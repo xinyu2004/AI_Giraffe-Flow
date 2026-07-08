@@ -1,0 +1,24 @@
+# desktop profile (skeleton)
+# Full recording, DDS, ROS-friendly host bring-up.
+
+name: desktop
+target: host_x86_64_linux
+
+bindings:
+  iceoryx: enabled
+  someip: stub_ok
+  dds: enabled
+
+observability:
+  record: full
+  trace_export: on
+  architect_tools: on
+
+apps:
+  - vehicle_motion_gateway
+  - radar
+  - camera_ingest
+  - perception
+  - planning
+  - control
+  - ivi

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://giraffe-flow.local/schemas/gf.sor.schema.json",
+  "title": "Giraffe Flow SOR (Statement of Requirements)",
+  "description": "Skeleton schema — fields to be frozen in Phase 0. Not yet enforced.",
+  "type": "object",
+  "required": ["schema_version", "types", "services", "deployments"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "SOR schema semver, e.g. 0.1.0"
+    },
+    "types": {
+      "type": "array",
+      "description": "Structs / enums / arrays",
+      "items": { "type": "object" }
+    },
+    "services": {
+      "type": "array",
+      "description": "Method / event / field + QoS",
+      "items": { "type": "object" }
+    },
+    "deployments": {
+      "type": "array",
+      "description": "Processes, function groups, provides/requires",
+      "items": { "type": "object" }
+    },
+    "dataflows": {
+      "type": "array",
+      "description": "Optional explicit producer→consumer edges",
+      "items": { "type": "object" }
+    },
+    "bindings": {
+      "type": "array",
+      "description": "iceoryx / someip / dds instance mapping",
+      "items": { "type": "object" }
+    },
+    "imports_meta": {
+      "type": "object",
+      "description": "OEM ARXML/DBC mapping metadata"
+    }
+  },
+  "additionalProperties": true
+}

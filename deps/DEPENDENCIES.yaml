@@ -1,0 +1,146 @@
+# Giraffe Flow dependency manifest
+# Canonical list — edit here first, then update versions.lock.md
+# Status: planned (not fetched / not built yet)
+
+schema_version: 1
+
+policy:
+  pin: exact           # prefer exact tags / commit SHAs when integrating
+  license_review: required
+  board_build_excludes:
+    - category: host_tools_ui
+    - category: ros_desktop
+  default_integration: cmake_fetchcontent  # alternatives: system_package, submodule, vendor_copy
+
+categories:
+  runtime_board:
+    description: Linked or executed on target (desktop or embedded)
+  host_tools:
+    description: Host PC only (importer/codegen/architect/replay)
+  optional:
+    description: Feature-gated / profile-gated
+
+dependencies:
+  - id: iceoryx
+    name: Eclipse iceoryx
+    category: runtime_board
+    purpose: On-SoC zero-copy IPC binding
+    homepage: https://github.com/eclipse-iceoryx/iceoryx
+    license: Apache-2.0
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [desktop, board, vehicle-debug, production]
+    notes: Required for local high-rate data paths
+
+  - id: vsomeip
+    name: COVESA vsomeip
+    category: runtime_board
+    purpose: SOME/IP + service discovery binding
+    homepage: https://github.com/COVESA/vsomeip
+    license: MPL-2.0
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [desktop, board, vehicle-debug, production]
+    notes: May pull Boost.Asio
+
+  - id: cyclonedds
+    name: Eclipse Cyclone DDS
+    category: runtime_board
+    purpose: DDS binding / ROS 2 interop path
+    homepage: https://github.com/eclipse-cyclonedds/cyclonedds
+    license: EPL-2.0 OR BSD-3-Clause
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [desktop, board, vehicle-debug]
+    notes: May be disabled in production profile if unused
+
+  - id: cyclonedds_cxx
+    name: Cyclone DDS C++ binding
+    category: runtime_board
+    purpose: C++ API for DDS binding
+    homepage: https://github.com/eclipse-cyclonedds/cyclonedds-cxx
+    license: EPL-2.0 OR BSD-3-Clause
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    depends_on: [cyclonedds]
+    enabled_profiles: [desktop, board, vehicle-debug]
+
+  - id: nlohmann_json
+    name: nlohmann/json
+    category: runtime_board
+    purpose: Manifest / SOR JSON parsing (runtime + tools)
+    homepage: https://github.com/nlohmann/json
+    license: MIT
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [desktop, board, vehicle-debug, production]
+
+  - id: yaml_cpp
+    name: yaml-cpp
+    category: host_tools
+    purpose: req.yaml / profile parsing in tools
+    homepage: https://github.com/jbeder/yaml-cpp
+    license: MIT
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [desktop]
+
+  - id: cli11
+    name: CLI11
+    category: host_tools
+    purpose: CLI for importer/codegen/lint
+    homepage: https://github.com/CLIUtils/CLI11
+    license: BSD-3-Clause
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [desktop]
+
+  - id: spdlog
+    name: spdlog
+    category: optional
+    purpose: Optional structured logging backend before DLT
+    homepage: https://github.com/gabime/spdlog
+    license: MIT
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [desktop, board, vehicle-debug]
+
+  - id: gtest
+    name: GoogleTest
+    category: host_tools
+    purpose: Unit / component tests
+    homepage: https://github.com/google/googletest
+    license: BSD-3-Clause
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [desktop]
+
+  - id: boost
+    name: Boost (subset)
+    category: optional
+    purpose: Transitive need for vsomeip / Asio if not replaced
+    homepage: https://www.boost.org/
+    license: BSL-1.0
+    planned_version: TBD
+    integration: system_package
+    enabled_profiles: [desktop, board]
+    notes: Prefer system packages on board BSPs when available
+
+  - id: openvx
+    name: OpenVX (implementation TBD)
+    category: optional
+    purpose: Vision pipeline + trace hooks
+    homepage: https://www.khronos.org/openvx/
+    license: TBD (impl-dependent)
+    planned_version: TBD
+    integration: system_package
+    enabled_profiles: [desktop, board]
+    notes: Vendor SDK or Khronos sample — decide per SoC
+
+deferred:
+  - id: ros2_rclcpp
+    reason: Prefer DDS direct interop first; full ROS2 optional later
+  - id: dlt_daemon
+    reason: ara::log DLT compatibility is P1+
+  - id: sqlite
+    reason: persistency (ara::per) is P1

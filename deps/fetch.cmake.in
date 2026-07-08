@@ -1,0 +1,13 @@
+# Optional CMake FetchContent template (not wired yet)
+#
+# When build system lands, copy patterns from here into cmake/Dependencies.cmake
+#
+# include(FetchContent)
+# FetchContent_Declare(
+#   iceoryx
+#   GIT_REPOSITORY https://github.com/eclipse-iceoryx/iceoryx.git
+#   GIT_TAG        <pin-from-versions.lock.md>
+# )
+# FetchContent_MakeAvailable(iceoryx)
+
+message(STATUS "Giraffe Flow: dependency fetch templates live under deps/; not active in skeleton phase.")

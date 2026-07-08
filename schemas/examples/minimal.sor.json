@@ -1,0 +1,11 @@
+{
+  "schema_version": "0.1.0-skeleton",
+  "types": [],
+  "services": [],
+  "deployments": [],
+  "dataflows": [],
+  "bindings": [],
+  "imports_meta": {
+    "note": "Example placeholder — replace with real OEM mapping in Phase 0+"
+  }
+}

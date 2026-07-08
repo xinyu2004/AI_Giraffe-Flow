@@ -244,16 +244,20 @@ Apps / adapters
 
 ```text
 AI_Giraffe-Flow/
-  schemas/                 # 契约心脏，semver
+  schemas/                 # SOR 契约，semver
   middleware/              # 板端 runtime
   platform/osal|hal/
   bindings/
-  tools/importer|codegen|architect|record_replay/
+  tools/importer|codegen|architect|record_replay|lint/
   apps/                    # 参考进程；客户量产工程另仓
   deploy/profiles/
+  deps/                    # 第三方依赖清单与版本锁
+  third_party/             # 上游检出（钉扎后）
   docs/en/  docs/zh/
   ci/
 ```
+
+仓库内已落地的骨架说明见根目录 [STRUCTURE.md](../../../STRUCTURE.md) 与 [deps/README.md](../../../deps/README.md)。
 
 制品线可分：`gf-runtime`、`gf-tools`、`gf-schemas`。  
 板端 CI **不编** GUI 类 tools。  

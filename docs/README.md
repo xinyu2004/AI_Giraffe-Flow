@@ -1,6 +1,4 @@
-# Documentation
-
-Giraffe Flow docs are split by language so links stay in one language.
+# Documentation hub
 
 | Language | Index |
 |----------|-------|
@@ -9,15 +7,9 @@ Giraffe Flow docs are split by language so links stay in one language.
 
 ```text
 docs/
-  README.md          ← you are here (language hub)
-  en/
-    README.md
-    architecture/DESIGN.md
-    operations/WORKFLOW.md
-  zh/
-    README.md
-    architecture/DESIGN.md
-    operations/WORKFLOW.md
+  README.md
+  en/   architecture/  operations/  dependencies/
+  zh/   architecture/  operations/  dependencies/
 ```
 
-**Convention:** English entry points link only to `docs/en/**`; Chinese entry points link only to `docs/zh/**`. Each document also has a header link to its translation.
+Also: [../STRUCTURE.md](../STRUCTURE.md) · [../deps/README.md](../deps/README.md)

@@ -4,22 +4,20 @@
 
 | 文档 | 说明 |
 |------|------|
-| [architecture/DESIGN.md](architecture/DESIGN.md) | 设计：AP 取舍、三协议、SOR/codegen、SOA、部署、移植、monorepo |
-| [operations/WORKFLOW.md](operations/WORKFLOW.md) | 操作：OEM 导入、日常开发、T0–T4、架构师评审 |
+| [architecture/DESIGN.md](architecture/DESIGN.md) | 总体设计（主文档） |
+| [architecture/module-decision-matrix.md](architecture/module-decision-matrix.md) | AP 保留矩阵（占位） |
+| [architecture/transport-binding-guide.md](architecture/transport-binding-guide.md) | 传输选型（占位） |
+| [architecture/naming-compatibility.md](architecture/naming-compatibility.md) | `gf_ara` ↔ `gf`（占位） |
+| [architecture/soa-process-topology.md](architecture/soa-process-topology.md) | 进程拓扑（占位） |
+| [architecture/deployment-boundary.md](architecture/deployment-boundary.md) | 部署边界（占位） |
+| [architecture/portability-hal.md](architecture/portability-hal.md) | OSAL/HAL（占位） |
+| [architecture/architect-tools.md](architecture/architect-tools.md) | DAG / 信号工具（占位） |
+| [operations/WORKFLOW.md](operations/WORKFLOW.md) | 操作流程 |
+| [dependencies/README.md](dependencies/README.md) | 第三方依赖说明 |
 
 ## 阅读顺序
 
 1. [README_zh.md](../../README_zh.md)  
 2. [DESIGN.md](architecture/DESIGN.md)  
 3. [WORKFLOW.md](operations/WORKFLOW.md)  
-
-## 后续细分文档（实现阶段再补）
-
-- `architecture/module-decision-matrix.md`
-- `architecture/transport-binding-guide.md`
-- `architecture/naming-compatibility.md`
-- `architecture/soa-process-topology.md`
-- `architecture/deployment-boundary.md`
-- `architecture/portability-hal.md`
-- `architecture/architect-tools.md`
-- `../../schemas/gf.sor.schema.json`
+4. [依赖](dependencies/README.md) · [STRUCTURE.md](../../STRUCTURE.md)

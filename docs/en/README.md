@@ -4,22 +4,20 @@
 
 | Document | Description |
 |----------|-------------|
-| [architecture/DESIGN.md](architecture/DESIGN.md) | Architecture: AP keep/defer, transports, SOR/codegen, SOA, deploy, portability, monorepo |
-| [operations/WORKFLOW.md](operations/WORKFLOW.md) | Operational flows: OEM intake, day-to-day dev, T0–T4, architect review |
+| [architecture/DESIGN.md](architecture/DESIGN.md) | Architecture (primary design) |
+| [architecture/module-decision-matrix.md](architecture/module-decision-matrix.md) | AP keep/defer matrix (stub) |
+| [architecture/transport-binding-guide.md](architecture/transport-binding-guide.md) | Transport selection (stub) |
+| [architecture/naming-compatibility.md](architecture/naming-compatibility.md) | `gf_ara` ↔ `gf` (stub) |
+| [architecture/soa-process-topology.md](architecture/soa-process-topology.md) | Process topology (stub) |
+| [architecture/deployment-boundary.md](architecture/deployment-boundary.md) | Board / host / phase (stub) |
+| [architecture/portability-hal.md](architecture/portability-hal.md) | OSAL/HAL (stub) |
+| [architecture/architect-tools.md](architecture/architect-tools.md) | DAG / signal tools (stub) |
+| [operations/WORKFLOW.md](operations/WORKFLOW.md) | Operational workflows |
+| [dependencies/README.md](dependencies/README.md) | Third-party dependency docs |
 
 ## Reading order
 
-1. [README.md](../../README.md) (English project overview)  
+1. [README.md](../../README.md)  
 2. [DESIGN.md](architecture/DESIGN.md)  
 3. [WORKFLOW.md](operations/WORKFLOW.md)  
-
-## Planned follow-ups (implementation phase)
-
-- `architecture/module-decision-matrix.md`
-- `architecture/transport-binding-guide.md`
-- `architecture/naming-compatibility.md`
-- `architecture/soa-process-topology.md`
-- `architecture/deployment-boundary.md`
-- `architecture/portability-hal.md`
-- `architecture/architect-tools.md`
-- `../../schemas/gf.sor.schema.json`
+4. [dependencies](dependencies/README.md) · [STRUCTURE.md](../../STRUCTURE.md)

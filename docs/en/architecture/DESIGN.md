@@ -244,16 +244,20 @@ Suggested layout:
 
 ```text
 AI_Giraffe-Flow/
-  schemas/                 # contract heart, semver
+  schemas/                 # SOR contract, semver
   middleware/              # on-board runtime
   platform/osal|hal/
   bindings/
-  tools/importer|codegen|architect|record_replay/
+  tools/importer|codegen|architect|record_replay|lint/
   apps/                    # reference processes; customer prod apps in other repos
   deploy/profiles/
+  deps/                    # third-party manifests + version lock
+  third_party/             # upstream checkouts (after pins)
   docs/en/  docs/zh/
   ci/
 ```
+
+Skeleton already in-tree: [STRUCTURE.md](../../../STRUCTURE.md) · [deps/README.md](../../../deps/README.md).
 
 Artifact lines may split into `gf-runtime`, `gf-tools`, `gf-schemas`.  
 Board CI **must not** build GUI tools.  

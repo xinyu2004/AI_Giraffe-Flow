@@ -4,7 +4,9 @@
 
 **中文:** [README_zh.md](README_zh.md)
 
-> Status: **architecture baseline** (docs first). Runtime and tools are not implemented yet.
+> Status: **architecture + monorepo skeleton**. Docs and directory layout are in place; **no runtime/tool code yet**.
+
+Layout & deps: [STRUCTURE.md](STRUCTURE.md) · [deps/README.md](deps/README.md)
 
 ---
 
@@ -66,6 +68,23 @@ Details: [docs/en/architecture/DESIGN.md](docs/en/architecture/DESIGN.md) · flo
 
 ---
 
+## Repo map (skeleton)
+
+```text
+schemas/      SOR contract (gf.sor.schema.json)
+middleware/   exec · phm · sm · com · log · trace
+platform/     osal · hal
+bindings/     iceoryx · someip · dds
+tools/        importer · codegen · architect · record_replay · lint
+apps/         radar · perception · planning · control · ivi · …
+deploy/       profiles (desktop|board|vehicle-debug|production)
+deps/         DEPENDENCIES.yaml + version lock (libraries managed here)
+third_party/  vendor checkouts (empty until pins land)
+docs/en|zh/   design · workflow · dependencies
+```
+
+Full tree notes: [STRUCTURE.md](STRUCTURE.md)
+
 ## Docs
 
 | Link | Content |
@@ -73,13 +92,12 @@ Details: [docs/en/architecture/DESIGN.md](docs/en/architecture/DESIGN.md) · flo
 | [docs/en/README.md](docs/en/README.md) | English index |
 | [docs/en/architecture/DESIGN.md](docs/en/architecture/DESIGN.md) | Design |
 | [docs/en/operations/WORKFLOW.md](docs/en/operations/WORKFLOW.md) | Workflows |
+| [docs/en/dependencies/README.md](docs/en/dependencies/README.md) | Third-party libs |
 | [README_zh.md](README_zh.md) / [docs/zh/](docs/zh/README.md) | Chinese |
-
----
 
 ## Roadmap (short)
 
-0. Freeze SOR schema, SOA topology, deploy boundaries  
+0. Freeze SOR schema fields, review matrix — **next discussion**  
 1. Triple-binding communication MVP  
 2. Exec + health  
 3. ROS + observability (DAG / GTKWave / record-replay)  

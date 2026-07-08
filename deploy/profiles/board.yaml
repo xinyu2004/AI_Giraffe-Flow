@@ -1,0 +1,24 @@
+# board profile (skeleton)
+# Same SOR as desktop; trim host-only tools; sampled observability.
+
+name: board
+target: aarch64_linux  # example — override per SoC later
+
+bindings:
+  iceoryx: enabled
+  someip: enabled
+  dds: optional
+
+observability:
+  record: sampled
+  trace_export: ring_buffer
+  architect_tools: off
+
+apps:
+  - vehicle_motion_gateway
+  - radar
+  - camera_ingest
+  - perception
+  - planning
+  - control
+  - ivi

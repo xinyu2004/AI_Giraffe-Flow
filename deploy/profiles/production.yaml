@@ -1,0 +1,16 @@
+# production profile (skeleton)
+# No host tools, no full record, no ROS desktop deps.
+
+name: production
+extends: board
+
+bindings:
+  dds: off_if_unused
+
+observability:
+  record: off
+  remote_log_dump: off
+  someip_diag_probe: off
+  log_level: warn
+
+debug_agents: []

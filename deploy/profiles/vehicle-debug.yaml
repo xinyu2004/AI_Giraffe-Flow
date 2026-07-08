@@ -1,0 +1,14 @@
+# vehicle-debug profile (skeleton)
+# On-vehicle bring-up: keep control path lean; enable sampled dump agents.
+
+name: vehicle-debug
+extends: board
+
+observability:
+  record: sampled
+  remote_log_dump: on
+  someip_diag_probe: optional
+
+debug_agents:
+  - record_agent
+  - remote_dump
