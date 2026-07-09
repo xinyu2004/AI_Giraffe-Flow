@@ -2,17 +2,22 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://giraffe-flow.local/schemas/gf.sor.schema.json",
   "title": "Giraffe Flow SOR (Statement of Requirements)",
-  "description": "Skeleton schema — fields to be frozen in Phase 0. Not yet enforced.",
+  "description": "Schema v0.2 — skeleton fields for composable variants, topology, QoS, OTA/diag. Not fully enforced yet.",
   "type": "object",
   "required": ["schema_version", "types", "services", "deployments"],
   "properties": {
     "schema_version": {
       "type": "string",
-      "description": "SOR schema semver, e.g. 0.1.0"
+      "description": "SOR schema semver, e.g. 0.2.0"
     },
     "types": {
       "type": "array",
-      "description": "Structs / enums / arrays",
+      "description": "Structs / enums — may export to IDL for cyclonedds idlc",
+      "items": { "type": "object" }
+    },
+    "semantic_services": {
+      "type": "array",
+      "description": "Stable semantic service IDs (platform contract)",
       "items": { "type": "object" }
     },
     "services": {
@@ -22,22 +27,66 @@
     },
     "deployments": {
       "type": "array",
-      "description": "Processes, function groups, provides/requires",
+      "description": "Processes, function groups, provides/requires, compute_domain",
       "items": { "type": "object" }
+    },
+    "product_variants": {
+      "type": "array",
+      "description": "SKU profiles: topology, runtime_modules, components, adapters",
+      "items": { "type": "object" }
+    },
+    "compute_domains": {
+      "type": "array",
+      "description": "ap_linux, mcu_autosar_cp (peer, no gf code), host",
+      "items": { "type": "object" }
+    },
+    "topology": {
+      "type": "string",
+      "enum": ["ap_only", "ap_mcu_cp"],
+      "description": "Default deployment topology for this SOR"
     },
     "dataflows": {
       "type": "array",
-      "description": "Optional explicit producer→consumer edges",
+      "description": "Explicit producer→consumer edges",
       "items": { "type": "object" }
     },
     "bindings": {
       "type": "array",
-      "description": "iceoryx / someip / dds instance mapping",
+      "description": "iceoryx / someip / dds / cross_domain_ipc",
       "items": { "type": "object" }
+    },
+    "adapter_mappings": {
+      "type": "array",
+      "description": "OEM signal → semantic field",
+      "items": { "type": "object" }
+    },
+    "cp_ipc_mappings": {
+      "type": "array",
+      "description": "semantic ↔ AUTOSAR CP IPC (mcu.cp_gateway)",
+      "items": { "type": "object" }
+    },
+    "qos_budgets": {
+      "type": "array",
+      "description": "End-to-end latency budgets for evidence / PHM",
+      "items": { "type": "object" }
+    },
+    "benchmark_scenarios": {
+      "type": "array",
+      "description": "Reproducible bench definitions for GMT",
+      "items": { "type": "object" }
+    },
+    "ota_packages": {
+      "type": "array",
+      "description": "OTA package metadata for ucm",
+      "items": { "type": "object" }
+    },
+    "doip_config": {
+      "type": "object",
+      "description": "DoIP logical address, ports, routing"
     },
     "imports_meta": {
       "type": "object",
-      "description": "OEM ARXML/DBC mapping metadata"
+      "description": "OEM ARXML/DBC import provenance"
     }
   },
   "additionalProperties": true

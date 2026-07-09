@@ -29,7 +29,11 @@ It borrows ideas from the AUTOSAR Adaptive Platform (AP):
 - **ROS 2** interop (DDS)
 - Trimmed, portable deployment (not a full AP 14+ daemon stack)
 
-Product stance: **engineering platform first** (usable, observable, portable); functional-safety certification later.
+Phased delivery: **[ROADMAP.md](../operations/ROADMAP.md)** (P0–P3).
+
+Embedded **ARM Linux** primary; **MIPS / RISC-V** via `platform/osal/arch/`. See [portability-hal.md](portability-hal.md).
+
+More detail in the Chinese DESIGN (§6–§10) until full EN sync.
 
 ---
 
@@ -60,11 +64,11 @@ We **borrow concepts; we do not clone the full stack**. API semantics stay close
 
 ### 2.2 Keep / simplify / defer / extend
 
-**P0 (MVP must-have):** `core`, `exec`, `phm`, `com`, `log`, `sm` (all simplified)
+**P0 (MVP must-have):** `core`, `com`, `log`; simplified `exec`, `phm`, `sm`
 
-**P1:** `per`, `tsync`; diagnostics may start as health query APIs instead of full `diag`
+**P1:** `per`, `tsync`; **`ucm` (OTA)**, **`diag` (DoIP)** skeleton; full bindings
 
-**P2 (safety / compliance):** `crypto`, `iam`, `idsm`, `ucm`/`vucm`, `fw`, `shwa`, full `nm`/`diag`
+**P2 (safety / compliance):** `crypto`, `iam`, `idsm`, `fw`, `shwa`, full `nm`; OTA backends productionized
 
 **Extensions (weak or missing in AP):**
 

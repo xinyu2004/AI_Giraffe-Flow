@@ -16,7 +16,13 @@ categories:
   runtime_board:
     description: Linked or executed on target (desktop or embedded)
   host_tools:
-    description: Host PC only (importer/codegen/architect/replay)
+    description: Host PC — gf-codegen, GMT
+  ros_ecosystem_host:
+    description: Foxglove, PlotJuggler, rosbag2 — never on board
+  ota_stack:
+    description: OTA backends (ucm) — profile-gated
+  diag_doip:
+    description: DoIP / diagnostic transport — profile-gated
   optional:
     description: Feature-gated / profile-gated
 
@@ -136,6 +142,59 @@ dependencies:
     integration: system_package
     enabled_profiles: [desktop, board]
     notes: Vendor SDK or Khronos sample — decide per SoC
+
+  - id: mcap
+    name: MCAP C++ library
+    category: host_tools
+    purpose: GMT measure session read/write
+    homepage: https://github.com/foxglove/mcap
+    license: MIT
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [desktop, vehicle-debug]
+
+  - id: cantools
+    name: cantools
+    category: host_tools
+    purpose: DBC parse in gf-codegen import (Python subprocess)
+    homepage: https://github.com/cantools/cantools
+    license: MIT
+    planned_version: TBD
+    integration: python_package
+    enabled_profiles: [desktop]
+
+  - id: rauc
+    name: RAUC
+    category: ota_stack
+    purpose: A/B slot OTA backend candidate for gf_ara::ucm
+    homepage: https://github.com/rauc/rauc
+    license: LGPL-2.1
+    planned_version: TBD
+    integration: system_package
+    enabled_profiles: [board, vehicle-debug, production]
+    notes: Evaluate for ucm adapter; SWUpdate explicitly excluded
+
+  - id: ostree
+    name: OSTree
+    category: ota_stack
+    purpose: Atomic tree OTA candidate (P2 evaluation)
+    homepage: https://ostreedev.github.io/ostree/
+    license: LGPL-2.0+
+    planned_version: TBD
+    integration: system_package
+    enabled_profiles: [board]
+    notes: Alternative OTA path
+
+  - id: doip_cpp
+    name: DoIP stack (candidate)
+    category: diag_doip
+    purpose: ISO 13400 DoIP for gf_ara::diag
+    homepage: TBD
+    license: TBD
+    planned_version: TBD
+    integration: cmake_fetchcontent
+    enabled_profiles: [board, vehicle-debug, production]
+    notes: Spike vs minimal in-tree DoIP
 
 deferred:
   - id: ros2_rclcpp

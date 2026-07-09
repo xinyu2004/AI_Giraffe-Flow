@@ -1,0 +1,31 @@
+{
+  "schema_version": "0.2.0-skeleton",
+  "topology": "ap_only",
+  "types": [],
+  "semantic_services": [
+    { "id": "semantic.ObjectList" },
+    { "id": "semantic.Trajectory" },
+    { "id": "semantic.EgoMotion" }
+  ],
+  "services": [],
+  "compute_domains": [
+    { "id": "ap_linux", "runtime": "gf_full", "hosts_gf_code": true }
+  ],
+  "product_variants": [
+    {
+      "id": "desktop_ap_only",
+      "topology": "ap_only",
+      "runtime_modules": ["core", "com", "log", "exec", "phm", "sm", "trace"],
+      "bindings": ["iceoryx"],
+      "capabilities": ["simulators", "desktop_debug"],
+      "components": [
+        { "package": "giraffe/simulators/perception_feed", "provides": ["semantic.ObjectList"] }
+      ],
+      "adapters": ["adapter.vehicle_motion_gateway"]
+    }
+  ],
+  "deployments": [],
+  "dataflows": [],
+  "bindings": [],
+  "imports_meta": { "note": "Desktop smoke — no MCU gateway" }
+}

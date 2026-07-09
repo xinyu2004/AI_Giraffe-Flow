@@ -60,11 +60,11 @@ Giraffe Flow 是一套**轻量跨平台平台软件**，目标用户同时覆盖
 
 ### 2.2 保留 / 简化 / 延后 / 扩展
 
-**P0（MVP 必须）：** `core`、`exec`、`phm`、`com`、`log`、`sm`（均为简化实现）
+**P0（MVP 必须）：** `core`、`exec`（简化）、`phm`（简化）、`com`、`log`、`sm`（简化）
 
-**P1：** `per`、`tsync`；诊断类可先用健康查询 API 代替完整 `diag`
+**P1（骨架 + 扩展）：** `per`、`tsync`；**`ucm`（OTA）**、**`diag`（DoIP）** 公共 API + stub 实现；完整 UDS 栈后置
 
-**P2（安全 / 合规）：** `crypto`、`iam`、`idsm`、`ucm`/`vucm`、`fw`、`shwa`、完整 `nm`/`diag`
+**P2（安全 / 合规深化）：** `crypto`、`iam`、`idsm`、`fw`、`shwa`、完整 `nm`、OTA 后端量产化
 
 **扩展（AP 弱或无）：**
 
@@ -129,12 +129,14 @@ iceoryx  SOME/IP  DDS(CycloneDDS)
 
 ```text
 OEM.arxml|dbc + req.yaml
-        → Importer
+        → gf-codegen import
         → gf.sor.json
-        → lint
-        → codegen
-        → gf_ara Proxy/Skeleton + EM/PHM manifest + binding 配置 + 适配骨架
+        → gf-codegen lint
+        → gf-codegen generate
+        → gf_ara Proxy/Skeleton + EM/PHM manifest + binding 配置
 ```
+
+主机度量与分析：**GMT**（`architect` / `measure` / `bridge`）— 不参与 SOR 写入。
 
 架构师工具（DAG / 信号 review）**只读同一份 SOR**，保证图与生成代码同源。
 
@@ -164,78 +166,99 @@ OEM 换信号表时，优先改 gateway + 映射，**尽量不改编感知 / 规
 
 ---
 
-## 6. SOA：服务边界 vs 进程边界
+## 6. 可组合组件、适配器与产品变体
 
-**SOA** = 接口稳定、可发现、可替换。  
-**进程** = 故障隔离与资源部署粒度。  
+感知 / 规划 / 控制 / IVI **不是固定全集**；由 `product_variants` 组合。
 
-不必「一个功能一个进程」，否则会白白增加上下文切换、端点与内存。
+| 层 | 职责 | 仓库 |
+|----|------|------|
+| **适配器** | OEM、传感器 SDK、**mcu.cp_gateway** | 平台 monorepo `apps/adapters/` |
+| **语义契约** | `semantic.*` 服务 | `schemas/` + SOR |
+| **业务组件** | 感知、规划等 | **外部量产仓**；平台用 `apps/simulators/` |
 
-| 倾向拆进程 | 倾向同进程 |
-|------------|------------|
-| SDK / 驱动易崩、OEM 易变 | 纯算子、同生命周期 |
-| 不应拖死控制链（IVI、雷达） | 超高频且资源紧 |
-| 可能部署到另一 SoC | 永远钉在本域控制器 |
+**组件无感：** 业务只依赖 `gf_ara` semantic 服务；OEM 差异在 adapter/gateway。
 
-**默认进程清单：**
+**拓扑：**
 
-| 进程 | 说明 |
-|------|------|
-| `gf.exec_manager` / `gf.phm` / `gf.sm` | 平台常驻 |
-| `sensor.radar_*` | **雷达独立**（建议默认） |
-| `sensor.camera_ingest` | 相机输入 |
-| `perception.pipeline` | 融合 / OpenVX |
-| `planning.service` | 规划 |
-| `control.service` | 控制（最短路径、最高优先级） |
-| `vehicle.actuator_gateway` | 执行器（可选独立） |
-| `ivi.service` | 本机或跨 SoC；永不与控制共进程 |
+- `ap_only` — 控制等在 AP；无 MCU gateway
+- `ap_mcu_cp` — MCU 跑 **AUTOSAR CP（零 gf 代码）**；AP 上 `mcu.cp_gateway` + IPC
 
-Manifest 允许把轻量服务**合部署**到同一 OS 进程，而不改服务接口。
+详见 [heterogeneous-compute.md](heterogeneous-compute.md)、[component-composition.md](component-composition.md)。
 
 ---
 
-## 7. 部署边界
+## 7. SOA：服务边界 vs 进程边界（参考示例，非全集）
 
-| 类别 | 内容 |
-|------|------|
-| **板端常驻** | EM、PHM、SM、传感器适配、感知/规控、IVI（本机或对端）、必要 binding、环形缓冲 Trace Agent |
-| **上位机（永不装车）** | Importer、codegen、DAG / Signal Review、GTKWave、离线回放、ROS 可视化 |
-| **前期（desktop profile）** | 模拟传感器、全量录制、ROS 联调 |
-| **上车调试（vehicle-debug）** | 采样 Record、诊断探针；量产默认关闭 |
+**SOA** = 接口稳定。 **进程** = 故障域。清单随 `product_variants` 变化。
+
+| 参考进程 | 说明 |
+|----------|------|
+| 平台常驻 | exec / phm / sm |
+| 适配器 | radar、camera、vehicle_motion_gateway、**mcu.cp_gateway**（仅 ap_mcu_cp） |
+| 业务 | 外部仓或 **simulators** |
+| IVI | 可选，独立故障域 |
+
+---
+
+## 8. 部署边界：板端 vs 上位机
+
+| 类别 | 板端 Onboard | 上位机 Host PC |
+|------|----------------|----------------|
+| 运行时 | EM、PHM、SM、`gf_ara::com`、裁剪 bindings | — |
+| 适配 / sim / 外仓组件 | ● | — |
+| MCU（ap_mcu_cp） | AUTOSAR CP（无 gf） | — |
+| 录制 | Record Agent（vehicle-debug） | — |
+| 契约 | 消费 `generated/` | **gf-codegen** |
+| 度量 | — | **GMT** + Foxglove/PlotJuggler |
+| OTA/DoIP | ucm/diag 模块（按 SKU） | 台架工具 |
 
 阶段：T0 桌面 → T1 板+主机 → T2 台架 → T3 上车调试 → T4 量产裁剪。
 
----
-
-## 8. 可观测性
-
-| 层级 | 手段 | 用途 |
-|------|------|------|
-| 设计态 | DAG Viewer、Signal Lineage | 架构 / 信号扭转评审 |
-| 运行态（细） | Trace → VCD/FST → GTKWave | 微小时序、pipeline 抖动 |
-| 运行态（长） | Record/Replay | 小时级复现、确定性回放 |
-
-原则：先统一时钟；先只读回放，再做注入式回放；板端录制默认采样，避免拖垮实时路径。
+**目标硬件：** 嵌入式 **ARM Linux** 为主；**MIPS、RISC-V** 经 OSAL arch 预留（见 §10）。
 
 ---
 
-## 9. 移植性：OSAL / HAL / Binding
+## 9. 可观测性与可信度（摘要）
+
+设计态：GMT `architect` + SOR。运行态：trace、MCAP Session、Tag。发布态：`qos_budgets` + bench 证据包。
+
+详见 [observability-toolchain.md](observability-toolchain.md)、[trust-evidence-metrics.md](trust-evidence-metrics.md)。
+
+---
+
+## 10. 移植性：解耦、OSAL、多架构
+
+### 10.1 解耦五原则
+
+1. **SOR 唯一契约** — 拓扑、QoS、模块裁剪、arch
+2. **一能力一包** — middleware/bindings 可 `runtime_modules` 裁剪
+3. **插件边界** — binding、HAL、GMT/codegen 插件独立演进
+4. **gf_ara 稳定 / gf 与第三方可换**
+5. **业务与 OEM 差异不进组件仓**
+
+### 10.2 分层
 
 ```text
-Apps (perception/planning/…)
+simulators / adapters / 外部组件
     → gf_ara API
-    → gf runtime
-         ├→ Binding plugins (iceoryx / someip / dds)
-         └→ OSAL → Linux（先行） / QNX（预留）
-Apps / adapters
-    → HAL → 具体 SoC / 雷达 SDK / CAN
+    → middleware (可裁剪)
+    → bindings (iceoryx | someip | dds | cross_domain_ipc)
+    → OSAL (posix + arch: arm | mips | riscv)
+    → HAL (boards/)
 ```
 
-换平台时：业务与 runtime 核心通常不变；改 OSAL（首次移植）、HAL（每车型）、binding（库可用性）、部署 profile。**禁止在感知/规控里写 `#ifdef SOC_X`。**
+换 SoC：**只动 OSAL arch + HAL + profile**。禁止业务 `#ifdef SOC_X`。
+
+### 10.3 OTA 与 DoIP
+
+- **`gf_ara::ucm`** — [`middleware/ucm/`](../../../middleware/ucm/)：包传输、激活、回滚钩子（P1 骨架）
+- **`gf_ara::diag`** — [`middleware/diag/`](../../../middleware/diag/)：DoIP 优先（P1 骨架）
+
+OTA 后端候选：RAUC、OSTree；**不含 SWUpdate**。
 
 ---
 
-## 10. 仓库与制品策略
+## 11. 仓库与制品策略
 
 **现阶段：一个 monorepo（单仓多包）。**  
 原因：`gf.sor.json` 把 runtime、codegen、架构工具绑在一起，过早多仓会导致契约漂移与版本地狱。
@@ -248,8 +271,12 @@ AI_Giraffe-Flow/
   middleware/              # 板端 runtime
   platform/osal|hal/
   bindings/
-  tools/importer|codegen|architect|record_replay|lint/
-  apps/                    # 参考进程；客户量产工程另仓
+  middleware/              # core…trace, ucm, diag
+  platform/osal/arch/      # arm · mips · riscv
+  bindings/                # + cross_domain_ipc
+  tools/codegen/           # gf-codegen
+  tools/gmt/               # GMT
+  apps/adapters|simulators/
   deploy/profiles/
   deps/                    # 第三方依赖清单与版本锁
   third_party/             # 上游检出（钉扎后）
@@ -268,28 +295,29 @@ AI_Giraffe-Flow/
 
 ---
 
-## 11. 落地四原则
+## 12. 落地四原则
 
-1. 先冻结 SOR/IDL 子集，再写生成器。  
+1. 先冻结 SOR 子集，再写生成器。  
 2. 先只读回放，再可控注入。  
 3. 全链路统一时间基准。  
-4. 在 SOR 中显式固化 DDS ↔ SOME/IP 映射，不靠口头约定。
+4. 在 SOR 中显式固化 binding 与 QoS 映射。
 
 ---
 
-## 12. 里程碑（摘要）
+## 13. 阶段路线图（P0–P3）
 
-| 里程碑 | 验收要点 |
-|--------|----------|
-| M0 | 模块矩阵、SOR schema（含图信息）、导入契约、SOA/部署边界评审通过 |
-| M1 | 桌面多进程 + 三 binding；OEM 样例可导入；DAG / 信号 review 可用 |
-| M2 | EM+PHM 恢复闭环；雷达/IVI 故障不拖死控制 |
-| M3 | ROS↔DDS；GTKWave + Record/Replay |
-| M4 | 至少一块嵌入式 Linux SoC；量产 profile 关闭调试件 |
+具体交付物与验收见 **[ROADMAP.md](../operations/ROADMAP.md)**。摘要：
+
+| 阶段 | 焦点 |
+|------|------|
+| **P0** | SOR 0.2、gf-codegen、iceoryx 双进程、ARM OSAL |
+| **P1** | 三 binding 可选、GMT、ucm/diag stub、MCU gateway 模拟 |
+| **P2** | MCAP/Tag/bench、Foxglove、工程证据包 |
+| **P3** | 量产 profile、DoIP/OTA 台架、MIPS/RISC-V OSAL 编译 |
 
 ---
 
-## 13. 风险摘要
+## 14. 风险摘要
 
 - 三栈复杂度 → 插件化 + 首版先 Event  
 - 进程过细 → 决策表 + 允许合部署  

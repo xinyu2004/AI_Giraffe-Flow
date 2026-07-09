@@ -1,108 +1,75 @@
 # AI Giraffe Flow
 
-**Lightweight middleware + toolchain for cross-platform SOA systems** — desktop bring-up today, embedded vehicles tomorrow — without buying a full commercial AUTOSAR Adaptive stack.
+**Lightweight SOA middleware + toolchain** — desktop first, **ARM Linux embedded** primary; MIPS / RISC-V reserved via OSAL.
 
 **中文:** [README_zh.md](README_zh.md)
 
-> Status: **architecture + monorepo skeleton**. Docs and directory layout are in place; **no runtime/tool code yet**.
+> Status: **architecture + directory skeleton** (incl. `ucm`/`diag` header stubs). **P0 code not started.**
 
-Layout & deps: [STRUCTURE.md](STRUCTURE.md) · [deps/README.md](deps/README.md)
-
----
-
-## Why this exists
-
-Teams building perception / planning / control / IVI need AP-like discipline (process lifecycle, health, SOA) and OEM intake (ARXML/DBC), but often cannot afford a heavy Adaptive Platform toolchain. They also need ROS 2 for algorithms, on-SoC zero-copy for sensors, and deep observability when pipelines misbehave.
-
-**Giraffe Flow** is our answer: keep the useful AUTOSAR Adaptive *ideas*, ship a trim engineering platform, and own the model → codegen → review loop.
+[STRUCTURE.md](STRUCTURE.md) · [Roadmap P0–P3](docs/en/operations/ROADMAP.md) · [deps](deps/README.md)
 
 ---
 
 ## What this repo is
 
-One monorepo that will hold:
-
 | Piece | Role |
 |-------|------|
-| **Runtime** | Exec / health / state + `gf_ara::com` (ARA-like API, own extensions under `gf::*`) |
-| **Transports** | **iceoryx** (on-SoC), **SOME/IP** (vehicle SOA), **DDS** (ROS 2 / cross-SoC) |
-| **SOR toolchain** | OEM ARXML/DBC → **`gf.sor.json`** (Statement of Requirements) → codegen |
-| **Host tools** | DAG view, signal lineage review, GTKWave, record/replay |
+| **Runtime** | `gf_ara::*`, trimmable modules incl. **ucm** (OTA), **diag** (DoIP) |
+| **Transports** | iceoryx, SOME/IP, DDS, cross_domain_ipc |
+| **Contract** | **`gf.sor.json`** (SOR) |
+| **gf-codegen** | `import` → `lint` → `generate` |
+| **GMT** | Giraffe Measure Tool — architect / measure / bridge |
 
-**SOR (Statement of Requirements)** is the single contract for services, deployments, provide/require graphs, and OEM signal mappings. Codegen and architect tools all read the same SOR — diagrams and generated `::com` stay aligned.
-
----
-
-## Who it helps
-
-| You are… | You get… |
-|----------|----------|
-| **Platform / middleware eng** | Cross-OS/SoC portability via OSAL + HAL + binding plugins |
-| **Architect / integrator** | DAG + signal review; OEM import without rewriting apps |
-| **Perception / planning / control** | Stable service interfaces; OEM churn stays in adapter processes (e.g. radar) |
-| **Algo / ROS users** | DDS path into the ROS ecosystem without dual stacks by hand |
-
-Desktop-first debug, embedded-first ship: same SOR / manifests, profiles (`desktop` → `board` → `vehicle-debug` → `production`).
+Production perception/planning live in **external repos**; use `apps/simulators/` here.
 
 ---
 
-## Vision in one pass
+## Vision
 
 ```text
-OEM ARXML/DBC ──► Importer ──► gf.sor.json ──► Codegen ──► gf_ara::com + manifests
-                                   │
-                    DAG / Signal Review (host)     apps: radar | perception | planning | control | IVI
-                                   ▼
-                    Runtime (EM/PHM) + iceoryx | SOME/IP | DDS
+OEM → gf-codegen import → gf.sor.json → lint → generate → build → onboard
+Host: GMT measure / bridge / architect
 ```
-
-Key choices already aligned:
-
-- Borrow AP concepts (**exec / phm / com / sm / log**); defer heavy safety/OTA clusters  
-- **gf_ara::*** public API, **gf::*** internals  
-- Services fine-grained; **processes by fault domain** (radar separate; IVI local or remote SoC)  
-- Shared signals (e.g. vehicle speed) via one gateway, fan-out to subscribers  
-- Monorepo for platform; customer vehicle projects stay out of this repo  
-
-Details: [docs/en/architecture/DESIGN.md](docs/en/architecture/DESIGN.md) · flows: [docs/en/operations/WORKFLOW.md](docs/en/operations/WORKFLOW.md)
 
 ---
 
-## Repo map (skeleton)
+## Onboard vs host PC
 
-```text
-schemas/      SOR contract (gf.sor.schema.json)
-middleware/   exec · phm · sm · com · log · trace
-platform/     osal · hal
-bindings/     iceoryx · someip · dds
-tools/        importer · codegen · architect · record_replay · lint
-apps/         radar · perception · planning · control · ivi · …
-deploy/       profiles (desktop|board|vehicle-debug|production)
-deps/         DEPENDENCIES.yaml + version lock (libraries managed here)
-third_party/  vendor checkouts (empty until pins land)
-docs/en|zh/   design · workflow · dependencies
-```
+| | Onboard | Host PC |
+|---|---------|---------|
+| Runtime, bindings, adapters, sim | yes | |
+| AUTOSAR CP on MCU (no gf) | optional | |
+| gf-codegen, GMT, Foxglove | | yes |
 
-Full tree notes: [STRUCTURE.md](STRUCTURE.md)
+Details: [DESIGN.md](docs/en/architecture/DESIGN.md)
+
+---
+
+## Roadmap
+
+| Phase | Focus |
+|-------|--------|
+| **P0** | SOR, codegen, iceoryx demo, ARM OSAL — [ROADMAP](docs/en/operations/ROADMAP.md) |
+| **P1** | Bindings, GMT, ucm/diag stubs |
+| **P2** | MCAP, evidence, Foxglove |
+| **P3** | Production profile, DoIP/OTA bench, multi-arch OSAL |
+
+**Next:** [P0 plan](docs/zh/operations/P0_PLAN.md) (zh, to be expanded)
+
+---
+
+## Repo map
+
+[STRUCTURE.md](STRUCTURE.md)
 
 ## Docs
 
 | Link | Content |
 |------|---------|
-| [docs/en/README.md](docs/en/README.md) | English index |
-| [docs/en/architecture/DESIGN.md](docs/en/architecture/DESIGN.md) | Design |
-| [docs/en/operations/WORKFLOW.md](docs/en/operations/WORKFLOW.md) | Workflows |
-| [docs/en/dependencies/README.md](docs/en/dependencies/README.md) | Third-party libs |
-| [README_zh.md](README_zh.md) / [docs/zh/](docs/zh/README.md) | Chinese |
-
-## Roadmap (short)
-
-0. Freeze SOR schema fields, review matrix — **next discussion**  
-1. Triple-binding communication MVP  
-2. Exec + health  
-3. ROS + observability (DAG / GTKWave / record-replay)  
-4. Embedded convergence + production profile  
+| [DESIGN.md](docs/en/architecture/DESIGN.md) | Design |
+| [ROADMAP.md](docs/en/operations/ROADMAP.md) | Phases |
+| [THIRD_PARTY_EVALUATION.md](docs/en/dependencies/THIRD_PARTY_EVALUATION.md) | Dependencies |
 
 ## License
 
-See [LICENSE](LICENSE).
+[LICENSE](LICENSE)

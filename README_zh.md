@@ -1,108 +1,98 @@
 # AI Giraffe Flow（中文）
 
-**面向跨平台 SOA 的轻量中间件 + 工具链**：台式机上先跑通，嵌入式优先落地；借鉴 AUTOSAR Adaptive 的有用思想，**不必购买完整商业 AP 工具链**。
+**轻量跨平台 SOA 中间件 + 工具链**：台式机先跑通，**嵌入式 ARM Linux** 优先；预留 MIPS / RISC-V。
 
 **English:** [README.md](README.md)
 
-> 当前状态：**架构 + monorepo 骨架**（文档与目录已齐；**尚无运行时/工具实现代码**）。
+> 状态：**架构 + 目录骨架**（含 `ucm`/`diag` 头文件占位；**P0 实现尚未开始**）。
 
-仓库地图与依赖：[STRUCTURE.md](STRUCTURE.md) · [deps/README.md](deps/README.md)
+[STRUCTURE.md](STRUCTURE.md) · [路线图 P0–P3](docs/zh/operations/ROADMAP.md) · [deps](deps/README.md)
 
 ---
 
 ## 为什么做
 
-做感知 / 规划 / 控制 / IVI 的团队往往需要：进程与健康管理、SOA 通信、主机厂 ARXML/DBC 导入，同时要接 ROS 2、机内零拷贝、以及 pipeline 出问题时的深度观测。完整 Adaptive 工具链通常过重、过贵。
+感知 / 规划 / 控制团队需要进程管理、SOA、OEM 导入、ROS 零拷贝与可观测性，但不必买下完整 AP 商业栈。
 
-**Giraffe Flow** 的取舍是：只保留 AP 里真正好用的部分，做成可裁剪的工程平台，并自建「需求模型 → 代码生成 → 架构评审」闭环。
+**Giraffe Flow**：可裁剪工程平台 + **SOR → gf-codegen → GMT** 闭环。
 
 ---
 
 ## 这个仓库是什么
 
-一个 monorepo，计划包含：
-
 | 部分 | 作用 |
 |------|------|
-| **运行时** | 执行 / 健康 / 状态 + `gf_ara::com`（语义贴近 ARA，扩展放在 `gf::*`） |
-| **传输** | **iceoryx**（机内）、**SOME/IP**（车规 SOA）、**DDS**（ROS 2 / 跨 SoC） |
-| **SOR 工具链** | OEM ARXML/DBC → **`gf.sor.json`** → 生成 Proxy/Skeleton 与 manifest |
-| **上位机工具** | DAG 全图、信号扭转 review、GTKWave、录制回放 |
+| **运行时** | `gf_ara::com`、exec/phm/sm、**ucm（OTA）**、**diag（DoIP）** — 按 SKU 裁剪 |
+| **传输** | iceoryx、SOME/IP、DDS；MCU 场景 **cross_domain_ipc** |
+| **契约** | **`gf.sor.json`** — 唯一需求模型 |
+| **gf-codegen** | `import` → `lint` → `generate` |
+| **GMT** | 架构评审、度量、ROS 桥接（Foxglove 等） |
 
-**SOR（Statement of Requirements）** 是本项目的**唯一需求/模型契约**：服务定义、部署、provides/requires 图、OEM 信号映射。Codegen 与架构工具都读同一份 SOR，保证「图上看到的」和「生成出来的 com」一致。
+**不含**量产感知/规划源码 — 见 `apps/simulators/` 与外部仓。
 
 ---
 
-## 能帮到谁
+## Vision：一条流水线
 
-| 角色 | 收益 |
+```text
+OEM ──► gf-codegen import ──► gf.sor.json ──► lint ──► generate ──► 构建部署
+                                                              │
+                                         板端运行 ◄───────────┘
+                                                              │
+                                         GMT measure/bridge ◄──┘（上位机）
+```
+
+---
+
+## 板端 vs 上位机
+
+| | 板端 Onboard | 上位机 PC |
+|---|--------------|-----------|
+| runtime / bindings | ● | |
+| adapters / sim / 外仓组件 | ● | |
+| MCU（AUTOSAR CP，无 gf） | ● 可选 | |
+| gf-codegen | | ● |
+| GMT、Foxglove、PlotJuggler | | ● |
+| 交叉编译与打包 | | ● |
+
+`ap_mcu_cp` 时 AP 上另有 `mcu.cp_gateway`。详见 [DESIGN §8](docs/zh/architecture/DESIGN.md)。
+
+---
+
+## 目标硬件与解耦
+
+- **主：** ARM Linux  
+- **预留：** MIPS、RISC-V（`platform/osal/arch/`）  
+- **原则：** SOR 唯一契约；middleware/bindings 插件化；业务与 OEM 差异在 adapter/gateway  
+
+---
+
+## 路线图
+
+| 阶段 | 内容 |
 |------|------|
-| **中间件 / 平台** | OSAL + HAL + Binding 插件，跨 OS / SoC 移植 |
-| **架构 / 集成** | DAG + 信号血缘；OEM 导入尽量不改编业务 |
-| **感知 / 规控应用** | 稳定服务接口；车型差异沉在雷达等适配进程 |
-| **算法 / ROS** | DDS 对接生态，少维护两套手搓栈 |
+| **P0** | SOR、codegen、iceoryx 双进程、ARM OSAL → [详情](docs/zh/operations/ROADMAP.md) |
+| **P1** | 三 binding、GMT、ucm/diag stub、MCU gateway 模拟 |
+| **P2** | MCAP/Tag/bench、证据包 |
+| **P3** | 量产 profile、DoIP/OTA 台架、多架构 OSAL |
 
-台式机优先调试，板端优先交付：同一套 SOR / manifest，用 profile 切换（`desktop` → `board` → `vehicle-debug` → `production`）。
-
----
-
-## 构想一览
-
-```text
-OEM ARXML/DBC ──► Importer ──► gf.sor.json ──► Codegen ──► gf_ara::com + manifests
-                                   │
-                    DAG / 信号 Review（主机）     进程：雷达 | 感知 | 规划 | 控制 | IVI
-                                   ▼
-                    Runtime（EM/PHM）+ iceoryx | SOME/IP | DDS
-```
-
-已对齐的关键决策：
-
-- 借鉴 AP（**exec / phm / com / sm / log**），重安全 / OTA 等后置  
-- 对外 **`gf_ara::*`**，对内 **`gf::*`**  
-- 服务可细、**进程按故障域**（雷达独立；IVI 可本机或另一 SoC）  
-- 车速等共享信号经单一 gateway 一书多订  
-- 平台 monorepo；客户车型工程另仓  
-
-细节见：[设计文档](docs/zh/architecture/DESIGN.md) · [操作流程](docs/zh/operations/WORKFLOW.md)
+**下一步：** [P0 实施计划](docs/zh/operations/P0_PLAN.md)
 
 ---
 
-## 仓库地图（骨架）
+## 仓库地图
 
-```text
-schemas/      SOR 契约（gf.sor.schema.json）
-middleware/   exec · phm · sm · com · log · trace
-platform/     osal · hal
-bindings/     iceoryx · someip · dds
-tools/        importer · codegen · architect · record_replay · lint
-apps/         radar · perception · planning · control · ivi · …
-deploy/       profiles（desktop|board|vehicle-debug|production）
-deps/         DEPENDENCIES.yaml + 版本锁（第三方库集中管理）
-third_party/  上游检出（未钉扎前保持空）
-docs/en|zh/   设计 · 流程 · 依赖说明
-```
-
-详见 [STRUCTURE.md](STRUCTURE.md)
+见 [STRUCTURE.md](STRUCTURE.md)
 
 ## 文档
 
 | 链接 | 内容 |
 |------|------|
-| [docs/zh/README.md](docs/zh/README.md) | 中文索引 |
-| [docs/zh/architecture/DESIGN.md](docs/zh/architecture/DESIGN.md) | 设计 |
-| [docs/zh/operations/WORKFLOW.md](docs/zh/operations/WORKFLOW.md) | 流程 |
-| [docs/zh/dependencies/README.md](docs/zh/dependencies/README.md) | 第三方依赖 |
-| [README.md](README.md) / [docs/en/](docs/en/README.md) | English |
-
-## 路线图（极简）
-
-0. 冻结 SOR 字段级 schema，评审矩阵 — **下一步再讨论从哪开工**  
-1. 三 binding 通信 MVP  
-2. 执行 + 健康管理  
-3. ROS + 可观测（DAG / GTKWave / 录制回放）  
-4. 嵌入式收敛 + 量产 profile  
+| [DESIGN.md](docs/zh/architecture/DESIGN.md) | 设计 |
+| [ROADMAP.md](docs/zh/operations/ROADMAP.md) | P0–P3 |
+| [THIRD_PARTY_EVALUATION.md](docs/zh/dependencies/THIRD_PARTY_EVALUATION.md) | 三方库评估 |
+| [WORKFLOW.md](docs/zh/operations/WORKFLOW.md) | 流程 |
 
 ## 许可证
 
-见 [LICENSE](LICENSE)。
+[LICENSE](LICENSE)

@@ -1,5 +1,5 @@
-# architect
+# architect (legacy path)
 
-Skeleton only — host tool placeholder.
+**Moved to:** [gmt/plugins/architect](../gmt/README.md) — `gmt architect dag|lineage`.
 
 Parent: [tools/README.md](../README.md)

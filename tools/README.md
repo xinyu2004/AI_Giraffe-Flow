@@ -1,11 +1,24 @@
-# tools/ (host only)
+# tools/
 
-| Tool | Role |
-|------|------|
-| [importer](importer/) | ARXML / DBC / YAML → `gf.sor.json` |
-| [codegen](codegen/) | SOR → `gf_ara` Proxy/Skeleton, manifests, binding configs |
-| [architect](architect/) | DAG viewer + signal lineage review |
-| [record_replay](record_replay/) | Long-horizon record / replay |
-| [lint](lint/) | SOR lint (cycles, dangling requires, unmapped OEM signals) |
+## Two products
 
-Must **not** be linked into production onboard images. See `deps/` board_build_excludes.
+| Binary | Dir | Commands |
+|--------|-----|----------|
+| **gf-codegen** | [codegen/](codegen/) | `import` · `lint` · `generate` |
+| **GMT** (Giraffe Measure Tool) | [gmt/](gmt/) | `architect` · `measure` · `bridge` |
+
+```text
+OEM → gf-codegen import → lint → generate → build
+Analysis → gmt measure / bridge / architect
+```
+
+## Legacy directories
+
+| Legacy | Maps to |
+|--------|---------|
+| [importer/](importer/) | codegen/plugins/import |
+| [lint/](lint/) | codegen/plugins/lint |
+| [architect/](architect/) | gmt/plugins/architect |
+| [record_replay/](record_replay/) | gmt/plugins/measure |
+
+**Never ship** host tools on production board images.

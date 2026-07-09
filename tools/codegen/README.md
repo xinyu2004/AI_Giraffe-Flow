@@ -1,5 +1,13 @@
-# codegen
+# gf-codegen
 
-Skeleton only — host tool placeholder.
+Standalone build-chain tool (not part of GMT).
 
-Parent: [tools/README.md](../README.md)
+```text
+gf-codegen import ...    # OEM → gf.sor.json  (plugins/import)
+gf-codegen lint ...      # SOR gate
+gf-codegen generate ...  # → generated/
+```
+
+Plugins: [plugins/](plugins/)
+
+Legacy [../importer/](../importer/) and [../lint/](../lint/) map here.

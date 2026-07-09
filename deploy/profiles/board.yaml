@@ -1,24 +1,35 @@
 # board profile (skeleton)
-# Same SOR as desktop; trim host-only tools; sampled observability.
+# ARM Linux embedded primary. Override target_arch per BSP.
 
 name: board
-target: aarch64_linux  # example — override per SoC later
+target_os: linux
+target_arch: arm          # arm | mips | riscv
+toolchain_triple: aarch64-linux-gnu  # example
+
+topology: ap_only         # or ap_mcu_cp
+
+runtime_modules:
+  - core
+  - com
+  - log
+  - exec
+  - phm
+  - sm
+  - trace
+  # - ucm
+  # - diag
 
 bindings:
   iceoryx: enabled
   someip: enabled
   dds: optional
+  cross_domain_ipc: off    # on when topology: ap_mcu_cp
 
 observability:
   record: sampled
   trace_export: ring_buffer
-  architect_tools: off
 
 apps:
-  - vehicle_motion_gateway
-  - radar
-  - camera_ingest
-  - perception
-  - planning
-  - control
-  - ivi
+  - adapters/vehicle_motion_gateway
+  - simulators/perception_feed
+  - demo_pipeline

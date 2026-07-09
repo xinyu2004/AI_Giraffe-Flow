@@ -1,0 +1,51 @@
+{
+  "schema_version": "0.2.0-skeleton",
+  "topology": "ap_mcu_cp",
+  "types": [],
+  "semantic_services": [
+    { "id": "semantic.Trajectory" },
+    { "id": "semantic.ActuatorCommand" }
+  ],
+  "services": [],
+  "compute_domains": [
+    { "id": "ap_linux", "runtime": "gf_full", "hosts_gf_code": true },
+    {
+      "id": "mcu_autosar_cp",
+      "runtime": "autosar_cp",
+      "hosts_gf_code": false,
+      "peer": true
+    }
+  ],
+  "product_variants": [
+    {
+      "id": "vehicle_with_mcu_cp",
+      "topology": "ap_mcu_cp",
+      "runtime_modules": ["core", "com", "log", "exec", "phm", "sm", "trace", "ucm", "diag"],
+      "bindings": ["iceoryx", "someip", "cross_domain_ipc"],
+      "deployments": ["planning", "adapter.mcu_cp_gateway"],
+      "peer_domains": ["mcu_autosar_cp"]
+    }
+  ],
+  "cp_ipc_mappings": [
+    {
+      "semantic": "semantic.Trajectory",
+      "direction": "ap_to_mcu",
+      "cp_signal": "Rte_Write_Trajectory_Placeholder"
+    }
+  ],
+  "bindings": [
+    {
+      "id": "ap_mcu_ipc",
+      "type": "cross_domain_ipc",
+      "implemented_by": "adapter.mcu_cp_gateway"
+    }
+  ],
+  "deployments": [],
+  "dataflows": [],
+  "doip_config": {
+    "logical_address": "0x0E00",
+    "udp_port": 13400,
+    "tcp_port": 13400
+  },
+  "imports_meta": { "note": "Control on AUTOSAR CP — gateway on AP only" }
+}

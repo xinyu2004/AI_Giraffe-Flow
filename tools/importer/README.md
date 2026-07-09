@@ -1,5 +1,5 @@
-# importer
+# importer (legacy path)
 
-Skeleton only — host tool placeholder.
+**Moved to:** [codegen/plugins/import](../codegen/plugins/README.md) as `gf-codegen import`.
 
 Parent: [tools/README.md](../README.md)

@@ -1,5 +1,11 @@
-# osal
+# OS abstraction layer
 
-Skeleton only — no implementation yet.
+| Path | Role |
+|------|------|
+| `include/gf/osal/` | Public API (P0) |
+| `src/posix/` | Linux pthread, clocks, shm |
+| [arch/](arch/) | **arm** (P0), **mips**, **riscv** reserved |
 
-Parent: [platform/README.md](../README.md) · Repo: [STRUCTURE.md](../../STRUCTURE.md)
+CMake: `-DGF_OSAL_ARCH=arm|mips|riscv`
+
+Parent: [platform/README.md](../README.md)
