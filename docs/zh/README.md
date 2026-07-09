@@ -7,6 +7,7 @@
 | [architecture/DESIGN.md](architecture/DESIGN.md) | 总体设计 |
 | [architecture/component-composition.md](architecture/component-composition.md) | 可组合组件 / 外仓 |
 | [architecture/heterogeneous-compute.md](architecture/heterogeneous-compute.md) | AP + MCU CP 双拓扑 |
+| [architecture/sor-authoring.md](architecture/sor-authoring.md) | **SOR / compose --project 一键集成** |
 | [architecture/portability-hal.md](architecture/portability-hal.md) | ARM / MIPS / RISC-V OSAL |
 | [operations/ROADMAP.md](operations/ROADMAP.md) | **P0–P3 路线图** |
 | [operations/P0_PLAN.md](operations/P0_PLAN.md) | P0 实施计划（待细化） |

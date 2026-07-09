@@ -61,52 +61,20 @@ Rules:
 
 ---
 
-## 3. OEM intake (ARXML / DBC)
+## 3. Vehicle integration (four inputs + compose)
 
-Goal: ingest OEM signal tables quickly with **minimal perception/planning-control rewrites**.
+Module engineers deliver **`io_types.hpp` only** (no JSON).  
+System integrator maintains `projects/<oem>/<vehicle>/` and runs:
 
-### 3.1 Steps
+```bash
+gf-codegen compose --project projects/oem_demo/vehicle_demo/project.yaml
+```
 
-1. **Collect inputs**  
-   - OEM: `*.arxml`, `*.dbc`  
-   - Ours: `req.yaml` (deploy, function groups, health policy, extra services)
+Contract: [sor-authoring.md](../architecture/sor-authoring.md) · [projects/oem_demo/vehicle_demo/](../../../projects/oem_demo/vehicle_demo/)
 
-2. **Import (planned)**  
-   ```text
-   tools/importer  arxml/dbc/yaml  →  gf.sor.json (or patch)
-   ```
+### 3.1 DevOps acceptance (`req.yaml`)
 
-3. **Human mapping review** (hard gate)  
-   - OEM signal ↔ stable service field sanity  
-   - Shared signals (e.g. speed) converge on a **single gateway provide**  
-   - Reject multiple processes consuming the same OEM signal directly
-
-4. **SOR lint (planned)**  
-   - Cycles, dangling requires, QoS conflicts, unmapped warnings
-
-5. **Architect visualization (planned)**  
-   - DAG Viewer: confirm process / service edges  
-   - Signal Lineage: open `VehicleMotion.speed` and list all subscribers  
-
-6. **Codegen (planned)**  
-   ```text
-   tools/codegen  gf.sor.json  →  generated/
-        - Proxy/Skeleton
-        - EM/PHM manifests
-        - binding configs
-        - sensor/gateway adapter stubs (as needed)
-   ```
-
-7. **Fill only the adapter edge**  
-   - Implement / adjust `sensor.radar_*`, `vehicle.motion_gateway`, …  
-   - **Do not** change core `perception` / `planning` / `control` trees unless the service contract itself breaks
-
-8. **Desktop smoke**  
-   - Bring up related function groups with `desktop` profile  
-   - Verify fan-out and fault injection (kill radar → degradation flags)
-
-9. **Merge**  
-   - Land SOR + mappings; commit or CI-generate artifacts per policy
+`acceptance` block: golden SOR path, lineage gate, required services. CI runs compose + lint + diff before merge — codegen stays off production images.
 
 ### 3.2 Breaking service changes
 

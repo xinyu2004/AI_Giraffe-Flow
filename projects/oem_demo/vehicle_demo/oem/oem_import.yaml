@@ -1,0 +1,54 @@
+# OEM 导入策略（集成侧，非主机厂交付）
+schema_version: "0.1.0"
+project_id: vehicle_demo
+topology_default: ap_mcu_cp
+
+sources:
+  - id: vehicle_can_dbc
+    kind: dbc
+    path: oem_import.dbc
+    source_origin: Requirement/archive/Demo_Car_CAN_Message_Protocol_V08_ussAdvBrcLWJ.dbc
+    extract: dbc_vehicle_can.extract.yaml
+    bus_id: vehicle_can
+    nodes: [AFC, TDA4VE, AutoBox, TeampoEVB]
+    gateway:
+      process: adapter.vehicle_can_gateway
+      provides:
+        - services.semantic.EgoMotion
+        - services.semantic.VehicleModeStatus
+        - services.semantic.ParkingWorld
+
+extraction:
+  dbc:
+    exclude_name_patterns:
+      - "P_USS_SEN*"
+      - "P_USS_INFO*"
+      - "APA_SHOW_*"
+      - "VECTOR__*"
+    summarize_into:
+      semantic: services.semantic.ParkingWorld
+      from_messages:
+        - pattern: "PDC_INFO"
+          fields:
+            pdc_zone_mask: aggregate_pdc_zone_status
+        - pattern: "P_USS_INFO*"
+          fields:
+            uss_nearest_cm: min_echo_distance_cm
+    include_messages:
+      - P_VEHICLE_INFO
+      - P_APA_STS
+      - P_APA_SLOT1
+      - P_APA_SLOT2
+      - P_APA_SLOT3
+      - P_APA_SLOT4
+      - P_APA_SLOT5
+      - P_APA_SLOT6
+      - VISION_OBSTACLE
+      - VISION_OBSTACLE_EXT
+      - PDC_INFO
+      - P_SYNC_INFO
+
+output:
+  fragment_id: oem_vehicle_can
+  sections: [imports_meta, adapter_mappings, types]
+  merge_policy: overlay

@@ -11,6 +11,7 @@
 | [architecture/soa-process-topology.md](architecture/soa-process-topology.md) | Process topology (stub) |
 | [architecture/deployment-boundary.md](architecture/deployment-boundary.md) | Board / host / phase (stub) |
 | [architecture/portability-hal.md](architecture/portability-hal.md) | OSAL/HAL (stub) |
+| [architecture/sor-authoring.md](architecture/sor-authoring.md) | **SOR authoring / `import oem` contract** |
 | [architecture/architect-tools.md](architecture/architect-tools.md) | DAG / signal tools (stub) |
 | [operations/WORKFLOW.md](operations/WORKFLOW.md) | Operational workflows |
 | [dependencies/README.md](dependencies/README.md) | Third-party dependency docs |

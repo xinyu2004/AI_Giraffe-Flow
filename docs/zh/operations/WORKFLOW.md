@@ -61,54 +61,47 @@ AI_Giraffe-Flow/
 
 ---
 
-## 3. OEM 需求导入流程（ARXML / DBC）
+## 3. OEM 与车型集成流程（四类输入 + compose）
 
-目标：快速接入主机厂信号表，**尽量不改感知/规控源码**。
+目标：模块只交 `io_types.hpp`；系统工程师在 `projects/<oem>/<vehicle>/` 维护集成工件，**一条命令**出 `gf.sor.json`，用自动闭环替代开会扫表。
 
-### 3.1 步骤
+详细契约：[sor-authoring.md](../architecture/sor-authoring.md) · 示例：[projects/oem_demo/vehicle_demo/](../../../projects/oem_demo/vehicle_demo/)
 
-1. **收集输入**  
-   - OEM：`*.arxml`、`*.dbc`  
-   - 本侧：`req.yaml`（部署、功能组、健康策略、补充服务）
+### 3.1 角色
 
-2. **导入（计划中）**  
-   ```text
-   tools/importer  arxml/dbc/yaml  →  gf.sor.json（或 patch）
-   ```
+| 角色 | 交付 | 环境 |
+|------|------|------|
+| 模块工程师 | `io_types.hpp`（无 JSON/YAML） | 各业务仓 |
+| 系统工程师 | `oem_import.dbc`、`integration/wiring.yaml`、`req.yaml`、`project.yaml` | `projects/` |
+| DevOps | `req.yaml` 的 `acceptance`、CI profile、golden 对比 | 上位机 CI |
 
-3. **人工 review 映射表**（强制关口）  
-   - OEM 信号 ↔ 稳定服务字段是否合理  
-   - 车速等共享信号是否收敛到 **单一 gateway provide**  
-   - 是否出现多个进程直接消费同一 OEM 信号（应拒绝）
+### 3.2 集成（主路径）
 
-4. **SOR lint（计划中）**  
-   - 环依赖、悬空 require、QoS 冲突、未映射告警
+```bash
+gf-codegen compose --project projects/oem_demo/vehicle_demo/project.yaml
+```
 
-5. **架构师可视化（计划中）**  
-   - 打开 DAG Viewer：确认进程 / 服务边  
-   - Signal Lineage：点开 `VehicleMotion.speed` 看全订阅者  
+产出：`gf.sor.json` + `reports/signal_lineage_report.yaml`（闭环不过则失败）。
 
-6. **代码生成（计划中）**  
-   ```text
-   tools/codegen  gf.sor.json  →  generated/
-        - Proxy/Skeleton
-        - EM/PHM manifest
-        - binding 配置
-        - sensor/gateway 适配骨架（如需）
-   ```
+P0 golden：[Requirement/vehicle_demo.sor.json](../../../Requirement/vehicle_demo.sor.json)
 
-7. **只填适配层**  
-   - 实现 / 调整 `sensor.radar_*`、`vehicle.motion_gateway` 等边界进程  
-   - **不改** `perception` / `planning` / `control` 核心算法目录（除非服务契约本身 breaking）
+### 3.3 门禁（替代开会）
 
-8. **桌面冒烟**  
-   - `desktop` profile 拉起相关功能组  
-   - 验证一书多订与故障注入（雷达挂掉 → 降级标志）
+1. **lineage 报告**：缺映射、缺 provider、冲突连线  
+2. **人工只审差异项**（或 GMT 只读画布标红，P1）  
+3. 通过后再 `gf-codegen generate`
 
-9. **合并**  
-   - SOR 与映射入仓；生成物按策略提交或 CI 生成
+### 3.4 DevOps 验收（`req.yaml`）
 
-### 3.2 Breaking 服务变更
+`req.yaml` 的 `acceptance` 段声明：
+
+- `sor_golden`：compose 输出须与 golden diff 通过（或显式豁免）  
+- `lineage_required`：信号闭环是否阻断合入  
+- `required_services`：该 SKU 必须存在的 semantic 服务  
+
+CI 在合入 / 发版前执行 compose + lint + golden diff；**不**把 codegen 装进量产镜像。
+
+### 3.5 Breaking 服务变更
 
 若必须改稳定服务字段形状：
 

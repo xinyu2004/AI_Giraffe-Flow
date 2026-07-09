@@ -142,6 +142,8 @@ OEM.arxml|dbc + req.yaml
 
 Architect tools (DAG / signal review) **read the same SOR**, so diagrams stay aligned with generated code.
 
+Authoring and OEM import contract: [sor-authoring.md](sor-authoring.md) · examples: [Requirement/](../../../Requirement/)
+
 ### 5.2 Required SOR content
 
 - `schema_version`

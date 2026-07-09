@@ -1,0 +1,30 @@
+# 车型交付 / SKU / DevOps 验收（系统工程师维护）
+schema_version: "0.1"
+variant: vehicle_demo_full
+topology: ap_mcu_cp
+
+capabilities:
+  - parking
+  - driving
+  - mcu_ipc
+
+runtime_modules:
+  - core
+  - com
+  - log
+
+bindings:
+  - iceoryx
+  - cross_domain_ipc
+
+deploy_profile: deploy/profiles/vehicle-debug.yaml
+
+acceptance:
+  description: "P0 demo — compose 输出须与 golden 对齐且 lineage 通过"
+  sor_golden: Requirement/vehicle_demo.sor.json
+  lineage_required: true
+  required_services:
+    - services.semantic.EgoMotion
+    - services.semantic.DrivingObjectList
+    - services.semantic.ParkingWorld
+    - services.semantic.Trajectory

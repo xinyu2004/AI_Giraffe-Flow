@@ -140,6 +140,8 @@ OEM.arxml|dbc + req.yaml
 
 架构师工具（DAG / 信号 review）**只读同一份 SOR**，保证图与生成代码同源。
 
+编写与 OEM 导入契约：[sor-authoring.md](sor-authoring.md) · 示例：[Requirement/](../../../Requirement/)
+
 ### 5.2 SOR 必备内容
 
 - `schema_version`
