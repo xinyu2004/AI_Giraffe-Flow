@@ -28,7 +28,7 @@ AI_Giraffe-Flow/
   middleware/
   tools/
   apps/
-  deploy/profiles/
+  projects/          # 含各车型 req.yaml
   docs/zh/   docs/en/
 ```
 
@@ -243,7 +243,7 @@ CI 在合入 / 发版前执行 compose + lint + golden diff；**不**把 codegen
 1. 实现或移植 `middleware/osal`（线程、时钟、共享内存、进程）
 2. 实现本板 `middleware/hal`（雷达 SDK、相机、CAN）  
 3. 确认 binding 库可用性；不可用则关掉或换实现  
-4. 新增 `deploy/profiles/<soc>.yaml`（亲和性、内存池）  
+4. 在本车型 `projects/<oem>/<product>/req.yaml` 调整部署裁剪（`observability` / `apps`、亲和性等；勿另建共享 profile）  
 5. 跑同一套 apps（参考进程）冒烟，再接客户工程  
 
 业务仓与平台仓版本矩阵写入客户工程 README。

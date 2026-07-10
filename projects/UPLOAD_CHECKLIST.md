@@ -23,7 +23,7 @@
 |------|------|
 | `middleware/` | 静态：core / com / bindings / osal / hal …（不含 third_party 检出与 `.deps-prefix`） |
 | `tools/codegen/`、`tools/bridge/` | gf-codegen；可选 ROS2 桥（主机侧） |
-| `projects/` | 集成输入 + 项目脚本（如 `afc_with_uss/scripts/smoke_sil.sh`） |
+| `projects/` | 集成输入 + 项目脚本（如 `smoke_sil.sh`）；契约在 `req.yaml` |
 | `apps/` | 参考 App 源码 |
 | `schemas/`、`cmake/`、`scripts/`、`deps/`、`docs/`、`ci/` | 契约、构建、文档 |
 | 根 `README*`、`STRUCTURE.md`、`.gitignore` | |

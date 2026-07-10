@@ -12,7 +12,7 @@
 |------|--------|--------|
 | **模块工程师** | 本仓 / 各业务仓 `io_types.hpp`（POD struct） | JSON/YAML fragment、`provides`/`requires`、SKU 差异 |
 | **系统工程师** | `projects/<oem>/<vehicle>/` 下 OEM DBC、wiring、`req.yaml` | 模块算法实现 |
-| **DevOps** | `req.yaml` 的 `acceptance`、CI 门禁、部署 profile | 信号连线细节 |
+| **DevOps** | `req.yaml` 的 `acceptance`、CI 门禁、观测/apps 裁剪 | 信号连线细节 |
 | **工具** | 内部合并 → `gf.sor.json` + 闭环报告 | — |
 
 **原则：** 模块侧**不产生中间 JSON**；集成出问题改 wiring / OEM 策略，**不**让模块团队重出 fragment。
@@ -84,9 +84,9 @@ struct DrivingObjectList { ... };
 
 ### 5.1 OEM 层 — `oem/oem_import.dbc`
 
-主机厂只给 DBC。本仓 demo 使用提炼后的 [`oem_import.dbc`](../../../projects/oem_demo/vehicle_demo/oem/oem_import.dbc)（集成工程师按车型维护；**全量 OEM 通信矩阵**如何收纳进仓另议，见 §7）。
+主机厂只给 DBC。本仓示例使用提炼后的 [`oem_import.dbc`](../../../projects/oem_a/afc_with_uss/oem/oem_import.dbc)（集成工程师按车型维护；**全量 OEM 通信矩阵**如何收纳进仓另议，见 §7）。
 
-可选 [`oem_import.yaml`](../../../projects/oem_demo/vehicle_demo/oem/oem_import.yaml)：集成侧策略（白名单、USS 摘要、gateway provide 列表）。**非 OEM 交付物**；P1 可由 `import oem --dbc` 脚手架生成初稿。
+可选 [`oem_import.yaml`](../../../projects/oem_a/afc_with_uss/oem/oem_import.yaml)：集成侧策略（白名单、USS 摘要、gateway provide 列表）。**非 OEM 交付物**；P1 可由 `import oem --dbc` 脚手架生成初稿。
 
 ### 5.2 连线层 — `integration/wiring.yaml`
 
@@ -97,13 +97,13 @@ struct DrivingObjectList { ... };
 - `bindings`：semantic 服务 ↔ hpp struct 名
 - `dataflows`：进程间边
 
-示例：[integration/wiring.yaml](../../../projects/oem_demo/vehicle_demo/integration/wiring.yaml)
+示例：[integration/wiring.yaml](../../../projects/oem_a/afc_with_uss/integration/wiring.yaml)
 
 ### 5.3 交付层 — `req.yaml`
 
-SKU、拓扑、runtime 裁剪、部署 profile、**DevOps 验收**（golden SOR 路径、必选服务、lineage 是否必须通过）。
+SKU、拓扑、runtime 裁剪、观测/apps、**DevOps 验收**（golden SOR 路径、必选服务、lineage 是否必须通过）。
 
-示例：[req.yaml](../../../projects/oem_demo/vehicle_demo/req.yaml)
+示例：[req.yaml](../../../projects/oem_a/afc_with_uss/req.yaml)
 
 ### 5.4 项目入口 — `project.yaml`
 

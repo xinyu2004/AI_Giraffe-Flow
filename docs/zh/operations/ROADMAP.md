@@ -32,7 +32,7 @@
 | P0-4 | `gf_ara::com` Event 子集 + **iceoryx binding** | `middleware/com/`, `middleware/bindings/iceoryx/` |
 | P0-5 | 两进程 demo：simulator publish + consumer subscribe | `apps/simulators/`, `apps/demo_pipeline/` |
 | P0-6 | OSAL POSIX + **ARM** backend 最小（线程、单调时钟） | `middleware/osal/` |
-| P0-7 | CMake 构建 + desktop profile | `cmake/`, `deploy/profiles/desktop.yaml` |
+| P0-7 | CMake 构建 + 项目 `req.yaml` 裁剪 | `cmake/`，`projects/**/req.yaml` |
 | P0-8 | CI：lint + generate golden + 单测冒烟 | `ci/` |
 
 ### 验收标准

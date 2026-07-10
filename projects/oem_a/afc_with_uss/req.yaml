@@ -1,4 +1,5 @@
 # OEM A — AFC 前视（有独立 USS）
+# 车型交付契约（含原 deploy/profile：观测与参考 apps）
 schema_version: "0.1"
 variant: afc_front_camera_uss
 topology: ap_only
@@ -17,7 +18,13 @@ runtime_modules:
 bindings:
   - iceoryx
 
-deploy_profile: deploy/profiles/desktop.yaml
+observability:
+  record: full
+  trace_export: on
+
+apps:
+  - simulators/uss_feed
+  - demo_pipeline
 
 acceptance:
   description: "AFC + 独立 USS — 前视 / 超声 / 行车规划"

@@ -3,14 +3,14 @@
   "schema_version": "0.2.0",
   "merge_policy": "overlay",
   "imports_meta": {
-    "manifest": "projects/oem_demo/vehicle_demo/oem/oem_import.yaml",
+    "manifest": "projects/oem_b/adc_full/oem/oem_import.yaml",
     "sources": [
       {
-        "file": "projects/oem_demo/vehicle_demo/oem/oem_import.dbc",
+        "file": "projects/oem_b/adc_full/oem/oem_import.dbc",
         "source_origin": null,
         "role": "vehicle_can_chassis_parking_uss",
         "message_count": 12,
-        "extract": "projects/oem_demo/vehicle_demo/oem/dbc_vehicle_can.extract.yaml"
+        "extract": "projects/oem_b/adc_full/oem/dbc_vehicle_can.extract.yaml"
       }
     ],
     "extraction_note": "12-frame 精简 DBC（chassis/mode）；USS/PDC 归 sensing.uss → UssZones"

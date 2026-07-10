@@ -276,8 +276,7 @@ AI_Giraffe-Flow/
   tools/bridge/            # 主机侧桥（如 ROS2）
   tools/gmt/               # GMT
   apps/adapters|simulators/
-  projects/                # OEM 集成输入
-  deploy/profiles/
+  projects/                # OEM 集成输入（req.yaml 含契约与部署裁剪）
   deps/                    # 第三方依赖清单与版本锁
   docs/en/  docs/zh/
   ci/

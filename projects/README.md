@@ -23,5 +23,9 @@
 
 ```text
 projects/<oem>/<product>/
-  project.yaml  req.yaml  oem/  interfaces/  integration/  reports/  [golden/]
+  project.yaml  req.yaml  oem/  interfaces/  integration/
+  scripts/         # 可选：smoke_sil / compile_hil …
+  reports/  [golden/]
 ```
+
+**`req.yaml` 跟车型走：** SKU 契约（binding、runtime、acceptance）与部署裁剪（observability、apps）写在同一文件。SIL/HIL 只换编译与运行脚本。改款复制整个产品目录。

@@ -38,7 +38,7 @@ four inputs + project.yaml → compose → gf.sor.json → lint/lineage → gene
 Host loop: trace/MCAP → GMT / Foxglove → fix wiring → re-compose
 ```
 
-Example: [projects/oem_demo/vehicle_demo/](projects/oem_demo/vehicle_demo/) · [WORKFLOW](docs/en/operations/WORKFLOW.md)
+Example: [projects/oem_a/afc_with_uss/](projects/oem_a/afc_with_uss/) · [WORKFLOW](docs/en/operations/WORKFLOW.md)
 
 ---
 

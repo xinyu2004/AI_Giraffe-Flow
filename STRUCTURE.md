@@ -8,10 +8,10 @@ AI_Giraffe-Flow/
     hal/                     # board HAL
     third_party/             # iceoryx 等上游检出（gitignore）
   apps/                      # 业务与仿真进程
-  tools/                     # codegen、bridge/ros2（主机侧）
+  tools/                     # codegen、gmt（P1）、bridge/ros2（主机侧）
   schemas/                   # gf.sor.json contract + examples
   deps/                      # 依赖钉扎（策略，非检出树）
-  cmake/ scripts/ ci/ deploy/ docs/
+  cmake/ scripts/ ci/ docs/
 ```
 
 ## Toolchain flow（当前）

@@ -21,7 +21,14 @@ bindings:
   - iceoryx
   - cross_domain_ipc
 
-deploy_profile: deploy/profiles/vehicle-debug.yaml
+observability:
+  record: sampled
+  remote_log_dump: on
+
+apps:
+  - adapters/mcu_cp_gateway
+  - simulators/perception_feed
+  - demo_pipeline
 
 acceptance:
   description: "ADC 行泊一体 — 前视/环视/USS/泊车/行车 + MCU"

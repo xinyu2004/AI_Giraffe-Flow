@@ -63,5 +63,3 @@ EgoMotion ──► sensing.uss ──► UssZones ──► perception.parking 
 | [`oem_a/afc_no_uss`](oem_a/afc_no_uss/) | AFC 前视（无 USS） | 仅前视 + 行车规划；无 `sensing.uss` |
 | [`oem_a/afc_with_uss`](oem_a/afc_with_uss/) | AFC 前视（有 USS） | 前视 + 独立 USS；泊车感知可选/简化 |
 | [`oem_b/adc_full`](oem_b/adc_full/) | ADC 行泊一体 | 前视 + 环视 + USS + 泊车/行车规划 + MCU |
-
-旧目录 [`oem_demo/vehicle_demo`](oem_demo/vehicle_demo/) 保留作对照，新工作以以上三项目为准。

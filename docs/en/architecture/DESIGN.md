@@ -255,8 +255,7 @@ AI_Giraffe-Flow/
     third_party/           # upstream checkouts (after pins)
   tools/                   # codegen, bridge/ros2 (host)
   apps/                    # reference processes; customer prod apps in other repos
-  projects/                # OEM integration inputs
-  deploy/profiles/
+  projects/                # OEM inputs + per-SKU req.yaml
   deps/                    # third-party manifests + version lock
   docs/en/  docs/zh/
   ci/

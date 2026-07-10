@@ -16,7 +16,12 @@ runtime_modules:
 bindings:
   - iceoryx
 
-deploy_profile: deploy/profiles/desktop.yaml
+observability:
+  record: full
+  trace_export: on
+
+apps:
+  - demo_pipeline
 
 acceptance:
   description: "AFC 无 USS — 前视 + 行车规划"

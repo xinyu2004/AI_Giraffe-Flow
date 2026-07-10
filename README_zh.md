@@ -78,7 +78,7 @@ flowchart LR
 - **generate**：Proxy/Skeleton、adapter 映射、部署清单 — 手改 `generated/` 会在下次生成时丢失
 - **GMT**：上位机只读连线画布、Foxglove 桥接、架构度量（P1+）
 
-集成示例：[projects/oem_demo/vehicle_demo/](projects/oem_demo/vehicle_demo/)  
+集成示例：[projects/oem_a/afc_with_uss/](projects/oem_a/afc_with_uss/)  
 流程详解：[WORKFLOW.md](docs/zh/operations/WORKFLOW.md)
 
 ### 如何加快项目进度
@@ -108,7 +108,7 @@ flowchart LR
 | **gf-codegen**（compose/lint/generate） | | ● | **不进**量产镜像 |
 | **GMT**（architect / measure / bridge） | | ● | 联调观测、连线 review |
 | **Foxglove / PlotJuggler / MCAP** | | ● | P2 录制回放 |
-| **交叉编译 / 打包 / CI** | | ● | `deploy/profiles/` + `req.yaml` |
+| **交叉编译 / 打包 / CI** | | ● | 各项目 `req.yaml` + SIL/HIL 脚本 |
 | **SOR / wiring / DBC 编辑** | | ● | `projects/` 集成工程 |
 | **lineage / golden diff** | | ● | DevOps 合入门禁 |
 

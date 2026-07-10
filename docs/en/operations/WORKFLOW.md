@@ -28,7 +28,7 @@ AI_Giraffe-Flow/
   middleware/
   tools/
   apps/
-  deploy/profiles/
+  projects/          # per-SKU req.yaml
   docs/en/   docs/zh/
 ```
 
@@ -67,10 +67,10 @@ Module engineers deliver **`io_types.hpp` only** (no JSON).
 System integrator maintains `projects/<oem>/<vehicle>/` and runs:
 
 ```bash
-gf-codegen compose --project projects/oem_demo/vehicle_demo/project.yaml
+gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
 ```
 
-Contract: [sor-authoring.md](../architecture/sor-authoring.md) · [projects/oem_demo/vehicle_demo/](../../../projects/oem_demo/vehicle_demo/)
+Contract: [sor-authoring.md](../architecture/sor-authoring.md) · [projects/oem_a/afc_with_uss/](../../../projects/oem_a/afc_with_uss/)
 
 ### 3.1 DevOps acceptance and Golden (`req.yaml`)
 
@@ -212,7 +212,7 @@ Use as a design gate after OEM import or before a release.
 1. Implement or port `middleware/osal` (threads, clocks, shm, processes)
 2. Implement board `middleware/hal` (radar SDK, camera, CAN)  
 3. Confirm binding library availability; disable or swap if missing  
-4. Add `deploy/profiles/<soc>.yaml` (affinity, memory pools)  
+4. Adjust that SKU's `projects/<oem>/<product>/req.yaml` (observability / apps, affinity, memory pools; do not invent shared root profiles)  
 5. Smoke reference apps, then wire the customer project  
 
 Document the platform↔customer version matrix in the customer README.
