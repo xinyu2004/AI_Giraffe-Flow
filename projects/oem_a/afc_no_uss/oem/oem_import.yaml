@@ -1,0 +1,30 @@
+# OEM 导入策略 — AFC 无 USS（仅车身运动进 gateway）
+schema_version: "0.1.0"
+project_id: afc_no_uss
+topology_default: ap_only
+
+sources:
+  - id: vehicle_can_dbc
+    kind: dbc
+    path: oem_import.dbc
+    source_origin: null
+    bus_id: vehicle_can
+    gateway:
+      process: adapter.vehicle_can_gateway
+      provides:
+        - services.semantic.EgoMotion
+
+extraction:
+  dbc:
+    exclude_name_patterns:
+      - "P_USS_*"
+      - "PDC_*"
+      - "P_APA_*"
+      - "VECTOR__*"
+    include_messages:
+      - P_VEHICLE_INFO
+
+output:
+  fragment_id: oem_a_afc_can
+  sections: [imports_meta, adapter_mappings, types]
+  merge_policy: overlay

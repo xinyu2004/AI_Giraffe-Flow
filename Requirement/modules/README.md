@@ -1,31 +1,21 @@
-# 自研模块 IO（模块工程师只交 hpp）
-
-## 交付物
+# modules/ — 模块 IO 示例（只交 hpp）
 
 | 谁 | 交什么 | 不交什么 |
 |----|--------|----------|
-| **模块工程师** | `io_types.hpp` | JSON、YAML、`module.meta.yaml`、fragment |
-| **系统工程师** | 在 [`projects/.../integration/wiring.yaml`](../projects/oem_demo/vehicle_demo/integration/wiring.yaml) 登记 hpp 路径并连线 | — |
+| **模块工程师** | `io_types.hpp` | JSON、YAML、连线、SKU |
+| **系统工程师** | `projects/.../integration/wiring.yaml` | — |
 
-```text
-模块仓 io_types.hpp
-    →（compose 时内存解析，不落盘 JSON）
-    → integration/wiring.yaml 声明谁订谁
-    → gf.sor.json
-```
+## 示例目录 ↔ SOA App
 
-## 示例目录（本仓参考）
+| 目录 | process id | 类别 | 用于 |
+|------|------------|------|------|
+| [perception_front/](perception_front/) | `perception.front` | SOA App | AFC / ADC |
+| [perception_surround/](perception_surround/) | `perception.surround` | SOA App | ADC |
+| [uss_sensing/](uss_sensing/) | `sensing.uss` | SOA App | AFC+USS / ADC |
+| [perception_parking/](perception_parking/) | `perception.parking` | SOA App | ADC |
+| [perception_driving/](perception_driving/) | `perception.driving.nullmax` | SOA App | ADC 行车融合 |
+| [mcu_cp_gateway/](mcu_cp_gateway/) | `adapter.mcu_cp_gateway` | **Adapter** | ADC |
 
-| 目录 | 来源 | process id（在 wiring 中登记） |
-|------|------|-------------------------------|
-| [mcu_cp_gateway/](mcu_cp_gateway/) | app.xlsx Platform | `adapter.mcu_cp_gateway` |
-| [perception_parking/](perception_parking/) | app.xlsx Perception | `perception.parking` |
-| [perception_driving/](perception_driving/) | Nullmax.xlsx | `perception.driving.nullmax` |
+规划进程在 wiring 里用外仓 `package:`，本仓暂无 hpp。
 
-## 集成工程师命令
-
-```bash
-gf-codegen compose --project projects/oem_demo/vehicle_demo/project.yaml
-```
-
-见 [projects/oem_demo/vehicle_demo/README.md](../projects/oem_demo/vehicle_demo/README.md)。
+进程分类总表：[projects/PROCESS_ROLES.md](../../projects/PROCESS_ROLES.md)

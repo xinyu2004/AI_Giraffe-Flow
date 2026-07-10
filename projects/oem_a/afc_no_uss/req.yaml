@@ -1,0 +1,27 @@
+# OEM A — AFC 前视（无 USS）
+schema_version: "0.1"
+variant: afc_front_camera
+topology: ap_only
+product: AFC
+
+capabilities:
+  - front_camera
+  - driving
+
+runtime_modules:
+  - core
+  - com
+  - log
+
+bindings:
+  - iceoryx
+
+deploy_profile: deploy/profiles/desktop.yaml
+
+acceptance:
+  description: "AFC 无 USS — 前视 + 行车规划"
+  lineage_required: true
+  required_services:
+    - services.semantic.EgoMotion
+    - services.semantic.FrontObjectList
+    - services.semantic.Trajectory

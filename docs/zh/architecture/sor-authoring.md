@@ -84,7 +84,7 @@ struct DrivingObjectList { ... };
 
 ### 5.1 OEM 层 — `oem/oem_import.dbc`
 
-主机厂只给 DBC。本仓 demo 使用提炼后的 [`oem_import.dbc`](../../../projects/oem_demo/vehicle_demo/oem/oem_import.dbc)（源自 [`Requirement/archive/`](../../../Requirement/archive/) 完整车身 DBC）。
+主机厂只给 DBC。本仓 demo 使用提炼后的 [`oem_import.dbc`](../../../projects/oem_demo/vehicle_demo/oem/oem_import.dbc)（集成工程师按车型维护；**全量 OEM 通信矩阵**如何收纳进仓另议，见 §7）。
 
 可选 [`oem_import.yaml`](../../../projects/oem_demo/vehicle_demo/oem/oem_import.yaml)：集成侧策略（白名单、USS 摘要、gateway provide 列表）。**非 OEM 交付物**；P1 可由 `import oem --dbc` 脚手架生成初稿。
 
@@ -130,17 +130,17 @@ P1：`gmt architect wiring --read-only` 只读画布标红缺口；P1+ 拖拽写
 
 | 文件 | 角色 |
 |------|------|
-| `Requirement/archive/Demo_Car_*.dbc` | 原始来源（归档） |
 | `projects/.../oem/oem_import.dbc` | **import 用精简 DBC**（`--dbc` 指向此文件） |
 | `projects/.../oem/dbc_vehicle_can.extract.yaml` | 人工 review 用提炼表 |
+| `Requirement/archive/` | 可选占位；**非 P0 必留**，全量矩阵收纳流程 **TBD**（需与集成/OEM 流程讨论） |
 
 报文 → semantic 要点（节选）：
 
-- `P_VEHICLE_INFO` → `services.semantic.EgoMotion`
-- `P_APA_STS` → `services.semantic.VehicleModeStatus`
-- `P_APA_SLOT*` / `PDC_INFO` → 聚合进 `ParkingWorld`
-- `VISION_OBSTACLE*` → 驾驶障碍物列表输入
-- `P_USS_*` 大批量 → adapter 摘要，不进 SOR 逐帧
+- `P_VEHICLE_INFO` → `services.semantic.EgoMotion`（`adapter.vehicle_can_gateway`）
+- `P_APA_STS` → `services.semantic.VehicleModeStatus`（gateway）
+- `P_APA_SLOT*` / `VISION_OBSTACLE*` → 泊车/驾驶感知模块侧消费或对比
+- `PDC_INFO` / `P_USS_*` 大批量 → **独立模块 `sensing.uss`** 解码并摘要为 `services.semantic.UssZones`（`types.UssZones`），**不进 SOR 逐探头**
+- `perception.parking` 订阅 `UssZones`，融合输出 `ParkingWorld`（`zone_mask` / `uss_nearest_cm` 来自 `UssZones`）
 
 ---
 

@@ -29,6 +29,15 @@ struct VehicleModeStatus {
   uint8_t avm_mode;
 };
 
+// 来自独立模块 sensing.uss（类型形状与 uss_sensing::UssZones 对齐；compose 按服务名绑定）
+struct UssZones {
+  uint64_t timestamp_ns;
+  uint8_t sys_status;
+  uint8_t nearest_cm;
+  uint16_t zone_mask;
+  // 分区细节由 USS 模块维护；泊车侧可只读 nearest/mask
+};
+
 // --- provides（泊车感知输出）---
 
 struct ParkingSlot {
@@ -52,7 +61,8 @@ struct ParkingWorld {
   uint64_t timestamp_ns;
   uint8_t slot_count;
   ParkingSlot slots[6];
-  uint16_t pdc_zone_mask;
+  // 融合自 slots + UssZones（nearest/mask），不再由 CAN gateway 直接提供
+  uint16_t zone_mask;
   uint8_t uss_nearest_cm;
 };
 

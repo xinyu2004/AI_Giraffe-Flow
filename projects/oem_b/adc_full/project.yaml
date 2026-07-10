@@ -1,0 +1,22 @@
+# compose 入口 — OEM B / ADC 行泊一体
+schema_version: "0.1"
+project_id: adc_full
+customer_id: oem_b
+product: ADC
+
+base: schemas/examples/desktop_ap_only.sor.json
+out: gf.sor.json
+
+oem:
+  dbc: oem/oem_import.dbc
+  manifest: oem/oem_import.yaml
+
+integration:
+  wiring: integration/wiring.yaml
+
+delivery:
+  req: req.yaml
+
+lineage:
+  report: reports/signal_lineage_report.yaml
+  fail_on_error: true

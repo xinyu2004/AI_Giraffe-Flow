@@ -1,7 +1,11 @@
-# 信号连线（系统工程师）— 四类输入之二
+# ADC 行泊一体 — 集成工程师连线草稿（完整模块）
+# SOA Apps: sensing.uss, perception.front, perception.surround,
+#           perception.parking, perception.driving.nullmax,
+#           planning.parking, planning.driving
+# Adapters: vehicle_can_gateway, mcu_cp_gateway
 schema_version: "0.1"
-project_id: vehicle_demo
-variant: vehicle_demo_full
+project_id: adc_full
+variant: adc_driving_parking
 topology: ap_mcu_cp
 
 modules:
@@ -11,6 +15,12 @@ modules:
   - id: sensing.uss
     hpp: Requirement/modules/uss_sensing/io_types.hpp
     package: customer/uss-sensing
+  - id: perception.front
+    hpp: Requirement/modules/perception_front/io_types.hpp
+    package: customer/perception-front
+  - id: perception.surround
+    hpp: Requirement/modules/perception_surround/io_types.hpp
+    package: customer/perception-surround
   - id: perception.parking
     hpp: Requirement/modules/perception_parking/io_types.hpp
     package: customer/perception-parking
@@ -26,7 +36,6 @@ deployments:
       - services.semantic.VehicleModeStatus
     requires: []
 
-  # 独立超声模块：拥有 PDC/USS 相关解码与分区摘要（demo 可与 gateway 同机）
   - process: sensing.uss
     compute_domain: ap_linux
     provides:
@@ -44,12 +53,28 @@ deployments:
       - services.semantic.Trajectory
       - services.semantic.ActuatorCommand
 
+  - process: perception.front
+    compute_domain: ap_linux
+    provides:
+      - services.semantic.FrontObjectList
+    requires:
+      - services.semantic.EgoMotion
+
+  - process: perception.surround
+    compute_domain: ap_linux
+    provides:
+      - services.semantic.SurroundWorld
+    requires:
+      - services.semantic.EgoMotion
+      - services.semantic.UssZones
+
   - process: perception.driving.nullmax
     compute_domain: ap_linux
     provides:
       - services.semantic.DrivingObjectList
     requires:
       - services.semantic.EgoMotion
+      - services.semantic.FrontObjectList
 
   - process: perception.parking
     compute_domain: ap_linux
@@ -59,15 +84,7 @@ deployments:
       - services.semantic.EgoMotion
       - services.semantic.VehicleModeStatus
       - services.semantic.UssZones
-
-  - process: planning.parking
-    compute_domain: ap_linux
-    package: customer/planning-parking
-    provides:
-      - services.semantic.Trajectory
-    requires:
-      - services.semantic.ParkingWorld
-      - services.semantic.EgoMotionExtended
+      - services.semantic.SurroundWorld
 
   - process: planning.driving
     compute_domain: ap_linux
@@ -78,6 +95,16 @@ deployments:
       - services.semantic.DrivingObjectList
       - services.semantic.EgoMotion
 
+  - process: planning.parking
+    compute_domain: ap_linux
+    package: customer/planning-parking
+    provides:
+      - services.semantic.Trajectory
+      - services.semantic.ActuatorCommand
+    requires:
+      - services.semantic.ParkingWorld
+      - services.semantic.EgoMotionExtended
+
 bindings:
   - module: sensing.uss
     inputs:
@@ -85,9 +112,23 @@ bindings:
     outputs:
       - { service: semantic.UssZones, type: UssZones }
 
+  - module: perception.front
+    inputs:
+      - { service: semantic.EgoMotion, type: EgoMotion }
+    outputs:
+      - { service: semantic.FrontObjectList, type: FrontObjectList }
+
+  - module: perception.surround
+    inputs:
+      - { service: semantic.EgoMotion, type: EgoMotion }
+      - { service: semantic.UssZones, type: UssZones }
+    outputs:
+      - { service: semantic.SurroundWorld, type: SurroundWorld }
+
   - module: perception.driving.nullmax
     inputs:
       - { service: semantic.EgoMotion, type: EgoMotion }
+      - { service: semantic.FrontObjectList, type: FrontObjectList }
     outputs:
       - { service: semantic.DrivingObjectList, type: DrivingObjectList }
 
@@ -96,6 +137,7 @@ bindings:
       - { service: semantic.EgoMotion, type: EgoMotion }
       - { service: semantic.VehicleModeStatus, type: VehicleModeStatus }
       - { service: semantic.UssZones, type: UssZones }
+      - { service: semantic.SurroundWorld, type: SurroundWorld }
     outputs:
       - { service: semantic.ParkingWorld, type: ParkingWorld }
 
@@ -109,13 +151,26 @@ bindings:
       - { service: semantic.VehicleModeStatus, type: VehicleModeStatus }
 
 dataflows:
+  # 行车主路径
+  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: perception.front }
   - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: perception.driving.nullmax }
-  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: perception.parking }
-  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: sensing.uss }
-  - { from: adapter.vehicle_can_gateway, service: services.semantic.VehicleModeStatus, to: perception.parking }
-  - { from: sensing.uss, service: services.semantic.UssZones, to: perception.parking }
-  - { from: adapter.mcu_cp_gateway, service: services.semantic.EgoMotionExtended, to: planning.parking }
+  - { from: perception.front, service: services.semantic.FrontObjectList, to: perception.driving.nullmax }
   - { from: perception.driving.nullmax, service: services.semantic.DrivingObjectList, to: planning.driving }
+
+  # 超声
+  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: sensing.uss }
+  - { from: sensing.uss, service: services.semantic.UssZones, to: perception.surround }
+  - { from: sensing.uss, service: services.semantic.UssZones, to: perception.parking }
+
+  # 环视 + 泊车
+  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: perception.surround }
+  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: perception.parking }
+  - { from: adapter.vehicle_can_gateway, service: services.semantic.VehicleModeStatus, to: perception.parking }
+  - { from: perception.surround, service: services.semantic.SurroundWorld, to: perception.parking }
   - { from: perception.parking, service: services.semantic.ParkingWorld, to: planning.parking }
+
+  # MCU 闭环
+  - { from: adapter.mcu_cp_gateway, service: services.semantic.EgoMotionExtended, to: planning.parking }
   - { from: planning.parking, service: services.semantic.Trajectory, to: adapter.mcu_cp_gateway }
   - { from: planning.parking, service: services.semantic.ActuatorCommand, to: adapter.mcu_cp_gateway }
+  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: planning.driving }

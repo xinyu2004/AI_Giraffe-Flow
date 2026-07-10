@@ -5,25 +5,30 @@
     "sources": [
       {
         "file": "projects/oem_demo/vehicle_demo/oem/oem_import.dbc",
-        "source_origin": "Requirement/archive/Demo_Car_CAN_Message_Protocol_V08_ussAdvBrcLWJ.dbc",
+        "source_origin": null,
         "sha256_prefix": "55bfe2d2bcabd788",
         "role": "vehicle_can_chassis_parking_uss",
-        "message_count": 99,
+        "message_count": 12,
         "import": "gf-codegen import oem"
+      },
+      {
+        "file": "Requirement/modules/uss_sensing/io_types.hpp",
+        "role": "uss_sensing_module",
+        "import": "compose parse hpp → Requirement/modules/uss_sensing/"
       },
       {
         "file": "Requirement/app.xlsx#Platform",
         "role": "soa_mcu_ipc_gateway",
-        "import": "synthesize --from-hpp → Requirement/modules/mcu_cp_gateway/"
+        "import": "compose parse hpp → Requirement/modules/mcu_cp_gateway/"
       },
       {
         "file": "Requirement/app.xlsx#Perception",
         "role": "soa_parking_perception_io",
-        "import": "synthesize --from-hpp → Requirement/modules/perception_parking/"
+        "import": "compose parse hpp → Requirement/modules/perception_parking/"
       }
     ],
     "manifest": "projects/oem_demo/vehicle_demo/oem/oem_import.yaml",
-    "extraction_note": "OEM: DBC only in oem_import.yaml. SOA: app.xlsx sheets exported to hpp modules."
+    "extraction_note": "OEM: 精简 oem_import.dbc. USS/PDC → sensing.uss → UssZones. SOA modules: hpp only."
   },
   "compute_domains": [
     {
@@ -54,6 +59,10 @@
     {
       "id": "semantic.DrivingObjectList",
       "description": "行车感知目标列表 — Nullmax/Perception_OBJ_Out_St"
+    },
+    {
+      "id": "semantic.UssZones",
+      "description": "独立超声传感：分区摘要 — sensing.uss 模块；不进 SOR 逐探头"
     },
     {
       "id": "semantic.ParkingWorld",
@@ -175,10 +184,22 @@
       "id": "types.VisionObstacle",
       "kind": "struct",
       "fields": [
-        { "name": "id", "type": "uint8" },
-        { "name": "confidence", "type": "float32" },
-        { "name": "type", "type": "uint8" },
-        { "name": "heading_deg", "type": "float32" }
+        {
+          "name": "id",
+          "type": "uint8"
+        },
+        {
+          "name": "confidence",
+          "type": "float32"
+        },
+        {
+          "name": "type",
+          "type": "uint8"
+        },
+        {
+          "name": "heading_deg",
+          "type": "float32"
+        }
       ]
     },
     {
@@ -293,6 +314,51 @@
       ]
     },
     {
+      "id": "types.UssZoneSample",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "zone_id",
+          "type": "uint8"
+        },
+        {
+          "name": "status",
+          "type": "uint8"
+        },
+        {
+          "name": "distance_cm",
+          "type": "uint8"
+        }
+      ]
+    },
+    {
+      "id": "types.UssZones",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "sys_status",
+          "type": "uint8"
+        },
+        {
+          "name": "nearest_cm",
+          "type": "uint8"
+        },
+        {
+          "name": "zone_mask",
+          "type": "uint16"
+        },
+        {
+          "name": "zones",
+          "type": "types.UssZoneSample",
+          "array_size": 6
+        }
+      ]
+    },
+    {
       "id": "types.ParkingWorld",
       "kind": "struct",
       "fields": [
@@ -310,14 +376,14 @@
           "array_size": 6
         },
         {
-          "name": "pdc_zone_mask",
+          "name": "zone_mask",
           "type": "uint16",
-          "note": "from PDC_INFO summarized"
+          "note": "fused from UssZones.zone_mask"
         },
         {
           "name": "uss_nearest_cm",
           "type": "uint8",
-          "note": "from P_USS_INFO* summarized"
+          "note": "fused from UssZones.nearest_cm"
         }
       ]
     },
@@ -398,6 +464,12 @@
       "period_ms": 50
     },
     {
+      "id": "services.semantic.UssZones",
+      "type_ref": "types.UssZones",
+      "kind": "event",
+      "period_ms": 50
+    },
+    {
       "id": "services.semantic.ParkingWorld",
       "type_ref": "types.ParkingWorld",
       "kind": "event",
@@ -422,11 +494,10 @@
       "compute_domain": "ap_linux",
       "provides": [
         "services.semantic.EgoMotion",
-        "services.semantic.VehicleModeStatus",
-        "services.semantic.ParkingWorld"
+        "services.semantic.VehicleModeStatus"
       ],
       "requires": [],
-      "notes": "Reads DBC CAN; 99 frames (USS majority) — APA/VISION/P_VEHICLE_INFO whitelisted"
+      "notes": "Reads DBC CAN; chassis/mode only — P_VEHICLE_INFO / P_APA_STS whitelisted"
     },
     {
       "process": "adapter.mcu_cp_gateway",
@@ -455,6 +526,18 @@
       "notes": "Nullmax.xlsx / Perception_OBJ_Out_St"
     },
     {
+      "process": "sensing.uss",
+      "compute_domain": "ap_linux",
+      "package": "customer/uss-sensing",
+      "provides": [
+        "services.semantic.UssZones"
+      ],
+      "requires": [
+        "services.semantic.EgoMotion"
+      ],
+      "notes": "独立超声模块；消费 PDC/USS CAN，发布 UssZones 摘要"
+    },
+    {
       "process": "perception.parking",
       "compute_domain": "ap_linux",
       "package": "customer/perception-parking",
@@ -463,9 +546,10 @@
       ],
       "requires": [
         "services.semantic.EgoMotion",
-        "services.semantic.VehicleModeStatus"
+        "services.semantic.VehicleModeStatus",
+        "services.semantic.UssZones"
       ],
-      "notes": "泊车感知外仓；DBC 侧已有 APA/VISION 可作对比"
+      "notes": "泊车感知外仓；融合 UssZones + 视觉/车位"
     },
     {
       "process": "planning.parking",
@@ -527,6 +611,21 @@
       "from": "planning.parking",
       "service": "services.semantic.ActuatorCommand",
       "to": "adapter.mcu_cp_gateway"
+    },
+    {
+      "from": "adapter.vehicle_can_gateway",
+      "service": "services.semantic.EgoMotion",
+      "to": "sensing.uss"
+    },
+    {
+      "from": "adapter.vehicle_can_gateway",
+      "service": "services.semantic.VehicleModeStatus",
+      "to": "perception.parking"
+    },
+    {
+      "from": "sensing.uss",
+      "service": "services.semantic.UssZones",
+      "to": "perception.parking"
     }
   ],
   "adapter_mappings": [

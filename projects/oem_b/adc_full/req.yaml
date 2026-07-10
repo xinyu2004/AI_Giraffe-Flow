@@ -1,9 +1,13 @@
-# 车型交付 / SKU / DevOps 验收（系统工程师维护）
+# OEM B — ADC 行泊一体（完整模块）
 schema_version: "0.1"
-variant: vehicle_demo_full
+variant: adc_driving_parking
 topology: ap_mcu_cp
+product: ADC
 
 capabilities:
+  - front_camera
+  - surround_camera
+  - uss
   - parking
   - driving
   - mcu_ipc
@@ -20,12 +24,14 @@ bindings:
 deploy_profile: deploy/profiles/vehicle-debug.yaml
 
 acceptance:
-  description: "P0 demo — compose 输出须与 golden 对齐且 lineage 通过"
+  description: "ADC 行泊一体 — 前视/环视/USS/泊车/行车 + MCU"
   sor_golden: Requirement/vehicle_demo.sor.json
   lineage_required: true
   required_services:
     - services.semantic.EgoMotion
     - services.semantic.UssZones
-    - services.semantic.DrivingObjectList
+    - services.semantic.FrontObjectList
+    - services.semantic.SurroundWorld
     - services.semantic.ParkingWorld
+    - services.semantic.DrivingObjectList
     - services.semantic.Trajectory

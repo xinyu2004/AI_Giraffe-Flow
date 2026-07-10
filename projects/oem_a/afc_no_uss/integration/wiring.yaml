@@ -1,0 +1,47 @@
+# AFC 无 USS — 集成工程师连线草稿
+# SOA Apps: perception.front, planning.driving
+# Adapter: adapter.vehicle_can_gateway
+schema_version: "0.1"
+project_id: afc_no_uss
+variant: afc_front_camera
+topology: ap_only
+
+modules:
+  - id: perception.front
+    hpp: Requirement/modules/perception_front/io_types.hpp
+    package: customer/perception-front
+
+deployments:
+  - process: adapter.vehicle_can_gateway
+    compute_domain: ap_linux
+    provides:
+      - services.semantic.EgoMotion
+    requires: []
+
+  - process: perception.front
+    compute_domain: ap_linux
+    provides:
+      - services.semantic.FrontObjectList
+    requires:
+      - services.semantic.EgoMotion
+
+  - process: planning.driving
+    compute_domain: ap_linux
+    package: customer/planning-driving
+    provides:
+      - services.semantic.Trajectory
+    requires:
+      - services.semantic.FrontObjectList
+      - services.semantic.EgoMotion
+
+bindings:
+  - module: perception.front
+    inputs:
+      - { service: semantic.EgoMotion, type: EgoMotion }
+    outputs:
+      - { service: semantic.FrontObjectList, type: FrontObjectList }
+
+dataflows:
+  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: perception.front }
+  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: planning.driving }
+  - { from: perception.front, service: services.semantic.FrontObjectList, to: planning.driving }

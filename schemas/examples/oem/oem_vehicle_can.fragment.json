@@ -7,63 +7,144 @@
     "sources": [
       {
         "file": "projects/oem_demo/vehicle_demo/oem/oem_import.dbc",
-        "source_origin": "Requirement/archive/Demo_Car_CAN_Message_Protocol_V08_ussAdvBrcLWJ.dbc",
+        "source_origin": null,
         "role": "vehicle_can_chassis_parking_uss",
-        "message_count": 99,
+        "message_count": 12,
         "extract": "projects/oem_demo/vehicle_demo/oem/dbc_vehicle_can.extract.yaml"
       }
     ],
-    "extraction_note": "99-frame DBC; USS bulk excluded; whitelist 12 message groups → adapter_mappings"
+    "extraction_note": "12-frame 精简 DBC（chassis/mode）；USS/PDC 归 sensing.uss → UssZones"
   },
   "types": [
     {
       "id": "types.EgoMotion",
       "kind": "struct",
       "fields": [
-        { "name": "timestamp_ns", "type": "uint64" },
-        { "name": "speed_mps", "type": "float32" },
-        { "name": "yaw_rate_degps", "type": "float32" },
-        { "name": "steer_angle_deg", "type": "float32" },
-        { "name": "gear", "type": "uint8" },
-        { "name": "wheel_speed_fl_mps", "type": "float32" },
-        { "name": "wheel_speed_fr_mps", "type": "float32" },
-        { "name": "wheel_speed_rl_mps", "type": "float32" },
-        { "name": "wheel_speed_rr_mps", "type": "float32" }
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "speed_mps",
+          "type": "float32"
+        },
+        {
+          "name": "yaw_rate_degps",
+          "type": "float32"
+        },
+        {
+          "name": "steer_angle_deg",
+          "type": "float32"
+        },
+        {
+          "name": "gear",
+          "type": "uint8"
+        },
+        {
+          "name": "wheel_speed_fl_mps",
+          "type": "float32"
+        },
+        {
+          "name": "wheel_speed_fr_mps",
+          "type": "float32"
+        },
+        {
+          "name": "wheel_speed_rl_mps",
+          "type": "float32"
+        },
+        {
+          "name": "wheel_speed_rr_mps",
+          "type": "float32"
+        }
       ]
     },
     {
       "id": "types.VehicleModeStatus",
       "kind": "struct",
       "fields": [
-        { "name": "apa_on_off", "type": "uint8" },
-        { "name": "apa_mode", "type": "uint8" },
-        { "name": "apa_status", "type": "uint8" },
-        { "name": "avm_on_off", "type": "uint8" },
-        { "name": "avm_mode", "type": "uint8" }
+        {
+          "name": "apa_on_off",
+          "type": "uint8"
+        },
+        {
+          "name": "apa_mode",
+          "type": "uint8"
+        },
+        {
+          "name": "apa_status",
+          "type": "uint8"
+        },
+        {
+          "name": "avm_on_off",
+          "type": "uint8"
+        },
+        {
+          "name": "avm_mode",
+          "type": "uint8"
+        }
       ]
     },
     {
       "id": "types.ParkingSlot",
       "kind": "struct",
       "fields": [
-        { "name": "slot_id", "type": "uint8" },
-        { "name": "p0_x_m", "type": "float32" },
-        { "name": "p0_y_m", "type": "float32" },
-        { "name": "p1_x_m", "type": "float32" },
-        { "name": "p1_y_m", "type": "float32" },
-        { "name": "p2_x_m", "type": "float32" },
-        { "name": "p2_y_m", "type": "float32" }
+        {
+          "name": "slot_id",
+          "type": "uint8"
+        },
+        {
+          "name": "p0_x_m",
+          "type": "float32"
+        },
+        {
+          "name": "p0_y_m",
+          "type": "float32"
+        },
+        {
+          "name": "p1_x_m",
+          "type": "float32"
+        },
+        {
+          "name": "p1_y_m",
+          "type": "float32"
+        },
+        {
+          "name": "p2_x_m",
+          "type": "float32"
+        },
+        {
+          "name": "p2_y_m",
+          "type": "float32"
+        }
       ]
     },
     {
       "id": "types.ParkingWorld",
       "kind": "struct",
       "fields": [
-        { "name": "timestamp_ns", "type": "uint64" },
-        { "name": "slot_count", "type": "uint8" },
-        { "name": "slots", "type": "types.ParkingSlot", "array_size": 6 },
-        { "name": "pdc_zone_mask", "type": "uint16", "note": "from PDC_INFO summarized" },
-        { "name": "uss_nearest_cm", "type": "uint8", "note": "from P_USS_INFO* summarized" }
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "slot_count",
+          "type": "uint8"
+        },
+        {
+          "name": "slots",
+          "type": "types.ParkingSlot",
+          "array_size": 6
+        },
+        {
+          "name": "zone_mask",
+          "type": "uint16",
+          "note": "fused from UssZones.zone_mask (perception.parking)"
+        },
+        {
+          "name": "uss_nearest_cm",
+          "type": "uint8",
+          "note": "fused from UssZones.nearest_cm"
+        }
       ]
     }
   ],
@@ -71,40 +152,91 @@
     {
       "id": "map.ego_motion_from_can",
       "gateway": "adapter.vehicle_can_gateway",
-      "source": { "protocol": "can", "bus": "vehicle_can", "message": "P_VEHICLE_INFO", "frame_id": "0x631" },
+      "source": {
+        "protocol": "can",
+        "bus": "vehicle_can",
+        "message": "P_VEHICLE_INFO",
+        "frame_id": "0x631"
+      },
       "semantic_service": "services.semantic.EgoMotion",
       "semantic_type": "types.EgoMotion",
       "fields": [
-        { "semantic": "speed_mps", "source_signal": "P_Vehicle_Speed", "scale": 0.05 },
-        { "semantic": "yaw_rate_degps", "source_signal": "P_Vehicle_YawRate", "scale": 0.2, "offset": -102.4 },
-        { "semantic": "steer_angle_deg", "source_signal": "P_Vehicle_SteerAngle", "scale": 4, "offset": -2048 },
-        { "semantic": "gear", "source_signal": "P_Vehicle_Gear" },
-        { "semantic": "wheel_speed_fl_mps", "source_signal": "P_Vehicle_FL_Speed", "scale": 0.05 },
-        { "semantic": "wheel_speed_fr_mps", "source_signal": "P_Vehicle_FR_Speed", "scale": 0.05 },
-        { "semantic": "wheel_speed_rl_mps", "source_signal": "P_Vehicle_RL_Speed", "scale": 0.05 },
-        { "semantic": "wheel_speed_rr_mps", "source_signal": "P_Vehicle_RR_Speed", "scale": 0.05 }
+        {
+          "semantic": "speed_mps",
+          "source_signal": "P_Vehicle_Speed",
+          "scale": 0.05
+        },
+        {
+          "semantic": "yaw_rate_degps",
+          "source_signal": "P_Vehicle_YawRate",
+          "scale": 0.2,
+          "offset": -102.4
+        },
+        {
+          "semantic": "steer_angle_deg",
+          "source_signal": "P_Vehicle_SteerAngle",
+          "scale": 4,
+          "offset": -2048
+        },
+        {
+          "semantic": "gear",
+          "source_signal": "P_Vehicle_Gear"
+        },
+        {
+          "semantic": "wheel_speed_fl_mps",
+          "source_signal": "P_Vehicle_FL_Speed",
+          "scale": 0.05
+        },
+        {
+          "semantic": "wheel_speed_fr_mps",
+          "source_signal": "P_Vehicle_FR_Speed",
+          "scale": 0.05
+        },
+        {
+          "semantic": "wheel_speed_rl_mps",
+          "source_signal": "P_Vehicle_RL_Speed",
+          "scale": 0.05
+        },
+        {
+          "semantic": "wheel_speed_rr_mps",
+          "source_signal": "P_Vehicle_RR_Speed",
+          "scale": 0.05
+        }
       ]
     },
     {
       "id": "map.apa_mode_from_can",
       "gateway": "adapter.vehicle_can_gateway",
-      "source": { "protocol": "can", "bus": "vehicle_can", "message": "P_APA_STS", "frame_id": "0x630" },
+      "source": {
+        "protocol": "can",
+        "bus": "vehicle_can",
+        "message": "P_APA_STS",
+        "frame_id": "0x630"
+      },
       "semantic_service": "services.semantic.VehicleModeStatus",
       "semantic_type": "types.VehicleModeStatus",
       "fields": [
-        { "semantic": "apa_on_off", "source_signal": "P_APA_OnOff" },
-        { "semantic": "apa_mode", "source_signal": "P_APA_Mode" },
-        { "semantic": "apa_status", "source_signal": "P_APA_Status" },
-        { "semantic": "avm_on_off", "source_signal": "P_AVM_OnOff" },
-        { "semantic": "avm_mode", "source_signal": "P_AVM_Mode" }
+        {
+          "semantic": "apa_on_off",
+          "source_signal": "P_APA_OnOff"
+        },
+        {
+          "semantic": "apa_mode",
+          "source_signal": "P_APA_Mode"
+        },
+        {
+          "semantic": "apa_status",
+          "source_signal": "P_APA_Status"
+        },
+        {
+          "semantic": "avm_on_off",
+          "source_signal": "P_AVM_OnOff"
+        },
+        {
+          "semantic": "avm_mode",
+          "source_signal": "P_AVM_Mode"
+        }
       ]
-    },
-    {
-      "id": "map.pdc_summarize",
-      "gateway": "adapter.vehicle_can_gateway",
-      "source": { "protocol": "can", "message": "PDC_INFO", "frame_id": "0x700" },
-      "summarize_into": { "semantic_type": "types.ParkingWorld", "field": "pdc_zone_mask" },
-      "note": "PDC_*_Status bits packed in gateway; not per-signal in SOR"
     }
   ]
 }

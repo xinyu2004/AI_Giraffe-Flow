@@ -1,26 +1,35 @@
-# projects/ — 按客户 / 车型组织的集成工程
+# projects/ — 按 OEM / 产品组织的集成工程
 
-每个子目录 = 一个**实际交付项目**（系统工程师 + DevOps 的主战场）。
+每个子目录 = 一个交付项目（系统工程师 + DevOps）。
+
+## 先读：谁是 SOA App？
+
+→ **[PROCESS_ROLES.md](PROCESS_ROLES.md)**（Adapter / SOA App / 平台 daemon 分类）
+
+## 当前三个项目
+
+| 路径 | OEM | 产品 | 说明 |
+|------|-----|------|------|
+| [oem_a/afc_no_uss](oem_a/afc_no_uss/) | A | **AFC** | 前视，无 USS |
+| [oem_a/afc_with_uss](oem_a/afc_with_uss/) | A | **AFC** | 前视 + 独立 USS |
+| [oem_b/adc_full](oem_b/adc_full/) | B | **ADC** | 行泊一体（前视/环视/USS/规划/MCU） |
 
 ```text
 projects/
-  <oem>/
-    <vehicle>/
-      project.yaml           # compose 入口（索引，非替代四类文件）
-      req.yaml               # SKU / 部署 / 验收
-      oem/
-        oem_import.dbc
-        oem_import.yaml
-        dbc_vehicle_can.extract.yaml   # 可选 review
-      integration/
-        wiring.yaml
-      reports/                 # lineage 输出（CI 产物）
+  oem_a/
+    afc_no_uss/
+    afc_with_uss/
+  oem_b/
+    adc_full/
+  oem_demo/vehicle_demo/   # 旧对照样例，新工作以上面三个为准
+  PROCESS_ROLES.md
 ```
 
-示例：[oem_demo/vehicle_demo/](oem_demo/vehicle_demo/)
+每个项目内：
 
-模块 `io_types.hpp` 通常在各模块仓；在 `wiring.yaml` 的 `modules[].hpp` 登记路径。
+```text
+project.yaml / req.yaml / oem/ / integration/wiring.yaml / reports/
+```
 
-平台归档与 golden：[Requirement/](../Requirement/)
-
-文档：[docs/zh/architecture/sor-authoring.md](../docs/zh/architecture/sor-authoring.md)
+模块 hpp 示例：[Requirement/modules/](../Requirement/modules/)  
+文档：[sor-authoring.md](../docs/zh/architecture/sor-authoring.md)

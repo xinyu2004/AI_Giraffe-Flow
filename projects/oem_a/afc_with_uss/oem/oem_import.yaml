@@ -1,0 +1,39 @@
+# OEM 导入策略 — AFC + USS
+schema_version: "0.1.0"
+project_id: afc_with_uss
+topology_default: ap_only
+
+sources:
+  - id: vehicle_can_dbc
+    kind: dbc
+    path: oem_import.dbc
+    source_origin: null
+    bus_id: vehicle_can
+    gateway:
+      process: adapter.vehicle_can_gateway
+      provides:
+        - services.semantic.EgoMotion
+
+extraction:
+  dbc:
+    exclude_name_patterns:
+      - "P_USS_SEN*"
+      - "VECTOR__*"
+    module_owned:
+      - pattern: "PDC_INFO"
+        owner_process: sensing.uss
+        semantic: services.semantic.UssZones
+      - pattern: "P_USS_INFO*"
+        owner_process: sensing.uss
+        semantic: services.semantic.UssZones
+      - pattern: "P_USS_SEN*"
+        owner_process: sensing.uss
+        note: "探头原始 — 仅 USS 模块内部"
+    include_messages:
+      - P_VEHICLE_INFO
+      - PDC_INFO
+
+output:
+  fragment_id: oem_a_afc_uss_can
+  sections: [imports_meta, adapter_mappings, types]
+  merge_policy: overlay
