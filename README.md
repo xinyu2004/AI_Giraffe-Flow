@@ -4,9 +4,9 @@
 
 **中文:** [README_zh.md](README_zh.md)
 
-> Status: **architecture + directory skeleton** (incl. `ucm`/`diag` header stubs). **P0 code not started.**
+> Status: **projects + `gf-codegen` MVP ready** (compose/lint/suggest/type generate). Iceoryx two-process demo is next — [P0_PLAN](docs/zh/operations/P0_PLAN.md) (zh).
 
-[STRUCTURE.md](STRUCTURE.md) · [Roadmap P0–P3](docs/en/operations/ROADMAP.md) · [deps](deps/README.md)
+[STRUCTURE.md](STRUCTURE.md) · [Roadmap](docs/en/operations/ROADMAP.md) · [P0 plan (zh)](docs/zh/operations/P0_PLAN.md) · [Upload checklist](projects/UPLOAD_CHECKLIST.md)
 
 ---
 
@@ -67,7 +67,7 @@ Details: [DESIGN.md](docs/en/architecture/DESIGN.md) · expanded zh: [README_zh.
 | **P2** | MCAP, evidence, Foxglove |
 | **P3** | Production profile, DoIP/OTA bench, multi-arch OSAL |
 
-**Next:** [P0 plan](docs/zh/operations/P0_PLAN.md) (zh, to be expanded)
+**Next:** P0 track B — iceoryx demo + richer `generate` — [P0_PLAN (zh)](docs/zh/operations/P0_PLAN.md)
 
 ---
 

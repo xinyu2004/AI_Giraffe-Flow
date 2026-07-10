@@ -3,7 +3,7 @@
 > **English:** [ROADMAP.md](../../en/operations/ROADMAP.md)  
 > 设计背景：[DESIGN.md](../architecture/DESIGN.md)
 
-本文将平台交付划分为 **P0–P3**，每阶段有明确交付物与验收标准。完成文档与目录骨架后，**下一步单独制定 P0 实施计划**。
+本文将平台交付划分为 **P0–P3**，每阶段有明确交付物与验收标准。完成文档、`projects/` 集成输入与 **`gf-codegen` MVP** 后，按 [P0_PLAN.md](P0_PLAN.md) 进入 **轨 B（iceoryx 双进程）**。
 
 ---
 

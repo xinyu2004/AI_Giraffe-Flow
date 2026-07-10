@@ -4,9 +4,9 @@
 
 **English:** [README.md](README.md)
 
-> 状态：**架构 + 目录骨架**（含 `ucm`/`diag` 头文件占位；**P0 实现尚未开始**）。
+> 状态：**集成输入 + `gf-codegen` MVP 已可用**（compose/lint/suggest/类型 generate）。运行时 iceoryx 双进程尚未开始 — 见 [P0_PLAN](docs/zh/operations/P0_PLAN.md)。
 
-[STRUCTURE.md](STRUCTURE.md) · [路线图 P0–P3](docs/zh/operations/ROADMAP.md) · [deps](deps/README.md)
+[STRUCTURE.md](STRUCTURE.md) · [路线图](docs/zh/operations/ROADMAP.md) · [P0 实施计划](docs/zh/operations/P0_PLAN.md) · [上传清单](projects/UPLOAD_CHECKLIST.md)
 
 ---
 
@@ -134,12 +134,12 @@ flowchart LR
 
 | 阶段 | 内容 |
 |------|------|
-| **P0** | SOR、codegen、iceoryx 双进程、ARM OSAL → [详情](docs/zh/operations/ROADMAP.md) |
-| **P1** | 三 binding、GMT、ucm/diag stub、MCU gateway 模拟、`compose --project` |
+| **P0** | SOR、**gf-codegen（含 compose afc_with_uss）**、iceoryx 双进程、ARM OSAL → [P0_PLAN](docs/zh/operations/P0_PLAN.md) |
+| **P1** | 三 binding、GMT 画布、ucm/diag stub、MCU gateway 模拟 |
 | **P2** | MCAP/Tag/bench、证据包 |
 | **P3** | 量产 profile、DoIP/OTA 台架、多架构 OSAL |
 
-**下一步：** [P0 实施计划](docs/zh/operations/P0_PLAN.md)
+**下一步：** P0 轨 B — iceoryx 双进程 + generate 增强（Proxy/Skeleton）— [P0_PLAN](docs/zh/operations/P0_PLAN.md) · [上传清单](projects/UPLOAD_CHECKLIST.md)
 
 ---
 

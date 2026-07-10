@@ -3,7 +3,7 @@
 > 文档版本：0.1  
 > **English:** [WORKFLOW.md](../../en/operations/WORKFLOW.md)  
 > 配套设计：[DESIGN.md](../architecture/DESIGN.md)  
-> 说明：当前为**目标流程**描述；命令与工具名称在实现后会补齐可执行 CLI。标有「计划中」的步骤表示尚未有二进制产物。
+> 说明：主机工具 **`gf-codegen` MVP 已可用**（compose/lint/suggest/类型 generate）。板端 runtime / iceoryx 双进程仍为计划中（P0 轨 B）。GMT 画布为 P1。
 
 ---
 
