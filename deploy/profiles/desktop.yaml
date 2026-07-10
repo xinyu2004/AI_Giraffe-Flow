@@ -1,13 +1,14 @@
-# desktop profile (skeleton)
-# Full recording, DDS, ROS-friendly host bring-up.
+# desktop profile — host bring-up (x86_64 / aarch64 Linux desktop)
+# Runtime deps: ./scripts/bootstrap_deps.sh → middleware/third_party/iceoryx
+# Build: cmake -B build && cmake --build build
 
 name: desktop
-target: host_x86_64_linux
+target: host_linux
 
 bindings:
   iceoryx: enabled
   someip: stub_ok
-  dds: enabled
+  dds: stub_ok
 
 observability:
   record: full

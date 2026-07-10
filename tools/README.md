@@ -6,6 +6,7 @@
 |--------|-----|----------|
 | **gf-codegen** | [codegen/](codegen/) | `import` · `lint` · `generate` |
 | **GMT** (Giraffe Measure Tool) | [gmt/](gmt/) | `architect` · `measure` · `bridge` |
+| **bridge** (host) | [bridge/](bridge/) | optional ROS 2 helpers |
 
 ```text
 OEM → gf-codegen import → lint → generate → build

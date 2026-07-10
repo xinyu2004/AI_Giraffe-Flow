@@ -125,7 +125,7 @@ flowchart LR
 ## 目标硬件与解耦
 
 - **主：** ARM Linux  
-- **预留：** MIPS、RISC-V（`platform/osal/arch/`）  
+- **预留：** MIPS、RISC-V（`middleware/osal/arch/`）
 - **原则：** SOR 唯一契约；middleware/bindings 插件化；业务与 OEM 差异在 adapter/gateway  
 
 ---

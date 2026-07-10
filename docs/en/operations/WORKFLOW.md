@@ -209,8 +209,8 @@ Use as a design gate after OEM import or before a release.
 
 ## 11. Porting to a new SoC / OS (sketch)
 
-1. Implement or port `platform/osal` (threads, clocks, shm, processes)  
-2. Implement board `platform/hal` (radar SDK, camera, CAN)  
+1. Implement or port `middleware/osal` (threads, clocks, shm, processes)
+2. Implement board `middleware/hal` (radar SDK, camera, CAN)  
 3. Confirm binding library availability; disable or swap if missing  
 4. Add `deploy/profiles/<soc>.yaml` (affinity, memory pools)  
 5. Smoke reference apps, then wire the customer project  

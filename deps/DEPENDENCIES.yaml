@@ -7,10 +7,14 @@ schema_version: 1
 policy:
   pin: exact           # prefer exact tags / commit SHAs when integrating
   license_review: required
+  # Board/runtime deps: always source-build with the active toolchain into
+  # middleware/.deps-prefix (bootstrap) or via CMake add_subdirectory — never rely on
+  # host apt packages as the path that will ship to the board.
+  runtime_from_source: true
   board_build_excludes:
     - category: host_tools_ui
     - category: ros_desktop
-  default_integration: cmake_fetchcontent  # alternatives: system_package, submodule, vendor_copy
+  default_integration: source_staging  # bootstrap → middleware/.deps-prefix / middleware/third_party
 
 categories:
   runtime_board:
@@ -27,16 +31,45 @@ categories:
     description: Feature-gated / profile-gated
 
 dependencies:
+  - id: attr
+    name: GNU attr
+    category: runtime_board
+    purpose: xattr support; build dependency of acl
+    homepage: https://savannah.nongnu.org/projects/attr
+    license: GPL-2.0-or-later OR LGPL-2.1-or-later
+    planned_version: "2.5.2"
+    integration: source_staging
+    enabled_profiles: [desktop, board, vehicle-debug, production]
+    notes: >
+      Built by scripts/bootstrap_deps.sh into middleware/.deps-prefix with host or
+      GF_CROSS_PREFIX toolchain. Not taken from apt for board path.
+
+  - id: acl
+    name: GNU acl
+    category: runtime_board
+    purpose: POSIX ACL headers/libs required by iceoryx on Linux
+    homepage: https://savannah.nongnu.org/projects/acl
+    license: GPL-2.0-or-later OR LGPL-2.1-or-later
+    planned_version: "2.3.2"
+    integration: source_staging
+    depends_on: [attr]
+    enabled_profiles: [desktop, board, vehicle-debug, production]
+    notes: >
+      Same staging path as attr. Host apt libacl1-dev is NOT the board strategy.
+
   - id: iceoryx
     name: Eclipse iceoryx
     category: runtime_board
     purpose: On-SoC zero-copy IPC binding
     homepage: https://github.com/eclipse-iceoryx/iceoryx
     license: Apache-2.0
-    planned_version: TBD
+    planned_version: "v2.0.8"
     integration: cmake_fetchcontent
     enabled_profiles: [desktop, board, vehicle-debug, production]
-    notes: Required for local high-rate data paths
+    notes: >
+      Classic C++ iceoryx (not iceoryx2). Source in middleware/third_party/iceoryx;
+      CMake add_subdirectory with the same toolchain. Needs ACL from
+      middleware/.deps-prefix (bootstrap builds attr+acl from source).
 
   - id: vsomeip
     name: COVESA vsomeip

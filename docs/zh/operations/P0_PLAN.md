@@ -5,9 +5,9 @@
 > 布局：[MODULE_INTERFACE_LAYOUT.md](../../../projects/MODULE_INTERFACE_LAYOUT.md)
 
 **状态（2026-07-10）：**  
-- 集成输入与 **`gf-codegen` MVP 已落地**（`compose` / `lint` / `suggest` / 类型头 `generate`）。  
-- 验收项目：`projects/oem_a/afc_with_uss`（含 `golden/`）。  
-- **下一步：** P0 轨 B — iceoryx 双进程 + generate 增强（Proxy/Skeleton）；见下文轨 B/C。
+- 轨 A：`gf-codegen` MVP（compose / lint / suggest / **types+Proxy/Skeleton generate**）。  
+- 轨 B：**B0–B5 已落地**（bootstrap、CMake、core/com、iceoryx 双进程、generate 接入 demo、OSAL、CI/交叉冒烟脚本）。  
+- 联调：`bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh`（SIL：compose → generate → build → RouDi demo；HIL 见同目录 `compile_hil.sh`）。
 
 快速命令：
 
@@ -157,7 +157,7 @@ tools/codegen/
 | 步 | 交付 | 依赖 |
 |----|------|------|
 | B1 | `gf_ara::core` Result/ErrorCode | 无三方 |
-| B2 | `gf_ara::com` Event 子集 + `bindings/iceoryx` | **iceoryx** FetchContent；同工具链 |
+| B2 | `gf_ara::com` Event 子集 + `middleware/bindings/iceoryx` | **iceoryx** 源码；同工具链 |
 | B3 | 双进程 demo（publish/subscribe） | RouDi 先起（**平台 daemon**，OEM 主图不画） |
 | B4 | `generate` 输出接入 demo | A5 |
 

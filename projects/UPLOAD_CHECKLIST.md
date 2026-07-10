@@ -1,56 +1,48 @@
-# 上传前清单与当前流程（gf-codegen MVP）
+# 上传前清单
 
-> 日期：2026-07-10 · 状态：轨 A（codegen）MVP 已完成，可上传后进入轨 B（runtime / iceoryx）
+> 日期：2026-07-10 · 分层说明：[docs/zh/architecture/code-layers.md](../docs/zh/architecture/code-layers.md)
 
-## 应提交（建议）
-
-| 路径 | 说明 |
-|------|------|
-| `tools/codegen/` | `pyproject.toml`、`src/`、`tests/`、README、IMPLEMENTATION |
-| `projects/oem_a/afc_*`、`projects/oem_b/adc_full` | 集成输入 + **golden/** |
-| `projects/*.md` | PROCESS_ROLES、MODULE_INTERFACE_LAYOUT、走查 |
-| `docs/zh/operations/P0_PLAN.md` 等 | 已更新状态的文档 |
-| `.gitignore` | 已忽略 `.venv`、compose 工作产物、`generated/` |
-
-## 不要提交
+## 上传前请删掉 / 勿打包（本地已可清）
 
 | 路径 | 原因 |
 |------|------|
-| `.venv/` | 本地虚拟环境 |
-| `**/__pycache__/`、`*.egg-info/` | 构建垃圾 |
-| `projects/**/gf.sor.json` | compose 工作副本（以 golden 为准） |
-| `projects/**/reports/signal_lineage_report.yaml` | 本地报告 |
-| `generated/` | generate 输出 |
+| `build/`、`build-hil/`、`cmake-build-*/` | CMake 构建树 |
+| `middleware/.deps-prefix/`、`.deps-sysroot/` | 源码编出的 attr/acl staging |
+| `middleware/third_party/iceoryx/`、`attr/`、`acl/` | bootstrap 检出（保留 `middleware/third_party/README.md`） |
+| `.venv/`、`venv/` | 本地 Python 环境（可再 `python3 -m venv .venv`） |
+| `**/generated/` | `gf-codegen generate` 输出 |
+| `projects/**/gf.sor.json` | compose 工作副本 |
+| `projects/**/reports/` | lineage 等本地报告 |
+| `**/__pycache__/`、`*.egg-info/`、`.pytest_cache/` | Python 垃圾 |
 
-## 他人克隆后怎么跑
+`.gitignore` 已覆盖上表；若用压缩包上传，请确认未手动打进上述目录。
+
+## 应上传（源码与文档）
+
+| 路径 | 说明 |
+|------|------|
+| `middleware/` | 静态：core / com / bindings / osal / hal …（不含 third_party 检出与 `.deps-prefix`） |
+| `tools/codegen/`、`tools/bridge/` | gf-codegen；可选 ROS2 桥（主机侧） |
+| `projects/` | 集成输入 + 项目脚本（如 `afc_with_uss/scripts/smoke_sil.sh`） |
+| `apps/` | 参考 App 源码 |
+| `schemas/`、`cmake/`、`scripts/`、`deps/`、`docs/`、`ci/` | 契约、构建、文档 |
+| 根 `README*`、`STRUCTURE.md`、`.gitignore` | |
+
+## 他人拿到后怎么跑
 
 ```bash
-git clone <repo> && cd AI_Giraffe-Flow
-python3 -m venv .venv && source .venv/bin/activate
+cd AI_Giraffe-Flow
+python3 -m venv .venv && source .venv/bin/activate   # 需要 Python ≥ 3.10
 pip install -e "tools/codegen[dev]"
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
-pytest tools/codegen/tests -q
+bash scripts/bootstrap_deps.sh                       # 拉 iceoryx + 源码编 attr/acl
+bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
 ```
 
-要求：**Python ≥ 3.10**。
+只要工具链：`cmake`、`g++`、`git`、`make`、`curl`（见 `scripts/bootstrap_deps.sh --check`）。
 
-## 流程（现在 → 下一步）
+## 入口文档
 
-```text
-【已完成】
-  项目输入（DBC/hpp/wiring/req）
-  → gf-codegen compose / lint / suggest / generate(types)
-  → afc_with_uss golden 落盘
-
-【下一步 · P0 轨 B】
-  generate 增强（Proxy/Skeleton）或手写最小 com API
-  → iceoryx binding + RouDi
-  → 双进程 demo（publish / subscribe）
-  → CMake / OSAL / CI
-```
-
-入口文档：
-
-1. [tools/codegen/README.md](../tools/codegen/README.md) — 工具用法  
-2. [projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md](oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md) — 集成审阅  
-3. [docs/zh/operations/P0_PLAN.md](../docs/zh/operations/P0_PLAN.md) — 下一步 runtime  
+1. [code-layers.md](../docs/zh/architecture/code-layers.md) — **静态 / 生成 / 手写**  
+2. [tools/codegen/README.md](../tools/codegen/README.md) — 工具用法  
+3. [afc_with_uss/INTEGRATOR_WALKTHROUGH.md](oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md) — 集成审阅  
+4. [P0_PLAN.md](../docs/zh/operations/P0_PLAN.md) — 计划与状态  

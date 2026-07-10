@@ -29,9 +29,9 @@
 | P0-1 | SOR schema **0.2** 字段级冻结（子集） | `schemas/gf.sor.schema.json` + 评审记录 |
 | P0-2 | `gf-codegen` 可执行：`import`（DBC 样例）、`lint`、`generate`（最小） | `tools/codegen/` |
 | P0-3 | `gf_ara::core` Result/ErrorCode | `middleware/core/` |
-| P0-4 | `gf_ara::com` Event 子集 + **iceoryx binding** | `middleware/com/`, `bindings/iceoryx/` |
+| P0-4 | `gf_ara::com` Event 子集 + **iceoryx binding** | `middleware/com/`, `middleware/bindings/iceoryx/` |
 | P0-5 | 两进程 demo：simulator publish + consumer subscribe | `apps/simulators/`, `apps/demo_pipeline/` |
-| P0-6 | OSAL POSIX + **ARM** backend 最小（线程、单调时钟） | `platform/osal/` |
+| P0-6 | OSAL POSIX + **ARM** backend 最小（线程、单调时钟） | `middleware/osal/` |
 | P0-7 | CMake 构建 + desktop profile | `cmake/`, `deploy/profiles/desktop.yaml` |
 | P0-8 | CI：lint + generate golden + 单测冒烟 | `ci/` |
 

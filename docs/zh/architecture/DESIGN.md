@@ -270,18 +270,15 @@ OTA 后端候选：RAUC、OSTree；**不含 SWUpdate**。
 ```text
 AI_Giraffe-Flow/
   schemas/                 # SOR 契约，semver
-  middleware/              # 板端 runtime
-  platform/osal|hal/
-  bindings/
-  middleware/              # core…trace, ucm, diag
-  platform/osal/arch/      # arm · mips · riscv
-  bindings/                # + cross_domain_ipc
+  middleware/              # 板端 runtime：core/com/bindings/osal/hal/…
+    third_party/           # 上游检出（钉扎后）
   tools/codegen/           # gf-codegen
+  tools/bridge/            # 主机侧桥（如 ROS2）
   tools/gmt/               # GMT
   apps/adapters|simulators/
+  projects/                # OEM 集成输入
   deploy/profiles/
   deps/                    # 第三方依赖清单与版本锁
-  third_party/             # 上游检出（钉扎后）
   docs/en/  docs/zh/
   ci/
 ```

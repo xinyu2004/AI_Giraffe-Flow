@@ -31,7 +31,7 @@ It borrows ideas from the AUTOSAR Adaptive Platform (AP):
 
 Phased delivery: **[ROADMAP.md](../operations/ROADMAP.md)** (P0–P3).
 
-Embedded **ARM Linux** primary; **MIPS / RISC-V** via `platform/osal/arch/`. See [portability-hal.md](portability-hal.md).
+Embedded **ARM Linux** primary; **MIPS / RISC-V** via `middleware/osal/arch/`. See [portability-hal.md](portability-hal.md).
 
 More detail in the Chinese DESIGN (§6–§10) until full EN sync.
 
@@ -251,14 +251,13 @@ Suggested layout:
 ```text
 AI_Giraffe-Flow/
   schemas/                 # SOR contract, semver
-  middleware/              # on-board runtime
-  platform/osal|hal/
-  bindings/
-  tools/importer|codegen|architect|record_replay|lint/
+  middleware/              # on-board runtime: core/com/bindings/osal/hal/…
+    third_party/           # upstream checkouts (after pins)
+  tools/                   # codegen, bridge/ros2 (host)
   apps/                    # reference processes; customer prod apps in other repos
+  projects/                # OEM integration inputs
   deploy/profiles/
   deps/                    # third-party manifests + version lock
-  third_party/             # upstream checkouts (after pins)
   docs/en/  docs/zh/
   ci/
 ```

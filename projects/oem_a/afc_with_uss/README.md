@@ -27,5 +27,13 @@ CAN → gateway ─EgoMotion─► sensing.uss ─UssZones─► perception.fron
 **本项目接口：** [interfaces/](interfaces/) · 布局：[MODULE_INTERFACE_LAYOUT.md](../../MODULE_INTERFACE_LAYOUT.md)
 
 ```bash
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+# SIL 一键：compose → generate → compile → RouDi demo
+bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
+
+# 或分步
+bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+
+# HIL 交叉编译（需 aarch64 工具链）
+bash projects/oem_a/afc_with_uss/scripts/compile_hil.sh
 ```

@@ -1,16 +1,11 @@
-# CI (stubs)
+# CI
 
-Workflows will live under `workflows/` once the build system exists.
+| Script | Purpose |
+|--------|---------|
+| [scripts/smoke.sh](scripts/smoke.sh) | bootstrap → pytest → cmake/ctest → afc_with_uss smoke_sil → optional aarch64 link |
 
-Planned jobs:
+```bash
+bash ci/scripts/smoke.sh
+```
 
-| Job | Builds | Notes |
-|-----|--------|-------|
-| `docs` | — | Link/markdown checks |
-| `schemas` | — | Validate examples against `gf.sor.schema.json` |
-| `tools-host` | tools/* | Host only |
-| `runtime-desktop` | middleware + bindings | x86_64 |
-| `runtime-board` | middleware + bindings | cross aarch64; **no** architect GUI |
-| `e2e-smoke` | apps demo | Multi-process bring-up |
-
-See [../deps/README.md](../deps/README.md) for dependency policy on board jobs.
+Board jobs must not pull host-only UI/ROS deps — see [deps/README.md](../deps/README.md).

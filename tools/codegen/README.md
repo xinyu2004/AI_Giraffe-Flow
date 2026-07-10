@@ -10,8 +10,8 @@
 ① compose   → gf.sor.json + lineage 报告     ← 主路径（DBC+hpp+wiring+req）
 ② lint      → 校验 compose 产出的 SOR（工作区路径）
 ③ suggest   → 可选：打印 wiring 建议片段
-④ generate  → 目前仅 types/*.hpp（尚无 Proxy/Skeleton）
-⑤ 下一步    → iceoryx 双进程 + generate 增强（P0 轨 B）
+④ generate  → types + **Proxy/Skeleton**（`--out generated/`）
+⑤ 联调      → `bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh`
 ```
 
 ```bash
@@ -19,9 +19,11 @@
 cd /path/to/AI_Giraffe-Flow
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e "tools/codegen[dev]"
+bash scripts/bootstrap_deps.sh
 
 gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
-gf-codegen lint projects/oem_a/afc_with_uss/gf.sor.json   # gitignored 工作产出
+gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out projects/oem_a/afc_with_uss/generated/
+bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
 pytest tools/codegen/tests -q
 ```
 
@@ -29,8 +31,7 @@ pytest tools/codegen/tests -q
 |------|------|----------|
 | 工作 SOR | `projects/.../gf.sor.json` | 否（gitignore） |
 | lineage | `projects/.../reports/signal_lineage_report.yaml` | 否（gitignore） |
-| golden | `projects/.../golden/gf.sor.json` | 审定后可选提交（demo 阶段不随仓） |
-| generate | `--out` 目录下 `include/gf_gen/types/*.hpp` | 否（`**/generated/` ignore） |
+| generate | `projects/.../generated/include/gf_gen/{types,proxy,skeleton}/` | 否（`**/generated/` ignore） |
 
 **注意：** `pytest tools/codegen/tests` 必须在**仓库根**跑；在 `generated/...` 子目录会报 `file or directory not found`。
 
@@ -46,10 +47,10 @@ gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out generated/
 
 ## 当前能力边界
 
-| 已有 | 尚未有（下一步） |
-|------|------------------|
-| compose / lint / suggest / 类型头 generate | Proxy/Skeleton、iceoryx 联调、GMT 画布 |
-| afc_with_uss 端到端 + golden | adc_full 全量 compose 对齐（加分项） |
+| 已有 | 尚未有 |
+|------|--------|
+| compose / lint / suggest / types+Proxy/Skeleton generate | GMT 画布、adc_full 全量对齐 |
+| `afc_with_uss` `smoke_sil.sh` 联调 iceoryx | SOME/IP / DDS |
 
 ## 源码布局
 

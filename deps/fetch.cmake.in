@@ -1,13 +1,15 @@
-# Optional CMake FetchContent template (not wired yet)
+# Historical FetchContent sketch — preferred path is now:
+#   ./scripts/bootstrap_deps.sh  →  third_party/iceoryx
+#   cmake/Dependencies.cmake     →  add_subdirectory(third_party/iceoryx)
 #
-# When build system lands, copy patterns from here into cmake/Dependencies.cmake
+# FetchContent remains an alternative if you prefer configure-time clone:
 #
 # include(FetchContent)
 # FetchContent_Declare(
 #   iceoryx
 #   GIT_REPOSITORY https://github.com/eclipse-iceoryx/iceoryx.git
-#   GIT_TAG        <pin-from-versions.lock.md>
+#   GIT_TAG        v2.0.8
 # )
 # FetchContent_MakeAvailable(iceoryx)
 
-message(STATUS "Giraffe Flow: dependency fetch templates live under deps/; not active in skeleton phase.")
+message(STATUS "Giraffe Flow: use scripts/bootstrap_deps.sh + cmake/Dependencies.cmake")
