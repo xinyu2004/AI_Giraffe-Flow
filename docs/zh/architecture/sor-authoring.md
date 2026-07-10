@@ -29,7 +29,7 @@
 | 4 | **`req.yaml`** | 系统工程师 + DevOps | SKU、能力、profile、**验收项** |
 | — | **`project.yaml`** | 系统工程师 | **仅索引**以上路径 + compose 输出；不含业务细节 |
 
-示例工程：[projects/oem_demo/vehicle_demo/](../../../projects/oem_demo/vehicle_demo/)
+示例工程：[projects/oem_a/afc_with_uss/](../../../projects/oem_a/afc_with_uss/)
 
 ```text
 io_types.hpp ──┐
@@ -45,10 +45,10 @@ req.yaml ──────┘
 ## 3. 一句话生成 gf.sor.json（集成工程师）
 
 ```bash
-gf-codegen compose --project projects/oem_demo/vehicle_demo/project.yaml
+gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
 ```
 
-[`project.yaml`](../../../projects/oem_demo/vehicle_demo/project.yaml) 声明：
+[`project.yaml`](../../../projects/oem_a/afc_with_uss/project.yaml) 声明：
 
 - OEM：`oem/oem_import.dbc`（+ 可选 `oem/oem_import.yaml`）
 - 连线：`integration/wiring.yaml`
@@ -66,7 +66,7 @@ parse hpp structs  +  import oem(dbc)  +  apply wiring  +  merge req  →  gf.so
 
 ## 4. 模块工程师：只交 io_types.hpp
 
-示例目录：[Requirement/modules/](../../../Requirement/modules/)
+示例目录：[projects/oem_a/afc_with_uss/interfaces/](../../../projects/oem_a/afc_with_uss/interfaces/)
 
 ```cpp
 // perception_driving/io_types.hpp — 只描述数据形状
@@ -131,8 +131,8 @@ P1：`gmt architect wiring --read-only` 只读画布标红缺口；P1+ 拖拽写
 | 文件 | 角色 |
 |------|------|
 | `projects/.../oem/oem_import.dbc` | **import 用精简 DBC**（`--dbc` 指向此文件） |
-| `projects/.../oem/dbc_vehicle_can.extract.yaml` | 人工 review 用提炼表 |
-| `Requirement/archive/` | 可选占位；**非 P0 必留**，全量矩阵收纳流程 **TBD**（需与集成/OEM 流程讨论） |
+| `projects/.../oem/dbc_vehicle_can.extract.yaml` | 人工 review 用提炼表（按需） |
+| `projects/.../interfaces/` | 各模块 `io_types.hpp`（跟交付项目走，无顶层共享目录） |
 
 报文 → semantic 要点（节选）：
 
@@ -148,10 +148,10 @@ P1：`gmt architect wiring --read-only` 只读画布标红缺口；P1+ 拖拽写
 
 ```bash
 # 集成工程师（主路径）
-gf-codegen compose --project projects/oem_demo/vehicle_demo/project.yaml
+gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
 
 # 校验 golden / 本地调试
-gf-codegen lint Requirement/vehicle_demo.sor.json
+gf-codegen lint projects/oem_b/adc_full/golden/gf.sor.json
 gf-codegen lint --lineage gf.sor.json --out reports/signal_lineage_report.yaml
 
 # 代码生成（SOR 稳定后）
@@ -170,9 +170,11 @@ gf-codegen import module ... -o sor/fragments/xxx.json
 
 ## 9. 与 golden 的关系
 
-[Requirement/vehicle_demo.sor.json](../../../Requirement/vehicle_demo.sor.json) 仍为 P0 golden。  
-`req.yaml` 的 `acceptance.sor_golden` 指向该文件；CI 对 compose 输出做 diff。  
-P1 目标：`compose --project` 输出与之对齐。
+[projects/oem_b/adc_full/golden/gf.sor.json](../../../projects/oem_b/adc_full/golden/gf.sor.json) 为 P0 主示范 golden（各项目应自建，勿共用）。  
+`req.yaml` 的 `acceptance.sor_golden` 指向**本项目** golden；CI 对 compose 输出做 diff。  
+
+Golden = 已知正确的 SOR 快照（回归/验收），不是板端运行文件。何时更新、不是什么：见 [走查 §3](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md#3-golden对照用的正确答案sor)。  
+P1 目标：`compose --project` 输出与对应项目 golden 对齐。
 
 ---
 

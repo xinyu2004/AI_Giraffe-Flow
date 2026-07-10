@@ -37,18 +37,24 @@ EgoMotion ──► sensing.uss ──► UssZones ──► perception.parking 
 
 ## 本仓模块示例 ↔ 进程
 
-| 模块目录 (`Requirement/modules/`) | process id | 类别 | 典型项目 |
-|-----------------------------------|------------|------|----------|
-| `perception_front/` | `perception.front` | SOA App | OEM A AFC、OEM B ADC |
-| `perception_surround/` | `perception.surround` | SOA App | OEM B ADC |
-| `uss_sensing/` | `sensing.uss` | SOA App | AFC+USS、ADC |
-| `perception_parking/` | `perception.parking` | SOA App | ADC（行泊） |
-| `perception_driving/` | `perception.driving.nullmax` | SOA App | 旧 demo / 可作行车备选 |
-| `mcu_cp_gateway/` | `adapter.mcu_cp_gateway` | Adapter | 有 MCU 的项目 |
+> **接口布局：** 各交付项目的 `interfaces/` 下维护 `io_types.hpp`（无顶层共享目录）。  
+> `wiring.yaml` 的 `modules[].hpp` **只写路径引用**。详见 [MODULE_INTERFACE_LAYOUT.md](MODULE_INTERFACE_LAYOUT.md)。  
+> `middleware/ucm`、`middleware/diag` 是平台 API，**不是**模块 `io_types.hpp`。
+
+| 模块名 | process id | 类别 | 典型项目 |
+|--------|------------|------|----------|
+| `perception_front` | `perception.front` | SOA App | OEM A AFC、OEM B ADC |
+| `perception_surround` | `perception.surround` | SOA App | OEM B ADC |
+| `uss_sensing` | `sensing.uss` | SOA App | AFC+USS、ADC |
+| `perception_parking` | `perception.parking` | SOA App | ADC（行泊） |
+| `perception_driving` | `perception.driving.nullmax` | SOA App | 旧 demo / 可作行车备选 |
+| `mcu_cp_gateway` | `adapter.mcu_cp_gateway` | Adapter | 有 MCU 的项目 |
 | （无 hpp，平台 adapter） | `adapter.vehicle_can_gateway` | Adapter | 凡有车身 CAN |
 | （外仓） | `planning.driving` / `planning.parking` | SOA App | 按 SKU |
 
 规划模块本仓暂无 `io_types.hpp` 示例，在 wiring 里用 `package:` 指向外仓即可。
+
+**走查（推荐先读）：** [oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md](oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md)
 
 ## 三个交付项目（集成工程师工作区）
 

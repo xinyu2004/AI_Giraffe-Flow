@@ -4,7 +4,7 @@
   "imports_meta": {
     "sources": [
       {
-        "file": "projects/oem_demo/vehicle_demo/oem/oem_import.dbc",
+        "file": "projects/oem_b/adc_full/oem/oem_import.dbc",
         "source_origin": null,
         "sha256_prefix": "55bfe2d2bcabd788",
         "role": "vehicle_can_chassis_parking_uss",
@@ -12,22 +12,22 @@
         "import": "gf-codegen import oem"
       },
       {
-        "file": "Requirement/modules/uss_sensing/io_types.hpp",
+        "file": "projects/oem_b/adc_full/interfaces/uss_sensing/io_types.hpp",
         "role": "uss_sensing_module",
-        "import": "compose parse hpp → Requirement/modules/uss_sensing/"
+        "import": "compose parse hpp → projects/oem_b/adc_full/interfaces/uss_sensing/"
       },
       {
-        "file": "Requirement/app.xlsx#Platform",
+        "file": "projects/oem_b/adc_full/interfaces/mcu_cp_gateway/io_types.hpp",
         "role": "soa_mcu_ipc_gateway",
-        "import": "compose parse hpp → Requirement/modules/mcu_cp_gateway/"
+        "import": "compose parse hpp → projects/oem_b/adc_full/interfaces/mcu_cp_gateway/"
       },
       {
-        "file": "Requirement/app.xlsx#Perception",
+        "file": "projects/oem_b/adc_full/interfaces/perception_parking/io_types.hpp",
         "role": "soa_parking_perception_io",
-        "import": "compose parse hpp → Requirement/modules/perception_parking/"
+        "import": "compose parse hpp → projects/oem_b/adc_full/interfaces/perception_parking/"
       }
     ],
-    "manifest": "projects/oem_demo/vehicle_demo/oem/oem_import.yaml",
+    "manifest": "projects/oem_b/adc_full/oem/oem_import.yaml",
     "extraction_note": "OEM: 精简 oem_import.dbc. USS/PDC → sensing.uss → UssZones. SOA modules: hpp only."
   },
   "compute_domains": [

@@ -8,7 +8,7 @@ topology: ap_only
 
 modules:
   - id: perception.front
-    hpp: Requirement/modules/perception_front/io_types.hpp
+    hpp: projects/oem_a/afc_no_uss/interfaces/perception_front/io_types.hpp
     package: customer/perception-front
 
 deployments:

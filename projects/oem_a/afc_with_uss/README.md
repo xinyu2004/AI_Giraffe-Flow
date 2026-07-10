@@ -23,6 +23,9 @@ CAN → gateway ─EgoMotion─► sensing.uss ─UssZones─► perception.fron
 
 对比无 USS 变体：[../afc_no_uss/](../afc_no_uss/) · 角色总表：[PROCESS_ROLES.md](../../PROCESS_ROLES.md)
 
+**集成走查（含 Golden 说明）：** [INTEGRATOR_WALKTHROUGH.md](INTEGRATOR_WALKTHROUGH.md)  
+**本项目接口：** [interfaces/](interfaces/) · 布局：[MODULE_INTERFACE_LAYOUT.md](../../MODULE_INTERFACE_LAYOUT.md)
+
 ```bash
 gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
 ```

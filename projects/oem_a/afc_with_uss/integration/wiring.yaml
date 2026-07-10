@@ -6,12 +6,13 @@ project_id: afc_with_uss
 variant: afc_front_camera_uss
 topology: ap_only
 
+# hpp：本项目 interfaces/（外仓交付或本车型接口；DBC/hpp 均跟项目走）
 modules:
   - id: sensing.uss
-    hpp: Requirement/modules/uss_sensing/io_types.hpp
+    hpp: projects/oem_a/afc_with_uss/interfaces/uss_sensing/io_types.hpp
     package: customer/uss-sensing
   - id: perception.front
-    hpp: Requirement/modules/perception_front/io_types.hpp
+    hpp: projects/oem_a/afc_with_uss/interfaces/perception_front/io_types.hpp
     package: customer/perception-front
 
 deployments:

@@ -25,7 +25,7 @@ deploy_profile: deploy/profiles/vehicle-debug.yaml
 
 acceptance:
   description: "ADC 行泊一体 — 前视/环视/USS/泊车/行车 + MCU"
-  sor_golden: Requirement/vehicle_demo.sor.json
+  sor_golden: projects/oem_b/adc_full/golden/gf.sor.json
   lineage_required: true
   required_services:
     - services.semantic.EgoMotion

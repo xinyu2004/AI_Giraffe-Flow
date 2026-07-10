@@ -149,8 +149,7 @@ flowchart LR
 
 | 目录 | 用途 |
 |------|------|
-| [projects/](projects/) | 按客户/车型的集成工程（系统工程师主战场） |
-| [Requirement/](Requirement/) | 模块 hpp 示例 + golden SOR + DBC 归档 |
+| [projects/](projects/) | DBC + hpp + wiring 集成工程（系统工程师主战场）；golden 见 [projects/oem_b/adc_full/golden/](projects/oem_b/adc_full/golden/) |
 | [middleware/](middleware/) | 板端可裁剪运行时 |
 | [tools/codegen/](tools/codegen/) | gf-codegen |
 | [tools/gmt/](tools/gmt/) | 上位机度量与桥接 |

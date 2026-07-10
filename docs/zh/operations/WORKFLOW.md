@@ -65,25 +65,29 @@ AI_Giraffe-Flow/
 
 目标：模块只交 `io_types.hpp`；系统工程师在 `projects/<oem>/<vehicle>/` 维护集成工件，**一条命令**出 `gf.sor.json`，用自动闭环替代开会扫表。
 
-详细契约：[sor-authoring.md](../architecture/sor-authoring.md) · 示例：[projects/oem_demo/vehicle_demo/](../../../projects/oem_demo/vehicle_demo/)
+详细契约：[sor-authoring.md](../architecture/sor-authoring.md) · 走查：[afc_with_uss 集成走查](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md) · 角色：[PROCESS_ROLES.md](../../../projects/PROCESS_ROLES.md)
 
-### 3.1 角色
+### 3.1 角色与 hpp 归属
 
 | 角色 | 交付 | 环境 |
 |------|------|------|
-| 模块工程师 | `io_types.hpp`（无 JSON/YAML） | 各业务仓 |
-| 系统工程师 | `oem_import.dbc`、`integration/wiring.yaml`、`req.yaml`、`project.yaml` | `projects/` |
-| DevOps | `req.yaml` 的 `acceptance`、CI profile、golden 对比 | 上位机 CI |
+| 模块 / 外仓 | `io_types.hpp`（常仅接口可见） | 落入对应项目 `projects/.../interfaces/` |
+| 系统工程师 | DBC、wiring、req、project；wiring **引用** 本项目 hpp | `projects/` |
+| DevOps | `req.yaml` 的 `acceptance`、CI | 上位机 CI |
+
+布局：[MODULE_INTERFACE_LAYOUT.md](../../../projects/MODULE_INTERFACE_LAYOUT.md)。**不要**把 `middleware/ucm|diag` 当成模块 IO。接口与 DBC 均在各 `projects/<oem>/<product>/` 下维护。
 
 ### 3.2 集成（主路径）
 
 ```bash
-gf-codegen compose --project projects/oem_demo/vehicle_demo/project.yaml
+# 推荐先走 AFC+USS 走查文档，再 compose
+gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
 ```
 
+其它示例：`projects/oem_a/afc_no_uss`、`projects/oem_b/adc_full`。  
 产出：`gf.sor.json` + `reports/signal_lineage_report.yaml`（闭环不过则失败）。
 
-P0 golden：[Requirement/vehicle_demo.sor.json](../../../Requirement/vehicle_demo.sor.json)
+P0 golden：[projects/oem_b/adc_full/golden/gf.sor.json](../../../projects/oem_b/adc_full/golden/gf.sor.json)
 
 ### 3.3 门禁（替代开会）
 
@@ -91,13 +95,17 @@ P0 golden：[Requirement/vehicle_demo.sor.json](../../../Requirement/vehicle_dem
 2. **人工只审差异项**（或 GMT 只读画布标红，P1）  
 3. 通过后再 `gf-codegen generate`
 
-### 3.4 DevOps 验收（`req.yaml`）
+### 3.4 DevOps 验收与 Golden（`req.yaml`）
 
 `req.yaml` 的 `acceptance` 段声明：
 
-- `sor_golden`：compose 输出须与 golden diff 通过（或显式豁免）  
+- `sor_golden`：指向**本项目** `golden/gf.sor.json`（已知正确的 SOR 快照）  
 - `lineage_required`：信号闭环是否阻断合入  
 - `required_services`：该 SKU 必须存在的 semantic 服务  
+
+**Golden 是什么：** compose 输出的对照答案，用于回归与 CI，不是板端运行文件，也不是 OEM 架构报告。有意改接口/连线时才更新 golden；日常试验不要覆盖。  
+
+完整说明：[走查 §3 Golden](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md#3-golden对照用的正确答案sor) · 主示范：[adc_full/golden/](../../../projects/oem_b/adc_full/golden/)
 
 CI 在合入 / 发版前执行 compose + lint + golden diff；**不**把 codegen 装进量产镜像。
 

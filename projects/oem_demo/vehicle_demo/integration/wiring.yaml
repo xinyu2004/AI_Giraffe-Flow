@@ -6,16 +6,16 @@ topology: ap_mcu_cp
 
 modules:
   - id: adapter.mcu_cp_gateway
-    hpp: Requirement/modules/mcu_cp_gateway/io_types.hpp
+    hpp: projects/oem_demo/vehicle_demo/interfaces/mcu_cp_gateway/io_types.hpp
     package: giraffe/adapters/mcu_cp_gateway
   - id: sensing.uss
-    hpp: Requirement/modules/uss_sensing/io_types.hpp
+    hpp: projects/oem_demo/vehicle_demo/interfaces/uss_sensing/io_types.hpp
     package: customer/uss-sensing
   - id: perception.parking
-    hpp: Requirement/modules/perception_parking/io_types.hpp
+    hpp: projects/oem_demo/vehicle_demo/interfaces/perception_parking/io_types.hpp
     package: customer/perception-parking
   - id: perception.driving.nullmax
-    hpp: Requirement/modules/perception_driving/io_types.hpp
+    hpp: projects/oem_demo/vehicle_demo/interfaces/perception_driving/io_types.hpp
     package: customer/nullmax-perception-driving
 
 deployments:

@@ -72,9 +72,11 @@ gf-codegen compose --project projects/oem_demo/vehicle_demo/project.yaml
 
 Contract: [sor-authoring.md](../architecture/sor-authoring.md) · [projects/oem_demo/vehicle_demo/](../../../projects/oem_demo/vehicle_demo/)
 
-### 3.1 DevOps acceptance (`req.yaml`)
+### 3.1 DevOps acceptance and Golden (`req.yaml`)
 
-`acceptance` block: golden SOR path, lineage gate, required services. CI runs compose + lint + diff before merge — codegen stays off production images.
+`acceptance` block: `sor_golden` (path to this project's known-good `gf.sor.json` snapshot), lineage gate, required services. CI runs compose + lint + golden diff before merge — codegen stays off production images.
+
+**Golden** = regression/CI reference SOR, not a board runtime file and not the OEM architecture report. Update it only on intentional contract/wiring changes. Details (zh): [INTEGRATOR_WALKTHROUGH §3](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md#3-golden对照用的正确答案sor) · example: [adc_full/golden/](../../../projects/oem_b/adc_full/golden/)
 
 ### 3.2 Breaking service changes
 

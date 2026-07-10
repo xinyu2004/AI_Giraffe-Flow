@@ -73,7 +73,7 @@ Details: [DESIGN.md](docs/en/architecture/DESIGN.md) · expanded zh: [README_zh.
 
 ## Repo map
 
-[STRUCTURE.md](STRUCTURE.md) · [projects/](projects/) · [Requirement/](Requirement/)
+[STRUCTURE.md](STRUCTURE.md) · [projects/](projects/)
 
 ## Docs
 

@@ -21,7 +21,7 @@ deploy_profile: deploy/profiles/vehicle-debug.yaml
 
 acceptance:
   description: "P0 demo — compose 输出须与 golden 对齐且 lineage 通过"
-  sor_golden: Requirement/vehicle_demo.sor.json
+  sor_golden: projects/oem_demo/vehicle_demo/golden/gf.sor.json
   lineage_required: true
   required_services:
     - services.semantic.EgoMotion
