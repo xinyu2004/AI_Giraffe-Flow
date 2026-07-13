@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CI / local smoke: bootstrap → unit tests → project smoke_sil → optional aarch64 link.
+# CI / local smoke: bootstrap → unit tests → compose both SKUs → SIL demo → optional aarch64 link.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -16,6 +16,17 @@ if [[ ! -x .venv/bin/pytest ]]; then
 fi
 .venv/bin/pytest tools/codegen/tests -q
 
+echo "== compose + lint (afc_with_uss) =="
+gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+gf-codegen lint projects/oem_a/afc_with_uss/gf.sor.json
+
+echo "== compose + lint (adc_full) =="
+gf-codegen compose --project projects/oem_b/adc_full/project.yaml
+gf-codegen lint projects/oem_b/adc_full/gf.sor.json
+
+echo "== lint schema example =="
+gf-codegen lint schemas/examples/desktop_ap_only.sor.json
+
 echo "== cmake host build =="
 cmake -B build -DGF_BUILD_TESTS=ON -DGF_USE_GENERATED=OFF
 cmake --build build -j"$(nproc)"
@@ -27,4 +38,4 @@ bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
 echo "== optional aarch64 link =="
 bash scripts/cross_link_smoke.sh
 
-echo "CI smoke OK"
+echo "CI smoke OK (P0 close)"

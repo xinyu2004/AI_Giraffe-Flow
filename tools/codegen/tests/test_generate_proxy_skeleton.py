@@ -33,3 +33,21 @@ def test_generate_afc_with_uss_proxy_skeleton(repo_root: Path, tmp_path: Path) -
     proxy_txt = proxy.read_text(encoding="utf-8")
     assert "class UssZonesProxy" in proxy_txt
     assert "EventSubscriber" in proxy_txt
+
+
+def test_generate_adc_full_proxy_skeleton(repo_root: Path, tmp_path: Path) -> None:
+    project = repo_root / "projects/oem_b/adc_full/project.yaml"
+    assert compose_project(project, repo_root=repo_root) == 0
+    sor = repo_root / "projects/oem_b/adc_full/gf.sor.json"
+    out = tmp_path / "generated"
+    assert generate(sor, out) == 0
+
+    types = out / "include/gf_gen/types"
+    assert (types / "parking_world.hpp").is_file()
+    assert (types / "surround_world.hpp").is_file()
+    assert (types / "ego_motion_extended.hpp").is_file()
+
+    assert (out / "include/gf_gen/skeleton/parking_world_skeleton.hpp").is_file()
+    assert (out / "include/gf_gen/proxy/parking_world_proxy.hpp").is_file()
+    assert (out / "include/gf_gen/proxy/ego_motion_extended_proxy.hpp").is_file()
+    assert (out / "include/gf_gen/skeleton/actuator_command_skeleton.hpp").is_file()

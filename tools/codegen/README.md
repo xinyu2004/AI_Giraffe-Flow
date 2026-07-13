@@ -49,8 +49,8 @@ gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out generated/
 
 | 已有 | 尚未有 |
 |------|--------|
-| compose / lint / suggest / types+Proxy/Skeleton generate | GMT 画布、adc_full 全量对齐 |
-| `afc_with_uss` `smoke_sil.sh` 联调 iceoryx | SOME/IP / DDS |
+| compose / lint / suggest / types+Proxy/Skeleton generate | GMT 画布 |
+| `afc_with_uss` SIL + `adc_full` compose/generate | SOME/IP / DDS |
 
 ## 源码布局
 
@@ -67,6 +67,6 @@ tools/codegen/
 | 文档 | 用途 |
 |------|------|
 | [IMPLEMENTATION.md](IMPLEMENTATION.md) | 实现规格与管道细节 |
-| [P0_PLAN.md](../../docs/zh/operations/P0_PLAN.md) | P0 三轨与下一步 runtime |
+| [P0_PLAN.md](../../docs/zh/operations/P0_PLAN.md) | P0 已收口；下一步见 ROADMAP P1 |
 | [INTEGRATOR_WALKTHROUGH.md](../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md) | 如何审 afc_with_uss |
 | [MODULE_INTERFACE_LAYOUT.md](../../projects/MODULE_INTERFACE_LAYOUT.md) | DBC/hpp 跟项目走 |

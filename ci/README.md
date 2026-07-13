@@ -2,10 +2,10 @@
 
 | Script | Purpose |
 |--------|---------|
-| [scripts/smoke.sh](scripts/smoke.sh) | bootstrap → pytest → cmake/ctest → afc_with_uss smoke_sil → optional aarch64 link |
+| [scripts/smoke.sh](scripts/smoke.sh) | bootstrap → pytest → compose(afc+adc) → cmake/ctest → smoke_sil → optional aarch64 link |
 
 ```bash
 bash ci/scripts/smoke.sh
 ```
 
-Board jobs must not pull host-only UI/ROS deps — see [deps/README.md](../deps/README.md).
+P0 收口验收入口。Board jobs must not pull host-only UI/ROS deps — see [deps/README.md](../deps/README.md).

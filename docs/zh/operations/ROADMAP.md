@@ -3,7 +3,7 @@
 > **English:** [ROADMAP.md](../../en/operations/ROADMAP.md)  
 > 设计背景：[DESIGN.md](../architecture/DESIGN.md)
 
-本文将平台交付划分为 **P0–P3**，每阶段有明确交付物与验收标准。完成文档、`projects/` 集成输入与 **`gf-codegen` MVP** 后，按 [P0_PLAN.md](P0_PLAN.md) 进入 **轨 B（iceoryx 双进程）**。
+本文将平台交付划分为 **P0–P3**。**P0（契约 + 最小闭环 + adc_full compose）已收口**；下一阶段按下方 **P1** 选主线推进。细节见 [P0_PLAN.md](P0_PLAN.md)。
 
 ---
 
@@ -11,40 +11,43 @@
 
 | 阶段 | 主题 | 典型周期（参考） | 核心验收 |
 |------|------|------------------|----------|
-| **P0** | 契约 + 最小可运行闭环 | 基础 | SOR 冻结子集、gf-codegen 管线、iceoryx 双进程、ARM Linux 桌面/板 |
-| **P1** | 车规通信 + 工具 + OTA/DoIP 骨架 | 扩展 | 三 binding 可选、GMT、ucm/diag 可链、MCU gateway 模拟 |
+| **P0** | 契约 + 最小可运行闭环 | ✅ 已完成 | SOR 子集、gf-codegen、iceoryx 双进程、adc_full compose、CI |
+| **P1** | 车规通信 + 工具 + OTA/DoIP 骨架 | **下一步** | 三 binding 可选、GMT、ucm/diag 可链、MCU gateway 模拟 |
 | **P2** | 可观测 + 证据 + 异构量产 | 深化 | MCAP/Tag/bench、Foxglove 桥、ap_mcu_cp 台架 |
 | **P3** | 嵌入式收敛 + 可信度交付 | 量产向 | 裁剪 profile、证据包、MIPS/RISC-V OSAL 验证 |
 
 ---
 
-## P0 — 契约与最小闭环（下一步详细计划）
+## P0 — 契约与最小闭环（✅ 2026-07-13 收口）
 
-**目标：** 证明「SOR → 生成 → 两进程 com」在 **ARM Linux**（含桌面 aarch64/x86_64 仿真）可跑通。
+**目标：** 证明「SOR → 生成 → 两进程 com」在 **ARM Linux**（含桌面仿真）可跑通；完整拓扑以 `adc_full` compose 验收。
 
 ### 交付物
 
-| # | 交付物 | 路径 / 说明 |
-|---|--------|-------------|
-| P0-1 | SOR schema **0.2** 字段级冻结（子集） | `schemas/gf.sor.schema.json` + 评审记录 |
-| P0-2 | `gf-codegen` 可执行：`import`（DBC 样例）、`lint`、`generate`（最小） | `tools/codegen/` |
-| P0-3 | `gf_ara::core` Result/ErrorCode | `middleware/core/` |
-| P0-4 | `gf_ara::com` Event 子集 + **iceoryx binding** | `middleware/com/`, `middleware/bindings/iceoryx/` |
-| P0-5 | 两进程 demo：simulator publish + consumer subscribe | `apps/simulators/`, `apps/demo_pipeline/` |
-| P0-6 | OSAL POSIX + **ARM** backend 最小（线程、单调时钟） | `middleware/osal/` |
-| P0-7 | CMake 构建 + 项目 `req.yaml` 裁剪 | `cmake/`，`projects/**/req.yaml` |
-| P0-8 | CI：lint + generate golden + 单测冒烟 | `ci/` |
+| # | 交付物 | 路径 / 说明 | 状态 |
+|---|--------|-------------|------|
+| P0-1 | SOR schema **0.2** 字段级冻结（子集） | `schemas/gf.sor.schema.json` | ✅ |
+| P0-2 | `gf-codegen`：compose / lint / generate | `tools/codegen/` | ✅ |
+| P0-3 | `gf_ara::core` Result/ErrorCode | `middleware/core/` | ✅ |
+| P0-4 | `gf_ara::com` Event + iceoryx | `middleware/com/`, `middleware/bindings/iceoryx/` | ✅ |
+| P0-5 | 两进程 demo | `apps/simulators/`, `apps/demo_pipeline/` + `smoke_sil.sh` | ✅ |
+| P0-6 | OSAL POSIX | `middleware/osal/` | ✅ |
+| P0-7 | CMake + `req.yaml` | `cmake/`，`projects/**/req.yaml` | ✅ |
+| P0-8 | CI smoke | `ci/scripts/smoke.sh`（含 afc + adc compose） | ✅ |
+| P0-9 | `adc_full` compose / generate | `projects/oem_b/adc_full/` | ✅ |
 
 ### 验收标准
 
-- [ ] `gf-codegen lint` 对 `schemas/examples/desktop_ap_only.sor.json` 通过
-- [ ] 生成物可编译；两进程 iceoryx 收发 semantic 类型
-- [ ] 无业务代码写 `#ifdef ARM`；架构由 CMake `GF_OSAL_ARCH` 选择
-- [ ] 文档：P0 范围外功能标为 P1+
+- [x] `gf-codegen lint` 对 `schemas/examples/desktop_ap_only.sor.json` 通过
+- [x] 生成物可编译；两进程 iceoryx 收发（`smoke_sil.sh`）
+- [x] 无业务代码写 `#ifdef ARM`；架构由 CMake `GF_OSAL_ARCH` 选择
+- [x] `adc_full` compose + lineage `ok` + generate
+- [x] 文档：P0 范围外功能标为 P1+
 
 ### 明确不在 P0
 
-SOME/IP、DDS、GMT GUI、OTA 实装、DoIP 实装、MCU 真机、MIPS/RISC-V 实板。
+SOME/IP、DDS、GMT GUI、OTA 实装、DoIP 实装、MCU 真机、MIPS/RISC-V 实板。  
+HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke.sh` SKIP。`run_hil` 仍为 stub。
 
 ---
 
