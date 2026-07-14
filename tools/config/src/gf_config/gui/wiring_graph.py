@@ -361,6 +361,8 @@ class ProcessCard(QGraphicsItem):
             for e in self._edges:
                 if _qt_alive(e):
                     e.update_path()
+            if self.graph is not None:
+                self.graph.remember_card_pos(self)
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
             self.update()
         return super().itemChange(change, value)
@@ -888,6 +890,8 @@ class WiringGraphView(QWidget):
         self._missing: list[MissingEdge] = []
         self._wire_src: PortItem | None = None
         self._wire_line: QGraphicsLineItem | None = None
+        # process_name -> (x, y); survives rebuild so edits don't reset layout
+        self._layout_pos: dict[str, tuple[float, float]] = {}
 
         self._scene = QGraphicsScene(self)
         self._view = ZoomGraphicsView(self._scene, self)
@@ -962,7 +966,14 @@ class WiringGraphView(QWidget):
 
     def set_session(self, session: ProjectSession | None) -> None:
         self._session = session
-        self.rebuild()
+        self._layout_pos.clear()
+        self.rebuild(fit_view=True)
+
+    def remember_card_pos(self, card: ProcessCard) -> None:
+        if not _qt_alive(card):
+            return
+        p = card.pos()
+        self._layout_pos[card.process_name] = (p.x(), p.y())
 
     def _fit_and_remember(self) -> None:
         if not self._scene.items():
@@ -1505,8 +1516,17 @@ class WiringGraphView(QWidget):
             "可双击模块继续调整，再从 Out 拖到 In 连线。",
         )
 
-    def rebuild(self) -> None:
+    def rebuild(self, *, fit_view: bool = False, reset_layout: bool = False) -> None:
         self.cancel_wire()
+        # Snapshot positions before C++ items are destroyed
+        if not reset_layout:
+            for name, card in list(self._nodes.items()):
+                if _qt_alive(card):
+                    p = card.pos()
+                    self._layout_pos[name] = (p.x(), p.y())
+        else:
+            self._layout_pos.clear()
+
         # Block selectionChanged while tearing down — scene.clear() deletes C++ items
         # while Python still briefly holds ProcessCard/EdgeCurve wrappers.
         self._scene.blockSignals(True)
@@ -1549,16 +1569,31 @@ class WiringGraphView(QWidget):
         for name in ordered:
             cols.setdefault(depths.get(name, 0), []).append(name)
 
+        # auto-layout slots for nodes without a remembered position
+        auto_slots: dict[str, tuple[float, float]] = {}
         for depth, names in sorted(cols.items()):
             for i, name in enumerate(names):
-                d = dep_map.get(name) or {}
-                provides = [str(x) for x in (d.get("provides") or [])]
-                requires = [str(x) for x in (d.get("requires") or [])]
-                x = 40 + depth * 280
-                y = 40 + i * 240
-                card = ProcessCard(name, provides, requires, x, y, graph=self)
-                self._scene.addItem(card)
-                self._nodes[name] = card
+                auto_slots[name] = (40.0 + depth * 280.0, 40.0 + i * 240.0)
+
+        for name in ordered:
+            d = dep_map.get(name) or {}
+            provides = [str(x) for x in (d.get("provides") or [])]
+            requires = [str(x) for x in (d.get("requires") or [])]
+            if name in self._layout_pos:
+                x, y = self._layout_pos[name]
+            else:
+                x, y = auto_slots.get(name, (40.0, 40.0))
+                # stagger brand-new nodes so they don't stack on (40,40)
+                if name not in auto_slots:
+                    n = len(self._layout_pos)
+                    x, y = 80.0 + (n % 4) * 40.0, 80.0 + (n // 4) * 40.0
+                self._layout_pos[name] = (x, y)
+            card = ProcessCard(name, provides, requires, x, y, graph=self)
+            self._scene.addItem(card)
+            self._nodes[name] = card
+
+        # drop positions for deleted processes
+        self._layout_pos = {k: v for k, v in self._layout_pos.items() if k in self._nodes}
 
         flows = self._session.dataflows()
         outbound_count: dict[str, int] = {}
@@ -1614,7 +1649,8 @@ class WiringGraphView(QWidget):
         if self._search.text().strip():
             self._on_search_text(self._search.text())
         self._scene.setSceneRect(self._scene.itemsBoundingRect().adjusted(-60, -60, 60, 60))
-        self._fit_and_remember()
+        if fit_view:
+            self._fit_and_remember()
 
     @staticmethod
     def _compute_depths(procs: list[str], flows: list[dict[str, Any]]) -> dict[str, int]:
