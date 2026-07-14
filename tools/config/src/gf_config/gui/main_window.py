@@ -10,15 +10,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
-    QPlainTextEdit,
     QStatusBar,
     QTabWidget,
     QToolBar,
-    QVBoxLayout,
-    QWidget,
 )
 
 from gf_config.core import ProjectSession
+from gf_config.gui.lineage_view import LineageView
 from gf_config.gui.req_editor import ReqEditor
 from gf_config.gui.wiring_graph import WiringGraphView
 
@@ -27,15 +25,13 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("gf-config — Giraffe Flow（SKU + 信号链接）")
-        self.resize(1200, 760)
+        self.resize(1280, 800)
         self._session: ProjectSession | None = None
 
         self._tabs = QTabWidget()
         self._req = ReqEditor()
         self._graph = WiringGraphView()
-        self._lineage = QPlainTextEdit()
-        self._lineage.setReadOnly(True)
-        self._lineage.setPlaceholderText("Compose 后显示 lineage 报告…")
+        self._lineage = LineageView()
 
         self._tabs.addTab(self._req, "A · SKU / 中间件")
         self._tabs.addTab(self._graph, "B · 信号链接")
@@ -116,12 +112,11 @@ class MainWindow(QMainWindow):
         self._graph.set_session(self._session)
         self._path_label.setText(str(self._session.paths.project_file))
         self.setWindowTitle(f"gf-config — {self._session.paths.project_dir.name}")
-        # load existing lineage if any
         lr = self._session.paths.lineage_report
         if lr.is_file():
-            self._lineage.setPlainText(lr.read_text(encoding="utf-8"))
+            self._lineage.set_report_text(lr.read_text(encoding="utf-8"))
         else:
-            self._lineage.setPlainText("尚无 lineage 报告。点击 Compose 生成。")
+            self._lineage.set_placeholder("尚无 lineage 报告。点击 Compose 生成。")
         self.statusBar().showMessage("已打开", 3000)
 
     def _mark_dirty(self) -> None:
@@ -146,7 +141,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "Compose 失败", str(exc))
             return
-        self._lineage.setPlainText(report or "(无报告文件)")
+        self._lineage.set_report_text(report or "")
         self._tabs.setCurrentWidget(self._lineage)
         self._graph.rebuild()
         if rc == 0:

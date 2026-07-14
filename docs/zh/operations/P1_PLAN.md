@@ -3,7 +3,7 @@
 > 路线图：[ROADMAP.md](ROADMAP.md) · P0 已收口：[P0_PLAN.md](P0_PLAN.md)  
 > 配置 UI 讨论定稿：主机 **PySide6**；**A+B**（req + wiring）；**信号链接 GUI 为 P1 必做**
 
-**状态（2026-07-13）：** 计划定稿；`gf-config` MVP 开工（可打开项目体验表单 + 连线图雏形）。
+**状态（2026-07-14）：** **Cfg（`gf-config`）MVP 已交付** — A 完整 req · B 类 Simulink 信号图 · C lineage 红项；下一刀 **F（CMake 裁剪）**。
 
 ---
 
@@ -57,18 +57,19 @@ flowchart LR
 |----|------|
 | 包 | [`tools/config/`](../../../tools/config/)（入口 `gf-config`） |
 | 技术 | Python ≥3.10 + **PySide6**（host_tools，不上板） |
-| 页签 A | 编辑 `req.yaml`（runtime_modules / bindings / observability / apps） |
+| 页签 A | 完整编辑 `req.yaml`（capabilities / runtime_modules / bindings / observability / apps / acceptance） |
 | 页签 B | **信号链接图（类 Simulink）**：端口 + 拖线 + 右键增删节点 → 写回 `wiring.yaml` |
-| 页签 C | lineage 报告；红项可提示 |
+| 页签 C | lineage 报告；**失败项标红** + 原文 |
 | 动作 | 保存 → `gf-codegen compose` → 刷新图/报告 |
 | GMT | 只读 `gmt architect` CLI（CI）+ 后期 measure；**不做作者画布** |
 
 ### 2.2 验收
 
-- [ ] 打开 `afc_with_uss` 可见连线图  
-- [ ] 改边保存后 `wiring.yaml` 更新且 compose/lineage 可用  
-- [ ] 改 req 勾选写回  
-- [ ] CI 不强制跑 Qt  
+- [x] 打开 `afc_with_uss` 可见连线图  
+- [x] 改边保存后 `wiring.yaml` 更新且 compose/lineage 可用  
+- [x] 改 req（含 capabilities / observability / apps / acceptance）写回  
+- [x] C 页 lineage 失败项标红  
+- [x] CI 不强制跑 Qt  
 
 ### 2.3 P1 不做
 
