@@ -124,15 +124,17 @@ dependencies:
     integration: cmake_fetchcontent
     enabled_profiles: [desktop]
 
-  - id: cli11
-    name: CLI11
+  - id: pyside6
+    name: PySide6 (Qt for Python)
     category: host_tools
-    purpose: CLI for importer/codegen/lint
-    homepage: https://github.com/CLIUtils/CLI11
-    license: BSD-3-Clause
-    planned_version: TBD
-    integration: cmake_fetchcontent
+    purpose: gf-config SKU + signal-link GUI (never on board)
+    homepage: https://doc.qt.io/qtforpython/
+    license: LGPL-3.0-only
+    planned_version: ">=6.6"
+    integration: pip
     enabled_profiles: [desktop]
+    notes: >
+      Host-only. Install via pip install -e tools/config. Not for production images.
 
   - id: spdlog
     name: spdlog

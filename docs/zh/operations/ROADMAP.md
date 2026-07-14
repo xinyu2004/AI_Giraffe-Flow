@@ -53,27 +53,30 @@ HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke
 
 ## P1 — 通信扩展、工具链、OTA/DoIP 骨架
 
-**目标：** SKU 可裁剪；主机工具链可用；诊断与 OTA **可链接占位模块**。
+**目标：** SKU 可裁剪；**信号链接 GUI**；主机工具链可用；诊断与 OTA **可链接占位模块**。  
+细则：[P1_PLAN.md](P1_PLAN.md)
 
 ### 交付物
 
 | # | 交付物 |
 |---|--------|
-| P1-1 | vsomeip、CycloneDDS binding（可选编译） |
-| P1-2 | SOR `product_variants` + `runtime_modules` 驱动 CMake 裁剪 |
+| P1-0 | **`gf-config`（PySide6）**：req 表单 + **信号链接画布**写回 wiring + lineage（GMT architect GUI） |
+| P1-1 | vsomeip、CycloneDDS binding（可选编译；DDS 默认 Cyclone） |
+| P1-2 | SOR / `req.yaml` `runtime_modules` 驱动 CMake 裁剪 |
 | P1-3 | `gf-codegen import` ARXML 子集 |
-| P1-4 | SOR types → IDL → **cyclonedds idlc** 包装 |
-| P1-5 | **GMT** CLI：`architect`（DAG 文本）、`measure export`（MCAP 雏形） |
-| P1-6 | `middleware/ucm`、`middleware/diag` 链接进镜像（stub 实现） |
+| P1-4 | SOR types → IDL → cyclonedds idlc 包装 |
+| P1-5 | GMT CLI：`architect`（CI）· `measure export`（MCAP 雏形） |
+| P1-6 | `middleware/ucm`、`middleware/diag` 链接进镜像（stub） |
 | P1-7 | `mcu.cp_gateway` + `cp_ipc_peer` 桌面联调 |
 | P1-8 | `middleware/exec` + `phm` Alive/Deadline 最小 |
 
 ### 验收标准
 
-- [ ] `ap_only` 与 `ap_mcu_cp` 两套 SOR 示例均可 lint + generate
-- [ ] 低配 manifest 仅含 5/10 中间件库仍可运行 demo
+- [ ] `gf-config` 打开 `afc_with_uss`：可见连线图；改边写回 wiring；compose/lineage 可用
+- [ ] 低配 CMake 裁剪后 demo 仍可链（仅 core/com/log/iceoryx）
 - [ ] DoIP Initialize/Shutdown stub 可被诊断探针调用
 - [ ] ucm PackageManager 状态机 stub 与 SM 钩子文档化
+- [ ] `adc_full` MCU 桌面联调脚本可跑（无真 MCU）
 
 ---
 

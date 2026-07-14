@@ -10,7 +10,8 @@
 | [architecture/sor-authoring.md](architecture/sor-authoring.md) | **SOR / compose --project 一键集成** |
 | [architecture/portability-hal.md](architecture/portability-hal.md) | ARM / MIPS / RISC-V OSAL |
 | [operations/ROADMAP.md](operations/ROADMAP.md) | **P0–P3 路线图** |
-| [operations/P0_PLAN.md](operations/P0_PLAN.md) | P0 实施计划（待细化） |
+| [operations/P0_PLAN.md](operations/P0_PLAN.md) | P0 实施（已收口） |
+| [operations/P1_PLAN.md](operations/P1_PLAN.md) | P1：gf-config 信号链接 GUI / 裁剪 / MCU |
 | [operations/WORKFLOW.md](operations/WORKFLOW.md) | 操作流程 |
 | [dependencies/THIRD_PARTY_EVALUATION.md](dependencies/THIRD_PARTY_EVALUATION.md) | 三方库评估 |
 

@@ -1,69 +1,78 @@
-# AFC + USS — 集成工程师连线草稿
-# SOA Apps: sensing.uss, perception.front, planning.driving
-# Adapter: adapter.vehicle_can_gateway
-schema_version: "0.1"
+schema_version: '0.1'
 project_id: afc_with_uss
 variant: afc_front_camera_uss
 topology: ap_only
-
-# hpp：本项目 interfaces/（外仓交付或本车型接口；DBC/hpp 均跟项目走）
 modules:
-  - id: sensing.uss
-    hpp: projects/oem_a/afc_with_uss/interfaces/uss_sensing/io_types.hpp
-    package: customer/uss-sensing
-  - id: perception.front
-    hpp: projects/oem_a/afc_with_uss/interfaces/perception_front/io_types.hpp
-    package: customer/perception-front
-
+- id: sensing.uss
+  hpp: projects/oem_a/afc_with_uss/interfaces/uss_sensing/io_types.hpp
+  package: customer/uss-sensing
+- id: perception.front
+  hpp: projects/oem_a/afc_with_uss/interfaces/perception_front/io_types.hpp
+  package: customer/perception-front
+- id: adapter.vehicle_can_gateway
+  hpp: projects/oem_a/afc_with_uss/interfaces/uss_sensing/io_types.hpp
 deployments:
-  - process: adapter.vehicle_can_gateway
-    compute_domain: ap_linux
-    provides:
-      - services.semantic.EgoMotion
-    requires: []
-
-  - process: sensing.uss
-    compute_domain: ap_linux
-    provides:
-      - services.semantic.UssZones
-    requires:
-      - services.semantic.EgoMotion
-
-  - process: perception.front
-    compute_domain: ap_linux
-    provides:
-      - services.semantic.FrontObjectList
-    requires:
-      - services.semantic.EgoMotion
-      # 前视可选用超声做近距融合（本 SKU 订阅）
-      - services.semantic.UssZones
-
-  - process: planning.driving
-    compute_domain: ap_linux
-    package: customer/planning-driving
-    provides:
-      - services.semantic.Trajectory
-    requires:
-      - services.semantic.FrontObjectList
-      - services.semantic.EgoMotion
-
+- process: adapter.vehicle_can_gateway
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.EgoMotion
+  - services.semantic.UssZoneSample
+  - services.semantic.UssZones
+  requires: []
+- process: sensing.uss
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.UssZones
+  requires:
+  - services.semantic.EgoMotion
+- process: perception.front
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.FrontObjectList
+  requires:
+  - services.semantic.EgoMotion
+  - services.semantic.UssZones
+- process: planning.driving
+  compute_domain: ap_linux
+  package: customer/planning-driving
+  provides:
+  - services.semantic.Trajectory
+  requires:
+  - services.semantic.FrontObjectList
+  - services.semantic.EgoMotion
 bindings:
-  - module: sensing.uss
-    inputs:
-      - { service: semantic.EgoMotion, type: EgoMotion }
-    outputs:
-      - { service: semantic.UssZones, type: UssZones }
-
-  - module: perception.front
-    inputs:
-      - { service: semantic.EgoMotion, type: EgoMotion }
-      - { service: semantic.UssZones, type: UssZones }
-    outputs:
-      - { service: semantic.FrontObjectList, type: FrontObjectList }
-
+- module: sensing.uss
+  inputs:
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  outputs:
+  - service: semantic.UssZones
+    type: UssZones
+- module: perception.front
+  inputs:
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  - service: semantic.UssZones
+    type: UssZones
+  outputs:
+  - service: semantic.FrontObjectList
+    type: FrontObjectList
 dataflows:
-  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: sensing.uss }
-  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: perception.front }
-  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: planning.driving }
-  - { from: sensing.uss, service: services.semantic.UssZones, to: perception.front }
-  - { from: perception.front, service: services.semantic.FrontObjectList, to: planning.driving }
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: sensing.uss
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: perception.front
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: planning.driving
+- from: sensing.uss
+  service: services.semantic.UssZones
+  to: perception.front
+- from: perception.front
+  service: services.semantic.FrontObjectList
+  to: planning.driving
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.UssZones
+  to: perception.front

@@ -136,9 +136,8 @@ OEM.arxml|dbc + req.yaml
         → gf_ara Proxy/Skeleton + EM/PHM manifest + binding 配置
 ```
 
-主机度量与分析：**GMT**（`architect` / `measure` / `bridge`）— 不参与 SOR 写入。
-
-架构师工具（DAG / 信号 review）**只读同一份 SOR**，保证图与生成代码同源。
+主机度量与分析：**GMT**（`architect` / `measure` / `bridge`）。  
+**配置 / 信号链接：** 主机 **`gf-config`（PySide6）** 编辑 `req.yaml` / `wiring.yaml` 后 compose；架构师只读同一份 SOR/lineage，保证图与生成代码同源。measure **不**写回 SOR。
 
 编写与 OEM 导入契约：[sor-authoring.md](sor-authoring.md) · 示例：[projects/](../../../projects/)
 

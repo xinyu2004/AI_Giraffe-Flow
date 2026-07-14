@@ -3,7 +3,7 @@
 > 文档版本：0.1  
 > **English:** [WORKFLOW.md](../../en/operations/WORKFLOW.md)  
 > 配套设计：[DESIGN.md](../architecture/DESIGN.md)  
-> 说明：主机工具 **`gf-codegen` MVP 已可用**（compose/lint/suggest/类型 generate）。板端 runtime / iceoryx 双进程仍为计划中（P0 轨 B）。GMT 画布为 P1。
+> 说明：主机工具 **`gf-codegen` MVP 已可用**（compose/lint/suggest/generate）。板端 iceoryx SIL 已通（P0）。**`gf-config` 信号链接 GUI（P1）** 见 [P1_PLAN.md](P1_PLAN.md)。
 
 ---
 

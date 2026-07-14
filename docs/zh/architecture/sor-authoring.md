@@ -178,11 +178,11 @@ P1 目标：`compose --project` 输出与对应项目 golden 对齐。
 
 ---
 
-## 10. 缺口（P1 工具）
+## 10. 缺口（工具）
 
 | 项 | 状态 |
 |----|------|
-| `compose --project` 一键实现 | P1 |
-| `lint --lineage` | P1 |
-| GMT 只读连线画布 | P1 并行 |
+| `compose --project` / `lint --lineage` | **P0 已完成** |
+| **`gf-config` 信号链接 GUI（PySide6）** | **P1**（主路径） |
+| GMT measure / Foxglove | P2 |
 | `oem_import.yaml` 从 DBC 脚手架生成 | P1 可选 |
