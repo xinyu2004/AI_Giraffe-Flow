@@ -2,8 +2,10 @@
 
 PySide6 工具：按 **SKU** 编辑 `req.yaml`，用 **类 Simulink 信号图** 编辑 `wiring.yaml`，一键 `compose` + lineage。
 
-> 计划：[P1_PLAN.md](../../docs/zh/operations/P1_PLAN.md) · 不上板、不进 production 镜像  
-> 工具边界：`gf-config` = 唯一作者 GUI · `gf-codegen` = CLI · GMT = 只读 CI + 后期 measure（见 [tools/README.md](../README.md)）
+> **流程：** 改 A/B 页 → **保存并 Compose**（自动写 req/wiring + 跑 compose）→ 可选点 **Generate** 产出 Proxy/Skeleton。  
+> CI/无 GUI：`python -m gf_codegen.compose --project …`；代码生成仍用 `gf-codegen generate`。
+>
+> 工具边界：`gf-config` = 唯一作者 GUI · `gf-codegen` = lint/generate/import · GMT = 只读 CI + measure
 
 ## `req.yaml` vs `wiring.yaml`（怎么分工）
 
@@ -17,7 +19,7 @@ PySide6 工具：按 **SKU** 编辑 `req.yaml`，用 **类 Simulink 信号图** 
 
 ```text
 req.yaml（SKU 契约） ──┐
-                       ├── gf-codegen compose → gf.sor.json → generate / lineage
+                       ├── gf-config 保存 → compose → gf.sor.json → Generate / lineage
 wiring.yaml（集成连线）─┘
 ```
 
@@ -46,7 +48,9 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | B · 信号链接 | 类 Simulink 画布 → `wiring.yaml` |
 | C · Lineage | Compose 报告；**失败项标红**，下方保留原文 |
 
-菜单：**保存**（Ctrl+S）· **Compose**（Ctrl+R）
+菜单：**保存并 Compose**（Ctrl+S，写盘后自动 compose）· **重新 Compose**（Ctrl+R）· **Generate**（Ctrl+G，Proxy/Skeleton）
+
+日常：改 A/B → **保存** → 看 C 页 Lineage → 需要编 APP 时再 **Generate**。
 
 ## 类 Simulink 日常四步（B 页）
 
@@ -57,7 +61,10 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | 3 | **双击模块** | 增删 In/Out 端口、切换方向、改 service 名 |
 | 4 | **从右侧 Out 拖到左侧 In** | 生成 `dataflows`；以 Out 信号名为准（In 不同名自动改同名） |
 
-其它：单击信号线（含缺失虚线）可选中；搜索框模糊定位；导入 hpp；Ctrl+滚轮 / Ctrl+H。
+其它：单击信号线（含缺失虚线）可选中；搜索框模糊定位；导入 hpp / **fidl**；Ctrl+滚轮 / Ctrl+H。
+
+**FIDL 导入：** B 页「导入 fidl…」→ 勾选 struct / broadcast / method / interface 作为端口 → 写回 `wiring.modules[].fidl` 与 provides/requires。解析库在 `gf_codegen.compose.parse_fidl`。  
+**导出：** 当前**不支持**从 wiring/SOR 导出 `.fidl` / `.fdepl`（P1 优先导入；导出属后置，且完整 `.fdepl` 需 SOME/IP ID 模型，随 B/vsomeip）。
 
 ## 验收清单（Cfg 已交付）
 

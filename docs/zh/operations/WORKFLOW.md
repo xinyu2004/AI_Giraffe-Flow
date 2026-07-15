@@ -80,11 +80,14 @@ AI_Giraffe-Flow/
 ### 3.2 集成（主路径）
 
 ```bash
-# 推荐先走 AFC+USS 走查文档，再 compose
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+# GUI：打开 projects/.../project.yaml → Save（自动 compose）
+# 无 GUI / CI：
+python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
+# Proxy/Skeleton：
+gf-codegen generate --project projects/oem_a/afc_with_uss/project.yaml
 ```
 
-其它示例：`projects/oem_a/afc_no_uss`、`projects/oem_b/adc_full`。  
+其它示例：`projects/oem_a/afc_no_uss`、`projects/oem_b/adc_full`。
 产出：`gf.sor.json` + `reports/signal_lineage_report.yaml`（闭环不过则失败）。
 
 P0 golden：[projects/oem_b/adc_full/golden/gf.sor.json](../../../projects/oem_b/adc_full/golden/gf.sor.json)

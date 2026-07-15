@@ -21,6 +21,14 @@
 | `adapter.vehicle_can_gateway` | CAN → EgoMotion / VehicleModeStatus |
 | `adapter.mcu_cp_gateway` | MCU IPC ↔ 轨迹/执行器 |
 
+## MCU 桌面联调（P1 · 无真 MCU）
+
+```bash
+bash projects/oem_b/adc_full/scripts/smoke_mcu_desktop.sh
+```
+
+构建 `cp_ipc_peer`（模拟 CP）+ `mcu_cp_gateway`（AP），经 `cross_domain_ipc` Unix socket 互传 `IPC_CanInfo_*` / `TrajPlot` / `P_Parking`。
+
 ## 平台（不进 SOA 主图）
 
 `iox-roudi`、exec_manager — 仅开发/部署可见。
@@ -33,11 +41,14 @@ sensing.uss ─UssZones─► perception.parking ─ParkingWorld─► planning.
 
 完整角色：[PROCESS_ROLES.md](../../PROCESS_ROLES.md)
 
-## 命令（P0 已通）
+## 命令（集成）
 
 ```bash
-# 务必在仓库根
-gf-codegen compose --project projects/oem_b/adc_full/project.yaml
+# 人工：开 GUI，保存即 compose；需要 C++ 头时点 Generate（或下面 CLI）
+gf-config projects/oem_b/adc_full/project.yaml
+
+# CI / 无 GUI
+python -m gf_codegen.compose --project projects/oem_b/adc_full/project.yaml
 gf-codegen lint projects/oem_b/adc_full/gf.sor.json
 gf-codegen generate projects/oem_b/adc_full/gf.sor.json --out projects/oem_b/adc_full/generated/
 

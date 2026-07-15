@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 from gf_codegen.compose.load_project import ProjectPaths, load_project
+from gf_codegen.compose.parse_fidl import parse_fidl_file
 from gf_codegen.compose.parse_hpp import parse_hpp_file
 from gf_codegen.compose.pipeline import compose_project
 from gf_codegen.paths import resolve_path
@@ -82,6 +83,20 @@ class ProjectSession:
         if self.paths.lineage_report.is_file():
             report = self.paths.lineage_report.read_text(encoding="utf-8")
         return rc, report
+
+    def generate(self, out_dir: Path | None = None) -> tuple[int, str]:
+        """Compose if needed, then generate Proxy/Skeleton under project generated/."""
+        from gf_codegen.generate_cmd import generate as generate_cmd
+
+        rc, report = self.compose()
+        if rc != 0:
+            return rc, report
+        sor = self.paths.out_sor
+        if not sor.is_file():
+            return 1, report
+        out = out_dir or (self.paths.project_dir / "generated")
+        gen_rc = generate_cmd(sor, out)
+        return gen_rc, report
 
     def dataflows(self) -> list[dict[str, Any]]:
         return list(self.wiring.get("dataflows") or [])
@@ -205,7 +220,14 @@ class ProjectSession:
         ]
         self.set_dataflows(flows)
 
-    def upsert_module(self, module_id: str, hpp_rel: str, package: str = "") -> None:
+    def upsert_module(
+        self,
+        module_id: str,
+        hpp_rel: str = "",
+        package: str = "",
+        *,
+        fidl_rel: str = "",
+    ) -> None:
         modules = list(self.wiring.get("modules") or [])
         found = None
         for m in modules:
@@ -213,13 +235,20 @@ class ProjectSession:
                 found = m
                 break
         if found is None:
-            entry: dict[str, Any] = {"id": module_id, "hpp": hpp_rel}
+            entry: dict[str, Any] = {"id": module_id}
+            if hpp_rel:
+                entry["hpp"] = hpp_rel
+            if fidl_rel:
+                entry["fidl"] = fidl_rel
             if package:
                 entry["package"] = package
             modules.append(entry)
             self.wiring["modules"] = modules
         else:
-            found["hpp"] = hpp_rel
+            if hpp_rel:
+                found["hpp"] = hpp_rel
+            if fidl_rel:
+                found["fidl"] = fidl_rel
             if package:
                 found["package"] = package
         self.dirty_wiring = True
@@ -231,10 +260,22 @@ class ProjectSession:
             repo_root=self.paths.repo_root,
         )
 
+    def resolve_interface(self, rel: str) -> Path:
+        return resolve_path(
+            self.paths.project_dir,
+            rel,
+            repo_root=self.paths.repo_root,
+        )
+
     def parse_hpp_candidates(self, hpp_path: Path) -> list[str]:
         """Struct names from header → service short-name candidates."""
         structs = parse_hpp_file(hpp_path)
         return [str(s["name"]) for s in structs if s.get("name")]
+
+    def parse_fidl_candidates(self, fidl_path: Path) -> list[str]:
+        """Struct / broadcast / method / interface names from .fidl."""
+        parsed = parse_fidl_file(fidl_path)
+        return list(parsed.get("candidates") or [])
 
     def module_hpp_for_process(self, process: str) -> Path | None:
         for m in self.modules():

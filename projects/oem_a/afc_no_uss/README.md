@@ -24,5 +24,11 @@ CAN → vehicle_can_gateway ─EgoMotion─► perception.front ─FrontObjectLi
 角色总表：[PROCESS_ROLES.md](../../PROCESS_ROLES.md)
 
 ```bash
-gf-codegen compose --project projects/oem_a/afc_no_uss/project.yaml
+```bash
+# 仓库根
+python -m gf_codegen.compose --project projects/oem_a/afc_no_uss/project.yaml
+gf-codegen lint projects/oem_a/afc_no_uss/gf.sor.json
+```
+
+（日常请用 **gf-config** 打开本项目并保存，自动 compose。）
 ```

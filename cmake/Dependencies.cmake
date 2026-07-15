@@ -29,12 +29,14 @@ endif()
 set(_gf_iox_root "${GF_THIRD_PARTY_DIR}/iceoryx")
 set(_gf_iox_meta "${_gf_iox_root}/iceoryx_meta")
 
-# Auto-enable when sources exist, unless caller forced OFF (e.g. aarch64 OSAL-only link smoke).
+# Auto-enable when sources exist, unless forced OFF / SKU already decided off.
 if(EXISTS "${_gf_iox_meta}/CMakeLists.txt")
-  if(GF_WITH_ICEORYX)
-    # already on
-  elseif(GF_FORCE_NO_ICEORYX)
+  if(GF_FORCE_NO_ICEORYX)
     message(STATUS "Giraffe Flow: iceoryx present but GF_FORCE_NO_ICEORYX=ON")
+  elseif(GF_WITH_ICEORYX)
+    # already on (CLI or SKU)
+  elseif(GF_SKU_APPLIED)
+    message(STATUS "Giraffe Flow: SKU applied; GF_WITH_ICEORYX=${GF_WITH_ICEORYX}")
   else()
     message(STATUS "Giraffe Flow: found ${_gf_iox_meta}; enabling GF_WITH_ICEORYX")
     set(GF_WITH_ICEORYX ON CACHE BOOL "Build iceoryx binding" FORCE)
@@ -67,4 +69,21 @@ if(GF_WITH_ICEORYX)
 else()
   set(GF_ICEORYX_FOUND FALSE)
   message(STATUS "Giraffe Flow: iceoryx disabled (run bash scripts/bootstrap_deps.sh then reconfigure)")
+endif()
+
+# --- CycloneDDS (optional; default vendor when GF_WITH_DDS) ---
+# Source tree: middleware/third_party/cyclonedds (pin: deps/versions.lock.md).
+# Offline CI uses bindings/dds stub backend; add_subdirectory only when present.
+set(_gf_cdds_root "${GF_THIRD_PARTY_DIR}/cyclonedds")
+set(GF_CYCLONEDDS_FOUND FALSE)
+if(GF_WITH_DDS AND EXISTS "${_gf_cdds_root}/CMakeLists.txt")
+  set(BUILD_IDLC ON CACHE BOOL "" FORCE)
+  set(ENABLE_TOPIC_DISCOVERY ON CACHE BOOL "" FORCE)
+  add_subdirectory("${_gf_cdds_root}" "${CMAKE_BINARY_DIR}/_deps/cyclonedds" EXCLUDE_FROM_ALL)
+  set(GF_CYCLONEDDS_FOUND TRUE)
+  message(STATUS "Giraffe Flow: CycloneDDS from ${_gf_cdds_root}")
+elseif(GF_WITH_DDS)
+  message(STATUS
+    "Giraffe Flow: CycloneDDS sources not under ${_gf_cdds_root}; "
+    "DDS binding uses stub backend (default offline)")
 endif()

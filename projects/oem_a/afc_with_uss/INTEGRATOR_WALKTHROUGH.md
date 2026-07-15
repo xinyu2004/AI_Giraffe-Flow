@@ -57,51 +57,51 @@ CAN → gateway ─EgoMotion─► sensing.uss ─UssZones─► perception.fron
 | `sensing.uss` / `perception.front` / `planning.driving` | SOA App |
 
 ```bash
-# 已实现（需先 pip install -e tools/codegen）
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+# 日常：gf-config 打开本项目 → 保存（自动 compose）→ Generate (Ctrl+G)
+# CI / 无 GUI：
+python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 ```
 
 实施规格：[IMPLEMENTATION.md](../../../tools/codegen/IMPLEMENTATION.md) · 总计划：[P0_PLAN.md](../../../docs/zh/operations/P0_PLAN.md)
 
 ---
 
-## 2.1 如何审本项目？用 gf-codegen 还是 GMT？
+## 2.1 如何审本项目？用 gf-config / gf-codegen 还是 GMT？
 
 ### 工具分工（配套一起用，不互相替代）
 
 | 工具 | 管什么 | 不管什么 |
 |------|--------|----------|
-| **`gf-codegen`** | 读 project 输入、**compose 出 SOR**、lint、lineage 报告、`suggest` 建议片段、**generate** | 运行时画图、录包、Foxglove |
-| **GMT** | 读**已有** SOR/报告做 **architect 可视化**、measure、bridge | OEM import、compose、codegen |
+| **`gf-config`** | 改 req/wiring、**保存自动 compose**、**Generate** | CI 无显示器 |
+| **`gf-codegen`** | lint / suggest / **generate** / import；compose 仅库 + `python -m gf_codegen.compose` | GUI |
+| **GMT** | 读已有 SOR 做 architect / measure | 写 wiring、compose |
 
 ```text
-审「输入对不对 / SOR 能不能生成」  →  gf-codegen（主）
-审「拓扑好不好看 / 联调后信号」    →  GMT（辅，P1 画布；P0 可先看 lineage 文本）
+审「输入对不对 / 保存后 SOR」     →  gf-config（主）
+审「无 GUI 时 CI 合成」           →  python -m gf_codegen.compose
+审「拓扑/度量」                   →  GMT architect / measure
 ```
-
-**第一版集成审 `afc_with_uss`：以 `gf-codegen` 为主。**  
-GMT 在 P0 只规划 `suggest` 也可挂在 codegen 下（`gf-codegen suggest`）；GMT `architect wiring --read-only` 是 P1。不要指望用 GMT 代替 compose。
 
 ### 工具已就绪时——命令审（推荐）
 
 ```bash
 # 在仓库根目录
-pip install -e "tools/codegen[dev]"
-gf-codegen suggest wiring --project projects/oem_a/afc_with_uss/project.yaml   # 可选
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+pip install -e "tools/codegen[dev]" -e "tools/config"
+# 作者路径：开 gf-config → 保存 → Generate
+# 或 CI：
+python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 # 看 reports/signal_lineage_report.yaml
-gf-codegen lint projects/oem_a/afc_with_uss/golden/gf.sor.json
-# generate 目前仅 types hpp，尚无 Proxy/Skeleton
-gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out generated/
+gf-codegen lint projects/oem_a/afc_with_uss/gf.sor.json
+gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out projects/oem_a/afc_with_uss/generated/
 ```
 
 | 阶段 | 主工具 | 你做什么 |
 |------|--------|----------|
-| 输入评审 | 编辑器 + 下方清单 | 改 yaml/hpp/dbc |
-| 合成与门禁 | **gf-codegen compose/lint** | 看 lineage，改 wiring |
-| 类型头 | **generate** | 仅 POD；通信 API 下一步 |
-| 看图 / 标红 | **GMT**（P1） | 只读 |
-| 联调 | iceoryx demo（P0 轨 B） | 下一步 |
+| 输入评审 | gf-config / 编辑器 | 改 yaml/hpp/dbc |
+| 合成与门禁 | **gf-config 保存** 或 `python -m gf_codegen.compose` | 看 lineage |
+| C++ API | **Generate** / `gf-codegen generate` | Proxy/Skeleton |
+| 只读检查 | **GMT** | architect lineage |
+| 联调 | iceoryx / MCU smoke | 脚本 |
 
 ### 无 CLI 时——人工审输入清单（仍可用）
 

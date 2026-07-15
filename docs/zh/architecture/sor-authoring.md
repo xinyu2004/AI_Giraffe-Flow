@@ -45,7 +45,12 @@ req.yaml ──────┘
 ## 3. 一句话生成 gf.sor.json（集成工程师）
 
 ```bash
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+# 推荐：gf-config 打开 project.yaml → Save（自动 compose）
+# 无 GUI / CI：
+python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
+# 需要 Proxy/Skeleton 时：
+gf-codegen generate --project projects/oem_a/afc_with_uss/project.yaml
+# 或在 gf-config 点 Generate（Ctrl+G）
 ```
 
 [`project.yaml`](../../../projects/oem_a/afc_with_uss/project.yaml) 声明：
@@ -147,15 +152,14 @@ P1：`gmt architect wiring --read-only` 只读画布标红缺口；P1+ 拖拽写
 ## 8. 命令速查
 
 ```bash
-# 集成工程师（主路径）
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+# 集成工程师（主路径）：gf-config Save → 可选 Generate
+# 无 GUI：
+python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
+gf-codegen generate --project projects/oem_a/afc_with_uss/project.yaml
 
 # 校验 golden / 本地调试
 gf-codegen lint projects/oem_b/adc_full/golden/gf.sor.json
 gf-codegen lint --lineage gf.sor.json --out reports/signal_lineage_report.yaml
-
-# 代码生成（SOR 稳定后）
-gf-codegen generate gf.sor.json --out generated/
 ```
 
 **不再推荐**（模块侧中间产物）：

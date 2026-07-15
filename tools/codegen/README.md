@@ -3,15 +3,16 @@
 主机侧 Python 工具（**≥3.10**）：从 `project.yaml` 合成 SOR，并做 lint / suggest / 最小 generate。
 
 > 规格：[IMPLEMENTATION.md](IMPLEMENTATION.md) · 总计划：[P0_PLAN.md](../../docs/zh/operations/P0_PLAN.md) · 走查：[afc_with_uss](../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md)
+>
+> **Compose 入口：** 人工用 **gf-config 保存**（自动 compose）；CI/无 GUI 用 `python -m gf_codegen.compose`。公开 CLI **没有** `gf-codegen compose`，仅保留 `lint` / `suggest` / `generate` / `emit-idl` / import。
 
 ## 推荐流程（第一版集成）
 
 ```text
-① compose   → gf.sor.json + lineage 报告     ← 主路径（DBC+hpp+wiring+req）
-② lint      → 校验 compose 产出的 SOR（工作区路径）
-③ suggest   → 可选：打印 wiring 建议片段
-④ generate  → types + **Proxy/Skeleton**（`--out generated/`）
-⑤ 联调      → `bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh`
+① gf-config 保存  → 自动 compose → gf.sor.json + lineage + gf_build.cmake
+② lint（可选）    → 校验 SOR
+③ Generate        → types + Proxy/Skeleton（GUI Ctrl+G 或 gf-codegen generate）
+④ 联调            → smoke_sil / 桌面脚本
 ```
 
 ```bash
@@ -21,7 +22,8 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e "tools/codegen[dev]"
 bash scripts/bootstrap_deps.sh
 
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+# CI / 无 GUI：compose
+python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out projects/oem_a/afc_with_uss/generated/
 bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
 pytest tools/codegen/tests -q
@@ -39,34 +41,23 @@ pytest tools/codegen/tests -q
 
 ```bash
 gf-codegen --help
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 gf-codegen lint projects/oem_a/afc_with_uss/gf.sor.json   # gitignored 工作产出
 gf-codegen suggest wiring --project projects/oem_a/afc_with_uss/project.yaml
 gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out generated/
+gf-codegen emit-idl projects/oem_a/afc_with_uss/gf.sor.json --out generated/idl/
+bash scripts/run_idlc.sh generated/idl/gf_types.idl   # SKIP if no idlc
 ```
 
 ## 当前能力边界
 
 | 已有 | 尚未有 |
 |------|--------|
-| compose / lint / suggest / types+Proxy/Skeleton generate | GMT 画布 |
+| compose（模块入口）/ lint / suggest / types+Proxy/Skeleton generate | GMT 画布 |
 | `afc_with_uss` SIL + `adc_full` compose/generate | SOME/IP / DDS |
+| FIDL/FDEPL/ARXML 子集 import | 真 MCU / 真 DoIP |
 
-## 源码布局
+## 相关
 
-```text
-tools/codegen/
-  pyproject.toml
-  src/gf_codegen/          # cli, lint, suggest, generate, compose/*
-  tests/                   # 在仓库根执行 pytest
-  IMPLEMENTATION.md
-```
-
-## 相关文档
-
-| 文档 | 用途 |
-|------|------|
-| [IMPLEMENTATION.md](IMPLEMENTATION.md) | 实现规格与管道细节 |
-| [P0_PLAN.md](../../docs/zh/operations/P0_PLAN.md) | P0 已收口；下一步见 ROADMAP P1 |
-| [INTEGRATOR_WALKTHROUGH.md](../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md) | 如何审 afc_with_uss |
-| [MODULE_INTERFACE_LAYOUT.md](../../projects/MODULE_INTERFACE_LAYOUT.md) | DBC/hpp 跟项目走 |
+- [tools/config](../config/README.md) — 作者 GUI（保存自动 compose + Generate）
+- [tools/gmt](../gmt/README.md) — 只读 architect + measure

@@ -39,7 +39,8 @@ cmake -B "${BUILD_HIL}" \
   -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN}" \
   -DGF_BUILD_TESTS=ON \
   -DGF_USE_GENERATED=ON \
-  -DGF_GENERATED_DIR="${GEN_OUT}"
+  -DGF_GENERATED_DIR="${GEN_OUT}" \
+  -DGF_SKU_CMAKE="${GEN_OUT}/gf_build.cmake"
 cmake --build "${BUILD_HIL}" -j"$(nproc)"
 
 echo "${TAG} compile_hil OK (binaries are for board; not executed on host)"

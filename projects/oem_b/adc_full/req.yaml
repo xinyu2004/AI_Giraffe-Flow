@@ -27,6 +27,7 @@ observability:
 
 apps:
   - adapters/mcu_cp_gateway
+  - simulators/cp_ipc_peer
   - simulators/perception_feed
   - demo_pipeline
 

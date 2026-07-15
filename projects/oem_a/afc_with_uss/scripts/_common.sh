@@ -37,8 +37,8 @@ gf_ensure_bootstrap() {
 }
 
 gf_prepare_codegen() {
-  echo "${TAG} compose ..."
-  gf-codegen compose --project "${PROJECT_YAML}"
+  echo "${TAG} compose (python -m gf_codegen.compose) ..."
+  python -m gf_codegen.compose --project "${PROJECT_YAML}"
 
   echo "${TAG} generate → ${GEN_OUT} ..."
   gf-codegen generate "${SOR_JSON}" --out "${GEN_OUT}"

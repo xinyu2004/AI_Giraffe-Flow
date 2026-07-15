@@ -23,6 +23,9 @@ deployments:
   compute_domain: ap_linux
   provides:
   - services.semantic.UssZones
+  - services.semantic.UssZone
+  - services.semantic.UssZon
+  - services.semantic.UssZo
   requires:
   - services.semantic.EgoMotion
 - process: perception.front
@@ -40,6 +43,7 @@ deployments:
   requires:
   - services.semantic.FrontObjectList
   - services.semantic.EgoMotion
+  - services.semantic.UssZone
 bindings:
 - module: sensing.uss
   inputs:
@@ -76,3 +80,6 @@ dataflows:
 - from: adapter.vehicle_can_gateway
   service: services.semantic.UssZones
   to: perception.front
+- from: sensing.uss
+  service: services.semantic.UssZone
+  to: planning.driving

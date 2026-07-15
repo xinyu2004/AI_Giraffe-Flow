@@ -24,7 +24,7 @@ bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh   # SIL: compose → gener
 # HIL（交叉）
 bash projects/oem_a/afc_with_uss/scripts/compile_hil.sh
 
-project → gf-codegen compose → gf.sor.json → lint/lineage
+project → gf-config 保存 / python -m gf_codegen.compose → gf.sor.json → lint/lineage
          → generate（types + Proxy/Skeleton）→ iceoryx demo
 ```
 

@@ -3,7 +3,7 @@
 > **English:** [ROADMAP.md](../../en/operations/ROADMAP.md)  
 > 设计背景：[DESIGN.md](../architecture/DESIGN.md)
 
-本文将平台交付划分为 **P0–P3**。**P0（契约 + 最小闭环 + adc_full compose）已收口**；下一阶段按下方 **P1** 选主线推进。细节见 [P0_PLAN.md](P0_PLAN.md)。
+本文将平台交付划分为 **P0–P3**。**P0 已收口**；**P1 骨架已齐**，验收见 [P1_REVIEW_CHECKLIST.md](P1_REVIEW_CHECKLIST.md)。细节见 [P0_PLAN.md](P0_PLAN.md) / [P1_PLAN.md](P1_PLAN.md)。
 
 ---
 
@@ -12,7 +12,7 @@
 | 阶段 | 主题 | 典型周期（参考） | 核心验收 |
 |------|------|------------------|----------|
 | **P0** | 契约 + 最小可运行闭环 | ✅ 已完成 | SOR 子集、gf-codegen、iceoryx 双进程、adc_full compose、CI |
-| **P1** | 车规通信 + 工具 + OTA/DoIP 骨架 | **下一步** | 三 binding 可选、GMT、ucm/diag 可链、MCU gateway 模拟 |
+| **P1** | 车规通信 + 工具 + OTA/DoIP 骨架 | **骨架已齐** | Cfg✓ F✓ I✓ M✓ E/U✓ B/D✓ T/A✓（详见 P1_PLAN） |
 | **P2** | 可观测 + 证据 + 异构量产 | 深化 | MCAP/Tag/bench、Foxglove 桥、ap_mcu_cp 台架 |
 | **P3** | 嵌入式收敛 + 可信度交付 | 量产向 | 裁剪 profile、证据包、MIPS/RISC-V OSAL 验证 |
 
@@ -53,30 +53,32 @@ HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke
 
 ## P1 — 通信扩展、工具链、OTA/DoIP 骨架
 
-**目标：** SKU 可裁剪；**信号链接 GUI**；主机工具链可用；诊断与 OTA **可链接占位模块**。  
+**目标：** SKU 可裁剪；**信号链接 GUI**；**FIDL 轻量导入**；主机工具链可用；诊断与 OTA **可链接占位模块**。  
 细则：[P1_PLAN.md](P1_PLAN.md)
 
 ### 交付物
 
 | # | 交付物 |
 |---|--------|
-| P1-0 | **`gf-config`（PySide6）**：req 表单 + **信号链接画布**写回 wiring + lineage（GMT architect GUI） |
-| P1-1 | vsomeip、CycloneDDS binding（可选编译；DDS 默认 Cyclone） |
-| P1-2 | SOR / `req.yaml` `runtime_modules` 驱动 CMake 裁剪 |
-| P1-3 | `gf-codegen import` ARXML 子集 |
-| P1-4 | SOR types → IDL → cyclonedds idlc 包装 |
-| P1-5 | GMT CLI：`architect`（CI）· `measure export`（MCAP 雏形） |
-| P1-6 | `middleware/ucm`、`middleware/diag` 链接进镜像（stub） |
-| P1-7 | `mcu.cp_gateway` + `cp_ipc_peer` 桌面联调 |
-| P1-8 | `middleware/exec` + `phm` Alive/Deadline 最小 |
+| P1-0 | **`gf-config`（PySide6）**：req 表单 + **信号链接画布**写回 wiring + lineage（**已交付**） |
+| P1-2 | SOR / `req.yaml` `runtime_modules` / bindings 驱动 **CMake 裁剪**（**下一刀**） |
+| P1-2b | **FIDL 导入已交付**（`parse_fidl` + B 页「导入 fidl…」）；**不导出** fidl/fdepl（后置）；`.fdepl` 读入挂 B/vsomeip；不做 IoNAS |
+| P1-7 | **`mcu.cp_gateway` + `cp_ipc_peer` 桌面联调已交付**（`smoke_mcu_desktop.sh`） |
+| P1-8 | **`middleware/exec` + `phm` Alive/Deadline 最小已交付** |
+| P1-6 | **`middleware/ucm`、`middleware/diag` stub 可链已交付** |
+| P1-1 | **CycloneDDS + vsomeip binding 可链**（DDS 默认 Cyclone；offline stub；真源码后置） |
+| P1-4 | **SOR→IDL→idlc 包装已交付**（`emit-idl` + `run_idlc.sh` SKIP-ok） |
+| P1-5 | **GMT CLI 已交付**：`architect`（CI）· `measure export`（MCAP 雏形） |
+| P1-3 | **`gf-codegen import arxml` 子集已交付**（可接 FARACON 产出） |
 
 ### 验收标准
 
-- [ ] `gf-config` 打开 `afc_with_uss`：可见连线图；改边写回 wiring；compose/lineage 可用
+- [x] `gf-config` 打开 `afc_with_uss`：可见连线图；改边写回 wiring；compose/lineage 可用
 - [ ] 低配 CMake 裁剪后 demo 仍可链（仅 core/com/log/iceoryx）
-- [ ] DoIP Initialize/Shutdown stub 可被诊断探针调用
-- [ ] ucm PackageManager 状态机 stub 与 SM 钩子文档化
-- [ ] `adc_full` MCU 桌面联调脚本可跑（无真 MCU）
+- [ ] 样例 `.fidl` 可经 gf-config 导入画布为端口候选（`.fdepl` 非本项；见 P1-2b / B）
+- [x] DoIP Initialize/Shutdown stub 可被诊断探针调用
+- [x] ucm PackageManager 状态机 stub 与 SM 钩子文档化
+- [x] `adc_full` MCU 桌面联调脚本可跑（无真 MCU）
 
 ---
 

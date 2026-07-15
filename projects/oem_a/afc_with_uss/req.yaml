@@ -1,36 +1,32 @@
-# OEM A — AFC 前视（有独立 USS）
-# 车型交付契约（含原 deploy/profile：观测与参考 apps）
-schema_version: "0.1"
+schema_version: '0.1'
 variant: afc_front_camera_uss
 topology: ap_only
 product: AFC
-
 capabilities:
-  - front_camera
-  - uss
-  - driving
-
+- front_camera
+- uss
+- driving
+- dfsdf
 runtime_modules:
-  - core
-  - com
-  - log
-
+- core
+- com
+- log
 bindings:
-  - iceoryx
-
+- iceoryx
+- someip
+- dds
+- cross_domain_ipc
 observability:
-  record: full
-  trace_export: on
-
+  record: minimal
+  trace_export: 'True'
 apps:
-  - simulators/uss_feed
-  - demo_pipeline
-
+- simulators/uss_feed
+- demo_pipeline
 acceptance:
-  description: "AFC + 独立 USS — 前视 / 超声 / 行车规划"
+  description: AFC + 独立 USS — 前视 / 超声 / 行车规划
   lineage_required: true
   required_services:
-    - services.semantic.EgoMotion
-    - services.semantic.UssZones
-    - services.semantic.FrontObjectList
-    - services.semantic.Trajectory
+  - services.semantic.EgoMotion
+  - services.semantic.UssZones
+  - services.semantic.FrontObjectList
+  - services.semantic.Trajectory

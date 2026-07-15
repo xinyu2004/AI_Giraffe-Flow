@@ -1,0 +1,22 @@
+{
+  "schema_version": "0.2.0-skeleton",
+  "types": [
+    {
+      "id": "types.EgoMotion",
+      "kind": "struct",
+      "fields": [
+        { "name": "timestamp_ns", "type": "uint64" },
+        { "name": "speed_mps", "type": "float32" },
+        { "name": "yaw_rate_degps", "type": "float32" }
+      ]
+    },
+    {
+      "id": "types.UssZones",
+      "kind": "struct",
+      "fields": [
+        { "name": "nearest_cm", "type": "uint8" },
+        { "name": "zones", "type": "uint8", "array_size": 6 }
+      ]
+    }
+  ]
+}

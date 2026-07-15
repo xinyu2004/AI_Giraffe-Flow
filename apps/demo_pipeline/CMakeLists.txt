@@ -9,7 +9,7 @@ if(GF_USE_GENERATED)
   if(NOT EXISTS "${GF_GENERATED_DIR}/include/gf_gen/proxy/uss_zones_proxy.hpp")
     message(FATAL_ERROR
       "GF_USE_GENERATED=ON but missing ${GF_GENERATED_DIR}/include/gf_gen/proxy/uss_zones_proxy.hpp\n"
-      "Run gf-codegen compose + generate into ${GF_GENERATED_DIR}")
+      "Run python -m gf_codegen.compose + gf-codegen generate into ${GF_GENERATED_DIR}")
   endif()
   target_include_directories(gf_demo_pipeline PRIVATE "${GF_GENERATED_DIR}/include")
   target_compile_definitions(gf_demo_pipeline PRIVATE GF_USE_GENERATED=1)

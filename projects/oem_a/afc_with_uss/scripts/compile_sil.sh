@@ -18,7 +18,8 @@ echo "${TAG} cmake SIL compile (host, GF_USE_GENERATED=ON) → ${BUILD_SIL} ..."
 cmake -B "${BUILD_SIL}" \
   -DGF_BUILD_TESTS=ON \
   -DGF_USE_GENERATED=ON \
-  -DGF_GENERATED_DIR="${GEN_OUT}"
+  -DGF_GENERATED_DIR="${GEN_OUT}" \
+  -DGF_SKU_CMAKE="${GEN_OUT}/gf_build.cmake"
 cmake --build "${BUILD_SIL}" -j"$(nproc)"
 
 echo "${TAG} ctest (SIL) ..."

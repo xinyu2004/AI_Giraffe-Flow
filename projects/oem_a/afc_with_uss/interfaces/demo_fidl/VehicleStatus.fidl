@@ -1,0 +1,28 @@
+package oem_a.demo
+
+/** Demo Franca IDL for gf-config FIDL import (P1 Track I). */
+interface VehicleStatus {
+    version { major 1 minor 0 }
+
+    method getPose {
+        out {
+            VehiclePose pose
+        }
+    }
+
+    broadcast SpeedChanged {
+        out {
+            Float speed
+        }
+    }
+}
+
+typeCollection VehicleTypes {
+    version { major 1 minor 0 }
+
+    struct VehiclePose {
+        Float x
+        Float y
+        Float yaw
+    }
+}

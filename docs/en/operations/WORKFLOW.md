@@ -67,7 +67,10 @@ Module engineers deliver **`io_types.hpp` only** (no JSON).
 System integrator maintains `projects/<oem>/<vehicle>/` and runs:
 
 ```bash
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+# GUI: open project.yaml → Save (auto-compose) → optional Generate (Ctrl+G)
+# Headless / CI:
+python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
+gf-codegen generate --project projects/oem_a/afc_with_uss/project.yaml
 ```
 
 Contract: [sor-authoring.md](../architecture/sor-authoring.md) · [projects/oem_a/afc_with_uss/](../../../projects/oem_a/afc_with_uss/)

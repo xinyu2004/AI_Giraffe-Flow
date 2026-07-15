@@ -807,19 +807,24 @@ class PortEditDialog(QDialog):
         return provides, requires
 
 
-class ImportHppDialog(QDialog):
+class ImportPortsDialog(QDialog):
+    """Shared dialog: pick candidates from hpp or fidl → module ports."""
+
     def __init__(
         self,
         candidates: list[str],
         processes: list[str],
         default_process: str,
         parent: QWidget | None = None,
+        *,
+        title: str = "添加端口",
+        hint: str = "勾选要加入的名称（作为 service 短名）：",
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("从头文件添加端口")
+        self.setWindowTitle(title)
         self.resize(420, 380)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("勾选要加入的类型（作为 service 短名）："))
+        layout.addWidget(QLabel(hint))
         self._checks: list[QCheckBox] = []
         for name in candidates:
             cb = QCheckBox(name)
@@ -857,6 +862,10 @@ class ImportHppDialog(QDialog):
         names = [cb.text() for cb in self._checks if cb.isChecked()]
         direction = "out" if self._dir_out.isChecked() else "in"
         return self._proc.currentText(), names, direction
+
+
+# Back-compat alias
+ImportHppDialog = ImportPortsDialog
 
 
 class AddNodeDialog(QDialog):
@@ -922,6 +931,8 @@ class WiringGraphView(QWidget):
         self._btn_remove.clicked.connect(self._remove_selected_flow)
         self._btn_import = QPushButton("导入 hpp/h…")
         self._btn_import.clicked.connect(self.import_hpp)
+        self._btn_import_fidl = QPushButton("导入 fidl…")
+        self._btn_import_fidl.clicked.connect(self.import_fidl)
         self._btn_reload = QPushButton("重载图")
         self._btn_reload.clicked.connect(self.rebuild)
         self._btn_fit = QPushButton("适应窗口")
@@ -931,6 +942,7 @@ class WiringGraphView(QWidget):
         for b in (
             self._btn_remove,
             self._btn_import,
+            self._btn_import_fidl,
             self._btn_reload,
             self._btn_fit,
             self._btn_reset,
@@ -1479,21 +1491,78 @@ class WiringGraphView(QWidget):
         if not candidates:
             QMessageBox.information(self, "导入", "未解析到 struct，请检查头文件格式")
             return
+        self._apply_import_candidates(
+            candidates,
+            default_process,
+            source_path=hpp_path,
+            kind="hpp",
+            title="从头文件添加端口",
+            hint="勾选要加入的类型（作为 service 短名）：",
+        )
 
+    def import_fidl(self, default_process: str = "") -> None:
+        if not self._session:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择 FIDL",
+            str(self._session.paths.project_dir),
+            "Franca IDL (*.fidl);;All (*)",
+        )
+        if not path:
+            return
+        fidl_path = Path(path)
+        try:
+            candidates = self._session.parse_fidl_candidates(fidl_path)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "解析失败", str(exc))
+            return
+        if not candidates:
+            QMessageBox.information(
+                self,
+                "导入",
+                "未解析到 interface/struct/method/broadcast，请检查 .fidl 格式",
+            )
+            return
+        self._apply_import_candidates(
+            candidates,
+            default_process,
+            source_path=fidl_path,
+            kind="fidl",
+            title="从 FIDL 添加端口",
+            hint="勾选要加入的名称（struct / broadcast / method / interface）：",
+        )
+
+    def _apply_import_candidates(
+        self,
+        candidates: list[str],
+        default_process: str,
+        *,
+        source_path: Path,
+        kind: str,
+        title: str,
+        hint: str,
+    ) -> None:
+        assert self._session is not None
         procs = sorted(self._nodes.keys())
         if not procs:
             QMessageBox.information(self, "导入", "请先添加至少一个模块")
             return
         default = default_process if default_process in procs else procs[0]
-        dlg = ImportHppDialog(candidates, procs, default, self)
+        dlg = ImportPortsDialog(
+            candidates, procs, default, self, title=title, hint=hint
+        )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         process, names, direction = dlg.selected()
         if not names:
             return
 
-        rel = self._session.relpath_from_repo(hpp_path)
-        self._session.upsert_module(process, rel)
+        rel = self._session.relpath_from_repo(source_path)
+        if kind == "fidl":
+            self._session.upsert_module(process, fidl_rel=rel)
+        else:
+            self._session.upsert_module(process, rel)
 
         card = self._nodes.get(process)
         provides = list(card.provides) if card else []
