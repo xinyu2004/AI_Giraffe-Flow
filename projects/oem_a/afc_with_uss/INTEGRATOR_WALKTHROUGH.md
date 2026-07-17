@@ -25,22 +25,49 @@ wiring 引用上述路径 → compose →（可选）与 golden 对照
 
 | 路径 | 内容 |
 |------|------|
+| [interfaces/vehicle_gateway/](interfaces/vehicle_gateway/) | EgoMotion + FCM/FAPA 整包输入 |
+| [interfaces/fcm_perception/](interfaces/fcm_perception/) | FCM 粗端口 `io_ports.hpp` |
+| [interfaces/fapa_perception/](interfaces/fapa_perception/) | FAPA 粗端口 `io_ports.hpp` |
 | [interfaces/uss_sensing/](interfaces/uss_sensing/) | USS |
-| [interfaces/perception_front/](interfaces/perception_front/) | 前视 |
-| [oem/](oem/) | DBC + manifest |
-| [integration/wiring.yaml](integration/wiring.yaml) | 连线 |
+| [oem/](oem/) | DBC + extract + manifest |
+| [integration/wiring.yaml](integration/wiring.yaml) | **W0 粗端口连线基线** |
+| [100_dbc/](../../../100_dbc/) | 金样 DBC + FCM_hpp / FAPA_hpp |
+
+---
+
+## 0b. 第一步：gf-config 粗端口对接（取代线下对表）
+
+**不要在画布上连几十个字段。** 一条边 = 一包协议；字段细节留在 `100_dbc/*_hpp`。
+
+```bash
+gf-config projects/oem_a/afc_with_uss/project.yaml
+# B 页：gateway → fcm / fapa / uss → planning
+# 右侧 dataflow 点 ◀ 可折叠；导入时勾选「仅粗端口」
+```
+
+| 会上原来对的话 | 画布边 |
+|----------------|--------|
+| FCM 吃 Perception_In | gateway → `Perception_In_St` → perception.fcm |
+| FCM 吐 MESSAGE_Out | fcm → `Perception_MESSAGE_Out_St` → planning |
+| FAPA 吃 CanInfo | gateway → 三包 → perception.fapa |
+| FAPA 吐 ADC Out | fapa → `IPC_ADC_Perception_Out_St` → planning |
+| USS 区划 | uss → `UssZones` → planning |
+| 规划控车 | planning → `Trajectory` → gateway → **MCU/车身** |
+| 车身源 | **MCU/车身** → `VehicleBus` → gateway |
+
+画布技巧：双击模块可改 **In/Out 所在边**（gateway 建议 In 在下）；右键空白可「添加 MCU/车身 节点」。
 
 ---
 
 ## 1. 适配顺序
 
 ```text
-① 选定 SOA Apps（本项目：uss + front + planning.driving）
-② 外仓/模块 hpp → interfaces/
-③ oem_import.dbc + oem_import.yaml
-④ wiring.yaml
+① 选定 SOA Apps（uss + fcm + fapa + planning）
+② 粗端口 hpp → interfaces/（金样留 100_dbc）
+③ oem extract / oem_import.dbc + oem_import.yaml
+④ wiring.yaml（W0 已有基线）
 ⑤ req.yaml
-⑥ compose → lineage →（有 golden 则 diff）→ generate
+⑥ compose → lineage → generate
 ```
 
 ---

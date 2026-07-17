@@ -3,7 +3,7 @@
 > 路线图：[ROADMAP.md](ROADMAP.md) · P0 已收口：[P0_PLAN.md](P0_PLAN.md)  
 > 配置 UI：主机 **PySide6** · `gf-config` · 信号链接 GUI
 
-**状态（2026-07-15）：** **P1 子轨全部交付（Cfg · F · I · M · E/U · B/D · T/A）**。下一阶段见 ROADMAP **P2**。  
+**状态（2026-07-15）：** **P1 子轨全部交付（Cfg · F · I · M · E/U · B/D · T/A）**。下一阶段见 **[P2_PLAN.md](P2_PLAN.md)**（真正可运行）。  
 **Review：** 请按 [P1_REVIEW_CHECKLIST.md](P1_REVIEW_CHECKLIST.md)（R0–R7）逐项验收后再改。
 
 ---

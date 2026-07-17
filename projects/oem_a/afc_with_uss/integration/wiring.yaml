@@ -3,48 +3,98 @@ project_id: afc_with_uss
 variant: afc_front_camera_uss
 topology: ap_only
 modules:
+- id: adapter.vehicle_can_gateway
+  hpp: projects/oem_a/afc_with_uss/interfaces/vehicle_gateway/io_types.hpp
+- id: perception.fcm
+  hpp: projects/oem_a/afc_with_uss/interfaces/fcm_perception/io_ports.hpp
+  package: customer/fcm-perception
+- id: perception.fapa
+  hpp: projects/oem_a/afc_with_uss/interfaces/fapa_perception/io_ports.hpp
+  package: customer/fapa-perception
 - id: sensing.uss
   hpp: projects/oem_a/afc_with_uss/interfaces/uss_sensing/io_types.hpp
   package: customer/uss-sensing
-- id: perception.front
-  hpp: projects/oem_a/afc_with_uss/interfaces/perception_front/io_types.hpp
-  package: customer/perception-front
-- id: adapter.vehicle_can_gateway
-  hpp: projects/oem_a/afc_with_uss/interfaces/uss_sensing/io_types.hpp
+- id: planning.driving
+  hpp: projects/oem_a/afc_with_uss/interfaces/planning_driving/io_types.hpp
+  package: customer/planning-driving
 deployments:
+- process: external.vehicle_mcu
+  compute_domain: external
+  provides:
+  - services.semantic.VehicleBus
+  requires:
+  - services.semantic.Trajectory
 - process: adapter.vehicle_can_gateway
   compute_domain: ap_linux
   provides:
   - services.semantic.EgoMotion
-  - services.semantic.UssZoneSample
-  - services.semantic.UssZones
-  requires: []
+  - services.semantic.Perception_In_St
+  - services.semantic.IPC_CanInfo_100ms_St
+  - services.semantic.IPC_CanInfo_20ms_St
+  - services.semantic.IPC_CanInfo_10ms_St
+  - services.semantic.Trajectory
+  requires:
+  - services.semantic.VehicleBus
+  - services.semantic.Trajectory
+- process: perception.fcm
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.Perception_MESSAGE_Out_St
+  requires:
+  - services.semantic.Perception_In_St
 - process: sensing.uss
   compute_domain: ap_linux
   provides:
   - services.semantic.UssZones
-  - services.semantic.UssZone
-  - services.semantic.UssZon
-  - services.semantic.UssZo
   requires:
   - services.semantic.EgoMotion
-- process: perception.front
-  compute_domain: ap_linux
-  provides:
-  - services.semantic.FrontObjectList
-  requires:
-  - services.semantic.EgoMotion
-  - services.semantic.UssZones
 - process: planning.driving
   compute_domain: ap_linux
   package: customer/planning-driving
   provides:
   - services.semantic.Trajectory
   requires:
-  - services.semantic.FrontObjectList
+  - services.semantic.Perception_MESSAGE_Out_St
   - services.semantic.EgoMotion
-  - services.semantic.UssZone
+  - services.semantic.UssZones
 bindings:
+- module: adapter.vehicle_can_gateway
+  inputs:
+  - service: semantic.VehicleBus
+    type: VehicleBus
+  - service: semantic.Trajectory
+    type: Trajectory
+  outputs:
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  - service: semantic.Perception_In_St
+    type: Perception_In_St
+  - service: semantic.IPC_CanInfo_100ms_St
+    type: IPC_CanInfo_100ms_St
+  - service: semantic.IPC_CanInfo_20ms_St
+    type: IPC_CanInfo_20ms_St
+  - service: semantic.IPC_CanInfo_10ms_St
+    type: IPC_CanInfo_10ms_St
+  - service: semantic.Trajectory
+    type: Trajectory
+- module: perception.fcm
+  inputs:
+  - service: semantic.Perception_In_St
+    type: Perception_In_St
+  outputs:
+  - service: semantic.Perception_MESSAGE_Out_St
+    type: Perception_MESSAGE_Out_St
+- module: perception.fapa
+  inputs:
+  - service: semantic.IPC_CanInfo_20ms_St
+    type: IPC_CanInfo_20ms_St
+  - service: semantic.IPC_CanInfo_10ms_St
+    type: IPC_CanInfo_10ms_St
+  - service: semantic.IPC_CanInfo_100ms_St
+    type: IPC_CanInfo_100ms_St
+  outputs:
+  - service: semantic.IPC_ADC_Perception_Out_St
+    type: IPC_ADC_Perception_Out_St
 - module: sensing.uss
   inputs:
   - service: semantic.EgoMotion
@@ -52,34 +102,84 @@ bindings:
   outputs:
   - service: semantic.UssZones
     type: UssZones
-- module: perception.front
+- module: planning.driving
   inputs:
+  - service: semantic.Perception_MESSAGE_Out_St
+    type: Perception_MESSAGE_Out_St
+  - service: semantic.IPC_ADC_Perception_Out_St
+    type: IPC_ADC_Perception_Out_St
   - service: semantic.EgoMotion
     type: EgoMotion
   - service: semantic.UssZones
     type: UssZones
   outputs:
-  - service: semantic.FrontObjectList
-    type: FrontObjectList
+  - service: semantic.Trajectory
+    type: Trajectory
 dataflows:
+- from: external.vehicle_mcu
+  service: services.semantic.VehicleBus
+  to: adapter.vehicle_can_gateway
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.Perception_In_St
+  to: perception.fcm
+- from: perception.fcm
+  service: services.semantic.Perception_MESSAGE_Out_St
+  to: planning.driving
+  route:
+    mid_dx: 69.1
+    mid_dy: -51.3
 - from: adapter.vehicle_can_gateway
   service: services.semantic.EgoMotion
   to: sensing.uss
 - from: adapter.vehicle_can_gateway
   service: services.semantic.EgoMotion
-  to: perception.front
-- from: adapter.vehicle_can_gateway
-  service: services.semantic.EgoMotion
   to: planning.driving
 - from: sensing.uss
   service: services.semantic.UssZones
-  to: perception.front
-- from: perception.front
-  service: services.semantic.FrontObjectList
   to: planning.driving
+- from: planning.driving
+  service: services.semantic.Trajectory
+  to: adapter.vehicle_can_gateway
+  route:
+    mid_dx: 45.4
+    mid_dy: 70.2
 - from: adapter.vehicle_can_gateway
-  service: services.semantic.UssZones
-  to: perception.front
-- from: sensing.uss
-  service: services.semantic.UssZone
-  to: planning.driving
+  service: services.semantic.Trajectory
+  to: external.vehicle_mcu
+  route:
+    mid_dx: -63.8
+    mid_dy: 46.8
+canvas:
+  nodes:
+    external.vehicle_mcu:
+      kind: external
+      label: MCU / 车身
+      out_side: right
+      in_side: top
+      x: -381.3
+      y: -99.4
+    adapter.vehicle_can_gateway:
+      out_side: right
+      in_side: bottom
+      x: 108.7
+      y: -39.6
+    perception.fcm:
+      out_side: right
+      in_side: left
+      x: 728.9
+      y: -485.9
+    perception.fapa:
+      out_side: right
+      in_side: left
+      x: 697.1
+      y: 259.3
+    sensing.uss:
+      out_side: right
+      in_side: left
+      x: 713.0
+      y: -158.5
+    planning.driving:
+      out_side: bottom
+      in_side: left
+      x: 1289.7
+      y: -16.5

@@ -3,7 +3,8 @@
 > **English:** [ROADMAP.md](../../en/operations/ROADMAP.md)  
 > 设计背景：[DESIGN.md](../architecture/DESIGN.md)
 
-本文将平台交付划分为 **P0–P3**。**P0 已收口**；**P1 骨架已齐**，验收见 [P1_REVIEW_CHECKLIST.md](P1_REVIEW_CHECKLIST.md)。细节见 [P0_PLAN.md](P0_PLAN.md) / [P1_PLAN.md](P1_PLAN.md)。
+本文将平台交付划分为 **P0–P3**。**P0 已收口**；**P1 骨架已齐**（大量 stub），验收见 [P1_REVIEW_CHECKLIST.md](P1_REVIEW_CHECKLIST.md)。  
+**当前阶段：P2** — 细则见 [P2_PLAN.md](P2_PLAN.md)。另见 [P0_PLAN.md](P0_PLAN.md) / [P1_PLAN.md](P1_PLAN.md)。
 
 ---
 
@@ -12,9 +13,9 @@
 | 阶段 | 主题 | 典型周期（参考） | 核心验收 |
 |------|------|------------------|----------|
 | **P0** | 契约 + 最小可运行闭环 | ✅ 已完成 | SOR 子集、gf-codegen、iceoryx 双进程、adc_full compose、CI |
-| **P1** | 车规通信 + 工具 + OTA/DoIP 骨架 | **骨架已齐** | Cfg✓ F✓ I✓ M✓ E/U✓ B/D✓ T/A✓（详见 P1_PLAN） |
-| **P2** | 可观测 + 证据 + 异构量产 | 深化 | MCAP/Tag/bench、Foxglove 桥、ap_mcu_cp 台架 |
-| **P3** | 嵌入式收敛 + 可信度交付 | 量产向 | 裁剪 profile、证据包、MIPS/RISC-V OSAL 验证 |
+| **P1** | 车规通信 + 工具 + OTA/DoIP 骨架 | ✅ 骨架已齐 | Cfg✓ F✓ I✓ M✓ E/U✓ B/D✓ T/A✓（详见 P1_PLAN） |
+| **P2** | **真正可运行** + 最小可观测 | 进行中 | 四进程 SIL、exec/phm 挂主链、一条真 binding、Tag/MCAP/Foxglove MVP |
+| **P3** | 嵌入式收敛 + 可信度交付 | 量产向 | 裁剪 profile、真板/DoIP/OTA 台架、MIPS/RISC-V OSAL 验证 |
 
 ---
 
@@ -82,27 +83,35 @@ HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke
 
 ---
 
-## P2 — 可观测、ROS 生态、工程证据
+## P2 — 真正可运行 + 最小可观测
 
-**目标：** 用户能 **度量、回放、出报告**；算法同事能用 Foxglove/PlotJuggler。
+**目标：** 把 P1 的 stub 骨架收敛成 **桌面多进程真跑通**；度量/Foxglove 服务于这条主链，而不是单独堆工具。  
+细则：[P2_PLAN.md](P2_PLAN.md)
 
 ### 交付物
 
-| # | 交付物 |
-|---|--------|
-| P2-1 | 板端 Record Agent + Session **Tag** |
-| P2-2 | GMT `measure bench` + `qos_budgets` 对照 |
-| P2-3 | GMT `bridge foxglove` / `measure plot` |
-| P2-4 | trace → VCD → GTKWave 文档化工作流 |
-| P2-5 | 故障注入场景 2–3 个（雷达丢失、IPC 超时） |
-| P2-6 | `gf-codegen` + GMT 版本与 schema 锁定策略 |
-| P2-7 | OTA：RAUC 或自研 ucm 后端 **Spike 选型落地** |
+| # | 交付物 | 子轨 |
+|---|--------|------|
+| P2-R0 | wiring 卫生（去掉截断假服务名） | R0 |
+| P2-R | `afc_with_uss` **四进程** iceoryx SIL + `smoke_sil_4proc` | R |
+| P2-X | exec/phm 挂主链 + 1 例故障注入 | X |
+| P2-O | Record Agent + Session Tag + 真实 session→MCAP | O |
+| P2-B | **CycloneDDS 或 vsomeip 二选一**真收发（另一条保持 stub） | B |
+| P2-F | `GMT bridge foxglove` MVP | F |
+| P2-G | 版本锁定 + `bench_e2e_latency` golden + 证据包样例 | G |
+| P2-U | OTA Spike 选型（可选，不挡主验收） | U |
 
 ### 验收标准
 
-- [ ] 10 分钟运行 + 第 6 分钟 tag + 导出 ±3 分钟 MCAP 可复现
-- [ ] CI golden `bench_e2e_latency` 回归
-- [ ] 证据包目录结构（HTML/JSON）有样例
+- [ ] `smoke_sil_4proc.sh`：四进程存活，端到端至少一跳有计数
+- [ ] Alive miss 可注入可观测
+- [ ] 10 分钟运行 + 第 6 分钟 tag + 导出 ±3 分钟 MCAP 可复现（演示）
+- [ ] 选定 binding 真后端 event 收发 ≥ 1
+- [ ] CI golden `bench_e2e_latency`；证据包目录有样例
+
+### 明确不在 P2
+
+真 MCU / 真 DoIP 台架 / 量产 OTA、双栈同时量产级、GTKWave 强依赖、ISO 26262。→ **P3**
 
 ---
 
@@ -120,6 +129,7 @@ HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke
 | P3-4 | OSAL **mips** / **riscv** backend 各至少编译通过 |
 | P3-5 | 发版附带 evidence_pack + 参考延时表 |
 | P3-6 | 客户车型外仓集成指南 + 契约测试模板 |
+| P3-7 | 真板 / ap_mcu_cp 台架（承接 P1 桌面 gateway） |
 
 ### 验收标准
 
@@ -133,13 +143,13 @@ HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke
 
 | 模块 | P0 | P1 | P2 | P3 |
 |------|----|----|----|-----|
-| core, com, iceoryx | ● | | | |
-| exec, phm, sm | | ● | | |
-| vsomeip, dds | | ● | | |
-| ucm, diag (DoIP) | | skeleton ● | backend ● | production ● |
-| gf-codegen | ● | ● | | |
-| GMT | | ● | ● | ● |
-| simulators / gateway | ● | ● | | |
+| core, com, iceoryx | ● | | 四进程 ● | |
+| exec, phm, sm | | stub ● | 挂主链 ● | |
+| vsomeip, dds | | stub ● | **二选一真后端** ● | |
+| ucm, diag (DoIP) | | skeleton ● | Spike 可选 | production ● |
+| gf-codegen | ● | ● | 版本锁定 ● | |
+| GMT | | CLI ● | Tag/MCAP/Foxglove ● | ● |
+| 参考 App（afc 四节点） | 双进程 ● | | **四进程 SIL** ● | |
 | trust / bench | | | ● | ● |
 | MIPS/RISC-V OSAL | | | | ● |
 
@@ -147,4 +157,4 @@ HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke
 
 ## 下一步
 
-制定 **[P0 实施计划](P0_PLAN.md)**（待创建）：任务分解、人天粗估、依赖顺序、第一个可演示日期。
+按 **[P2 实施计划](P2_PLAN.md)** 开工：先 **R0 + R（四进程 SIL）**；W3 前确认 **B 轨选 CycloneDDS 还是 vsomeip**。

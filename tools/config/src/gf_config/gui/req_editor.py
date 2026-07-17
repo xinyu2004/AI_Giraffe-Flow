@@ -135,7 +135,7 @@ class ReqEditor(QWidget):
         hint = QLabel(
             "req.yaml = SKU / 交付契约（裁什么、验什么）。\n"
             "wiring.yaml = 本车型集成连线（谁提供/订阅、dataflow）。\n"
-            "保存或 Compose 时写回；不上板。"
+            "保存或 Verify 时写回；不上板。"
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#666;")

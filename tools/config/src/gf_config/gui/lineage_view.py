@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 class LineageView(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._summary = QLabel("Compose 后显示 lineage 检查结果")
+        self._summary = QLabel("Verify 后显示 lineage 检查结果")
         self._summary.setWordWrap(True)
         font = QFont()
         font.setPointSize(11)

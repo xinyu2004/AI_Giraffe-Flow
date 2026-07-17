@@ -1,4 +1,6 @@
-// OEM A / AFC+USS — 外仓交付的 USS 接口落盘（与共享基线同形；项目内持有副本便于审计/封板）
+// OEM A / AFC+USS — USS 语义接口（gf-config 导入用）
+// 物理源：uss.dbc 仅 USS 信息（见 oem/uss.extract.yaml）；可为私有 CAN / SPI / GMT 模拟
+// 不含车速：EgoMotion 只来自 vehicle_gateway
 #pragma once
 
 #include <cstdint>
@@ -17,16 +19,32 @@ enum class UssZoneId : uint8_t {
 
 struct UssZoneSample {
   uint8_t zone_id;
-  uint8_t status;
-  uint8_t distance_cm;
+  uint8_t status;       // PDC_INFO.PDC_*_Status
+  uint8_t distance_cm;  // P_USS_INFO*.USS_*_Dis [m] → cm
 };
 
+// W0 — 必连
 struct UssZones {
   uint64_t timestamp_ns;
-  uint8_t sys_status;
+  uint8_t sys_status;   // PDC_INFO.PDC_Sys_Status
   uint8_t nearest_cm;
   uint16_t zone_mask;
   UssZoneSample zones[6];
+};
+
+// W1 — APA 车位/状态（传感器侧；非车辆 CAN）
+struct ApaSlot {
+  uint8_t slot_id;
+  uint8_t slot_status;
+  float length_m;
+  float width_m;
+};
+
+struct ApaSlotList {
+  uint64_t timestamp_ns;
+  uint8_t apa_status;
+  uint8_t slot_count;
+  ApaSlot slots[3];
 };
 
 }  // namespace gf::demo::uss_sensing

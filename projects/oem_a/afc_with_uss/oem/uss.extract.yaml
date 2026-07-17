@@ -1,0 +1,130 @@
+# uss.dbc → USS 信息抽取表（仅超声波/APA 传感器侧）
+# 源：100_dbc/uss.dbc
+# 传输叙事：私有 CAN 或 SPI 等价；后期 GMT 可灌同一 semantic
+# 禁止：P_VEHICLE_INFO / 任何车速进 gateway（EgoMotion 唯一源 = vehicle_can）
+schema_version: "0.1"
+project_id: afc_with_uss
+bus_id: uss_io
+sources:
+  - id: uss
+    path: 100_dbc/uss.dbc
+
+owner_process: sensing.uss
+transport_options: [private_can, spi, gmt_sim]
+notes: |
+  只抽 USS 信息。探头原始 P_USS_SEN* 永不进 SOR（模块内部可选）。
+  gf-config 导入用 interfaces/uss_sensing/io_types.hpp，不直接吃本文件。
+
+drop_name_patterns:
+  - "P_USS_SEN*"
+  - "VECTOR__*"
+  - "P_VEHICLE_INFO"   # 明确排除 — 车速不走 USS
+
+exclude_messages:
+  - P_VEHICLE_INFO
+
+# ---------------------------------------------------------------------------
+# W0 — UssZones（先跑通）
+# hpp: interfaces/uss_sensing/io_types.hpp
+# ---------------------------------------------------------------------------
+w0_uss_zones:
+  semantic_type: types.UssZones
+  provides: services.semantic.UssZones
+  keep_messages:
+    - PDC_INFO      # 区划 status
+    - P_USS_INFO1   # 前向距离 [m]
+    - P_USS_INFO2   # 后向距离 [m]
+  fields:
+    - semantic: timestamp_ns
+      source: host_receive_time
+    - semantic: sys_status
+      message: PDC_INFO
+      frame_id: "0x700"
+      signal: PDC_Sys_Status
+    # 6 区划（与 UssZoneId / zones[6] 对齐；侧视 FLS/FRS/RLS/RRS 可进 zone_mask）
+    - semantic: zones[0].status  # FL
+      message: PDC_INFO
+      signal: PDC_FL_Status
+    - semantic: zones[1].status  # FRM
+      message: PDC_INFO
+      signal: PDC_FRM_Status
+    - semantic: zones[2].status  # FR
+      message: PDC_INFO
+      signal: PDC_FR_Status
+    - semantic: zones[3].status  # RL
+      message: PDC_INFO
+      signal: PDC_RL_Status
+    - semantic: zones[4].status  # RRM
+      message: PDC_INFO
+      signal: PDC_RRM_Status
+    - semantic: zones[5].status  # RR
+      message: PDC_INFO
+      signal: PDC_RR_Status
+    - semantic: zones[0].distance_cm
+      message: P_USS_INFO1
+      frame_id: "0x400"
+      signal: USS_FL_Dis
+      unit_dbc: m
+      convert: "cm = m * 100"
+    - semantic: zones[1].distance_cm
+      message: P_USS_INFO1
+      signal: USS_FRM_Dis
+      convert: "cm = m * 100"
+    - semantic: zones[2].distance_cm
+      message: P_USS_INFO1
+      signal: USS_FR_Dis
+      convert: "cm = m * 100"
+    - semantic: zones[3].distance_cm
+      message: P_USS_INFO2
+      frame_id: "0x401"
+      signal: USS_RL_Dis
+      convert: "cm = m * 100"
+    - semantic: zones[4].distance_cm
+      message: P_USS_INFO2
+      signal: USS_RRM_Dis
+      convert: "cm = m * 100"
+    - semantic: zones[5].distance_cm
+      message: P_USS_INFO2
+      signal: USS_RR_Dis
+      convert: "cm = m * 100"
+    - semantic: nearest_cm
+      source: min_of_zone_distances
+    - semantic: zone_mask
+      source: derived_from_status_and_side_zones
+      note: "FLS/FRS/RLS/RRS status 可并入 mask 高位"
+
+w0_keep_messages:
+  - PDC_INFO
+  - P_USS_INFO1
+  - P_USS_INFO2
+
+# ---------------------------------------------------------------------------
+# W1 — APA 传感器侧（仍非车速）
+# ---------------------------------------------------------------------------
+w1_apa_sensor:
+  semantic_type: types.ApaSlotList   # hpp 预留
+  provides: services.semantic.ApaSlotList
+  keep_messages:
+    - P_APA_STS
+    - P_APA_SLOT1
+    - P_APA_SLOT2
+    - P_APA_SLOT3
+    - P_SYNC_INFO
+  deferred_messages:
+    - P_APA_SLOT4
+    - P_APA_SLOT5
+    - P_APA_FREESPACE1
+    - P_APA_FREESPACE10
+    - P_APA_FREESPACE11
+    - P_APA_FREESPACE12
+    - P_APA_FREESPACE13
+    - VISION_OBSTACLE
+    - VISION_OBSTACLE_EXT
+    - P_USS_INFO3
+    - P_USS_INFO4
+
+# 原始探头 — 仅模块内部，不上 SOR / 不上画布
+module_internal_only:
+  pattern: "P_USS_SEN*"
+  count_approx: 88
+  note: sensing.uss 进程内解码可选；不 generate Proxy/Skeleton

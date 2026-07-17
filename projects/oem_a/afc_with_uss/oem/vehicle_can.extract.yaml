@@ -1,0 +1,163 @@
+# FAPA + FCM → 车辆 CAN 抽取表（行泊一体 / gateway）
+# 源：100_dbc/FAPA_M36TFL20T_Pack_V190.dbc + FCM_VO_M36TFL_20T_Pack_V190.dbc
+# 用途：集成 review → 后续生成精简 oem_vehicle_import.dbc；不供 gf-config 直接导入
+schema_version: "0.1"
+project_id: afc_with_uss
+bus_id: vehicle_can
+sources:
+  - id: fapa
+    path: 100_dbc/FAPA_M36TFL20T_Pack_V190.dbc
+  - id: fcm
+    path: 100_dbc/FCM_VO_M36TFL_20T_Pack_V190.dbc
+
+owner_process: adapter.vehicle_can_gateway
+notes: |
+  合并策略：同 ID 同名取并集信号；TX 以真实 ECU 为准。
+  EgoMotion 唯一源在本 bus；USS.dbc 车速不进 gateway。
+  wave: w0=先跑通 · w1=行泊端口加满 · deferred=全表保留待加 · drop=永不进 import
+
+# ---------------------------------------------------------------------------
+# 全局丢弃（两份 DBC 均适用）
+# ---------------------------------------------------------------------------
+drop_name_patterns:
+  - "NM_*"
+  - "DIAG_*"
+  - "WarnMsg_*"
+  - "VECTOR__*"
+
+# ---------------------------------------------------------------------------
+# W0 — EgoMotion（先跑通）
+# semantic: types.EgoMotion / services.semantic.EgoMotion
+# hpp: interfaces/vehicle_gateway/io_types.hpp
+# ---------------------------------------------------------------------------
+w0_egomotion:
+  semantic_type: types.EgoMotion
+  provides: services.semantic.EgoMotion
+  fields:
+    - semantic: timestamp_ns
+      source: host_receive_time
+      note: CAN 无时间戳；gateway 填接收时刻
+    - semantic: speed_mps
+      message: ESC_2
+      frame_id: "0xA8"
+      signal: VehicleSpeed
+      unit_dbc: km/h
+      convert: "mps = kmh / 3.6"
+      prefer_dbc: fapa
+    - semantic: speed_mps
+      valid_signal: VehicleSpeedValid
+      message: ESC_2
+    - semantic: yaw_rate_degps
+      message: ACM_3
+      frame_id: "0x132"
+      signal: YawRate
+      unit_dbc: rad/s
+      convert: "degps = radps * 180 / pi"
+      prefer_dbc: fapa
+    - semantic: steer_angle_deg
+      message: SAM_1
+      frame_id: "0x12B"
+      signal: SteeringAngle
+      unit_dbc: deg
+      prefer_dbc: fapa
+      note: 勿用 PDC_APA_3.REQ_APASteeringAngle（APA 请求角）
+    - semantic: gear
+      message: TCU_2
+      frame_id: "0x128"
+      signal: ActualGear
+      prefer_dbc: fcm
+      note: 仅 FCM DBC 含此报文
+
+w0_keep_messages:
+  - ESC_2
+  - ACM_3
+  - SAM_1
+  - TCU_2
+
+# ---------------------------------------------------------------------------
+# W0 可选 enrichment（同一 EgoMotion 上下文，字段可后扩 hpp）
+# ---------------------------------------------------------------------------
+w0_optional_messages:
+  - ESC_3   # WhlSpeedFL/FR
+  - ESC_4   # WhlSpeedRL/RR
+  - ESC_5   # WhlTick*
+  - ACM_2   # Long/Lat accel
+  - ESC_6   # StandStill
+
+# ---------------------------------------------------------------------------
+# W1 — 泊车 / 行车高层 → gateway 额外 semantic（hpp 已预留 struct）
+# ---------------------------------------------------------------------------
+w1_parking:
+  semantic_type: types.ApaStatus
+  provides: services.semantic.ApaStatus
+  keep_messages:
+    - PDC_APA_3
+    - PDC_APA_5
+    - PDC_APA_6
+    - FAPA_1
+    - AVM_3
+    - AVM_4
+
+w1_front_camera:
+  semantic_type: types.FcmObjectList
+  provides: services.semantic.FcmObjectList
+  keep_messages:
+    - FCM_1
+    - FCM_2
+    - FCM_3
+    - FCM_4
+    - FRM_1
+    - FRM_2
+    - FRM_3
+  deferred_messages:
+    - FCM_5
+    - FCM_6
+    - FCM_7
+    - FCM_8
+    - FCM_9
+    - FCM_10
+
+# ---------------------------------------------------------------------------
+# deferred — APP 帧保留在全量表，暂不进精简 DBC
+# ---------------------------------------------------------------------------
+deferred_messages:
+  - EMS_3
+  - TCU_4
+  - EPS_1
+  - EPS_2
+  - ESC_7
+  - ESC_A
+  - ACM_1
+  - IHU_3
+  - IHU_4
+  - IHU_9
+  - IHU_11
+  - IHU_A
+  - IHU_F
+  - IPC_2
+  - BCM_A
+  - MFS_2
+  - TGW_4
+  - CTP_1
+
+drop_messages:
+  - NM_VGW
+  - NM_ACM
+  - NM_EPS
+  - NM_ESC_CH
+  - NM_FCM
+  - NM_FRM
+  - NM_FAPA
+  - NM_BSDL
+  - NM_BSDR
+  - NM_FRCR_M
+  - NM_PDC
+  - DIAG_REQ_AVM
+  - DIAG_RESP_FAPA
+  - DIAG_REQ_Broadcast_1
+  - DIAG_REQ_FCM
+  - DIAG_RESP_FCM
+  - DIAG_REQ_Broadcast
+  - WarnMsg_FAPA
+  - WarnMsg_FCM
+  - WarnMsg_FRM

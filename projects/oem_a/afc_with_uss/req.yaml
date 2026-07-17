@@ -25,8 +25,11 @@ apps:
 acceptance:
   description: AFC + 独立 USS — 前视 / 超声 / 行车规划
   lineage_required: true
+  # 与当前粗端口 wiring 对齐（旧 FrontObjectList 已由 FCM MESSAGE_Out 等取代）
   required_services:
   - services.semantic.EgoMotion
   - services.semantic.UssZones
-  - services.semantic.FrontObjectList
+  - services.semantic.Perception_MESSAGE_Out_St
+  - services.semantic.IPC_ADC_Perception_Out_St
   - services.semantic.Trajectory
+  - services.semantic.VehicleBus

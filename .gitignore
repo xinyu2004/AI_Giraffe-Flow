@@ -1,0 +1,51 @@
+# Ignore build & vendor artifacts (skeleton)
+
+build/
+build-*/
+cmake-build-*/
+out/
+install/
+.cache/
+.deps-sysroot/
+.deps-prefix/
+middleware/.deps-prefix/
+compile_commands.json
+
+# Vendored trees live under middleware/; keep policy in deps/
+middleware/third_party/*/
+!middleware/third_party/README.md
+# Legacy root paths (pre-layout cleanup)
+third_party/*/
+!third_party/README.md
+
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.pyc
+__pycache__/
+.venv/
+venv/
+100_dbc/
+
+.idea/
+.vscode/
+*.user
+.DS_Store
+
+# Generated (when codegen lands)
+**/generated/
+!**/generated/.gitkeep
+
+# Python tooling
+**/__pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# compose working outputs (golden/ is optional — produced after review; not shipped in demo by default)
+projects/**/gf.sor.json
+projects/**/golden/gf.sor.json
+projects/**/reports/signal_lineage_report.yaml

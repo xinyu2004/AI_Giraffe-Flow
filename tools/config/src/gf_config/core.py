@@ -165,6 +165,39 @@ class ProjectSession:
         self.wiring["dataflows"] = flows
         self.dirty_wiring = True
 
+    def canvas(self) -> dict[str, Any]:
+        c = self.wiring.get("canvas")
+        if not isinstance(c, dict):
+            c = {}
+            self.wiring["canvas"] = c
+        nodes = c.get("nodes")
+        if not isinstance(nodes, dict):
+            c["nodes"] = {}
+        return c
+
+    def node_ui(self, process: str) -> dict[str, Any]:
+        nodes = self.canvas().setdefault("nodes", {})
+        assert isinstance(nodes, dict)
+        ui = nodes.get(process)
+        if not isinstance(ui, dict):
+            ui = {}
+            nodes[process] = ui
+        return ui
+
+    def set_node_ui(self, process: str, **fields: Any) -> None:
+        ui = self.node_ui(process)
+        changed = False
+        for k, v in fields.items():
+            if v is None:
+                if k in ui:
+                    ui.pop(k, None)
+                    changed = True
+            elif ui.get(k) != v:
+                ui[k] = v
+                changed = True
+        if changed:
+            self.dirty_wiring = True
+
     def set_ports(self, process: str, provides: list[str], requires: list[str]) -> None:
         self.upsert_deployment(
             process,
