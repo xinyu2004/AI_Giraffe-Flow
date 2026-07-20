@@ -15,6 +15,7 @@ from gf_codegen.compose.emit_build_cmake import emit_build_cmake
 from gf_codegen.compose.import_oem import import_oem
 from gf_codegen.compose.lineage import run_lineage
 from gf_codegen.compose.load_project import ProjectPaths, load_project
+from gf_codegen.compose.merge_platform import merge_platform
 from gf_codegen.compose.merge_req import merge_req
 from gf_codegen.compose.write_sor import write_lineage, write_sor
 
@@ -76,10 +77,25 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
 
     with paths.req.open(encoding="utf-8") as f:
         req = yaml.safe_load(f) or {}
+    if not isinstance(req, dict):
+        req = {}
+
+    with paths.wiring.open(encoding="utf-8") as f:
+        wiring = yaml.safe_load(f) or {}
+    if not isinstance(wiring, dict):
+        wiring = {}
+
+    plat_errors, plat_warnings, plat_checks = merge_platform(
+        sor, paths, req, wiring=wiring
+    )
 
     report = run_lineage(sor, req)
     report["project_id"] = paths.data.get("project_id") or report.get("project_id")
-    report["warnings"] = list(report.get("warnings") or []) + warnings
+    report["warnings"] = list(report.get("warnings") or []) + warnings + plat_warnings
+    report["errors"] = list(report.get("errors") or []) + plat_errors
+    report["checks"] = list(report.get("checks") or []) + plat_checks
+    if plat_errors:
+        report["ok"] = False
     # relativize note
     report["outputs"] = {
         "sor": str(paths.out_sor),
@@ -90,12 +106,15 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     write_lineage(paths.lineage_report, report)
 
     sku_cmake = paths.project_dir / "generated" / "gf_build.cmake"
-    emit_build_cmake(req if isinstance(req, dict) else {}, sku_cmake)
+    emit_build_cmake(req, sku_cmake)
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)
 
     print(f"compose wrote: {paths.out_sor}")
     print(f"lineage wrote: {paths.lineage_report} (ok={report['ok']})")
     print(f"sku cmake wrote: {sku_cmake}")
+    if sor.get("platform_manifest"):
+        keys = sorted(k for k in sor["platform_manifest"] if k != "schema_version")
+        print(f"platform_manifest: {', '.join(keys)}")
     for w in report.get("warnings") or []:
         print(f"  warning: {w}")
     if not report["ok"]:

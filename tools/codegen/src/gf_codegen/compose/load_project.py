@@ -56,16 +56,12 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
     lineage_report = resolve_path(project_dir, report_rel, repo_root=root)
 
     platform_paths: dict[str, Path] = {}
-    if isinstance(plat, dict):
-        defaults = {
-            "exec": "platform/exec.yaml",
-            "phm": "platform/phm.yaml",
-            "diag": "platform/diag.yaml",
-            "log": "platform/log.yaml",
-            "ucm": "platform/ucm.yaml",
-        }
+    # Only resolve keys explicitly listed under project.platform (no silent defaults)
+    if isinstance(plat, dict) and plat:
         for key in PLATFORM_KEYS:
-            rel = plat.get(key) or defaults.get(key)
+            if key not in plat:
+                continue
+            rel = plat.get(key)
             if rel:
                 platform_paths[key] = resolve_path(project_dir, str(rel), repo_root=root)
 
