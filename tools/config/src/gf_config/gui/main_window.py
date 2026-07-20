@@ -1,4 +1,4 @@
-"""Main window: open project, SKU + signal graph（Lineage 在右侧面板）。"""
+"""Main window: A·SKU / B·信号链接 / C·平台（Lineage 在 B 右侧）。"""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from gf_config.core import ProjectSession
+from gf_config.gui.platform_editor import PlatformEditor
 from gf_config.gui.req_editor import ReqEditor
 from gf_config.gui.wiring_graph import WiringGraphView
 
@@ -23,16 +24,18 @@ from gf_config.gui.wiring_graph import WiringGraphView
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("gf-config — Giraffe Flow（SKU + 信号链接）")
+        self.setWindowTitle("gf-config — Giraffe Flow（A/B/C）")
         self.resize(1280, 800)
         self._session: ProjectSession | None = None
 
         self._tabs = QTabWidget()
         self._req = ReqEditor()
         self._graph = WiringGraphView()
+        self._platform = PlatformEditor()
 
-        self._tabs.addTab(self._req, "A · SKU / 中间件")
+        self._tabs.addTab(self._req, "A · SKU")
         self._tabs.addTab(self._graph, "B · 信号链接")
+        self._tabs.addTab(self._platform, "C · 平台")
         self.setCentralWidget(self._tabs)
 
         self._path_label = QLabel("未打开项目")
@@ -42,6 +45,8 @@ class MainWindow(QMainWindow):
 
         self._req.changed.connect(self._mark_dirty)
         self._graph.changed.connect(self._mark_dirty)
+        self._platform.changed.connect(self._mark_dirty)
+        self._req.modules_changed.connect(self._platform.set_runtime_modules)
 
         self._build_menu()
 
@@ -96,6 +101,26 @@ class MainWindow(QMainWindow):
         file_menu.addAction(act_quit)
 
         view_menu = self.menuBar().addMenu("视图")
+
+        act_tab_a = QAction("A · SKU", self)
+        act_tab_a.setShortcut("Ctrl+1")
+        act_tab_a.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_tab_a.triggered.connect(lambda: self._tabs.setCurrentWidget(self._req))
+        view_menu.addAction(act_tab_a)
+
+        act_tab_b = QAction("B · 信号链接", self)
+        act_tab_b.setShortcut("Ctrl+2")
+        act_tab_b.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_tab_b.triggered.connect(lambda: self._tabs.setCurrentWidget(self._graph))
+        view_menu.addAction(act_tab_b)
+
+        act_tab_c = QAction("C · 平台", self)
+        act_tab_c.setShortcut("Ctrl+3")
+        act_tab_c.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_tab_c.triggered.connect(lambda: self._tabs.setCurrentWidget(self._platform))
+        view_menu.addAction(act_tab_c)
+
+        view_menu.addSeparator()
 
         act_fit = QAction("适应窗口", self)
         act_fit.setShortcut("Ctrl+0")
@@ -168,6 +193,7 @@ class MainWindow(QMainWindow):
         self._session = ProjectSession.open(project_file)
         self._req.set_session(self._session)
         self._graph.set_session(self._session)
+        self._platform.set_session(self._session)
         self._path_label.setText(str(self._session.paths.project_file))
         self.setWindowTitle(f"gf-config — {self._session.paths.project_dir.name}")
         lr = self._session.paths.lineage_report
@@ -186,11 +212,11 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if self._session is not None:
             self._graph.flush_canvas()
-            if self._session.dirty_wiring or self._session.dirty_req:
+            if self._session.is_dirty():
                 reply = QMessageBox.question(
                     self,
                     "退出",
-                    "有未保存的连线/布局/SKU 更改，是否保存？",
+                    "有未保存的 SKU / 连线 / 平台 更改，是否保存？",
                     QMessageBox.StandardButton.Save
                     | QMessageBox.StandardButton.Discard
                     | QMessageBox.StandardButton.Cancel,
@@ -202,30 +228,35 @@ class MainWindow(QMainWindow):
                     self._session.save_all()
         event.accept()
 
+    def _saved_paths_summary(self) -> str:
+        assert self._session is not None
+        lines = [
+            f"• {self._session.paths.req}",
+            f"• {self._session.paths.wiring}",
+        ]
+        for key, p in sorted(self._session.paths.platform.items()):
+            lines.append(f"• {p}  ({key})")
+        return "\n".join(lines)
+
     def _save(self) -> None:
-        """写盘 only — 不跑 lineage / 不拦不合理连线。"""
+        """写盘 only — flush A+B+C；不跑 lineage。"""
         if not self._session:
             QMessageBox.information(self, "保存", "请先打开项目")
             return
         self._graph.flush_canvas()
-        had_dirty = bool(self._session.dirty_wiring or self._session.dirty_req)
+        had_dirty = self._session.is_dirty()
         try:
             self._session.save_all()
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "保存失败", str(exc))
             return
-        wiring = self._session.paths.wiring
-        req = self._session.paths.req
         if had_dirty:
             self._path_label.setText(f"{self._session.paths.project_file}  ·  ✓ 已保存")
-            self.statusBar().showMessage(
-                f"✓ 已保存 {wiring.name} / {req.name}（未 Verify）",
-                8000,
-            )
+            self.statusBar().showMessage("✓ 已保存 A/B/C（未 Verify）", 8000)
             QMessageBox.information(
                 self,
                 "保存",
-                f"已写入磁盘：\n• {wiring}\n• {req}\n\n"
+                f"已写入磁盘：\n{self._saved_paths_summary()}\n\n"
                 "（未跑 Verify；需要检查时再按 Ctrl+R）",
             )
         else:
@@ -238,7 +269,7 @@ class MainWindow(QMainWindow):
             return
         self._graph.flush_canvas()
         self._session.save_all()
-        self.statusBar().showMessage("已保存，正在 Verify…", 2000)
+        self.statusBar().showMessage("已保存 A/B/C，正在 Verify…", 2000)
         self._verify(show_dialog=False)
 
     def _verify(self, *, show_dialog: bool = False) -> bool:

@@ -1,0 +1,26 @@
+# exec + SM 极简（function_groups）；进程名 ∈ wiring，非 external
+schema_version: "0.1"
+function_groups:
+  - id: MachineFG
+    initial: Running
+processes:
+  - name: adapter.vehicle_can_gateway
+    function_group: MachineFG
+    depends_on: []
+    execution_client: true
+  - name: perception.fcm
+    function_group: MachineFG
+    depends_on:
+      - adapter.vehicle_can_gateway
+    execution_client: true
+  - name: sensing.uss
+    function_group: MachineFG
+    depends_on:
+      - adapter.vehicle_can_gateway
+    execution_client: true
+  - name: planning.driving
+    function_group: MachineFG
+    depends_on:
+      - perception.fcm
+      - sensing.uss
+    execution_client: true

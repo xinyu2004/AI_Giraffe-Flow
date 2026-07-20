@@ -1,9 +1,12 @@
-# P2 实施计划 — 真正可运行
+# P2 实施计划 — 真正可运行 + 平台配置骨架
 
-> 路线图：[ROADMAP.md](ROADMAP.md) · P1 收口：[P1_PLAN.md](P1_PLAN.md) · Review：[P1_REVIEW_CHECKLIST.md](P1_REVIEW_CHECKLIST.md)
+> 路线图：[ROADMAP.md](ROADMAP.md) · P1：[P1_PLAN.md](P1_PLAN.md) · Review：[P1_REVIEW_CHECKLIST.md](P1_REVIEW_CHECKLIST.md)  
+> **中间件 / gf-config 配什么（主规格）：** [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)  
+> 集成基线：[afc_with_uss/INTEGRATOR_WALKTHROUGH.md](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md)
 
-**状态（2026-07-15）：** P1 子轨骨架已齐（大量 **stub / offline**）。  
-**P2 主题：** 从「可链接占位」升级到 **桌面多进程真正跑通**，并带上最小可观测证据。
+**状态（2026-07-20）：** P1 骨架已齐；B 页信号图 / MCU / Lineage 可用；`platform/*.yaml` 空壳已落；**配置规格已冻结**（MIDDLEWARE_CONFIG_PLAN）。  
+**P2 主题：** **先定型 gf-config（A/B/C）** → 再多进程真跑 + 可观测 + CycloneDDS。  
+**排期原则：Cfg 轨优先** — 入口不定，后面 SIL/codegen 都难对齐。
 
 ---
 
@@ -11,45 +14,69 @@
 
 | 原则 | 含义 |
 |------|------|
-| **Runnable first** | 验收以「进程在跑、样本在流」为准，不以「库能编过」为准 |
-| **一条主演示链** | 以 `afc_with_uss` **四节点 iceoryx SIL** 为 P2 主验收；其它 binding 选 **一条** 真后端加深 |
-| **生成物进 App** | 四进程全部 `GF_USE_GENERATED=ON`，按 wiring 的 provides→Skeleton / requires→Proxy |
-| **Stub 分级** | 主链上去 stub；OTA/DoIP/真 MCU **仍可 stub**，不挡主演示 |
-| **工具边界不变** | gf-config 写 req/wiring；codegen 生成；GMT 只读度量/桥接 |
+| **Config first** | **先做齐 gf-config A·SKU / B·信号 / C·平台** + compose 读 platform；再堆 SIL |
+| **Runnable second** | 配置入口稳定后，验收仍以「进程在跑、样本在流」为准 |
+| **一条主演示链** | `oem_a/afc_with_uss` 多进程 iceoryx SIL（无 FAPA） |
+| **粗端口不变** | wiring 继续 fat port |
+| **生成物进 App** | 主链 `GF_USE_GENERATED=ON` |
+| **Stub 分级** | OTA / 真 DoIP / 真 MCU 仍可 stub |
+| **工具边界** | gf-config **写** req/wiring/**platform**；codegen 生成；GMT **只读** |
+| **无 DEM** | 诊断仅 `ara::diag` 小表 |
 
-**一句话验收：**  
-在桌面 Linux 上，一条命令拉起 RouDi + 四进程，EgoMotion → UssZones → FrontObjectList → Trajectory 链路可见；并能打 Tag、导出一段 MCAP。
-
----
-
-## 1. P1 → P2：什么算「还是 stub」、P2 怎么处理
-
-| P1 交付 | 现状 | P2 态度 |
-|---------|------|---------|
-| iceoryx 双进程 (uss_feed ↔ demo_pipeline) | ✅ 真跑 | **扩展为四进程**（主链） |
-| Proxy / Skeleton generate | ✅ 头文件 | **四 App 全部接入** |
-| exec / phm | 单测 smoke | **挂进多进程启动与监督** |
-| CycloneDDS / vsomeip | offline stub 可链 | **二选一做真收发 demo**（另一条保持 stub） |
-| ucm / diag DoIP | API stub | **不挡主链**；OTA 仅 Spike 选型 |
-| GMT measure MCAP | JSONL→MCAP 雏形 | **Session Tag + 可复现导出**；Foxglove 桥 MVP |
-| MCU desktop gateway | Unix socket 桌面 | 保持；**真板 / 真 CP 仍属 P3** |
-| FIDL / ARXML import | 已可导入 | 清理 wiring 脏名；不做导出 |
+**一句话验收（P2 收口）：**  
+用 gf-config 配完 SKU + 连线 + 平台清单并 Verify 通过；再一条脚本拉起主链 SIL（gateway→fcm/uss→planning），exec/phm 可读配置；Tag→MCAP；CycloneDDS 旁路真收发。
 
 ---
 
-## 2. 子轨与依赖顺序
+## 1. 已冻结决策（开工勿再摇摆）
+
+| # | 决策 | 说明 |
+|---|------|------|
+| D1 | **主项目** | 扩展 `projects/oem_a/afc_with_uss`（不新开项目） |
+| D2 | **B 轨 binding** | **CycloneDDS** 真源码 pub/sub；vsomeip **保持 P1 stub** |
+| D3 | **EgoMotion 源** | 车端 CAN 经 gateway（DBC 可合并多 ECU 报文）；**uss.dbc 不进车身 info** |
+| D3b | **无泊车** | `afc_with_uss` **无 `perception.fapa`**（FAPA=泊车）；带泊车另开 SKU |
+| D4 | **MCU** | 画布特殊节点；yaml 保留 VehicleBus/Trajectory；真 CP → P3 |
+| D5 | **平台 ③** | exec(+sm∈function_groups) / phm / diag / **log** / **ucm 空壳**；**无 DEM**；见 MIDDLEWARE_CONFIG_PLAN |
+| D6 | **gf-config** | **P2 做齐 A·SKU / B·信号 / C·平台**（C 不进 P3）；YAML 已空壳；GMT **不写**配置 |
+
+---
+
+## 2. P1 → P2：现状与态度
+
+| 交付 | 现状 | P2 态度 |
+|------|------|---------|
+| gf-config B + Verify/MCU | ✅ 可用 | **W1–W2 主攻**：A 瘦身 + **C·平台** + compose 读 platform |
+| platform/*.yaml 空壳 | ✅ 已落 | compose 校验 + C 页编辑 |
+| W0 粗端口 wiring（无 FAPA） | ✅ 基线 | Cfg 之后 R 轨按此跑 SIL |
+| iceoryx 双进程 | ✅ 真跑 | 扩展为 **多进程主链** |
+| Proxy/Skeleton generate | ✅ 头文件 | **主链 App 全部接入** |
+| exec / phm | 单测 smoke | **platform 配置 + 挂主链监督** |
+| diag DoIP | API stub | **platform/diag.yaml 最小表**；真台架 → P3 |
+| CycloneDDS | offline stub | **真源码收发 demo（B）** |
+| GMT MCAP | fixture 雏形 | **真实 session + Tag 窗**；Foxglove MVP |
+| DEM | — | **不做** |
+
+---
+
+## 3. 子轨与依赖（**Cfg 在前**）
 
 ```mermaid
 flowchart TD
-  R0[R0_wiring卫生]
-  R[R_四进程SIL]
+  R0[R0_契约对齐]
+  Cfg[Cfg_gf-config定型]
+  P[P_compose吃platform]
+  R[R_多进程SIL]
   X[X_exec_phm挂主链]
-  B[B_一条真binding]
-  O[O_Record_Tag_MCAP]
-  F[F_Foxglove桥MVP]
-  U[U_OTA_Spike可选]
-  G[G_版本锁定_bench]
-  R0 --> R
+  B[B_CycloneDDS]
+  O[O_Tag_MCAP]
+  F[F_Foxglove]
+  G[G_收口]
+  U[U_OTA可选]
+  R0 --> Cfg
+  Cfg --> P
+  P --> R
+  P --> X
   R --> X
   R --> O
   R --> B
@@ -57,183 +84,210 @@ flowchart TD
   O --> G
   X --> G
   B --> G
+  Cfg --> G
   U -.-> G
 ```
 
 | 顺序 | 子轨 | 内容 | 优先级 |
 |------|------|------|--------|
-| 0 | **R0** | 清理 `wiring` 截断服务名（`UssZon`/`UssZo` 等）；对齐 provides/requires/dataflows | P0 必做 |
-| 1 | **R** | 四进程 App + `smoke_sil_4proc` / 扩展 `run_sil` | **主轨** |
-| 2 | **X** | exec Offer/Running + phm Alive/Deadline 监督四进程（或关键两进程） | 主轨紧随 |
-| 3 | **O** | Record Agent（环形缓冲）+ Session Tag + `GMT measure export` 可复现窗 | 主轨并行 |
-| 4 | **B** | **CycloneDDS 真源码 pub/sub** *或* **vsomeip 真收发** 二选一 | 加深 |
-| 5 | **F** | `GMT bridge foxglove` MVP（读 MCAP / 活流其一） | 体验 |
-| 6 | **G** | schema/工具版本锁定；`bench_e2e_latency` CI golden | 收口 |
-| 7 | **U** | OTA：RAUC vs 自研 ucm 后端 **Spike 文档+选型**（可不编码） | 可选 |
+| 0 | **R0** | req/wiring/acceptance 与粗端口一致；lineage 绿 | 必做 · 很快 |
+| 1 | **Cfg** | **gf-config 定型**：A 瘦身 · B 巩固 · **C·平台五子页** · 菜单已齐 | **最先主轨** |
+| 2 | **P** | compose 读 `project.platform` → 校验 → `platform_manifest`；（可选）generate 常量表 | 紧随 Cfg |
+| 3 | **R** | 多进程 App + smoke_sil_multiproc | 配置闭环后 |
+| 4 | **X** | 读 platform → Running + Alive；故障注入 1 例 | 随 R |
+| 5 | **O** | Record + Tag + MCAP | 并行加深 |
+| 6 | **B** | CycloneDDS 真收发 | 加深 |
+| 7 | **F** | Foxglove MVP | 体验 |
+| 8 | **G / U** | 收口 / OTA Spike | 收口 |
 
 ---
 
-## 3. R — 四进程真正可运行（主轨）
-
-### 3.1 目标拓扑（与 wiring 对齐）
-
-| 进程 ID | 建议 App 目录 | Skeleton | Proxy |
-|---------|---------------|----------|-------|
-| `adapter.vehicle_can_gateway` | `apps/adapters/vehicle_can_gateway/`（新）或扩展现有 adapter | EgoMotion（+ 约定的 USS 相关若仍由 adapter 提供） | — |
-| `sensing.uss` | 演进现有 `apps/simulators/uss_feed/` | UssZones | EgoMotion |
-| `perception.front` | `apps/perception/front/`（新；可由 demo_pipeline 拆出） | FrontObjectList | EgoMotion, UssZones |
-| `planning.driving` | `apps/planning/driving/`（新） | Trajectory | FrontObjectList, EgoMotion（+ 约定） |
-
-> 现有 `uss_feed` + `demo_pipeline` **可保留为双进程回归**；P2 验收以四进程脚本为准。
-
-### 3.2 交付物
-
-| # | 交付物 | 说明 |
-|---|--------|------|
-| R-1 | wiring 卫生 + compose/lineage 绿 | 无截断假服务；generate 无垃圾 proxy/skeleton |
-| R-2 | 四可执行文件 | 均 `#include gf_gen/{proxy,skeleton}/…`，`GF_USE_GENERATED=ON` |
-| R-3 | CMake / `gf_build.cmake` / `GF_APPS` | compose 产出的 app 列表能编进四进程 |
-| R-4 | `projects/oem_a/afc_with_uss/scripts/run_sil_4proc.sh` | RouDi + 四进程；stdout 可见链路样本（seq / nearest / object_count / traj） |
-| R-5 | `smoke_sil_4proc.sh` | compile → run → 超时内断言「下游至少收到 N 帧」 |
-| R-6 | 短文档 | `afc_with_uss` 集成说明：谁提供谁订阅、如何只开双进程回归 |
-
-### 3.3 验收
-
-- [ ] `bash …/smoke_sil_4proc.sh` 退出码 0
-- [ ] 四进程同时存活 ≥ 30s（或脚本约定窗口）
-- [ ] 至少一条 dataflow 端到端有计数（例如 planning 打印收到的 FrontObjectList seq）
-- [ ] 不依赖 stub DDS/SOME/IP（主链仍用 **iceoryx**）
-
----
-
-## 4. X — exec / phm 挂上主链
-
-| # | 交付物 | 说明 |
-|---|--------|------|
-| X-1 | 启动编排 | 四进程（或 EM 代理）走 exec Offer→Running；非「裸 main 无限循环」无监督 |
-| X-2 | Alive 监督 | 至少对 perception 或 planning 开 Alive；杀进程 / 停喂狗 → phm 可见 miss |
-| X-3 | 故障注入脚本 | `scripts/fault_inject_ipc_timeout.sh` 或进程暂停 1 例（对应 ROADMAP 旧 P2-5 收敛） |
-| X-4 | 文档 | OTA 时 `SetPaused` 与主链关系（沿用 P1 ucm README，补四进程场景） |
-
-### 验收
-
-- [ ] 正常启动四进程均 Running
-- [ ] 注入 1 次 Alive miss 可观测（日志或 GMT 事件），恢复后继续跑
-
----
-
-## 5. O / F — 可观测（为「真跑」服务，不做空壳）
-
-| # | 交付物 | 说明 |
-|---|--------|------|
-| O-1 | Record Agent（桌面） | 环形缓冲订阅关键服务（或 JSONL sink）；与四进程同机 |
-| O-2 | Session **Tag** | 运行中打 tag（CLI 或信号）；导出窗 = tag±Δt |
-| O-3 | `GMT measure export` | 从真实 session（非仅 fixture）导出 MCAP，魔数 `\x89MCAP0` |
-| O-4 | 文档化 10 分钟场景 | 「跑 10 min → 第 6 min tag → 导出 ±3 min」可复现步骤 |
-| F-1 | Foxglove 桥 MVP | `GMT bridge foxglove`：读导出的 MCAP **或** 活流二选一；不追求完整布局 |
-
-### 验收
-
-- [ ] 按 O-4 步骤导出的 MCAP 可在 Foxglove / PlotJuggler 打开至少 1 个 topic
-- [ ] CI 可用短 session fixture 回归 export（长跑不进默认 CI）
-
----
-
-## 6. B — 一条真 binding（加深，非双栈量产）
-
-**决策（开工第一天冻结）：**
-
-| 选项 | 适用 | P2 交付 |
-|------|------|---------|
-| **B-DDS**（推荐若偏 ROS 生态） | 真 CycloneDDS 源码树（`middleware/third_party` 或 deps 脚本） | 单服务 pub/sub demo + profile；iceoryx 主链不变 |
-| **B-SOMEIP**（推荐若偏车规 SOA） | 真 vsomeip（+ 必要 Boost） | 单服务 offer/find/event + 可选 `.fdepl` 数字 ID 进配置 |
-
-**明确不做（P2）：** 两套都做到量产级；完整 CommonAPI 生成；把 fdepl 当成 `req.bindings`。
-
-### 验收
-
-- [ ] 选定栈的 smoke：**真后端**收发 ≥ 1 个 event（非 Init/Shutdown stub）
-- [ ] 另一栈可保持 P1 stub，文档标明
-
----
-
-## 7. G — 收口与证据
+## 4. R0 — 卫生与契约对齐（短）
 
 | # | 交付物 |
 |---|--------|
-| G-1 | `gf-codegen` / GMT / SOR schema **版本锁定**说明（谁升谁跟） |
-| G-2 | `bench_e2e_latency`：四进程或双进程延迟采样 → CI golden（阈值可松） |
-| G-3 | 证据包目录样例：`evidence_pack/`（HTML 或 JSON 索引 + MCAP 指针） |
-| G-4 | ROADMAP / 本计划勾选；`P2_REVIEW_CHECKLIST.md`（收口时写） |
+| R0-1 | acceptance / 文档与粗端口一致（无 FAPA / 无 FrontObjectList 主链叙事） |
+| R0-2 | 现有 compose + lineage PASS（尚可不读 platform） |
+
+### 验收
+
+- [ ] compose afc_with_uss → lineage ok
 
 ---
 
-## 8. U — OTA Spike（可选，不挡主验收）
+## 5. Cfg — gf-config 定型（**最先主轨**）
 
-- 输出一页选型：RAUC vs 自研 ucm 后端 vs 「P3 再做」
-- 不要求台架升级成功；P1 ucm 状态机 stub 可继续用
+> 目标形态：[MIDDLEWARE_CONFIG_PLAN.md §4](MIDDLEWARE_CONFIG_PLAN.md)。  
+> **先做完本轨，再开 R 多进程大开发。**
+
+| # | 交付物 |
+|---|--------|
+| Cfg-1 | **A · SKU 瘦身**：标识 / capabilities / runtime_modules / bindings / acceptance；apps 折叠或移出 |
+| Cfg-2 | **B · 信号链接巩固**：现有画布+右侧连线/Lineage；无回归 |
+| Cfg-3 | **C · 平台页（新建）**：子页编辑 exec / phm / diag / log / ucm；进程下拉只读自 wiring |
+| Cfg-4 | Ctrl+S 写回对应 yaml；Verify 前 flush A+B+C |
+| Cfg-5 | 菜单/快捷键与文档一致（无杂乱工具条） |
+
+### 验收
+
+- [ ] 打开 afc_with_uss：三页齐全，C 页能改 platform 并保存
+- [ ] 改 Alive 超时 → 落盘 `phm.yaml`；改 FG → 落盘 `exec.yaml`
+- [ ] external.* 默认不出现在 exec/phm 进程下拉
+- [ ] B 页既有能力无回退
 
 ---
 
-## 9. 明确不做（P2）
+## 6. P — compose 吃 platform（紧随 Cfg）
 
-- 真 MCU / 真 AUTOSAR CP / 车载板 24h soak（→ P3）
-- 真 DoIP 台架互通、量产 OTA A/B（→ P3）
-- IoNAS / Classic↔ARXML 完整互转；gf-config 内嵌 FARACON
-- MIPS / RISC-V OSAL 实板（→ P3）
-- GMT 完整 GUI；板端配置 GUI
-- iceoryx + DDS + SOME/IP **三栈同时**量产级 QoS
-- ISO 26262 认证材料（工程证据 ≠ 认证）
+> 字段见 MIDDLEWARE_CONFIG_PLAN §8。五文件已空壳：`exec/phm/diag/log/ucm`。
+
+| # | 交付物 |
+|---|--------|
+| P-1 | compose 读 `project.yaml` → `platform:` 路径 |
+| P-2 | 校验：exec/phm 的 process ∈ wiring（非 external）→ 失败非 0、信息可读 |
+| P-3 | 写入 SOR `platform_manifest`（或旁路 JSON） |
+| P-4 | （可选）generate 常量表供运行时加载 |
+| P-5 | Verify（Ctrl+R）跑通含 platform 的检查 |
+
+### 验收
+
+- [ ] 故意写错 process → compose/Verify 失败
+- [ ] 正确配置 → lineage/compose ok，SOR 含 platform 段
+- [ ] 无 dem.yaml / 无 DEM 轨
 
 ---
 
-## 10. 推荐节奏（约 3–4 周参考）
+## 7. R — 多进程真正可运行（配置闭环之后）
+
+### 7.1 拓扑（W0）
+
+```text
+MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fcm / uss ──► planning
+                      ▲                                    │
+                      └── Trajectory ◄── gateway ◄─────────┘
+```
+
+| 进程 | 方向 |
+|------|------|
+| `adapter.vehicle_can_gateway` | 新或扩展 adapter |
+| `sensing.uss` | 演进 `uss_feed` |
+| `perception.fcm` | 前视行车感知（本 SKU 有） |
+| `planning.driving` | 新或拆 demo |
+
+> **`perception.fapa`（泊车）不在本 SKU。** 带泊车的行泊一体见 `oem_b/adc_full` 等。  
+> `external.vehicle_mcu` 不做 AP iceoryx 进程。双进程回归保留。
+
+### 7.2 交付物
+
+| # | 交付物 |
+|---|--------|
+| R-1 | 主链可执行文件 + `GF_USE_GENERATED=ON` |
+| R-2 | CMake / `GF_APPS` / `gf_build.cmake` |
+| R-3 | `scripts/run_sil_multiproc.sh` |
+| R-4 | `scripts/smoke_sil_multiproc.sh`（下游 N 帧断言） |
+| R-5 | 双进程回归说明 |
+
+### 验收
+
+- [ ] smoke 绿；约定窗口内存活
+- [ ] 端到端至少一跳有计数
+- [ ] 主链 **iceoryx**
+
+---
+
+## 8. X — exec / phm 挂主链
+
+| # | 交付物 |
+|---|--------|
+| X-1 | Offer→Running（读 `platform/exec.yaml`） |
+| X-2 | 1～2 进程 Alive（读 `platform/phm.yaml`） |
+| X-3 | 故障注入 1 例 |
+| X-4 | 与 OTA Pause 关系文档 |
+
+### 验收
+
+- [ ] 启动 Running；Alive miss 可观测并可恢复
+
+---
+
+## 9. O / F — 可观测
+
+| # | 交付物 |
+|---|--------|
+| O-1～O-4 | Record、Tag、真实 session→MCAP、10min 演示步骤 |
+| F-1 | Foxglove 桥 MVP |
+
+### 验收
+
+- [ ] MCAP 可打开 ≥ 1 topic；CI 短 fixture 回归 export
+
+---
+
+## 10. B — CycloneDDS 真收发（已选定）
+
+| # | 交付物 |
+|---|--------|
+| B-1 | 依赖可复现获取 |
+| B-2 | 真后端 pub/sub smoke |
+| B-3 | 文档：主链仍 iceoryx；vsomeip stub |
+
+### 验收
+
+- [ ] DDS 真收发 ≥ 1 event；不阻塞主链 SIL
+
+---
+
+## 11. G / U — 收口与可选
+
+G：版本锁定、bench golden、证据包、`P2_REVIEW_CHECKLIST.md`  
+U：OTA Spike 一页（可选）
+
+---
+
+## 12. 明确不做（P2）
+
+- **DEM**
+- 真 MCU / 真 CP / 车载板 soak（→ P3）
+- 真 DoIP 台架、量产 OTA（→ P3）
+- GMT 可写配置 / GMT 完整 GUI
+- IoNAS；fidl/fdepl 导出；三栈量产级；ISO 26262
+- （已取消）「平台 GUI 放到 P3」— **C 页在 P2 Cfg 轨完成**
+
+---
+
+## 13. 节奏（约 4～5 周 · **Cfg 在前**）
 
 | 周 | 焦点 | 出口 |
 |----|------|------|
-| **W1** | R0 + R：wiring 清洁；四 App 骨架；`run_sil_4proc` 能起来 | 四进程有心跳日志 |
-| **W2** | R 收尾（端到端计数）+ X 最小监督 + O-1/O-2 雏形 | `smoke_sil_4proc` 绿 |
-| **W3** | B 真 binding 一条 + O-3/O-4 MCAP 窗 | 选定栈真收发；MCAP 可开 |
-| **W4** | F Foxglove MVP + G bench/锁定 + 文档/Review 清单 | **P2 可演示收口** |
-
-联调入口（目标态）：
+| **W1** | R0 + **Cfg-1/2/3**：A 瘦身 + C·平台页骨架（能读/写五 yaml） | 三页可用；保存落盘 |
+| **W2** | **Cfg 收尾** + **P**：compose/Verify 吃 platform + 校验 | 错 process 能红；SOR 含 platform |
+| **W3** | **R** 多进程骨架/端到端 + **X** 最小监督 | smoke 绿；Alive 读配置 |
+| **W4** | **B** Cyclone + **O** Tag/MCAP | DDS smoke；MCAP 可开 |
+| **W5** | **F** + **G** 收口（可压缩进 W4 末） | **可演示收口** |
 
 ```bash
-source .venv/bin/activate
-pip install -e "tools/codegen[dev]" -e "tools/gmt[dev]" -e tools/config
-# 作者改连线
-gf-config projects/oem_a/afc_with_uss/project.yaml
-# 生成
+gf-config projects/oem_a/afc_with_uss/project.yaml   # 先把 A/B/C 配稳
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json \
-  --out projects/oem_a/afc_with_uss/generated
-# 四进程 SIL（P2 主验收）
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil_4proc.sh
+bash projects/oem_a/afc_with_uss/scripts/smoke_sil_multiproc.sh
 ```
 
 ---
 
-## 11. 与旧 ROADMAP「P2」条目对照
+## 14. 与旧草案对照
 
-| 旧 ROADMAP | 本计划 |
-|------------|--------|
-| P2-1 Record + Tag | → **O** |
-| P2-2 measure bench + qos | → **G-2**（主链有数据后） |
-| P2-3 Foxglove / plot | → **F**（MVP，靠后） |
-| P2-4 VCD/GTKWave | **降级**：有空再文档化；不挡四进程验收 |
-| P2-5 故障注入 | → **X-3**（收敛 1–2 例） |
-| P2-6 版本锁定 | → **G-1** |
-| P2-7 OTA Spike | → **U**（可选） |
-| （缺失）四进程真跑 | → **R / R0**（**新主轨**） |
-| （缺失）真 DDS 或 SOME/IP | → **B** |
+| 旧草案 | 本版 |
+|--------|------|
+| SIL 与配置并行 / GUI 后置 | **Cfg 最先**；C·平台 P2 必做 |
+| 四进程 + FrontObjectList | gateway/fcm/uss/planning（无 FAPA） |
+| B 待定 | CycloneDDS |
+| 无 platform | 五 yaml + compose + C 页 |
 
 ---
 
-## 12. 开工前需你确认的一个决策
+## 15. 开工检查清单（按你的优先级）
 
-**B 轨选哪条真 binding？**
-
-1. **CycloneDDS**（利于后续 Foxglove/ROS 叙事）  
-2. **vsomeip**（利于车规 SOA / fdepl 叙事）  
-
-确认后 W3 按该选项排期；另一条保持 P1 stub 即可。
+- [x] D1–D6 / MIDDLEWARE_CONFIG_PLAN 拍板
+- [x] `platform/*.yaml` 空壳 + `project.yaml` 索引
+- [ ] **W1：Cfg — A 瘦身 + C·平台页（读/写五文件）**
+- [ ] W2：compose/Verify 吃 platform
+- [ ] 其后：R App 目录落点 + smoke

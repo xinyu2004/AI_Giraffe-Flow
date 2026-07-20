@@ -50,16 +50,29 @@ class ProjectSession:
     paths: ProjectPaths
     req: dict[str, Any]
     wiring: dict[str, Any]
+    platform: dict[str, dict[str, Any]]
     dirty_req: bool = False
     dirty_wiring: bool = False
+    dirty_platform: set[str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.dirty_platform is None:
+            self.dirty_platform = set()
 
     @classmethod
     def open(cls, project_file: Path) -> ProjectSession:
         paths = load_project(project_file)
+        platform: dict[str, dict[str, Any]] = {}
+        for key, p in (paths.platform or {}).items():
+            if p.is_file():
+                platform[key] = load_yaml(p)
+            else:
+                platform[key] = {"schema_version": "0.1"}
         return cls(
             paths=paths,
             req=load_yaml(paths.req),
             wiring=load_yaml(paths.wiring),
+            platform=platform,
         )
 
     def save_req(self) -> None:
@@ -70,11 +83,46 @@ class ProjectSession:
         _dump_yaml(self.paths.wiring, self.wiring)
         self.dirty_wiring = False
 
+    def save_platform(self, key: str | None = None) -> None:
+        assert self.dirty_platform is not None
+        keys = [key] if key else list(self.dirty_platform)
+        for k in keys:
+            path = self.paths.platform.get(k)
+            data = self.platform.get(k)
+            if path is None or data is None:
+                continue
+            _dump_yaml(path, data)
+            self.dirty_platform.discard(k)
+
+    def mark_platform_dirty(self, key: str) -> None:
+        assert self.dirty_platform is not None
+        self.dirty_platform.add(key)
+
+    def is_dirty(self) -> bool:
+        assert self.dirty_platform is not None
+        return bool(self.dirty_req or self.dirty_wiring or self.dirty_platform)
+
     def save_all(self) -> None:
         if self.dirty_req:
             self.save_req()
         if self.dirty_wiring:
             self.save_wiring()
+        assert self.dirty_platform is not None
+        if self.dirty_platform:
+            self.save_platform()
+
+    def wiring_process_names(self, *, include_external: bool = False) -> list[str]:
+        """Process names from wiring.deployments for platform dropdowns."""
+        names: list[str] = []
+        for d in self.deployments():
+            name = str(d.get("process") or "").strip()
+            if not name:
+                continue
+            if not include_external and name.startswith("external."):
+                continue
+            if name not in names:
+                names.append(name)
+        return names
 
     def compose(self) -> tuple[int, str]:
         self.save_all()

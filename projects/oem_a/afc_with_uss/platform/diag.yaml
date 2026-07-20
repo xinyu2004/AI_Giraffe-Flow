@@ -1,0 +1,7 @@
+# ara::diag / gf_ara::diag — 非 DEM；无 dem.yaml
+schema_version: "0.1"
+doip:
+  enabled: true
+  logical_address: 0x0E00
+dids: []
+rids: []

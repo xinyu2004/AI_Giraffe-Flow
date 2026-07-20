@@ -4,7 +4,7 @@
 > 设计背景：[DESIGN.md](../architecture/DESIGN.md)
 
 本文将平台交付划分为 **P0–P3**。**P0 已收口**；**P1 骨架已齐**（大量 stub），验收见 [P1_REVIEW_CHECKLIST.md](P1_REVIEW_CHECKLIST.md)。  
-**当前阶段：P2** — 细则见 [P2_PLAN.md](P2_PLAN.md)。另见 [P0_PLAN.md](P0_PLAN.md) / [P1_PLAN.md](P1_PLAN.md)。
+**当前阶段：P2** — 细则见 [P2_PLAN.md](P2_PLAN.md)；中间件与 gf-config 配置规格见 [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)。另见 [P0_PLAN.md](P0_PLAN.md) / [P1_PLAN.md](P1_PLAN.md)。
 
 ---
 
@@ -14,7 +14,7 @@
 |------|------|------------------|----------|
 | **P0** | 契约 + 最小可运行闭环 | ✅ 已完成 | SOR 子集、gf-codegen、iceoryx 双进程、adc_full compose、CI |
 | **P1** | 车规通信 + 工具 + OTA/DoIP 骨架 | ✅ 骨架已齐 | Cfg✓ F✓ I✓ M✓ E/U✓ B/D✓ T/A✓（详见 P1_PLAN） |
-| **P2** | **真正可运行** + 最小可观测 | 进行中 | 四进程 SIL、exec/phm 挂主链、一条真 binding、Tag/MCAP/Foxglove MVP |
+| **P2** | **真正可运行** + 可观测 + platform 配置骨架 | 进行中 | 多进程 SIL、platform exec/phm/diag（无 DEM）、CycloneDDS、Tag/MCAP |
 | **P3** | 嵌入式收敛 + 可信度交付 | 量产向 | 裁剪 profile、真板/DoIP/OTA 台架、MIPS/RISC-V OSAL 验证 |
 
 ---
@@ -83,35 +83,39 @@ HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke
 
 ---
 
-## P2 — 真正可运行 + 最小可观测
+## P2 — 真正可运行 + 最小可观测 + 平台配置骨架
 
-**目标：** 把 P1 的 stub 骨架收敛成 **桌面多进程真跑通**；度量/Foxglove 服务于这条主链，而不是单独堆工具。  
-细则：[P2_PLAN.md](P2_PLAN.md)
+**目标：** **先定型 gf-config（A/B/C）** → 多进程 SIL → 可观测 → CycloneDDS；platform 五文件（**无 DEM**）。  
+细则：[P2_PLAN.md](P2_PLAN.md) · 配置规格：[MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)
 
 ### 交付物
 
 | # | 交付物 | 子轨 |
 |---|--------|------|
-| P2-R0 | wiring 卫生（去掉截断假服务名） | R0 |
-| P2-R | `afc_with_uss` **四进程** iceoryx SIL + `smoke_sil_4proc` | R |
-| P2-X | exec/phm 挂主链 + 1 例故障注入 | X |
-| P2-O | Record Agent + Session Tag + 真实 session→MCAP | O |
-| P2-B | **CycloneDDS 或 vsomeip 二选一**真收发（另一条保持 stub） | B |
+| P2-R0 | wiring/req 与粗端口对齐 | R0 |
+| P2-Cfg | **gf-config 定型**：A 瘦身 · B 巩固 · **C·平台**（最先） | Cfg |
+| P2-P | compose 吃 platform + 校验（五 yaml；sm∈exec；无 DEM） | P |
+| P2-R | 多进程 iceoryx SIL（gateway/fcm/uss/planning）+ smoke | R |
+| P2-X | exec/phm 读 platform 挂主链 + 1 例故障注入 | X |
+| P2-O | Record + Tag + 真实 session→MCAP | O |
+| P2-B | **CycloneDDS** 真收发（vsomeip 保持 stub） | B |
 | P2-F | `GMT bridge foxglove` MVP | F |
-| P2-G | 版本锁定 + `bench_e2e_latency` golden + 证据包样例 | G |
-| P2-U | OTA Spike 选型（可选，不挡主验收） | U |
+| P2-G | 版本锁定 + bench golden + 证据包 + Review 清单 | G |
+| P2-U | OTA Spike 选型（可选） | U |
 
 ### 验收标准
 
-- [ ] `smoke_sil_4proc.sh`：四进程存活，端到端至少一跳有计数
+- [ ] `smoke_sil_multiproc`：主链存活，端到端至少一跳有计数
+- [ ] platform 引用未知 process → compose/校验失败
 - [ ] Alive miss 可注入可观测
-- [ ] 10 分钟运行 + 第 6 分钟 tag + 导出 ±3 分钟 MCAP 可复现（演示）
-- [ ] 选定 binding 真后端 event 收发 ≥ 1
-- [ ] CI golden `bench_e2e_latency`；证据包目录有样例
+- [ ] Tag + 导出 MCAP 可复现（演示）
+- [ ] CycloneDDS 真 event 收发 ≥ 1
+- [ ] CI bench golden；证据包有样例
+- [ ] **无 DEM** 配置/生成轨
 
 ### 明确不在 P2
 
-真 MCU / 真 DoIP 台架 / 量产 OTA、双栈同时量产级、GTKWave 强依赖、ISO 26262。→ **P3**
+DEM；真 MCU / 真 DoIP 台架 / 量产 OTA；gf-config 平台大 GUI（后置）；GMT 可写配置；双栈量产级；ISO 26262。→ **P3 或另议**
 
 ---
 

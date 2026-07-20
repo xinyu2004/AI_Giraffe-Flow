@@ -11,6 +11,9 @@ import yaml
 from gf_codegen.paths import find_repo_root, resolve_path
 
 
+PLATFORM_KEYS = ("exec", "phm", "diag", "log", "ucm")
+
+
 @dataclass
 class ProjectPaths:
     repo_root: Path
@@ -25,6 +28,8 @@ class ProjectPaths:
     out_sor: Path
     lineage_report: Path
     fail_on_error: bool
+    # key → absolute path; missing project.platform → empty dict
+    platform: dict[str, Path]
 
 
 def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPaths:
@@ -39,6 +44,7 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
     integ = data.get("integration") or {}
     delivery = data.get("delivery") or {}
     lineage = data.get("lineage") or {}
+    plat = data.get("platform") or {}
 
     base_rel = data.get("base") or "schemas/examples/desktop_ap_only.sor.json"
     base_sor = resolve_path(root, base_rel, repo_root=root)
@@ -48,6 +54,20 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
 
     report_rel = lineage.get("report") or "reports/signal_lineage_report.yaml"
     lineage_report = resolve_path(project_dir, report_rel, repo_root=root)
+
+    platform_paths: dict[str, Path] = {}
+    if isinstance(plat, dict):
+        defaults = {
+            "exec": "platform/exec.yaml",
+            "phm": "platform/phm.yaml",
+            "diag": "platform/diag.yaml",
+            "log": "platform/log.yaml",
+            "ucm": "platform/ucm.yaml",
+        }
+        for key in PLATFORM_KEYS:
+            rel = plat.get(key) or defaults.get(key)
+            if rel:
+                platform_paths[key] = resolve_path(project_dir, str(rel), repo_root=root)
 
     return ProjectPaths(
         repo_root=root,
@@ -66,4 +86,5 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
         out_sor=out_sor,
         lineage_report=lineage_report,
         fail_on_error=bool(lineage.get("fail_on_error", True)),
+        platform=platform_paths,
     )

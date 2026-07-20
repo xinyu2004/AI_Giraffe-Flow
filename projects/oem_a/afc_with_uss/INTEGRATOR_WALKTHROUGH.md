@@ -25,13 +25,16 @@ wiring 引用上述路径 → compose →（可选）与 golden 对照
 
 | 路径 | 内容 |
 |------|------|
-| [interfaces/vehicle_gateway/](interfaces/vehicle_gateway/) | EgoMotion + FCM/FAPA 整包输入 |
-| [interfaces/fcm_perception/](interfaces/fcm_perception/) | FCM 粗端口 `io_ports.hpp` |
-| [interfaces/fapa_perception/](interfaces/fapa_perception/) | FAPA 粗端口 `io_ports.hpp` |
+| [interfaces/vehicle_gateway/](interfaces/vehicle_gateway/) | EgoMotion + 发给 FCM 的整包输入 |
+| [interfaces/fcm_perception/](interfaces/fcm_perception/) | FCM 前视粗端口 `io_ports.hpp` |
+| [interfaces/fapa_perception/](interfaces/fapa_perception/) | FAPA 泊车粗端口（**本 SKU 不上板**；供带 parking 的项目参考） |
 | [interfaces/uss_sensing/](interfaces/uss_sensing/) | USS |
 | [oem/](oem/) | DBC + extract + manifest |
-| [integration/wiring.yaml](integration/wiring.yaml) | **W0 粗端口连线基线** |
+| [integration/wiring.yaml](integration/wiring.yaml) | **W0 粗端口连线基线（无 FAPA）** |
 | [100_dbc/](../../../100_dbc/) | 金样 DBC + FCM_hpp / FAPA_hpp |
+
+> **FCM = 前视行车感知（本项目有）· FAPA = 泊车感知（本项目无）。**  
+> 行泊一体见 [`oem_b/adc_full`](../../oem_b/adc_full/)。车端 CAN 抽取仍可能合并多 ECU 的 DBC，≠ 部署 `perception.fapa` 进程。
 
 ---
 
@@ -41,7 +44,7 @@ wiring 引用上述路径 → compose →（可选）与 golden 对照
 
 ```bash
 gf-config projects/oem_a/afc_with_uss/project.yaml
-# B 页：gateway → fcm / fapa / uss → planning
+# B 页：gateway → fcm / uss → planning（无 fapa）
 # 右侧 dataflow 点 ◀ 可折叠；导入时勾选「仅粗端口」
 ```
 
@@ -49,11 +52,11 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 |----------------|--------|
 | FCM 吃 Perception_In | gateway → `Perception_In_St` → perception.fcm |
 | FCM 吐 MESSAGE_Out | fcm → `Perception_MESSAGE_Out_St` → planning |
-| FAPA 吃 CanInfo | gateway → 三包 → perception.fapa |
-| FAPA 吐 ADC Out | fapa → `IPC_ADC_Perception_Out_St` → planning |
 | USS 区划 | uss → `UssZones` → planning |
 | 规划控车 | planning → `Trajectory` → gateway → **MCU/车身** |
 | 车身源 | **MCU/车身** → `VehicleBus` → gateway |
+
+> 泊车 FAPA（CanInfo / ADC Out）**不在本 AFC+USS SKU**；需要时另开带 `parking` 的项目。
 
 画布技巧：双击模块可改 **In/Out 所在边**（gateway 建议 In 在下）；右键空白可「添加 MCU/车身 节点」。
 
@@ -62,7 +65,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 ## 1. 适配顺序
 
 ```text
-① 选定 SOA Apps（uss + fcm + fapa + planning）
+① 选定 SOA Apps（uss + fcm + planning；**无 fapa**）
 ② 粗端口 hpp → interfaces/（金样留 100_dbc）
 ③ oem extract / oem_import.dbc + oem_import.yaml
 ④ wiring.yaml（W0 已有基线）
@@ -134,7 +137,7 @@ gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out projects/oem_a
 
 | # | 审什么 | 打开 | 通过标准 |
 |---|--------|------|----------|
-| 1 | 本 SKU 只要哪些 App | [wiring.yaml](integration/wiring.yaml) deployments | 仅有 gateway + `sensing.uss` + `perception.front` + `planning.driving`；**无**环视/泊车/MCU |
+| 1 | 本 SKU 只要哪些 App | [wiring.yaml](integration/wiring.yaml) deployments | gateway + `sensing.uss` + `perception.fcm` + `planning.driving`；**无**环视/**泊车 FAPA** |
 | 2 | hpp 路径存在且为本项目 | wiring `modules[].hpp` → [interfaces/](interfaces/) | 路径可打开；未引用已删的 `Requirement/` |
 | 3 | provide/require 闭环 | deployments + dataflows | 每个 require 有 provider；边与表一致 |
 | 4 | struct ↔ semantic | bindings + hpp | `UssZones` / `FrontObjectList` / `EgoMotion` 名字对得上 |

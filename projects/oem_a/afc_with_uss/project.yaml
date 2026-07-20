@@ -14,6 +14,14 @@ oem:
 integration:
   wiring: integration/wiring.yaml
 
+# ③ 平台清单（exec 含 SM 极简；无 dem.yaml）— 见 docs/zh/operations/MIDDLEWARE_CONFIG_PLAN.md
+platform:
+  exec: platform/exec.yaml
+  phm: platform/phm.yaml
+  diag: platform/diag.yaml
+  log: platform/log.yaml
+  ucm: platform/ucm.yaml
+
 delivery:
   req: req.yaml
 

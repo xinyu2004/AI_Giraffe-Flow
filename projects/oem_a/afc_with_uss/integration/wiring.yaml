@@ -8,9 +8,6 @@ modules:
 - id: perception.fcm
   hpp: projects/oem_a/afc_with_uss/interfaces/fcm_perception/io_ports.hpp
   package: customer/fcm-perception
-- id: perception.fapa
-  hpp: projects/oem_a/afc_with_uss/interfaces/fapa_perception/io_ports.hpp
-  package: customer/fapa-perception
 - id: sensing.uss
   hpp: projects/oem_a/afc_with_uss/interfaces/uss_sensing/io_types.hpp
   package: customer/uss-sensing
@@ -29,9 +26,6 @@ deployments:
   provides:
   - services.semantic.EgoMotion
   - services.semantic.Perception_In_St
-  - services.semantic.IPC_CanInfo_100ms_St
-  - services.semantic.IPC_CanInfo_20ms_St
-  - services.semantic.IPC_CanInfo_10ms_St
   - services.semantic.Trajectory
   requires:
   - services.semantic.VehicleBus
@@ -69,12 +63,6 @@ bindings:
     type: EgoMotion
   - service: semantic.Perception_In_St
     type: Perception_In_St
-  - service: semantic.IPC_CanInfo_100ms_St
-    type: IPC_CanInfo_100ms_St
-  - service: semantic.IPC_CanInfo_20ms_St
-    type: IPC_CanInfo_20ms_St
-  - service: semantic.IPC_CanInfo_10ms_St
-    type: IPC_CanInfo_10ms_St
   - service: semantic.Trajectory
     type: Trajectory
 - module: perception.fcm
@@ -84,17 +72,6 @@ bindings:
   outputs:
   - service: semantic.Perception_MESSAGE_Out_St
     type: Perception_MESSAGE_Out_St
-- module: perception.fapa
-  inputs:
-  - service: semantic.IPC_CanInfo_20ms_St
-    type: IPC_CanInfo_20ms_St
-  - service: semantic.IPC_CanInfo_10ms_St
-    type: IPC_CanInfo_10ms_St
-  - service: semantic.IPC_CanInfo_100ms_St
-    type: IPC_CanInfo_100ms_St
-  outputs:
-  - service: semantic.IPC_ADC_Perception_Out_St
-    type: IPC_ADC_Perception_Out_St
 - module: sensing.uss
   inputs:
   - service: semantic.EgoMotion
@@ -106,8 +83,6 @@ bindings:
   inputs:
   - service: semantic.Perception_MESSAGE_Out_St
     type: Perception_MESSAGE_Out_St
-  - service: semantic.IPC_ADC_Perception_Out_St
-    type: IPC_ADC_Perception_Out_St
   - service: semantic.EgoMotion
     type: EgoMotion
   - service: semantic.UssZones
@@ -156,8 +131,8 @@ canvas:
       label: MCU / 车身
       out_side: right
       in_side: top
-      x: -381.3
-      y: -99.4
+      x: -336.3
+      y: -87.7
     adapter.vehicle_can_gateway:
       out_side: right
       in_side: bottom
@@ -168,11 +143,6 @@ canvas:
       in_side: left
       x: 728.9
       y: -485.9
-    perception.fapa:
-      out_side: right
-      in_side: left
-      x: 697.1
-      y: 259.3
     sensing.uss:
       out_side: right
       in_side: left

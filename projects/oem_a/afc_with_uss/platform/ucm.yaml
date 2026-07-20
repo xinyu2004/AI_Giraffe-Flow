@@ -1,0 +1,5 @@
+# P2 空壳 — OTA stub；真策略 P3
+schema_version: "0.1"
+enabled: false
+package_source: ""
+allow_rollback: true

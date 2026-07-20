@@ -1,4 +1,4 @@
-"""SKU / req.yaml editor — full SKU fields used by compose / lineage / (later) CMake trim."""
+"""SKU / req.yaml editor — thin ① switches (apps folded under 高级)."""
 
 from __future__ import annotations
 
@@ -13,15 +13,24 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QScrollArea,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from gf_config.core import ProjectSession
 
+# Frozen topologies (DESIGN §6 / heterogeneous-compute)
+KNOWN_TOPOLOGIES = [
+    ("ap_only", "ap_only — 控制在 AP；无 MCU CP gateway"),
+    ("ap_mcu_cp", "ap_mcu_cp — MCU=AUTOSAR CP；AP 上 mcu.cp_gateway"),
+]
+
 KNOWN_MODULES = ["core", "com", "log", "osal", "exec", "phm", "sm", "ucm", "diag", "trace"]
 KNOWN_BINDINGS = ["iceoryx", "someip", "dds", "cross_domain_ipc"]
-KNOWN_CAPABILITIES = ["front_camera", "uss", "driving", "parking", "surround"]
+
+# A 勾选 → C 子页显示（sm 并入 exec.yaml，勾 sm 也显示「执行」）
+PLATFORM_MODULE_KEYS = frozenset({"exec", "phm", "sm", "diag", "log", "ucm"})
 
 
 def _lines_to_list(text: str) -> list[str]:
@@ -34,13 +43,14 @@ def _list_to_lines(values: list | None) -> str:
 
 class ReqEditor(QWidget):
     changed = Signal()
+    """Emitted when runtime_modules change — C 页据此过滤子导航。"""
+    modules_changed = Signal(list)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._session: ProjectSession | None = None
         self._module_boxes: dict[str, QCheckBox] = {}
         self._binding_boxes: dict[str, QCheckBox] = {}
-        self._cap_boxes: dict[str, QCheckBox] = {}
         self._loading = False
 
         scroll = QScrollArea()
@@ -51,50 +61,73 @@ class ReqEditor(QWidget):
         meta = QGroupBox("SKU 标识")
         meta_f = QFormLayout(meta)
         self._variant = QLineEdit()
-        self._topology = QLineEdit()
+        self._variant.textChanged.connect(self._on_any)
+        self._topology = QComboBox()
+        for value, label in KNOWN_TOPOLOGIES:
+            self._topology.addItem(label, value)
+        self._topology.currentIndexChanged.connect(self._on_any)
         self._product = QLineEdit()
-        for w in (self._variant, self._topology, self._product):
-            w.textChanged.connect(self._on_any)
+        self._product.textChanged.connect(self._on_any)
         meta_f.addRow("variant", self._variant)
         meta_f.addRow("topology", self._topology)
         meta_f.addRow("product", self._product)
+        topo_hint = QLabel(
+            "B 页 external MCU 节点 ≠ ap_mcu_cp。"
+            "后者才是异构 CP gateway 拓扑。"
+        )
+        topo_hint.setWordWrap(True)
+        topo_hint.setStyleSheet("color:#666; font-size:11px;")
+        meta_f.addRow("", topo_hint)
         root.addWidget(meta)
 
-        caps = QGroupBox("capabilities（产品能力标签）")
+        caps = QGroupBox("capabilities（自由标签 · 不假装穷尽客户能力）")
         caps_l = QVBoxLayout(caps)
-        row = QHBoxLayout()
-        for name in KNOWN_CAPABILITIES:
-            cb = QCheckBox(name)
-            cb.toggled.connect(self._on_any)
-            self._cap_boxes[name] = cb
-            row.addWidget(cb)
-        caps_l.addLayout(row)
-        self._cap_extra = QPlainTextEdit()
-        self._cap_extra.setPlaceholderText("额外 capability，每行一个")
-        self._cap_extra.setMaximumHeight(60)
-        self._cap_extra.textChanged.connect(self._on_any)
-        caps_l.addWidget(self._cap_extra)
+        caps_hint = QLabel(
+            "写入 req 供交付/文档标记；不驱动 compose 裁剪。"
+            "客户专有标签直接写，不必进平台清单。"
+        )
+        caps_hint.setWordWrap(True)
+        caps_hint.setStyleSheet("color:#666;")
+        caps_l.addWidget(caps_hint)
+        self._caps = QPlainTextEdit()
+        self._caps.setPlaceholderText("每行一个，如 front_camera / uss / driving / oem_xxx")
+        self._caps.setMaximumHeight(90)
+        self._caps.textChanged.connect(self._on_any)
+        caps_l.addWidget(self._caps)
         root.addWidget(caps)
 
-        mods = QGroupBox("runtime_modules（按 SKU 裁中间件 → 后续 F 轨 CMake）")
+        mods = QGroupBox("runtime_modules（① 编进镜像 · 勾选后才在 C 页出现对应清单）")
         mods_l = QVBoxLayout(mods)
-        for name in KNOWN_MODULES:
+        mod_row = QHBoxLayout()
+        for i, name in enumerate(KNOWN_MODULES):
             cb = QCheckBox(name)
             cb.toggled.connect(self._on_any)
             self._module_boxes[name] = cb
-            mods_l.addWidget(cb)
+            mod_row.addWidget(cb)
+            if (i + 1) % 5 == 0:
+                mods_l.addLayout(mod_row)
+                mod_row = QHBoxLayout()
+        if mod_row.count():
+            mods_l.addLayout(mod_row)
+        mods_note = QLabel(
+            "C 页映射：exec/sm→执行 · phm→健康 · diag→诊断 · log→日志 · ucm→OTA"
+        )
+        mods_note.setWordWrap(True)
+        mods_note.setStyleSheet("color:#666; font-size:11px;")
+        mods_l.addWidget(mods_note)
         root.addWidget(mods)
 
-        binds = QGroupBox("bindings（通信栈裁剪）")
-        binds_l = QVBoxLayout(binds)
+        binds = QGroupBox("bindings（通信栈开关）")
+        binds_l = QHBoxLayout(binds)
         for name in KNOWN_BINDINGS:
             cb = QCheckBox(name)
             cb.toggled.connect(self._on_any)
             self._binding_boxes[name] = cb
             binds_l.addWidget(cb)
+        binds_l.addStretch(1)
         root.addWidget(binds)
 
-        obs = QGroupBox("observability")
+        obs = QGroupBox("observability（粗开关；细级别在 C·日志）")
         obs_f = QFormLayout(obs)
         self._record = QComboBox()
         self._record.setEditable(True)
@@ -107,15 +140,6 @@ class ReqEditor(QWidget):
         obs_f.addRow("record", self._record)
         obs_f.addRow("trace_export", self._trace)
         root.addWidget(obs)
-
-        apps = QGroupBox("apps（参考 / SIL 应用列表）")
-        apps_l = QVBoxLayout(apps)
-        self._apps = QPlainTextEdit()
-        self._apps.setPlaceholderText("每行一个，如 simulators/uss_feed")
-        self._apps.setMaximumHeight(80)
-        self._apps.textChanged.connect(self._on_any)
-        apps_l.addWidget(self._apps)
-        root.addWidget(apps)
 
         acc = QGroupBox("acceptance（lineage 门禁）")
         acc_f = QFormLayout(acc)
@@ -132,10 +156,33 @@ class ReqEditor(QWidget):
         acc_f.addRow("required_services", self._acc_svcs)
         root.addWidget(acc)
 
+        self._apps_toggle = QToolButton()
+        self._apps_toggle.setText("▶ 高级 · apps（参考 / SIL 列表）")
+        self._apps_toggle.setCheckable(True)
+        self._apps_toggle.setChecked(False)
+        self._apps_toggle.setStyleSheet("QToolButton { text-align: left; border: none; }")
+        self._apps_panel = QWidget()
+        apps_l = QVBoxLayout(self._apps_panel)
+        apps_l.setContentsMargins(8, 0, 0, 0)
+        self._apps = QPlainTextEdit()
+        self._apps.setPlaceholderText("每行一个，如 simulators/uss_feed")
+        self._apps.setMaximumHeight(80)
+        self._apps.textChanged.connect(self._on_any)
+        apps_l.addWidget(self._apps)
+        self._apps_panel.setVisible(False)
+
+        def _toggle_apps(on: bool) -> None:
+            self._apps_panel.setVisible(on)
+            self._apps_toggle.setText(
+                ("▼" if on else "▶") + " 高级 · apps（参考 / SIL 列表）"
+            )
+
+        self._apps_toggle.toggled.connect(_toggle_apps)
+        root.addWidget(self._apps_toggle)
+        root.addWidget(self._apps_panel)
+
         hint = QLabel(
-            "req.yaml = SKU / 交付契约（裁什么、验什么）。\n"
-            "wiring.yaml = 本车型集成连线（谁提供/订阅、dataflow）。\n"
-            "保存或 Verify 时写回；不上板。"
+            "A = SKU 开关（要不要）。B = 信号连线。C = 平台清单（仅显示已勾选模块）。"
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#666;")
@@ -146,6 +193,9 @@ class ReqEditor(QWidget):
         outer = QVBoxLayout(self)
         outer.addWidget(scroll)
 
+    def selected_modules(self) -> list[str]:
+        return [n for n, cb in self._module_boxes.items() if cb.isChecked()]
+
     def set_session(self, session: ProjectSession | None) -> None:
         self._session = session
         if session is None:
@@ -153,15 +203,9 @@ class ReqEditor(QWidget):
         self._loading = True
         req = session.req
         self._variant.setText(str(req.get("variant") or ""))
-        self._topology.setText(str(req.get("topology") or ""))
+        self._set_topology(str(req.get("topology") or "ap_only"))
         self._product.setText(str(req.get("product") or ""))
-
-        caps = [str(x) for x in (req.get("capabilities") or [])]
-        known = set(self._cap_boxes)
-        for name, cb in self._cap_boxes.items():
-            cb.setChecked(name in caps)
-        extra = [c for c in caps if c not in known]
-        self._cap_extra.setPlainText(_list_to_lines(extra))
+        self._caps.setPlainText(_list_to_lines(req.get("capabilities")))
 
         selected_m = set(req.get("runtime_modules") or [])
         for name, cb in self._module_boxes.items():
@@ -188,27 +232,35 @@ class ReqEditor(QWidget):
             self._acc_svcs.clear()
 
         self._loading = False
+        self.modules_changed.emit(self.selected_modules())
+
+    def _set_topology(self, value: str) -> None:
+        idx = self._topology.findData(value)
+        if idx < 0:
+            # unknown legacy value — show as-is without inventing options
+            self._topology.blockSignals(True)
+            self._topology.addItem(f"{value}（未识别）", value)
+            self._topology.blockSignals(False)
+            idx = self._topology.findData(value)
+        self._topology.setCurrentIndex(max(0, idx))
 
     def _on_any(self, *_args: object) -> None:
         if self._loading or not self._session:
             return
         req = self._session.req
         req["variant"] = self._variant.text().strip()
-        req["topology"] = self._topology.text().strip()
+        topo = self._topology.currentData()
+        req["topology"] = str(topo) if topo else "ap_only"
+        # keep wiring metadata in sync (compose uses req; wiring 也有同名字段)
+        if self._session.wiring.get("topology") != req["topology"]:
+            self._session.wiring["topology"] = req["topology"]
+            self._session.dirty_wiring = True
         req["product"] = self._product.text().strip()
+        req["capabilities"] = _lines_to_list(self._caps.toPlainText())
 
-        caps = [n for n, cb in self._cap_boxes.items() if cb.isChecked()]
-        caps.extend(_lines_to_list(self._cap_extra.toPlainText()))
-        # de-dupe preserve order
-        seen: set[str] = set()
-        uniq: list[str] = []
-        for c in caps:
-            if c not in seen:
-                seen.add(c)
-                uniq.append(c)
-        req["capabilities"] = uniq
-
-        req["runtime_modules"] = [n for n, cb in self._module_boxes.items() if cb.isChecked()]
+        modules = self.selected_modules()
+        prev = list(req.get("runtime_modules") or [])
+        req["runtime_modules"] = modules
         req["bindings"] = [n for n, cb in self._binding_boxes.items() if cb.isChecked()]
         req["observability"] = {
             "record": self._record.currentText().strip() or "full",
@@ -222,3 +274,5 @@ class ReqEditor(QWidget):
         }
         self._session.dirty_req = True
         self.changed.emit()
+        if modules != prev:
+            self.modules_changed.emit(modules)

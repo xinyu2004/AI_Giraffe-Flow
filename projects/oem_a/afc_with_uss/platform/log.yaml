@@ -1,0 +1,4 @@
+# 默认级别 / 上下文；后期再扩
+schema_version: "0.1"
+default_level: INFO
+contexts: []
