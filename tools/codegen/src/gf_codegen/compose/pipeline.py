@@ -12,6 +12,7 @@ import yaml
 
 from gf_codegen.compose.apply_wiring import apply_wiring
 from gf_codegen.compose.emit_build_cmake import emit_build_cmake
+from gf_codegen.compose.emit_platform_tables import emit_platform_tables
 from gf_codegen.compose.import_oem import import_oem
 from gf_codegen.compose.lineage import run_lineage
 from gf_codegen.compose.load_project import ProjectPaths, load_project

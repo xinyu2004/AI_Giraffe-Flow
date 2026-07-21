@@ -4,7 +4,7 @@
 > 设计背景：[DESIGN.md](../architecture/DESIGN.md)
 
 本文将平台交付划分为 **P0–P3**。**P0 已收口**；**P1 骨架已齐**（大量 stub），验收见 [P1_REVIEW_CHECKLIST.md](P1_REVIEW_CHECKLIST.md)。  
-**当前阶段：P2** — 细则见 [P2_PLAN.md](P2_PLAN.md)；中间件与 gf-config 配置规格见 [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)。另见 [P0_PLAN.md](P0_PLAN.md) / [P1_PLAN.md](P1_PLAN.md)。
+**当前阶段：P2 收口** — 细则 [P2_PLAN.md](P2_PLAN.md) · Review [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md) · 配置规格 [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)。
 
 ---
 
@@ -14,7 +14,7 @@
 |------|------|------------------|----------|
 | **P0** | 契约 + 最小可运行闭环 | ✅ 已完成 | SOR 子集、gf-codegen、iceoryx 双进程、adc_full compose、CI |
 | **P1** | 车规通信 + 工具 + OTA/DoIP 骨架 | ✅ 骨架已齐 | Cfg✓ F✓ I✓ M✓ E/U✓ B/D✓ T/A✓（详见 P1_PLAN） |
-| **P2** | **真正可运行** + 可观测 + platform 配置骨架 | 进行中 | 多进程 SIL、platform exec/phm/diag（无 DEM）、CycloneDDS、Tag/MCAP |
+| **P2** | **真正可运行** + 可观测 + platform 配置骨架 | ✅ 交付齐 / Review | 多进程 SIL、platform、CycloneDDS、Tag/MCAP、证据包 |
 | **P3** | 嵌入式收敛 + 可信度交付 | 量产向 | 裁剪 profile、真板/DoIP/OTA 台架、MIPS/RISC-V OSAL 验证 |
 
 ---
@@ -105,17 +105,20 @@ HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke
 
 ### 验收标准
 
-- [ ] `smoke_sil_multiproc`：主链存活，端到端至少一跳有计数
-- [ ] platform 引用未知 process → compose/校验失败
-- [ ] Alive miss 可注入可观测
-- [ ] Tag + 导出 MCAP 可复现（演示）
-- [ ] CycloneDDS 真 event 收发 ≥ 1
-- [ ] CI bench golden；证据包有样例
-- [ ] **无 DEM** 配置/生成轨
+- [x] `smoke_sil_multiproc`：主链存活，端到端至少一跳有计数
+- [x] platform 引用未知 process → compose/校验失败
+- [x] Alive miss 可注入可观测
+- [x] Tag + 导出 MCAP 可复现（演示）
+- [x] CycloneDDS 真 event 收发 ≥ 1
+- [x] CI bench golden；证据包有样例（`test_afc_bench_golden` · `evidence_pack/p2_afc_with_uss` · [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md)）
+- [x] **无 DEM** 配置/生成轨
+
+**P2 收口入口：** [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md)
 
 ### 明确不在 P2
 
-DEM；真 MCU / 真 DoIP 台架 / 量产 OTA；gf-config 平台大 GUI（后置）；GMT 可写配置；双栈量产级；ISO 26262。→ **P3 或另议**
+DEM；真 MCU / 真 DoIP 台架 / 量产 OTA；GMT 可写配置；双栈量产级；ISO 26262。→ **P3 或另议**  
+（注：gf-config **C·平台**已在 P2 完成，不再后置。）
 
 ---
 

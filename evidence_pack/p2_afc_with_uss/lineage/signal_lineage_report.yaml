@@ -1,0 +1,27 @@
+project_id: afc_with_uss
+ok: true
+errors: []
+warnings: []
+checks:
+- id: requires_have_provider
+  status: pass
+- id: dataflow_endpoints
+  status: pass
+- id: required_services_present
+  status: pass
+- id: module_owned_not_on_gateway
+  status: pass
+- id: platform_files
+  status: pass
+  loaded:
+  - exec
+  - phm
+  - diag
+  - log
+- id: platform_exec_processes
+  status: pass
+- id: platform_phm_processes
+  status: pass
+outputs:
+  sor: /home/herry/work/repo/opencode_repo/AI_Giraffe-Flow/projects/oem_a/afc_with_uss/gf.sor.json
+  lineage: /home/herry/work/repo/opencode_repo/AI_Giraffe-Flow/projects/oem_a/afc_with_uss/reports/signal_lineage_report.yaml

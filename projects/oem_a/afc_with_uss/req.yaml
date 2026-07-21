@@ -25,9 +25,15 @@ observability:
 apps:
 - simulators/uss_feed
 - demo_pipeline
+- adapters/vehicle_can_gateway
+- perception/fcm
+- sensing/uss
+- planning/driving
+- tools/iox_obs_tap
 acceptance:
   description: AFC + 独立 USS — 前视 FCM / 超声 / 行车规划（不含泊车 FAPA）
   lineage_required: true
+  sor_golden: projects/oem_a/afc_with_uss/golden/gf.sor.json
   required_services:
   - services.semantic.EgoMotion
   - services.semantic.UssZones

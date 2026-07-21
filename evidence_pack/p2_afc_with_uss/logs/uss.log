@@ -1,0 +1,27 @@
+[0;90m2026-07-20 17:21:41.040 [0;1;96m[ Debug ][m: Application registered management segment 0x782a35a54000 with size 66761736 to id 1
+[0;90m2026-07-20 17:21:41.041 [0;1;96m[ Debug ][m: Application registered payload data segment 0x782a2cbfa000 with size 149264720 to id 2
+Offer→Running process=sensing.uss fg=MachineFG
+phm entity=uss_alive period_ms=100 timeout_ms=300
+FAULT inject armed for 400 ms after first Alive
+gf-sensing-uss: start
+FAULT inject begin entity=uss_alive
+DeadlineMissed entity=uss_alive
+fault window ended entity=uss_alive
+phm recovered entity=uss_alive
+gf-sensing-uss: UssZones#0 nearest_cm=20 speed=5
+gf-sensing-uss: UssZones#1 nearest_cm=21 speed=5.1
+gf-sensing-uss: UssZones#2 nearest_cm=22 speed=5.2
+gf-sensing-uss: UssZones#3 nearest_cm=23 speed=5.3
+gf-sensing-uss: UssZones#4 nearest_cm=24 speed=5.4
+gf-sensing-uss: UssZones#5 nearest_cm=25 speed=5.5
+gf-sensing-uss: UssZones#6 nearest_cm=26 speed=5.6
+gf-sensing-uss: UssZones#7 nearest_cm=27 speed=5.7
+gf-sensing-uss: UssZones#8 nearest_cm=28 speed=5.8
+gf-sensing-uss: UssZones#9 nearest_cm=29 speed=5.9
+gf-sensing-uss: UssZones#10 nearest_cm=30 speed=5
+gf-sensing-uss: UssZones#11 nearest_cm=31 speed=5.1
+gf-sensing-uss: UssZones#12 nearest_cm=32 speed=5.2
+gf-sensing-uss: UssZones#13 nearest_cm=33 speed=5.3
+gf-sensing-uss: UssZones#14 nearest_cm=34 speed=5.4
+gf-sensing-uss: UssZones#15 nearest_cm=35 speed=5.5
+[0;90m2026-07-20 17:21:43.209 [0;1;36m[Verbose][m: RouDi cleaned up resources of gf-sensing-uss. Shutting down gracefully.

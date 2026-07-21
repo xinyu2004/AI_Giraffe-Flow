@@ -4,13 +4,16 @@
 
 | Mode | When | Behavior |
 |------|------|----------|
-| **stub** (default offline) | no `middleware/third_party/cyclonedds` | In-process pub/sub loopback (`gf_ara::com_dds`) |
-| **cyclone** | tree present + `GF_DDS_BACKEND=cyclone` | Links `ddsc`; `BackendName()` → `cyclonedds` |
+| **stub** (default offline) | `GF_DDS_BACKEND=stub` 或无 third_party | In-process pub/sub loopback |
+| **cyclone** | tree + `GF_DDS_BACKEND=cyclone` | **Real** `ddsc` pub/sub via `GfBlob.idl` |
 
 ```bash
-bash scripts/smoke_bd_stub.sh
-gf-codegen emit-idl path/to/gf.sor.json --out generated/idl/
-bash scripts/run_idlc.sh generated/idl/gf_types.idl   # SKIP if idlc missing
+bash scripts/bootstrap_deps.sh          # fetch cyclonedds 0.10.5
+bash scripts/smoke_bd_cyclone.sh        # real ≥1 event
+bash scripts/smoke_bd_stub.sh           # offline stub
 ```
+
+**主链 SIL 仍为 iceoryx** — 见 [CYCLONEDDS_BYPASS.md](../../../docs/zh/operations/CYCLONEDDS_BYPASS.md)。  
+**vsomeip** 保持 stub。
 
 Pin: [deps/versions.lock.md](../../../deps/versions.lock.md) · Parent: [bindings/README.md](../README.md)

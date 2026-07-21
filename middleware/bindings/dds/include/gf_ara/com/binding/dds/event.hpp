@@ -14,10 +14,14 @@
 #include <unordered_map>
 #include <vector>
 
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+#include "gf_ara/com/binding/dds/cyclone_transport.hpp"
+#endif
+
 namespace gf_ara::com::binding::dds {
 namespace detail {
 
-/// Process-local topic bus (P1 stub / offline CI). CycloneDDS path replaces this later.
+/// Process-local topic bus (offline stub / CI without CycloneDDS).
 class TopicBus {
  public:
   static TopicBus& Instance() {
@@ -65,7 +69,12 @@ class EventPublisher {
  public:
   explicit EventPublisher(ServicePath path) : path_(std::move(path)) {
     static_assert(std::is_trivially_copyable_v<T>,
-                  "P1 DDS Event payload must be trivially copyable (POD)");
+                  "DDS Event payload must be trivially copyable (POD)");
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+    if (IsInitialized()) {
+      cyclone_ = CycloneWriter(path_);
+    }
+#endif
   }
 
   [[nodiscard]] const ServicePath& Path() const noexcept { return path_; }
@@ -74,12 +83,23 @@ class EventPublisher {
     if (!IsInitialized()) {
       return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kNotAvailable);
     }
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+    if (cyclone_.Ok()) {
+      if (!cyclone_.Write(&sample, sizeof(T))) {
+        return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kNotAvailable);
+      }
+      return gf_ara::core::Result<void>::Ok();
+    }
+#endif
     detail::TopicBus::Instance().Publish(path_.Key(), &sample, sizeof(T));
     return gf_ara::core::Result<void>::Ok();
   }
 
  private:
   ServicePath path_;
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+  CycloneWriter cyclone_{};
+#endif
 };
 
 template <typename T>
@@ -87,7 +107,12 @@ class EventSubscriber {
  public:
   explicit EventSubscriber(ServicePath path) : path_(std::move(path)) {
     static_assert(std::is_trivially_copyable_v<T>,
-                  "P1 DDS Event payload must be trivially copyable (POD)");
+                  "DDS Event payload must be trivially copyable (POD)");
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+    if (IsInitialized()) {
+      cyclone_ = CycloneReader(path_);
+    }
+#endif
   }
 
   [[nodiscard]] const ServicePath& Path() const noexcept { return path_; }
@@ -97,6 +122,15 @@ class EventSubscriber {
       return gf_ara::core::Result<std::optional<T>>::Err(
           gf_ara::core::ErrorCode::kNotAvailable);
     }
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+    if (cyclone_.Ok()) {
+      T sample{};
+      if (!cyclone_.Take(&sample, sizeof(T))) {
+        return gf_ara::core::Result<std::optional<T>>::Ok(std::nullopt);
+      }
+      return gf_ara::core::Result<std::optional<T>>::Ok(std::optional<T>{sample});
+    }
+#endif
     T sample{};
     if (!detail::TopicBus::Instance().Take(path_.Key(), &sample, sizeof(T))) {
       return gf_ara::core::Result<std::optional<T>>::Ok(std::nullopt);
@@ -106,6 +140,9 @@ class EventSubscriber {
 
  private:
   ServicePath path_;
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+  CycloneReader cyclone_{};
+#endif
 };
 
 }  // namespace gf_ara::com::binding::dds

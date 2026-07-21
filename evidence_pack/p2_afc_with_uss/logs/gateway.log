@@ -1,0 +1,22 @@
+[0;90m2026-07-20 17:21:41.544 [0;1;96m[ Debug ][m: Application registered management segment 0x78a9f2854000 with size 66761736 to id 1
+[0;90m2026-07-20 17:21:41.545 [0;1;96m[ Debug ][m: Application registered payload data segment 0x78a9e99fa000 with size 149264720 to id 2
+Offer→Running process=adapter.vehicle_can_gateway fg=MachineFG
+phm entity=gateway_alive period_ms=100 timeout_ms=300
+gf-vehicle-can-gateway: start (exit after 15 Trajectory)
+gf-vehicle-can-gateway: Trajectory#1 points=3 ts_ns=32490966854349
+gf-vehicle-can-gateway: Trajectory#2 points=3 ts_ns=32491067556008
+gf-vehicle-can-gateway: Trajectory#3 points=3 ts_ns=32491167829040
+gf-vehicle-can-gateway: Trajectory#4 points=3 ts_ns=32491268402551
+gf-vehicle-can-gateway: Trajectory#5 points=3 ts_ns=32491368989037
+gf-vehicle-can-gateway: Trajectory#6 points=3 ts_ns=32491469299027
+gf-vehicle-can-gateway: Trajectory#7 points=3 ts_ns=32491569651968
+gf-vehicle-can-gateway: Trajectory#8 points=3 ts_ns=32491670216772
+gf-vehicle-can-gateway: Trajectory#9 points=3 ts_ns=32491770490645
+gf-vehicle-can-gateway: Trajectory#10 points=3 ts_ns=32491871078624
+gf-vehicle-can-gateway: Trajectory#11 points=3 ts_ns=32491971670198
+gf-vehicle-can-gateway: Trajectory#12 points=3 ts_ns=32492072345839
+gf-vehicle-can-gateway: Trajectory#13 points=3 ts_ns=32492172573035
+gf-vehicle-can-gateway: Trajectory#14 points=3 ts_ns=32492272727184
+gf-vehicle-can-gateway: Trajectory#15 points=3 ts_ns=32492373204587
+[0;90m2026-07-20 17:21:43.054 [0;1;36m[Verbose][m: RouDi cleaned up resources of gf-vehicle-can-gateway. Shutting down gracefully.
+gf-vehicle-can-gateway: received 15 Trajectory sample(s), exiting OK

@@ -1,0 +1,793 @@
+{
+  "schema_version": "0.2.0",
+  "topology": "ap_only",
+  "types": [
+    {
+      "id": "types.EgoMotion",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "speed_mps",
+          "type": "float32"
+        },
+        {
+          "name": "yaw_rate_degps",
+          "type": "float32"
+        },
+        {
+          "name": "steer_angle_deg",
+          "type": "float32"
+        },
+        {
+          "name": "gear",
+          "type": "uint8"
+        }
+      ]
+    },
+    {
+      "id": "types.Perception_In_St",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "ipc_frame_counter",
+          "type": "uint32"
+        },
+        {
+          "name": "gear",
+          "type": "uint8"
+        },
+        {
+          "name": "vehicle_speed",
+          "type": "float32"
+        },
+        {
+          "name": "yaw_rate",
+          "type": "float32"
+        },
+        {
+          "name": "_vendor_payload_opaque",
+          "type": "uint8",
+          "array_size": 1
+        }
+      ]
+    },
+    {
+      "id": "types.IPC_CanInfo_100ms_St",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "apa_on_off",
+          "type": "uint8"
+        },
+        {
+          "name": "apa_mode",
+          "type": "uint8"
+        },
+        {
+          "name": "apa_status",
+          "type": "uint8"
+        },
+        {
+          "name": "avm_on_off",
+          "type": "uint8"
+        },
+        {
+          "name": "avm_mode",
+          "type": "uint8"
+        }
+      ]
+    },
+    {
+      "id": "types.IPC_CanInfo_20ms_St",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "vehicle_speed",
+          "type": "float32"
+        },
+        {
+          "name": "yaw_rate",
+          "type": "float32"
+        },
+        {
+          "name": "wheel_fl",
+          "type": "float32"
+        },
+        {
+          "name": "wheel_fr",
+          "type": "float32"
+        },
+        {
+          "name": "wheel_rl",
+          "type": "float32"
+        },
+        {
+          "name": "wheel_rr",
+          "type": "float32"
+        }
+      ]
+    },
+    {
+      "id": "types.IPC_CanInfo_10ms_St",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "steer_angle",
+          "type": "float32"
+        },
+        {
+          "name": "gear",
+          "type": "uint8"
+        },
+        {
+          "name": "sync_x",
+          "type": "float32"
+        },
+        {
+          "name": "sync_y",
+          "type": "float32"
+        },
+        {
+          "name": "sync_angle",
+          "type": "float32"
+        }
+      ]
+    },
+    {
+      "id": "types.VehicleBus",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "_opaque",
+          "type": "uint8",
+          "array_size": 1
+        }
+      ]
+    },
+    {
+      "id": "types.Trajectory",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "point_count",
+          "type": "uint8"
+        },
+        {
+          "name": "points_x_m",
+          "type": "float32",
+          "array_size": 60
+        },
+        {
+          "name": "points_y_m",
+          "type": "float32",
+          "array_size": 60
+        },
+        {
+          "name": "gear_shift_first",
+          "type": "uint8"
+        },
+        {
+          "name": "gear_shift_second",
+          "type": "uint8"
+        }
+      ]
+    },
+    {
+      "id": "types.Perception_Init_St",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "_vendor_payload_opaque",
+          "type": "uint8",
+          "array_size": 1
+        }
+      ]
+    },
+    {
+      "id": "types.Perception_MESSAGE_Out_St",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "dyn_obj_count",
+          "type": "uint8"
+        },
+        {
+          "name": "static_obj_count",
+          "type": "uint8"
+        },
+        {
+          "name": "_vendor_payload_opaque",
+          "type": "uint8",
+          "array_size": 1
+        }
+      ]
+    },
+    {
+      "id": "types.UssZoneSample",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "zone_id",
+          "type": "uint8"
+        },
+        {
+          "name": "status",
+          "type": "uint8"
+        },
+        {
+          "name": "distance_cm",
+          "type": "uint8"
+        }
+      ]
+    },
+    {
+      "id": "types.UssZones",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "sys_status",
+          "type": "uint8"
+        },
+        {
+          "name": "nearest_cm",
+          "type": "uint8"
+        },
+        {
+          "name": "zone_mask",
+          "type": "uint16"
+        },
+        {
+          "name": "zones",
+          "type": "types.UssZoneSample",
+          "array_size": 6
+        }
+      ]
+    },
+    {
+      "id": "types.ApaSlot",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "slot_id",
+          "type": "uint8"
+        },
+        {
+          "name": "slot_status",
+          "type": "uint8"
+        },
+        {
+          "name": "length_m",
+          "type": "float32"
+        },
+        {
+          "name": "width_m",
+          "type": "float32"
+        }
+      ]
+    },
+    {
+      "id": "types.ApaSlotList",
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "timestamp_ns",
+          "type": "uint64"
+        },
+        {
+          "name": "apa_status",
+          "type": "uint8"
+        },
+        {
+          "name": "slot_count",
+          "type": "uint8"
+        },
+        {
+          "name": "slots",
+          "type": "types.ApaSlot",
+          "array_size": 3
+        }
+      ]
+    }
+  ],
+  "semantic_services": [
+    {
+      "id": "semantic.ObjectList"
+    },
+    {
+      "id": "semantic.Trajectory"
+    },
+    {
+      "id": "semantic.EgoMotion"
+    },
+    {
+      "id": "semantic.VehicleBus"
+    },
+    {
+      "id": "semantic.Perception_In_St"
+    },
+    {
+      "id": "semantic.Perception_MESSAGE_Out_St"
+    },
+    {
+      "id": "semantic.UssZones"
+    }
+  ],
+  "services": [
+    {
+      "id": "services.semantic.VehicleBus",
+      "type_ref": "types.VehicleBus",
+      "kind": "event",
+      "period_ms": 50
+    },
+    {
+      "id": "services.semantic.EgoMotion",
+      "type_ref": "types.EgoMotion",
+      "kind": "event",
+      "period_ms": 50
+    },
+    {
+      "id": "services.semantic.Perception_In_St",
+      "type_ref": "types.Perception_In_St",
+      "kind": "event",
+      "period_ms": 50
+    },
+    {
+      "id": "services.semantic.Trajectory",
+      "type_ref": "types.Trajectory",
+      "kind": "event",
+      "period_ms": 50
+    },
+    {
+      "id": "services.semantic.Perception_MESSAGE_Out_St",
+      "type_ref": "types.Perception_MESSAGE_Out_St",
+      "kind": "event",
+      "period_ms": 50
+    },
+    {
+      "id": "services.semantic.UssZones",
+      "type_ref": "types.UssZones",
+      "kind": "event",
+      "period_ms": 50
+    }
+  ],
+  "compute_domains": [
+    {
+      "id": "ap_linux",
+      "runtime": "gf_full",
+      "hosts_gf_code": true
+    }
+  ],
+  "product_variants": [
+    {
+      "id": "afc_front_camera_uss",
+      "topology": "ap_only",
+      "runtime_modules": [
+        "core",
+        "com",
+        "log",
+        "exec",
+        "phm",
+        "sm",
+        "diag"
+      ],
+      "bindings": [
+        "iceoryx",
+        "someip",
+        "dds",
+        "cross_domain_ipc"
+      ],
+      "capabilities": [
+        "front_camera",
+        "uss",
+        "driving"
+      ],
+      "product": "AFC"
+    }
+  ],
+  "deployments": [
+    {
+      "process": "external.vehicle_mcu",
+      "compute_domain": "external",
+      "provides": [
+        "services.semantic.VehicleBus"
+      ],
+      "requires": [
+        "services.semantic.Trajectory"
+      ]
+    },
+    {
+      "process": "adapter.vehicle_can_gateway",
+      "compute_domain": "ap_linux",
+      "provides": [
+        "services.semantic.EgoMotion",
+        "services.semantic.Perception_In_St",
+        "services.semantic.Trajectory"
+      ],
+      "requires": [
+        "services.semantic.VehicleBus",
+        "services.semantic.Trajectory"
+      ]
+    },
+    {
+      "process": "perception.fcm",
+      "compute_domain": "ap_linux",
+      "provides": [
+        "services.semantic.Perception_MESSAGE_Out_St"
+      ],
+      "requires": [
+        "services.semantic.Perception_In_St"
+      ]
+    },
+    {
+      "process": "sensing.uss",
+      "compute_domain": "ap_linux",
+      "provides": [
+        "services.semantic.UssZones"
+      ],
+      "requires": [
+        "services.semantic.EgoMotion"
+      ]
+    },
+    {
+      "process": "planning.driving",
+      "compute_domain": "ap_linux",
+      "provides": [
+        "services.semantic.Trajectory"
+      ],
+      "requires": [
+        "services.semantic.Perception_MESSAGE_Out_St",
+        "services.semantic.EgoMotion",
+        "services.semantic.UssZones"
+      ],
+      "package": "customer/planning-driving"
+    }
+  ],
+  "dataflows": [
+    {
+      "from": "external.vehicle_mcu",
+      "service": "services.semantic.VehicleBus",
+      "to": "adapter.vehicle_can_gateway"
+    },
+    {
+      "from": "adapter.vehicle_can_gateway",
+      "service": "services.semantic.Perception_In_St",
+      "to": "perception.fcm"
+    },
+    {
+      "from": "perception.fcm",
+      "service": "services.semantic.Perception_MESSAGE_Out_St",
+      "to": "planning.driving"
+    },
+    {
+      "from": "adapter.vehicle_can_gateway",
+      "service": "services.semantic.EgoMotion",
+      "to": "sensing.uss"
+    },
+    {
+      "from": "adapter.vehicle_can_gateway",
+      "service": "services.semantic.EgoMotion",
+      "to": "planning.driving"
+    },
+    {
+      "from": "sensing.uss",
+      "service": "services.semantic.UssZones",
+      "to": "planning.driving"
+    },
+    {
+      "from": "planning.driving",
+      "service": "services.semantic.Trajectory",
+      "to": "adapter.vehicle_can_gateway"
+    },
+    {
+      "from": "adapter.vehicle_can_gateway",
+      "service": "services.semantic.Trajectory",
+      "to": "external.vehicle_mcu"
+    }
+  ],
+  "bindings": [
+    {
+      "module": "adapter.vehicle_can_gateway",
+      "inputs": [
+        {
+          "service": "semantic.VehicleBus",
+          "type": "VehicleBus"
+        },
+        {
+          "service": "semantic.Trajectory",
+          "type": "Trajectory"
+        }
+      ],
+      "outputs": [
+        {
+          "service": "semantic.EgoMotion",
+          "type": "EgoMotion"
+        },
+        {
+          "service": "semantic.Perception_In_St",
+          "type": "Perception_In_St"
+        },
+        {
+          "service": "semantic.Trajectory",
+          "type": "Trajectory"
+        }
+      ]
+    },
+    {
+      "module": "perception.fcm",
+      "inputs": [
+        {
+          "service": "semantic.Perception_In_St",
+          "type": "Perception_In_St"
+        }
+      ],
+      "outputs": [
+        {
+          "service": "semantic.Perception_MESSAGE_Out_St",
+          "type": "Perception_MESSAGE_Out_St"
+        }
+      ]
+    },
+    {
+      "module": "sensing.uss",
+      "inputs": [
+        {
+          "service": "semantic.EgoMotion",
+          "type": "EgoMotion"
+        }
+      ],
+      "outputs": [
+        {
+          "service": "semantic.UssZones",
+          "type": "UssZones"
+        }
+      ]
+    },
+    {
+      "module": "planning.driving",
+      "inputs": [
+        {
+          "service": "semantic.Perception_MESSAGE_Out_St",
+          "type": "Perception_MESSAGE_Out_St"
+        },
+        {
+          "service": "semantic.EgoMotion",
+          "type": "EgoMotion"
+        },
+        {
+          "service": "semantic.UssZones",
+          "type": "UssZones"
+        }
+      ],
+      "outputs": [
+        {
+          "service": "semantic.Trajectory",
+          "type": "Trajectory"
+        }
+      ]
+    }
+  ],
+  "imports_meta": {
+    "note": "Desktop smoke — no MCU gateway",
+    "sources": [
+      {
+        "file": "/home/herry/work/repo/opencode_repo/AI_Giraffe-Flow/projects/oem_a/afc_with_uss/oem/oem_import.dbc",
+        "role": "vehicle_can",
+        "message_count": 1,
+        "imported_messages": [
+          "P_VEHICLE_INFO"
+        ],
+        "import": "gf-codegen compose import oem"
+      }
+    ],
+    "manifest": "/home/herry/work/repo/opencode_repo/AI_Giraffe-Flow/projects/oem_a/afc_with_uss/oem/oem_import.yaml",
+    "module_owned": [
+      {
+        "pattern": "PDC_INFO",
+        "owner_process": "sensing.uss",
+        "semantic": "services.semantic.UssZones"
+      },
+      {
+        "pattern": "P_USS_INFO*",
+        "owner_process": "sensing.uss",
+        "semantic": "services.semantic.UssZones"
+      },
+      {
+        "pattern": "P_USS_SEN*",
+        "owner_process": "sensing.uss",
+        "note": "探头原始 — 仅 USS 模块内部"
+      }
+    ],
+    "gateway_provides": [
+      "services.semantic.EgoMotion"
+    ],
+    "acceptance": {
+      "description": "AFC + 独立 USS — 前视 FCM / 超声 / 行车规划（不含泊车 FAPA）",
+      "lineage_required": true,
+      "sor_golden": "projects/oem_a/afc_with_uss/golden/gf.sor.json",
+      "required_services": [
+        "services.semantic.EgoMotion",
+        "services.semantic.UssZones",
+        "services.semantic.Perception_MESSAGE_Out_St",
+        "services.semantic.Trajectory",
+        "services.semantic.VehicleBus"
+      ]
+    }
+  },
+  "adapter_mappings": [
+    {
+      "id": "map.ego_motion_from_can",
+      "source": {
+        "protocol": "can",
+        "message": "P_VEHICLE_INFO",
+        "frame_id": "0x631"
+      },
+      "semantic_type": "types.EgoMotion",
+      "fields": [
+        {
+          "semantic": "P_Vehicle_Gear",
+          "source_signal": "P_Vehicle_Gear"
+        },
+        {
+          "semantic": "P_Vehicle_YawRate",
+          "source_signal": "P_Vehicle_YawRate"
+        },
+        {
+          "semantic": "P_Vehicle_SteerAngle",
+          "source_signal": "P_Vehicle_SteerAngle"
+        },
+        {
+          "semantic": "P_Vehicle_Speed",
+          "source_signal": "P_Vehicle_Speed"
+        },
+        {
+          "semantic": "P_Vehicle_FL_Speed",
+          "source_signal": "P_Vehicle_FL_Speed"
+        },
+        {
+          "semantic": "P_Vehicle_FR_Speed",
+          "source_signal": "P_Vehicle_FR_Speed"
+        },
+        {
+          "semantic": "P_Vehicle_RL_Speed",
+          "source_signal": "P_Vehicle_RL_Speed"
+        },
+        {
+          "semantic": "P_Vehicle_RR_Speed",
+          "source_signal": "P_Vehicle_RR_Speed"
+        }
+      ]
+    }
+  ],
+  "platform_manifest": {
+    "schema_version": "0.1",
+    "exec": {
+      "function_groups": [
+        {
+          "id": "MachineFG",
+          "initial": "Running"
+        }
+      ],
+      "processes": [
+        {
+          "name": "adapter.vehicle_can_gateway",
+          "function_group": "MachineFG",
+          "depends_on": [],
+          "execution_client": true
+        },
+        {
+          "name": "perception.fcm",
+          "function_group": "MachineFG",
+          "depends_on": [
+            "adapter.vehicle_can_gateway"
+          ],
+          "execution_client": true
+        },
+        {
+          "name": "sensing.uss",
+          "function_group": "MachineFG",
+          "depends_on": [
+            "adapter.vehicle_can_gateway"
+          ],
+          "execution_client": true
+        },
+        {
+          "name": "planning.driving",
+          "function_group": "MachineFG",
+          "depends_on": [
+            "perception.fcm",
+            "sensing.uss"
+          ],
+          "execution_client": true
+        }
+      ]
+    },
+    "phm": {
+      "entities": [
+        {
+          "id": "gateway_alive",
+          "process": "adapter.vehicle_can_gateway",
+          "alive_period_ms": 100,
+          "alive_timeout_ms": 300,
+          "deadline_ms": null,
+          "on_failure": "log"
+        },
+        {
+          "id": "fcm_alive",
+          "process": "perception.fcm",
+          "alive_period_ms": 100,
+          "alive_timeout_ms": 300,
+          "deadline_ms": null,
+          "on_failure": "log"
+        },
+        {
+          "id": "uss_alive",
+          "process": "sensing.uss",
+          "alive_period_ms": 100,
+          "alive_timeout_ms": 300,
+          "deadline_ms": null,
+          "on_failure": "log"
+        },
+        {
+          "id": "planning_alive",
+          "process": "planning.driving",
+          "alive_period_ms": 100,
+          "alive_timeout_ms": 300,
+          "deadline_ms": null,
+          "on_failure": "log"
+        }
+      ]
+    },
+    "diag": {
+      "doip": {
+        "enabled": true,
+        "logical_address": 3584
+      },
+      "dids": [],
+      "rids": []
+    },
+    "log": {
+      "default_level": "INFO",
+      "contexts": []
+    }
+  }
+}

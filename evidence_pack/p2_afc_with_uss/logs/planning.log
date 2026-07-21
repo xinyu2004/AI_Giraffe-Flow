@@ -1,0 +1,27 @@
+[0;90m2026-07-20 17:21:41.040 [0;1;96m[ Debug ][m: Application registered management segment 0x7b9466254000 with size 66761736 to id 1
+[0;90m2026-07-20 17:21:41.041 [0;1;96m[ Debug ][m: Application registered payload data segment 0x7b945d3fa000 with size 149264720 to id 2
+Offer→Running process=planning.driving fg=MachineFG
+phm entity=planning_alive period_ms=100 timeout_ms=300
+FAULT inject armed for 400 ms after first Alive
+gf-planning-driving: start
+FAULT inject begin entity=planning_alive
+DeadlineMissed entity=planning_alive
+fault window ended entity=planning_alive
+phm recovered entity=planning_alive
+gf-planning-driving: Trajectory#0 dyn=1 nearest_cm=20
+gf-planning-driving: Trajectory#1 dyn=2 nearest_cm=21
+gf-planning-driving: Trajectory#2 dyn=3 nearest_cm=22
+gf-planning-driving: Trajectory#3 dyn=1 nearest_cm=23
+gf-planning-driving: Trajectory#4 dyn=2 nearest_cm=24
+gf-planning-driving: Trajectory#5 dyn=3 nearest_cm=25
+gf-planning-driving: Trajectory#6 dyn=1 nearest_cm=26
+gf-planning-driving: Trajectory#7 dyn=2 nearest_cm=27
+gf-planning-driving: Trajectory#8 dyn=3 nearest_cm=28
+gf-planning-driving: Trajectory#9 dyn=1 nearest_cm=29
+gf-planning-driving: Trajectory#10 dyn=2 nearest_cm=30
+gf-planning-driving: Trajectory#11 dyn=3 nearest_cm=31
+gf-planning-driving: Trajectory#12 dyn=1 nearest_cm=32
+gf-planning-driving: Trajectory#13 dyn=2 nearest_cm=33
+gf-planning-driving: Trajectory#14 dyn=3 nearest_cm=34
+gf-planning-driving: Trajectory#15 dyn=1 nearest_cm=35
+[0;90m2026-07-20 17:21:43.209 [0;1;36m[Verbose][m: RouDi cleaned up resources of gf-planning-driving. Shutting down gracefully.

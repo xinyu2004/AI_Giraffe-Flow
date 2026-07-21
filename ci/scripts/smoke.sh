@@ -16,6 +16,7 @@ if [[ ! -x .venv/bin/pytest ]]; then
 fi
 .venv/bin/pip install -q -e "tools/codegen[dev]" -e "tools/gmt[dev]"
 .venv/bin/pytest tools/codegen/tests tools/gmt/tests -q
+# P2-G bench golden is included above (test_afc_bench_golden / test_merge_platform)
 
 echo "== compose + lint (afc_with_uss) =="
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml

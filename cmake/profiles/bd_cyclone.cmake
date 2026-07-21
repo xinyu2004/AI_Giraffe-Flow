@@ -1,0 +1,12 @@
+# P2 Track B: real CycloneDDS pub/sub (bypass; main SIL stays iceoryx).
+set(GF_SKU_APPLIED TRUE)
+set(GF_SKU_VARIANT "bd_cyclone")
+
+set(GF_WITH_ICEORYX OFF CACHE BOOL "" FORCE)
+set(GF_WITH_SOMEIP ON CACHE BOOL "" FORCE)
+set(GF_WITH_DDS ON CACHE BOOL "" FORCE)
+set(GF_WITH_CROSS_DOMAIN_IPC OFF CACHE BOOL "" FORCE)
+
+set(GF_RUNTIME_MODULES core com)
+set(GF_APPS)
+set(GF_DDS_BACKEND cyclone CACHE STRING "" FORCE)

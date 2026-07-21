@@ -1,5 +1,9 @@
 #include "gf_ara/com/binding/dds/runtime.hpp"
 
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+#include "gf_ara/com/binding/dds/cyclone_transport.hpp"
+#endif
+
 #include <mutex>
 #include <string>
 
@@ -16,6 +20,9 @@ void InitRuntime(const std::string& participant_name) {
   std::lock_guard<std::mutex> lock(g_mu);
   g_name = participant_name;
   g_init = true;
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+  CycloneEnsureParticipant(participant_name);
+#endif
 }
 
 std::string_view BackendName() noexcept {

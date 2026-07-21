@@ -57,9 +57,15 @@ if(DEFINED GF_APPS)
       message(STATUS "Giraffe Flow: skip app '${_gf_app}' (missing CMakeLists)")
       continue()
     endif()
-    # Current iceoryx demo apps
+    # iceoryx demo / multiproc main-chain apps
     if(NOT GF_WITH_ICEORYX)
-      if(_gf_app STREQUAL "demo_pipeline" OR _gf_app STREQUAL "simulators/uss_feed")
+      if(_gf_app STREQUAL "demo_pipeline"
+         OR _gf_app STREQUAL "simulators/uss_feed"
+         OR _gf_app STREQUAL "adapters/vehicle_can_gateway"
+         OR _gf_app STREQUAL "perception/fcm"
+         OR _gf_app STREQUAL "sensing/uss"
+         OR _gf_app STREQUAL "planning/driving"
+         OR _gf_app STREQUAL "tools/iox_obs_tap")
         message(STATUS "Giraffe Flow: skip app '${_gf_app}' (needs GF_WITH_ICEORYX)")
         continue()
       endif()

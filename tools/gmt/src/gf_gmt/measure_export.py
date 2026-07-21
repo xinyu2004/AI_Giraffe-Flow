@@ -1,8 +1,7 @@
-"""Minimal MCAP writer (P1 stub — no Foxglove bridge).
+"""Minimal MCAP writer (P1 stub → P2 multi-topic).
 
 Produces a structurally valid MCAP 0 file with Header / Schema / Channel /
-Message / DataEnd / Footer. Enough for `measure export` 雏形; full Tag/bench
-belongs to P2.
+Message / DataEnd / Footer.
 """
 
 from __future__ import annotations
@@ -58,15 +57,30 @@ def write_mcap(
     *,
     topic: str = "/gf/stub",
     schema_name: str = "gf.StubMsg",
-    library: str = "gf_gmt/0.1",
+    library: str = "gf_gmt/0.2",
 ) -> Path:
-    """Write messages: each {log_time_ns, data: bytes|dict}."""
+    """Write messages: each {log_time_ns, data, optional topic}."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     schema_data = json.dumps(
-        {"type": "object", "properties": {"seq": {"type": "integer"}, "note": {"type": "string"}}},
+        {
+            "type": "object",
+            "properties": {
+                "seq": {"type": "integer"},
+                "note": {"type": "string"},
+            },
+        },
         separators=(",", ":"),
     ).encode("utf-8")
+
+    msgs = list(messages)
+    topics: list[str] = []
+    for msg in msgs:
+        t = str(msg.get("topic") or topic)
+        if t not in topics:
+            topics.append(t)
+    if not topics:
+        topics = [topic]
 
     chunks: list[bytes] = [MAGIC]
     chunks.append(_record(OPCODE_HEADER, _str("") + _str(library)))
@@ -76,19 +90,19 @@ def write_mcap(
             _u16(1) + _str(schema_name) + _str("jsonschema") + _bytes_field(schema_data),
         )
     )
-    chunks.append(
-        _record(
-            OPCODE_CHANNEL,
-            _u16(1)
-            + _u16(1)
-            + _str(topic)
-            + _str("json")
-            + _map_str({}),
+
+    topic_to_channel: dict[str, int] = {}
+    for i, tname in enumerate(topics, start=1):
+        topic_to_channel[tname] = i
+        chunks.append(
+            _record(
+                OPCODE_CHANNEL,
+                _u16(i) + _u16(1) + _str(tname) + _str("json") + _map_str({}),
+            )
         )
-    )
 
     seq = 0
-    for msg in messages:
+    for msg in msgs:
         payload = msg.get("data")
         if isinstance(payload, dict):
             payload_b = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -97,16 +111,16 @@ def write_mcap(
         else:
             payload_b = str(payload).encode("utf-8")
         log_time = int(msg.get("log_time_ns") or msg.get("t_ns") or 0)
+        ch = topic_to_channel[str(msg.get("topic") or topic)]
         chunks.append(
             _record(
                 OPCODE_MESSAGE,
-                _u16(1) + _u32(seq) + _u64(log_time) + _u64(log_time) + payload_b,
+                _u16(ch) + _u32(seq) + _u64(log_time) + _u64(log_time) + payload_b,
             )
         )
         seq += 1
 
     chunks.append(_record(OPCODE_DATA_END, _u32(0)))
-    # summary_start=0, summary_offset_start=0, summary_crc=0 → no summary section
     chunks.append(_record(OPCODE_FOOTER, _u64(0) + _u64(0) + _u32(0)))
     chunks.append(MAGIC)
 
@@ -114,8 +128,33 @@ def write_mcap(
     return out_path
 
 
-def export_session_jsonl(session_path: Path, out_mcap: Path, *, topic: str = "/gf/stub") -> Path:
-    """Read JSONL lines {t_ns|log_time_ns, data|payload} → MCAP."""
+def list_mcap_topics(mcap_path: Path) -> list[str]:
+    """Best-effort scan for channel topic strings in an MCAP we wrote."""
+    raw = mcap_path.read_bytes()
+    topics: list[str] = []
+    start = 0
+    marker = b"/gf/"
+    while True:
+        i = raw.find(marker, start)
+        if i < 0:
+            break
+        j = i
+        while j < len(raw) and 32 <= raw[j] < 127 and raw[j] not in b"\"'\\":
+            j += 1
+        topic = raw[i:j].decode("ascii", errors="ignore")
+        if topic and topic not in topics:
+            topics.append(topic)
+        start = j
+    return topics
+
+
+def export_session_jsonl(
+    session_path: Path,
+    out_mcap: Path,
+    *,
+    topic: str = "/gf/stub",
+) -> Path:
+    """Read JSONL lines {t_ns|log_time_ns, topic?, data|payload} → MCAP."""
     msgs: list[dict[str, Any]] = []
     with session_path.open(encoding="utf-8") as f:
         for line in f:
@@ -123,14 +162,16 @@ def export_session_jsonl(session_path: Path, out_mcap: Path, *, topic: str = "/g
             if not line:
                 continue
             row = json.loads(line)
+            if row.get("type") == "tag_meta":
+                continue
             data = row.get("data", row.get("payload", row))
             msgs.append(
                 {
                     "log_time_ns": row.get("log_time_ns", row.get("t_ns", 0)),
+                    "topic": row.get("topic") or topic,
                     "data": data,
                 }
             )
     if not msgs:
-        # synthetic one-shot so empty session still exports a valid file
-        msgs = [{"log_time_ns": 0, "data": {"seq": 0, "note": "empty_session"}}]
+        msgs = [{"log_time_ns": 0, "topic": topic, "data": {"seq": 0, "note": "empty_session"}}]
     return write_mcap(out_mcap, msgs, topic=topic)

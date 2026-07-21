@@ -1,9 +1,12 @@
 #include "gf_ara/com/binding/dds/event.hpp"
 #include "gf_ara/com/binding/dds/runtime.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <thread>
 
 namespace {
 
@@ -16,17 +19,26 @@ struct Sample {
 
 int main() {
   using gf_ara::com::ServicePath;
+  using gf_ara::com::binding::dds::BackendName;
   using gf_ara::com::binding::dds::EventPublisher;
   using gf_ara::com::binding::dds::EventSubscriber;
   using gf_ara::com::binding::dds::InitRuntime;
-  using gf_ara::com::binding::dds::BackendName;
 
   InitRuntime("gf-dds-smoke");
-  std::cout << "gf_dds_binding_smoke backend=" << BackendName() << "\n";
+  const auto backend = BackendName();
+  std::cout << "gf_dds_binding_smoke backend=" << backend << "\n";
+
+#if defined(GF_DDS_USE_CYCLONEDDS) && GF_DDS_USE_CYCLONEDDS
+  if (std::strcmp(backend.data(), "cyclonedds") != 0) {
+    std::cerr << "gf_dds_binding_smoke FAIL: expected cyclonedds backend\n";
+    return EXIT_FAILURE;
+  }
+#endif
 
   ServicePath path{"demo.Topic", "1", "Event"};
-  EventPublisher<Sample> pub{path};
+  // Subscriber first so discovery sees a reader before write
   EventSubscriber<Sample> sub{path};
+  EventPublisher<Sample> pub{path};
 
   Sample s{};
   s.seq = 7;
@@ -35,12 +47,21 @@ int main() {
     std::cerr << "gf_dds_binding_smoke FAIL: Publish\n";
     return EXIT_FAILURE;
   }
-  auto got = sub.Take();
-  if (!got || !got.Value().has_value() || got.Value()->seq != 7) {
-    std::cerr << "gf_dds_binding_smoke FAIL: Take\n";
+
+  bool ok = false;
+  for (int i = 0; i < 50; ++i) {
+    auto got = sub.Take();
+    if (got && got.Value().has_value() && got.Value()->seq == 7) {
+      ok = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  if (!ok) {
+    std::cerr << "gf_dds_binding_smoke FAIL: Take (no sample within timeout)\n";
     return EXIT_FAILURE;
   }
 
-  std::cout << "gf_dds_binding_smoke OK\n";
+  std::cout << "gf_dds_binding_smoke OK backend=" << backend << "\n";
   return EXIT_SUCCESS;
 }

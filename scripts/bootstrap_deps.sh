@@ -10,7 +10,7 @@
 #   bash scripts/bootstrap_deps.sh              # check + fetch + build attr/acl
 #   bash scripts/bootstrap_deps.sh --check      # check only
 #   bash scripts/bootstrap_deps.sh --clean      # wipe staging; then re-run without flags
-#   bash scripts/bootstrap_deps.sh --clean-all  # wipe staging + middleware/third_party/{attr,acl,iceoryx}
+#   bash scripts/bootstrap_deps.sh --clean-all  # wipe staging + middleware/third_party/{attr,acl,iceoryx,cyclonedds}
 #   GF_CROSS_PREFIX=aarch64-linux-gnu bash scripts/bootstrap_deps.sh
 set -euo pipefail
 
@@ -32,12 +32,13 @@ Usage: bash scripts/bootstrap_deps.sh [options]
   (default)       Check tools, fetch sources, build attr/acl into middleware/.deps-prefix
   --check, -n     Check only (no download / build)
   --clean         Remove middleware/.deps-prefix and legacy staging, then exit
-  --clean-all     --clean plus remove middleware/third_party/{attr,acl,iceoryx}
+  --clean-all     --clean plus remove middleware/third_party/{attr,acl,iceoryx,cyclonedds}
   -h, --help      Show this help
 
 Env:
   GF_CROSS_PREFIX   Cross triplet, e.g. aarch64-linux-gnu (empty = host build)
   GF_ICEORYX_TAG    Override iceoryx git tag (default v2.0.8)
+  GF_CYCLONEDDS_TAG Override CycloneDDS git tag (default 0.10.5)
 EOF
 }
 
@@ -63,9 +64,9 @@ do_clean() {
   echo "  removed: .deps-prefix/ (legacy root, if present)"
   echo "  removed: .deps-sysroot/ (legacy, if present)"
   if [[ "$CLEAN_ALL" -eq 1 ]]; then
-    rm -rf "${TP}/attr" "${TP}/acl" "${TP}/iceoryx"
-    rm -rf "${LEGACY_TP}/attr" "${LEGACY_TP}/acl" "${LEGACY_TP}/iceoryx"
-    echo "  removed: middleware/third_party/{attr,acl,iceoryx}"
+    rm -rf "${TP}/attr" "${TP}/acl" "${TP}/iceoryx" "${TP}/cyclonedds"
+    rm -rf "${LEGACY_TP}/attr" "${LEGACY_TP}/acl" "${LEGACY_TP}/iceoryx" "${LEGACY_TP}/cyclonedds"
+    echo "  removed: middleware/third_party/{attr,acl,iceoryx,cyclonedds}"
   fi
   echo "Clean done. Re-run: bash scripts/bootstrap_deps.sh"
 }
@@ -79,6 +80,10 @@ fi
 ICEORYX_TAG="${GF_ICEORYX_TAG:-v2.0.8}"
 ICEORYX_URL="${GF_ICEORYX_URL:-https://github.com/eclipse-iceoryx/iceoryx.git}"
 ICEORYX_DIR="${TP}/iceoryx"
+
+CYCLONEDDS_TAG="${GF_CYCLONEDDS_TAG:-0.10.5}"
+CYCLONEDDS_URL="${GF_CYCLONEDDS_URL:-https://github.com/eclipse-cyclonedds/cyclonedds.git}"
+CYCLONEDDS_DIR="${TP}/cyclonedds"
 
 ATTR_VER="${GF_ATTR_VER:-2.5.2}"
 ACL_VER="${GF_ACL_VER:-2.3.2}"
@@ -441,6 +446,11 @@ fetch_git() {
 }
 
 fetch_git "${ICEORYX_URL}" "${ICEORYX_TAG}" "${ICEORYX_DIR}" "iceoryx" || true
+
+# ============================================================
+step "[4b/5] Third-party CycloneDDS source (optional DDS backend)"
+# ============================================================
+fetch_git "${CYCLONEDDS_URL}" "${CYCLONEDDS_TAG}" "${CYCLONEDDS_DIR}" "cyclonedds" || true
 
 # ============================================================
 step "[5/5] Summary"

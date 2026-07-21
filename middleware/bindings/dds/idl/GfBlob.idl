@@ -1,0 +1,9 @@
+module gf {
+
+struct Blob {
+  unsigned long long stamp_ns;
+  unsigned long size;
+  octet bytes[1024];
+};
+
+};

@@ -1,4 +1,4 @@
-"""GMT CLI — architect (CI) + measure export."""
+"""GMT CLI — architect (CI) + measure (record/tag/export) + bridge foxglove."""
 
 from __future__ import annotations
 
@@ -9,7 +9,10 @@ from pathlib import Path
 
 from gf_gmt import __version__
 from gf_gmt.architect import dag_from_sor, load_json, load_yaml, run_architect_lineage
-from gf_gmt.measure_export import export_session_jsonl, write_mcap
+from gf_gmt.bridge_foxglove import main_bridge
+from gf_gmt.measure_export import export_session_jsonl, list_mcap_topics, write_mcap
+from gf_gmt.measure_record import record_from_sil_logs
+from gf_gmt.measure_tag import tag_session
 
 
 def _resolve_project(project: Path) -> tuple[dict, dict | None, Path | None]:
@@ -33,7 +36,7 @@ def _resolve_project(project: Path) -> tuple[dict, dict | None, Path | None]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="GMT",
-        description="Giraffe Measure Tool — architect (CI) + measure export",
+        description="Giraffe Measure Tool — architect + measure + foxglove bridge",
     )
     parser.add_argument("--version", action="version", version=f"GMT {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -52,12 +55,48 @@ def main(argv: list[str] | None = None) -> int:
     p_dag.add_argument("--project", type=Path, default=None)
     p_dag.add_argument("--sor", type=Path, default=None)
 
-    p_meas = sub.add_parser("measure", help="Measurement / export")
+    p_meas = sub.add_parser("measure", help="Record / tag / export")
     meas_sub = p_meas.add_subparsers(dest="meas_cmd", required=True)
-    p_exp = meas_sub.add_parser("export", help="Export session JSONL → MCAP 雏形")
+
+    p_rec = meas_sub.add_parser(
+        "record", help="Build session JSONL from SIL multiproc logs (O-1)"
+    )
+    p_rec.add_argument(
+        "--from-logs",
+        type=Path,
+        required=True,
+        help="iox_multiproc_logs directory",
+    )
+    p_rec.add_argument("--out", type=Path, required=True, help="Output session.jsonl")
+
+    p_tag = meas_sub.add_parser("tag", help="Clip session JSONL by time window (O-2)")
+    p_tag.add_argument("--in", dest="inp", type=Path, required=True)
+    p_tag.add_argument("--out", type=Path, required=True)
+    p_tag.add_argument("--from-ns", type=int, default=None)
+    p_tag.add_argument("--to-ns", type=int, default=None)
+    p_tag.add_argument("--label", type=str, default="")
+    p_tag.add_argument("--topic", action="append", default=None, help="Repeatable filter")
+
+    p_exp = meas_sub.add_parser("export", help="Export session JSONL → MCAP")
     p_exp.add_argument("--in", dest="inp", type=Path, required=True, help="JSONL session")
     p_exp.add_argument("--out", type=Path, required=True, help="Output .mcap")
-    p_exp.add_argument("--topic", type=str, default="/gf/stub")
+    p_exp.add_argument("--topic", type=str, default="/gf/stub", help="Default topic if row omits")
+
+    p_br = sub.add_parser("bridge", help="Visualization bridges")
+    br_sub = p_br.add_subparsers(dest="br_cmd", required=True)
+    p_fox = br_sub.add_parser("foxglove", help="Foxglove Studio helper / WS (offline + live)")
+    p_fox.add_argument("--mcap", type=Path, default=None)
+    p_fox.add_argument("--jsonl", type=Path, default=None)
+    p_fox.add_argument("--serve", action="store_true")
+    p_fox.add_argument("--ws", action="store_true")
+    p_fox.add_argument(
+        "--stdin",
+        action="store_true",
+        help="With --ws: live NDJSON from stdin (pipe from gf_iox_obs_tap)",
+    )
+    p_fox.add_argument("--host", default="127.0.0.1")
+    p_fox.add_argument("--port", type=int, default=8765)
+    p_fox.add_argument("--speed", type=float, default=1.0)
 
     args = parser.parse_args(argv)
 
@@ -98,18 +137,51 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(dag_from_sor(sor), indent=2, ensure_ascii=False))
             return 0
 
-    if args.cmd == "measure" and args.meas_cmd == "export":
-        if not args.inp.is_file():
-            write_mcap(
+    if args.cmd == "measure":
+        if args.meas_cmd == "record":
+            path, n = record_from_sil_logs(args.from_logs, args.out)
+            print(f"wrote {path} events={n}")
+            return 0 if n > 0 else 1
+        if args.meas_cmd == "tag":
+            path, kept, total = tag_session(
+                args.inp,
                 args.out,
-                [{"log_time_ns": 0, "data": {"seq": 0, "note": "synthetic"}}],
-                topic=args.topic,
+                from_ns=args.from_ns,
+                to_ns=args.to_ns,
+                label=args.label,
+                topics=args.topic,
             )
-            print(f"wrote synthetic {args.out}")
+            print(f"wrote {path} kept={kept}/{total}")
+            return 0 if kept > 0 else 1
+        if args.meas_cmd == "export":
+            if not args.inp.is_file():
+                write_mcap(
+                    args.out,
+                    [{"log_time_ns": 0, "data": {"seq": 0, "note": "synthetic"}}],
+                    topic=args.topic,
+                )
+                print(f"wrote synthetic {args.out}")
+                return 0
+            path = export_session_jsonl(args.inp, args.out, topic=args.topic)
+            topics = list_mcap_topics(path)
+            print(f"wrote {path} topics={topics}")
             return 0
-        path = export_session_jsonl(args.inp, args.out, topic=args.topic)
-        print(f"wrote {path}")
-        return 0
+
+    if args.cmd == "bridge" and args.br_cmd == "foxglove":
+        # Reuse bridge module argv shape
+        fox_argv: list[str] = []
+        if args.mcap:
+            fox_argv += ["--mcap", str(args.mcap)]
+        if args.jsonl:
+            fox_argv += ["--jsonl", str(args.jsonl)]
+        if args.serve:
+            fox_argv.append("--serve")
+        if args.ws:
+            fox_argv.append("--ws")
+        if getattr(args, "stdin", False):
+            fox_argv.append("--stdin")
+        fox_argv += ["--host", args.host, "--port", str(args.port), "--speed", str(args.speed)]
+        return main_bridge(fox_argv)
 
     return 2
 

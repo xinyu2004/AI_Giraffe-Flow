@@ -88,10 +88,10 @@ dependencies:
     purpose: DDS binding / ROS 2 interop path
     homepage: https://github.com/eclipse-cyclonedds/cyclonedds
     license: EPL-2.0 OR BSD-3-Clause
-    planned_version: TBD
-    integration: cmake_fetchcontent
+    planned_version: "0.10.5"
+    integration: git_subdirectory  # middleware/third_party/cyclonedds via bootstrap_deps.sh
     enabled_profiles: [desktop, board, vehicle-debug]
-    notes: May be disabled in production profile if unused
+    notes: P2 B-track real pub/sub; main SIL stays iceoryx
 
   - id: cyclonedds_cxx
     name: Cyclone DDS C++ binding

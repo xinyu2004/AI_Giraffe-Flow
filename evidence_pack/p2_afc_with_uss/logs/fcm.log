@@ -1,0 +1,27 @@
+[0;90m2026-07-20 17:21:41.040 [0;1;96m[ Debug ][m: Application registered management segment 0x7dadca254000 with size 66761736 to id 1
+[0;90m2026-07-20 17:21:41.041 [0;1;96m[ Debug ][m: Application registered payload data segment 0x7dadc13fa000 with size 149264720 to id 2
+Offer→Running process=perception.fcm fg=MachineFG
+phm entity=fcm_alive period_ms=100 timeout_ms=300
+FAULT inject armed for 400 ms after first Alive
+gf-perception-fcm: start
+FAULT inject begin entity=fcm_alive
+DeadlineMissed entity=fcm_alive
+fault window ended entity=fcm_alive
+phm recovered entity=fcm_alive
+gf-perception-fcm: out#0 dyn=1 frame=0
+gf-perception-fcm: out#1 dyn=2 frame=1
+gf-perception-fcm: out#2 dyn=3 frame=2
+gf-perception-fcm: out#3 dyn=1 frame=3
+gf-perception-fcm: out#4 dyn=2 frame=4
+gf-perception-fcm: out#5 dyn=3 frame=5
+gf-perception-fcm: out#6 dyn=1 frame=6
+gf-perception-fcm: out#7 dyn=2 frame=7
+gf-perception-fcm: out#8 dyn=3 frame=8
+gf-perception-fcm: out#9 dyn=1 frame=9
+gf-perception-fcm: out#10 dyn=2 frame=10
+gf-perception-fcm: out#11 dyn=3 frame=11
+gf-perception-fcm: out#12 dyn=1 frame=12
+gf-perception-fcm: out#13 dyn=2 frame=13
+gf-perception-fcm: out#14 dyn=3 frame=14
+gf-perception-fcm: out#15 dyn=1 frame=15
+[0;90m2026-07-20 17:21:43.209 [0;1;36m[Verbose][m: RouDi cleaned up resources of gf-perception-fcm. Shutting down gracefully.
