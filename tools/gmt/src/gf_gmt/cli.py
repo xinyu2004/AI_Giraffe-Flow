@@ -68,6 +68,18 @@ def main(argv: list[str] | None = None) -> int:
         help="iox_multiproc_logs directory",
     )
     p_rec.add_argument("--out", type=Path, required=True, help="Output session.jsonl")
+    p_rec.add_argument(
+        "--services",
+        type=str,
+        default=None,
+        help="Comma-separated record whitelist (short names). Empty → no events.",
+    )
+    p_rec.add_argument(
+        "--observability",
+        type=Path,
+        default=None,
+        help="generated/observability.json (uses record.services)",
+    )
 
     p_tag = meas_sub.add_parser("tag", help="Clip session JSONL by time window (O-2)")
     p_tag.add_argument("--in", dest="inp", type=Path, required=True)
@@ -139,7 +151,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "measure":
         if args.meas_cmd == "record":
-            path, n = record_from_sil_logs(args.from_logs, args.out)
+            services = None
+            if args.services is not None:
+                services = [s.strip() for s in args.services.split(",") if s.strip()]
+            path, n = record_from_sil_logs(
+                args.from_logs,
+                args.out,
+                services=services,
+                observability_json=args.observability,
+            )
             print(f"wrote {path} events={n}")
             return 0 if n > 0 else 1
         if args.meas_cmd == "tag":

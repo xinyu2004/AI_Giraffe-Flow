@@ -27,7 +27,14 @@ export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
 bash "${SCRIPT_DIR}/run_sil_multiproc.sh"
 
 echo "${TAG} measure record from ${LOG_DIR} ..."
-GMT measure record --from-logs "${LOG_DIR}" --out "${OUT_DIR}/session.jsonl"
+OBS_JSON="${PROJECT_DIR}/generated/observability.json"
+if [[ -f "${OBS_JSON}" ]]; then
+  GMT measure record --from-logs "${LOG_DIR}" --out "${OUT_DIR}/session.jsonl" \
+    --observability "${OBS_JSON}"
+else
+  echo "${TAG} WARN: missing ${OBS_JSON}; record without whitelist (legacy)" >&2
+  GMT measure record --from-logs "${LOG_DIR}" --out "${OUT_DIR}/session.jsonl"
+fi
 
 echo "${TAG} measure tag ..."
 # Keep all events; label the run

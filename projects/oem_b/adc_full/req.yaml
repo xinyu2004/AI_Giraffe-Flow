@@ -1,5 +1,6 @@
 # OEM B — ADC 行泊一体（完整模块）
 schema_version: "0.1"
+profile: vehicle-debug
 variant: adc_driving_parking
 topology: ap_mcu_cp
 product: ADC
@@ -22,8 +23,16 @@ bindings:
   - cross_domain_ipc
 
 observability:
-  record: sampled
+  live_tap:
+    enabled: false
+    services: []
+  record:
+    mode: sampled
+    services:
+      - services.semantic.EgoMotion
+      - services.semantic.Trajectory
   remote_log_dump: on
+  trace_export: on
 
 apps:
   - adapters/mcu_cp_gateway

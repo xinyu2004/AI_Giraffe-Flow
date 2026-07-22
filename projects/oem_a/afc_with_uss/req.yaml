@@ -1,4 +1,5 @@
 schema_version: '0.1'
+profile: vehicle-debug
 variant: afc_front_camera_uss
 topology: ap_only
 product: AFC
@@ -20,7 +21,17 @@ bindings:
 - dds
 - cross_domain_ipc
 observability:
-  record: minimal
+  live_tap:
+    enabled: true
+    services:
+    - services.semantic.EgoMotion
+    - services.semantic.Trajectory
+  record:
+    mode: minimal
+    services:
+    - services.semantic.EgoMotion
+    - services.semantic.UssZones
+    - services.semantic.Trajectory
   trace_export: 'True'
 apps:
 - simulators/uss_feed
@@ -29,7 +40,6 @@ apps:
 - perception/fcm
 - sensing/uss
 - planning/driving
-- tools/iox_obs_tap
 acceptance:
   description: AFC + 独立 USS — 前视 FCM / 超声 / 行车规划（不含泊车 FAPA）
   lineage_required: true

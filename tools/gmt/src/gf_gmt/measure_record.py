@@ -117,6 +117,31 @@ def events_from_sil_logs(log_dir: Path) -> list[dict[str, Any]]:
     return events
 
 
+def _short_from_topic(topic: str) -> str:
+    return str(topic).rsplit("/", 1)[-1]
+
+
+def filter_events_by_services(
+    events: list[dict[str, Any]],
+    services: list[str] | None,
+) -> list[dict[str, Any]]:
+    """Keep only events whose topic short name is in the record whitelist.
+
+    Empty / None whitelist → no events (record requires allowlist).
+    """
+    if not services:
+        return []
+    allow = {str(s).strip() for s in services if str(s).strip()}
+    # also accept bare names without services.semantic. prefix
+    allow |= {s.split(".")[-1] for s in list(allow)}
+    out: list[dict[str, Any]] = []
+    for e in events:
+        short = _short_from_topic(str(e.get("topic") or ""))
+        if short in allow:
+            out.append(e)
+    return out
+
+
 def write_session_jsonl(events: list[dict[str, Any]], out: Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8") as f:
@@ -125,7 +150,37 @@ def write_session_jsonl(events: list[dict[str, Any]], out: Path) -> Path:
     return out
 
 
-def record_from_sil_logs(log_dir: Path, out: Path) -> tuple[Path, int]:
+def load_record_services_from_obs(path: Path | None) -> list[str] | None:
+    """Read record.services from generated/observability.json; None if missing."""
+    if path is None or not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    rec = data.get("record") if isinstance(data, dict) else None
+    if not isinstance(rec, dict):
+        return None
+    if str(rec.get("mode") or "") == "off":
+        return []
+    return [str(x) for x in (rec.get("services") or []) if str(x).strip()]
+
+
+def record_from_sil_logs(
+    log_dir: Path,
+    out: Path,
+    *,
+    services: list[str] | None = None,
+    observability_json: Path | None = None,
+) -> tuple[Path, int]:
     events = events_from_sil_logs(log_dir)
-    write_session_jsonl(events, out)
-    return out, len(events)
+    allow = services
+    if allow is None and observability_json is not None:
+        allow = load_record_services_from_obs(observability_json)
+    if allow is None:
+        # no whitelist provided → keep legacy full parse for fixtures/tests
+        filtered = events
+    else:
+        filtered = filter_events_by_services(events, allow)
+    write_session_jsonl(filtered, out)
+    return out, len(filtered)

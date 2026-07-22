@@ -90,5 +90,25 @@ if [[ "${HOST}" == "0.0.0.0" || "${HOST}" == "::" ]]; then
 fi
 echo "${TAG} Studio → Foxglove WebSocket → ws://${HINT_IP}:${PORT}"
 echo "${TAG} (bind ${HOST}:${PORT}; GMT bridge is NOT ROS foxglove_bridge; main chain stays iceoryx)"
+
+# live allowlist from compose output
+OBS_JSON="${PROJECT_DIR}/generated/observability.json"
+if [[ -f "${OBS_JSON}" ]]; then
+  export GF_OBS_LIVE_SERVICES
+  GF_OBS_LIVE_SERVICES="$(python - <<PY
+import json
+from pathlib import Path
+d=json.loads(Path("${OBS_JSON}").read_text())
+live=d.get("live_tap") or {}
+svcs=live.get("services") or []
+print(",".join(svcs))
+PY
+)"
+  echo "${TAG} GF_OBS_LIVE_SERVICES=${GF_OBS_LIVE_SERVICES}"
+else
+  export GF_OBS_LIVE_SERVICES="${GF_OBS_LIVE_SERVICES:-EgoMotion,Trajectory}"
+  echo "${TAG} WARN: no observability.json; using ${GF_OBS_LIVE_SERVICES}" >&2
+fi
+
 # stderr from tap stays visible; NDJSON on stdout → bridge
 "${TAP}" 2>"${LOG_DIR}/tap.log" | GMT bridge foxglove --ws --stdin --host "${HOST}" --port "${PORT}"

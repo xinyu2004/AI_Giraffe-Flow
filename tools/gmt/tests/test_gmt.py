@@ -87,7 +87,7 @@ def test_tag_and_multitopic_export(tmp_path: Path) -> None:
 
 
 def test_record_from_sil_logs(tmp_path: Path) -> None:
-    from gf_gmt.measure_record import record_from_sil_logs
+    from gf_gmt.measure_record import filter_events_by_services, record_from_sil_logs
 
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
@@ -106,6 +106,12 @@ def test_record_from_sil_logs(tmp_path: Path) -> None:
     text = out.read_text(encoding="utf-8")
     assert "/gf/Trajectory" in text
     assert "/gf/UssZones" in text
+
+    out2 = tmp_path / "session_wl.jsonl"
+    path2, n2 = record_from_sil_logs(log_dir, out2, services=["Trajectory"])
+    assert n2 == 2
+    assert "UssZones" not in path2.read_text(encoding="utf-8")
+    assert filter_events_by_services([{"topic": "/gf/EgoMotion", "t_ns": 1}], []) == []
 
 
 def test_bridge_describe(tmp_path: Path) -> None:

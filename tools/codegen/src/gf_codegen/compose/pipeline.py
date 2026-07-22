@@ -11,15 +11,15 @@ from typing import Any
 import yaml
 
 from gf_codegen.compose.apply_wiring import apply_wiring
-from gf_codegen.compose.emit_build_cmake import emit_build_cmake
+from gf_codegen.compose.emit_build_cmake import emit_build_cmake, emit_observability_json
 from gf_codegen.compose.emit_platform_tables import emit_platform_tables
 from gf_codegen.compose.import_oem import import_oem
 from gf_codegen.compose.lineage import run_lineage
 from gf_codegen.compose.load_project import ProjectPaths, load_project
 from gf_codegen.compose.merge_platform import merge_platform
 from gf_codegen.compose.merge_req import merge_req
+from gf_codegen.compose.observability import validate_observability
 from gf_codegen.compose.write_sor import write_lineage, write_sor
-
 
 def _merge_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> None:
     for key, val in overlay.items():
@@ -91,11 +91,12 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     )
 
     report = run_lineage(sor, req)
+    obs_err, obs_warn, obs_checks = validate_observability(req)
     report["project_id"] = paths.data.get("project_id") or report.get("project_id")
-    report["warnings"] = list(report.get("warnings") or []) + warnings + plat_warnings
-    report["errors"] = list(report.get("errors") or []) + plat_errors
-    report["checks"] = list(report.get("checks") or []) + plat_checks
-    if plat_errors:
+    report["warnings"] = list(report.get("warnings") or []) + warnings + plat_warnings + obs_warn
+    report["errors"] = list(report.get("errors") or []) + plat_errors + obs_err
+    report["checks"] = list(report.get("checks") or []) + plat_checks + obs_checks
+    if plat_errors or obs_err:
         report["ok"] = False
     # relativize note
     report["outputs"] = {
@@ -108,11 +109,16 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
 
     sku_cmake = paths.project_dir / "generated" / "gf_build.cmake"
     emit_build_cmake(req, sku_cmake)
+    obs_json = paths.project_dir / "generated" / "observability.json"
+    emit_observability_json(req, obs_json)
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)
+    report.setdefault("outputs", {})["observability"] = str(obs_json)
+    write_lineage(paths.lineage_report, report)
 
     print(f"compose wrote: {paths.out_sor}")
     print(f"lineage wrote: {paths.lineage_report} (ok={report['ok']})")
     print(f"sku cmake wrote: {sku_cmake}")
+    print(f"observability wrote: {obs_json}")
     if sor.get("platform_manifest"):
         keys = sorted(k for k in sor["platform_manifest"] if k != "schema_version")
         print(f"platform_manifest: {', '.join(keys)}")

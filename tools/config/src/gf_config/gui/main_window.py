@@ -100,6 +100,23 @@ class MainWindow(QMainWindow):
         act_quit.triggered.connect(self.close)
         file_menu.addAction(act_quit)
 
+        edit_menu = self.menuBar().addMenu("编辑")
+        act_undo = QAction("撤销（信号图）", self)
+        act_undo.setShortcut(QKeySequence.StandardKey.Undo)
+        act_undo.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_undo.triggered.connect(self._undo_graph)
+        edit_menu.addAction(act_undo)
+        act_redo = QAction("重做（信号图）", self)
+        act_redo.setShortcut(QKeySequence.StandardKey.Redo)
+        act_redo.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_redo.triggered.connect(self._redo_graph)
+        edit_menu.addAction(act_redo)
+        act_redo_y = QAction("重做（Ctrl+Y）", self)
+        act_redo_y.setShortcut("Ctrl+Y")
+        act_redo_y.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_redo_y.triggered.connect(self._redo_graph)
+        edit_menu.addAction(act_redo_y)
+
         view_menu = self.menuBar().addMenu("视图")
 
         act_tab_a = QAction("A · SKU", self)
@@ -167,6 +184,22 @@ class MainWindow(QMainWindow):
     def _fit_graph(self) -> None:
         self._tabs.setCurrentWidget(self._graph)
         self._graph.fit_in_window()
+
+    def _undo_graph(self) -> None:
+        self._tabs.setCurrentWidget(self._graph)
+        if not self._graph._undo_stack:
+            self.statusBar().showMessage("没有可撤销的操作", 2000)
+            return
+        self._graph.undo()
+        self.statusBar().showMessage("已撤销（信号图）", 2000)
+
+    def _redo_graph(self) -> None:
+        self._tabs.setCurrentWidget(self._graph)
+        if not self._graph._redo_stack:
+            self.statusBar().showMessage("没有可重做的操作", 2000)
+            return
+        self._graph.redo()
+        self.statusBar().showMessage("已重做（信号图）", 2000)
 
     def _show_flows_panel(self) -> None:
         self._tabs.setCurrentWidget(self._graph)

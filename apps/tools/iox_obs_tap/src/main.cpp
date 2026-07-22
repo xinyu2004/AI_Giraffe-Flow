@@ -1,5 +1,8 @@
-// P2.5: iceoryx observability tap — subscribe EgoMotion + Trajectory, emit NDJSON to stdout.
+// P2.5: iceoryx observability tap — subscribe allowlisted services → NDJSON stdout.
 // Pipe into: GMT bridge foxglove --ws --stdin
+//
+// Env GF_OBS_LIVE_SERVICES: comma-separated short names (default: EgoMotion,Trajectory).
+// Only services implemented below are honored; others are warned on stderr.
 
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
 #include "gf_gen/proxy/ego_motion_proxy.hpp"
@@ -10,9 +13,12 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
+#include <set>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -23,6 +29,36 @@ std::uint64_t now_ns() {
       std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::steady_clock::now().time_since_epoch())
           .count());
+}
+
+std::set<std::string> parse_allowlist() {
+  const char* env = std::getenv("GF_OBS_LIVE_SERVICES");
+  std::string raw = env && *env ? env : "EgoMotion,Trajectory";
+  std::set<std::string> out;
+  std::string cur;
+  for (char c : raw) {
+    if (c == ',' || c == ';' || c == ' ') {
+      if (!cur.empty()) {
+        // strip services.semantic. prefix if present
+        const std::string pref = "services.semantic.";
+        if (cur.rfind(pref, 0) == 0) {
+          cur = cur.substr(pref.size());
+        }
+        out.insert(cur);
+        cur.clear();
+      }
+    } else {
+      cur.push_back(c);
+    }
+  }
+  if (!cur.empty()) {
+    const std::string pref = "services.semantic.";
+    if (cur.rfind(pref, 0) == 0) {
+      cur = cur.substr(pref.size());
+    }
+    out.insert(cur);
+  }
+  return out;
 }
 
 void emit_ego(const gf_gen::EgoMotion& ego) {
@@ -77,24 +113,45 @@ void emit_traj(const gf_gen::Trajectory& t) {
 }  // namespace
 
 int main() {
+  const auto allow = parse_allowlist();
+  const bool want_ego = allow.count("EgoMotion") > 0;
+  const bool want_traj = allow.count("Trajectory") > 0;
+
+  for (const auto& s : allow) {
+    if (s != "EgoMotion" && s != "Trajectory") {
+      std::cerr << "gf-iox-obs-tap: ignore unsupported service '" << s
+                << "' (implemented: EgoMotion, Trajectory)\n";
+    }
+  }
+  if (!want_ego && !want_traj) {
+    std::cerr << "gf-iox-obs-tap: empty/unsupported GF_OBS_LIVE_SERVICES — nothing to do\n";
+    return EXIT_FAILURE;
+  }
+
   gf_ara::com::binding::iceoryx::InitRuntime("gf-iox-obs-tap");
 
   gf_gen::EgoMotionProxy ego_sub{};
   gf_gen::TrajectoryProxy traj_sub{};
 
-  std::cerr << "gf-iox-obs-tap: start (EgoMotion + Trajectory → NDJSON stdout)\n";
+  std::cerr << "gf-iox-obs-tap: start allowlist=";
+  for (const auto& s : allow) {
+    std::cerr << s << ",";
+  }
+  std::cerr << " → NDJSON stdout\n";
 
   while (!iox::posix::hasTerminationRequested()) {
-    auto ego_taken = ego_sub.Take();
-    if (ego_taken && ego_taken.Value().has_value()) {
-      emit_ego(*ego_taken.Value());
+    if (want_ego) {
+      auto ego_taken = ego_sub.Take();
+      if (ego_taken && ego_taken.Value().has_value()) {
+        emit_ego(*ego_taken.Value());
+      }
     }
-
-    auto traj_taken = traj_sub.Take();
-    if (traj_taken && traj_taken.Value().has_value()) {
-      emit_traj(*traj_taken.Value());
+    if (want_traj) {
+      auto traj_taken = traj_sub.Take();
+      if (traj_taken && traj_taken.Value().has_value()) {
+        emit_traj(*traj_taken.Value());
+      }
     }
-
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   return 0;

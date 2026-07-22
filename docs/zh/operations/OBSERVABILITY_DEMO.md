@@ -26,7 +26,11 @@ Foxglove Studio → **Open connection** → Foxglove WebSocket → `ws://127.0.0
 连接成功后加 **Raw Messages** 或 **Plot** 面板，勾选 `/gf/EgoMotion`、`/gf/Trajectory`（Studio 会发 `subscribe`，桥才推二进制 Message Data）。  
 终端应出现 `subscribe sub=… channel=…`，随后字段（如 `speed_mps` / `point_count`）会更新。
 
-**另一台电脑连本机：** 脚本默认 `GF_WS_HOST=0.0.0.0`（监听所有网卡）。Studio 填 `ws://<跑 SIL 那台的局域网 IP>:8765`。若仍不通，检查本机防火墙是否放行 8765。仅本机可：`GF_WS_HOST=127.0.0.1 bash …/run_sil_live_foxglove.sh`。
+**另一台电脑连本机：** 脚本默认 `GF_WS_HOST=0.0.0.0`。Studio 填 `ws://<跑 SIL 那台的局域网 IP>:8765`。防火墙需放行 8765。
+
+**白名单：** `req.yaml` → `observability.live_tap.services`（gf-config A 页）；compose 写入 `generated/observability.json`，脚本经 `GF_OBS_LIVE_SERVICES` 传给 tap。`production-release` 剖面不编 tap。
+
+**画布单端口：** B 页右键某个 Out/In 点 → 移到左/右/上/下（只动该服务，例如只移 EgoMotion）。
 
 等价手工管道：
 

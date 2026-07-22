@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import math
 from pathlib import Path
 from typing import Any
@@ -147,9 +148,10 @@ def append_chevron(path: QPainterPath, tip: QPointF, ux: float, uy: float, *, ar
 
 
 class PortItem(QGraphicsEllipseItem):
-    """Inport (left) / Outport (right) — drag from Out to In like Simulink."""
+    """Out (green) / In (orange). Left-drag = move to card edge (view-level); Out Ctrl+drag = wire."""
 
-    SIZE = 11.0
+    SIZE = 16.0
+    HIT = 22.0  # larger pick target than the painted disc
 
     def __init__(
         self,
@@ -157,6 +159,8 @@ class PortItem(QGraphicsEllipseItem):
         direction: str,
         service: str,
         index: int,
+        *,
+        side: str = "right",
     ) -> None:
         s = self.SIZE
         super().__init__(-s / 2, -s / 2, s, s)
@@ -164,41 +168,55 @@ class PortItem(QGraphicsEllipseItem):
         self.direction = direction  # "in" | "out"
         self.service = service
         self.index = index
+        self.side = _norm_side(side, "right" if direction == "out" else "left")
         self.setParentItem(card)
-        self.setZValue(5)
+        self.setZValue(20)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
         self.setAcceptHoverEvents(True)
-        self.setCursor(
-            Qt.CursorShape.CrossCursor
-            if direction == "out"
-            else Qt.CursorShape.PointingHandCursor
+        self.setAcceptedMouseButtons(
+            Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton
         )
-        self.setToolTip(f"{'Out' if direction == 'out' else 'In'}: {short_service(service)}")
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
+        self._home_pos = QPointF(0, 0)
+        self._origin_side = self.side
+        self._pending_side: str | None = None
         self._apply_brush()
 
+    def shape(self) -> QPainterPath:
+        """Fat hit target so ports are easy to grab."""
+        h = self.HIT
+        path = QPainterPath()
+        path.addEllipse(QRectF(-h / 2, -h / 2, h, h))
+        return path
+
     def _apply_brush(self) -> None:
-        # 未连线=红；已连线 Out=绿 / In=橙
+        # 颜色 = 方向（Out 绿 / In 橙）；未连用虚线描边提示
         selected = bool(self.card and (self.card.isSelected() or self.card._emphasis))
         linked = bool(self.card and self.card.is_port_linked(self.direction, self.service))
-        if not linked:
-            fill = QColor("#e74c3c") if selected else QColor("#c0392b")
-            border = QColor("#ffffff") if selected else QColor("#f5b7b1")
-            tip = "未连线"
-        elif self.direction == "out":
+        if self.direction == "out":
             fill = QColor("#2ecc71") if selected else QColor("#58d68d")
-            border = QColor("#ffffff") if selected else QColor("#abebc6")
-            tip = "已连出"
+            tip_dir = "Out"
+            move_hint = "拖动改边；Ctrl+拖 = 拉线"
         else:
             fill = QColor("#e67e22") if selected else QColor("#f39c12")
-            border = QColor("#ffffff") if selected else QColor("#fdebd0")
-            tip = "已连入"
+            tip_dir = "In"
+            move_hint = "拖动到卡片其它边松手吸附"
+        if linked:
+            border = QColor("#ffffff") if selected else QColor("#f8f9f9")
+            tip = "已连"
+            pen = QPen(border, 2.5 if selected else 1.5)
+        else:
+            border = QColor("#922b21")
+            tip = "未连"
+            pen = QPen(border, 2.0 if selected else 1.6)
+            pen.setStyle(Qt.PenStyle.DashLine)
         self.setBrush(QBrush(fill))
-        self.setPen(QPen(border, 2.5 if selected else 1.5))
+        self.setPen(pen)
+        side_l = _SIDE_LABEL.get(self.side, self.side)
         self.setToolTip(
-            f"{'Out' if self.direction == 'out' else 'In'}: "
-            f"{short_service(self.service)}（{tip}）"
+            f"{tip_dir}: {short_service(self.service)}（{tip} · {side_l}侧）\n"
+            f"{move_hint}\n右键：菜单改边"
         )
-        # In 用略扁椭圆区分形状
         s = self.SIZE
         if self.direction == "in":
             self.setRect(-s / 2, -s / 2 + 1, s, s - 2)
@@ -208,16 +226,78 @@ class PortItem(QGraphicsEllipseItem):
     def scene_center(self) -> QPointF:
         return self.sceneBoundingRect().center()
 
+    def nearest_card_side(self, scene_pos: QPointF) -> str:
+        """Pick left/right/top/bottom from cursor vs card rect in scene coords."""
+        r = self.card.sceneBoundingRect()
+        cx = (r.left() + r.right()) / 2.0
+        cy = (r.top() + r.bottom()) / 2.0
+        dx = scene_pos.x() - cx
+        dy = scene_pos.y() - cy
+        dist_l = abs(scene_pos.x() - r.left())
+        dist_r = abs(scene_pos.x() - r.right())
+        dist_t = abs(scene_pos.y() - r.top())
+        dist_b = abs(scene_pos.y() - r.bottom())
+        if not r.contains(scene_pos):
+            if abs(dx) >= abs(dy):
+                return "right" if dx >= 0 else "left"
+            return "bottom" if dy >= 0 else "top"
+        return min(
+            (dist_l, "left"),
+            (dist_r, "right"),
+            (dist_t, "top"),
+            (dist_b, "bottom"),
+            key=lambda t: t[0],
+        )[1]
+
+    def preview_on_side(self, side: str) -> None:
+        """Move this ellipse onto `side` without destroying PortItems mid-drag."""
+        peers = (
+            self.card._out_ports if self.direction == "out" else self.card._in_ports
+        )
+        same = [
+            p
+            for p in peers
+            if p is not self
+            and self.card.port_side_for(p.service, self.direction) == side
+        ]
+        index = len(same)
+        self.setPos(self.card._place_on_side(side, index, index + 1))
+        self.side = side
+        self._pending_side = side
+        for e in list(self.card._edges):
+            if hasattr(e, "update_path"):
+                e.update_path()
+
     def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if (
-            event.button() == Qt.MouseButton.LeftButton
-            and self.direction == "out"
-            and self.card.graph is not None
-        ):
-            self.card.graph.begin_wire(self)
+        if event.button() == Qt.MouseButton.LeftButton and self.card.graph is not None:
+            self._home_pos = QPointF(self.pos())
+            self._origin_side = self.side
+            self._pending_side = None
+            ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            # Out + Ctrl → 拉线；否则拖动改边（与调节线同一套 view 级拖动）
+            if self.direction == "out" and ctrl:
+                self.card.graph.begin_wire(self)
+            else:
+                self.card.graph.begin_port_relocate(self)
             event.accept()
             return
         super().mousePressEvent(event)
+
+    def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self.card.graph is None:
+            return
+        menu = QMenu()
+        menu.addAction(f"{short_service(self.service)} — 移到：").setEnabled(False)
+        for s in _PORT_SIDES:
+            act = menu.addAction(f"  {_SIDE_LABEL[s]}侧")
+            act.setData(s)
+            if s == self.side:
+                act.setCheckable(True)
+                act.setChecked(True)
+        chosen = menu.exec(event.screenPos())
+        if chosen is not None and chosen.data():
+            self.card.graph.set_single_port_side(self, str(chosen.data()))
+        event.accept()
 
 
 class ProcessCard(QGraphicsItem):
@@ -242,6 +322,7 @@ class ProcessCard(QGraphicsItem):
         kind: str = "process",
         label: str = "",
         compute_domain: str = "ap_linux",
+        port_sides: dict[str, str] | None = None,
     ) -> None:
         super().__init__()
         self.process_name = name
@@ -250,6 +331,12 @@ class ProcessCard(QGraphicsItem):
         self.graph = graph
         self.out_side = _norm_side(out_side, "right")
         self.in_side = _norm_side(in_side, "left")
+        # short_service → side (overrides default out_side/in_side per port)
+        self.port_sides: dict[str, str] = {
+            short_service(k): _norm_side(v, self.out_side)
+            for k, v in (port_sides or {}).items()
+            if str(v).strip()
+        }
         self.kind = kind or "process"
         self.label = label or ""
         self.compute_domain = compute_domain or "ap_linux"
@@ -328,6 +415,12 @@ class ProcessCard(QGraphicsItem):
         for e in self._edges:
             e.update_path()
 
+    def port_side_for(self, service: str, direction: str) -> str:
+        key = short_service(service)
+        if key in self.port_sides:
+            return _norm_side(self.port_sides[key], self.out_side)
+        return self.out_side if direction == "out" else self.in_side
+
     def set_port_sides(self, *, out_side: str | None = None, in_side: str | None = None) -> None:
         if out_side is not None:
             self.out_side = _norm_side(out_side, self.out_side)
@@ -336,8 +429,9 @@ class ProcessCard(QGraphicsItem):
         self._rebuild_ports()
         self.prepareGeometryChange()
         self.update()
-        for e in self._edges:
-            e.update_path()
+        for e in list(self._edges):
+            if hasattr(e, "update_path"):
+                e.update_path()
 
     def _compute_height(self) -> float:
         # MCU/车身：紧凑块放大（宽×1.5 / 高×3），仍不展示信号端口
@@ -376,16 +470,27 @@ class ProcessCard(QGraphicsItem):
         if self.is_external():
             return
 
+        from collections import defaultdict
+
         outs = self._visible_provides()
         ins = self._visible_requires()
-        for i, svc in enumerate(outs):
-            port = PortItem(self, "out", svc, i)
-            port.setPos(self._place_on_side(self.out_side, i, len(outs)))
-            self._out_ports.append(port)
-        for i, svc in enumerate(ins):
-            port = PortItem(self, "in", svc, i)
-            port.setPos(self._place_on_side(self.in_side, i, len(ins)))
-            self._in_ports.append(port)
+        out_by_side: dict[str, list[str]] = defaultdict(list)
+        in_by_side: dict[str, list[str]] = defaultdict(list)
+        for svc in outs:
+            out_by_side[self.port_side_for(svc, "out")].append(svc)
+        for svc in ins:
+            in_by_side[self.port_side_for(svc, "in")].append(svc)
+
+        for side, svcs in out_by_side.items():
+            for i, svc in enumerate(svcs):
+                port = PortItem(self, "out", svc, i, side=side)
+                port.setPos(self._place_on_side(side, i, len(svcs)))
+                self._out_ports.append(port)
+        for side, svcs in in_by_side.items():
+            for i, svc in enumerate(svcs):
+                port = PortItem(self, "in", svc, i, side=side)
+                port.setPos(self._place_on_side(side, i, len(svcs)))
+                self._in_ports.append(port)
 
     def out_port_for_service(self, service: str) -> PortItem | None:
         key = short_service(service)
@@ -505,40 +610,31 @@ class ProcessCard(QGraphicsItem):
             return
 
         y = self.HEADER
-        out_hint = _SIDE_LABEL.get(self.out_side, self.out_side)
-        in_hint = _SIDE_LABEL.get(self.in_side, self.in_side)
         outs = self._visible_provides()
         ins = self._visible_requires()
-        # 已连线：Out 绿 / In 橙；未连线：红
+        # 颜色 = 方向（与连线无关）；未连在行尾标 !
         out_head = QColor("#145a32") if self._dimmed else QColor("#00e676")
         out_ok = QColor("#1e8449") if self._dimmed else QColor("#69f0ae")
         in_head = QColor("#6e2c00") if self._dimmed else QColor("#ff9100")
         in_ok = QColor("#935116") if self._dimmed else QColor("#ffb74d")
-        unlinked = QColor("#7b241c") if self._dimmed else QColor("#e74c3c")
         painter.setPen(out_head)
-        painter.drawText(8, y + 12, f"● Out →{out_hint}")
+        painter.drawText(8, y + 12, "● Out（绿）· 拖改边 / Ctrl拖拉线")
         y += self.LINE
-        if outs:
-            for p in outs:
-                painter.setPen(out_ok if self.is_port_linked("out", p) else unlinked)
-                painter.drawText(14, y + 12, short_service(p))
-                y += self.LINE
-        else:
-            painter.setPen(QColor("#566573"))
-            painter.drawText(14, y + 12, "(none)")
+        for svc in outs:
+            linked = self.is_port_linked("out", svc)
+            painter.setPen(out_ok)
+            mark = "" if linked else " !"
+            painter.drawText(16, y + 12, f"{short_service(svc)}{mark}")
             y += self.LINE
-
         painter.setPen(in_head)
-        painter.drawText(8, y + 12, f"■ In →{in_hint}")
+        painter.drawText(8, y + 12, "■ In（橙）· 拖动改边")
         y += self.LINE
-        if ins:
-            for req in ins:
-                painter.setPen(in_ok if self.is_port_linked("in", req) else unlinked)
-                painter.drawText(14, y + 12, short_service(req))
-                y += self.LINE
-        else:
-            painter.setPen(QColor("#566573"))
-            painter.drawText(14, y + 12, "(none)")
+        for svc in ins:
+            linked = self.is_port_linked("in", svc)
+            painter.setPen(in_ok)
+            mark = "" if linked else " !"
+            painter.drawText(16, y + 12, f"{short_service(svc)}{mark}")
+            y += self.LINE
 
     def itemChange(self, change, value):  # type: ignore[no-untyped-def]
         if not _qt_alive(self):
@@ -561,6 +657,15 @@ class ProcessCard(QGraphicsItem):
                 if _qt_alive(p):
                     p._apply_brush()
         return super().itemChange(change, value)
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self.graph is not None
+            and self.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable
+        ):
+            self.graph.begin_card_drag(self)
+        super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().mouseReleaseEvent(event)
@@ -741,8 +846,20 @@ class EdgeCurve(QGraphicsPathItem):
         else:
             spread = 0.0
         dist = max(48.0, 0.25 * math.hypot(p3.x() - p0.x(), p3.y() - p0.y()))
-        p1 = self._leave_point(p0, self.src.out_side, dist, spread)
-        p2 = self._approach_point(p3, self.dst.in_side, dist, spread)
+        src_port = self.src.out_port_for_service(self.service)
+        dst_port = self.dst.in_port_for_service(self.service)
+        src_side = (
+            src_port.side
+            if src_port is not None
+            else self.src.port_side_for(self.service, "out")
+        )
+        dst_side = (
+            dst_port.side
+            if dst_port is not None
+            else self.dst.port_side_for(self.service, "in")
+        )
+        p1 = self._leave_point(p0, src_side, dist, spread)
+        p2 = self._approach_point(p3, dst_side, dist, spread)
 
         route = self.flow.get("route") if isinstance(self.flow.get("route"), dict) else {}
         mid_dx = float(route.get("mid_dx") or 0.0)
@@ -792,8 +909,20 @@ class EdgeCurve(QGraphicsPathItem):
         else:
             spread = 0.0
         dist = max(48.0, 0.25 * math.hypot(p3.x() - p0.x(), p3.y() - p0.y()))
-        p1 = self._leave_point(p0, self.src.out_side, dist, spread)
-        p2 = self._approach_point(p3, self.dst.in_side, dist, spread)
+        src_port = self.src.out_port_for_service(self.service)
+        dst_port = self.dst.in_port_for_service(self.service)
+        src_side = (
+            src_port.side
+            if src_port is not None
+            else self.src.port_side_for(self.service, "out")
+        )
+        dst_side = (
+            dst_port.side
+            if dst_port is not None
+            else self.dst.port_side_for(self.service, "in")
+        )
+        p1 = self._leave_point(p0, src_side, dist, spread)
+        p2 = self._approach_point(p3, dst_side, dist, spread)
         default_mid = QPointF((p1.x() + p2.x()) / 2.0, (p1.y() + p2.y()) / 2.0)
         self.flow["route"] = {
             "mid_dx": round(scene_pos.x() - default_mid.x(), 1),
@@ -1102,6 +1231,10 @@ class ZoomGraphicsView(QGraphicsView):
         super().wheelEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self._graph._reloc_port is not None:
+            self._graph.update_port_relocate(self.mapToScene(event.position().toPoint()))
+            event.accept()
+            return
         if self._graph._wire_src is not None:
             self._graph.update_wire_preview(self.mapToScene(event.position().toPoint()))
             event.accept()
@@ -1109,7 +1242,11 @@ class ZoomGraphicsView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self._graph._wire_src is None and event.button() == Qt.MouseButton.LeftButton:
+        if (
+            self._graph._wire_src is None
+            and self._graph._reloc_port is None
+            and event.button() == Qt.MouseButton.LeftButton
+        ):
             item = self.itemAt(event.position().toPoint())
             cur: QGraphicsItem | None = item
             interactive = False
@@ -1129,17 +1266,22 @@ class ZoomGraphicsView(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self._graph._wire_src is not None and event.button() == Qt.MouseButton.LeftButton:
-            self._graph.finish_wire(self.mapToScene(event.position().toPoint()))
-            event.accept()
-            return
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self._graph._reloc_port is not None:
+                self._graph.finish_port_relocate()
+                event.accept()
+                return
+            if self._graph._wire_src is not None:
+                self._graph.finish_wire(self.mapToScene(event.position().toPoint()))
+                event.accept()
+                return
         super().mouseReleaseEvent(event)
-        if self._graph._wire_src is None:
+        if self._graph._wire_src is None and self._graph._reloc_port is None:
             self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
 
 
 class PortEditDialog(QDialog):
-    """Double-click block: add/remove In/Out ports (Simulink-like)."""
+    """Double-click block: add/remove In/Out ports (Simulink-like). Side layout = drag ports on canvas."""
 
     def __init__(
         self,
@@ -1148,9 +1290,6 @@ class PortEditDialog(QDialog):
         requires: list[str],
         candidates: list[str],
         parent: QWidget | None = None,
-        *,
-        out_side: str = "right",
-        in_side: str = "left",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"编辑端口 — {process}")
@@ -1171,21 +1310,6 @@ class PortEditDialog(QDialog):
             self._svc.addItem("services.semantic.")
 
         layout = QVBoxLayout(self)
-        side_row = QHBoxLayout()
-        self._out_side = QComboBox()
-        self._in_side = QComboBox()
-        for s in _PORT_SIDES:
-            self._out_side.addItem(f"Out 在{_SIDE_LABEL[s]}侧", s)
-            self._in_side.addItem(f"In 在{_SIDE_LABEL[s]}侧", s)
-        self._out_side.setCurrentIndex(
-            max(0, _PORT_SIDES.index(_norm_side(out_side, "right")))
-        )
-        self._in_side.setCurrentIndex(
-            max(0, _PORT_SIDES.index(_norm_side(in_side, "left")))
-        )
-        side_row.addWidget(self._out_side)
-        side_row.addWidget(self._in_side)
-        layout.addLayout(side_row)
         layout.addWidget(QLabel("Out (provides)"))
         layout.addWidget(self._provides)
         layout.addWidget(QLabel("In (requires)"))
@@ -1262,12 +1386,10 @@ class PortEditDialog(QDialog):
                     dst.addItem(item.text())
                 return
 
-    def result_ports(self) -> tuple[list[str], list[str], str, str]:
+    def result_ports(self) -> tuple[list[str], list[str]]:
         provides = [self._provides.item(i).text() for i in range(self._provides.count())]
         requires = [self._requires.item(i).text() for i in range(self._requires.count())]
-        out_side = str(self._out_side.currentData() or "right")
-        in_side = str(self._in_side.currentData() or "left")
-        return provides, requires, out_side, in_side
+        return provides, requires
 
 
 class ImportPortsDialog(QDialog):
@@ -1415,10 +1537,17 @@ class WiringGraphView(QWidget):
         self._peers: list[McuPeerLink] = []
         self._wire_src: PortItem | None = None
         self._wire_line: QGraphicsLineItem | None = None
+        self._reloc_port: PortItem | None = None
+        self._reloc_card_was_movable = True
         # process_name -> (x, y); survives rebuild so edits don't reset layout
         self._layout_pos: dict[str, tuple[float, float]] = {}
         # 打开项目时 Tab 可能尚未显示，viewport=0 → fitInView 无效；显示后再 fit
         self._need_fit_on_show = False
+        self._undo_stack: list[dict[str, Any]] = []
+        self._redo_stack: list[dict[str, Any]] = []
+        self._undo_suppress = False
+        self._drag_undo_armed = False
+        self._undo_limit = 40
 
         self._scene = QGraphicsScene(self)
         self._view = ZoomGraphicsView(self._scene, self)
@@ -1437,9 +1566,9 @@ class WiringGraphView(QWidget):
         self._search_hits.setVisible(False)
 
         self._legend = QLabel(
-            "●绿=Out已连 · ■橙=In已连 · 红=未连线（文字与端口圆点）\n"
-            "MCU/车身=金框特殊节点，无端口，只与 gateway 一条边界虚线\n"
-            "部署:xxx=compute_domain · Verify 结果见右侧「Lineage」页"
+            "●绿=Out · ■橙=In（颜色=方向）· 行尾 ! =未连\n"
+            "拖绿色/橙色圆点改边（松手吸附）；Out 用 Ctrl+拖拉线；右键也可改边\n"
+            "MCU/车身=金框特殊节点 · Ctrl+Z/Y 撤销重做 · Verify 见「Lineage」"
         )
         self._legend.setWordWrap(True)
         self._legend.setStyleSheet("color: #a9cfc0; font-size: 11px;")
@@ -1493,6 +1622,7 @@ class WiringGraphView(QWidget):
         sc_back = QShortcut(QKeySequence(Qt.Key.Key_Backspace), self)
         sc_back.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         sc_back.activated.connect(self._delete_selection)
+        # Undo/Redo: ApplicationShortcut in MainWindow「编辑」菜单（Ctrl+Z / Ctrl+Y）
 
     def reset_zoom(self) -> None:
         self._view.reset_to_default_zoom()
@@ -1509,6 +1639,63 @@ class WiringGraphView(QWidget):
 
     def delete_selection(self) -> None:
         self._delete_selection()
+
+    def _push_undo(self) -> None:
+        if self._undo_suppress or self._session is None:
+            return
+        self.flush_canvas()
+        self._undo_stack.append(copy.deepcopy(self._session.wiring))
+        if len(self._undo_stack) > self._undo_limit:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+
+    def begin_card_drag(self, card: ProcessCard) -> None:
+        """Arm one undo snapshot per drag gesture."""
+        if self._drag_undo_armed:
+            return
+        self._push_undo()
+        self._drag_undo_armed = True
+
+    def undo(self) -> None:
+        if not self._undo_stack or self._session is None:
+            return
+        self.flush_canvas()
+        self._redo_stack.append(copy.deepcopy(self._session.wiring))
+        snap = self._undo_stack.pop()
+        self._apply_wiring_snapshot(snap)
+        self.changed.emit()
+
+    def redo(self) -> None:
+        if not self._redo_stack or self._session is None:
+            return
+        self.flush_canvas()
+        self._undo_stack.append(copy.deepcopy(self._session.wiring))
+        snap = self._redo_stack.pop()
+        self._apply_wiring_snapshot(snap)
+        self.changed.emit()
+
+    def _apply_wiring_snapshot(self, snap: dict[str, Any]) -> None:
+        assert self._session is not None
+        self._undo_suppress = True
+        try:
+            self._session.wiring = snap
+            self._session.dirty_wiring = True
+            # refresh cached positions from canvas
+            self._layout_pos.clear()
+            nodes = (snap.get("canvas") or {}).get("nodes") or {}
+            if isinstance(nodes, dict):
+                for name, ui in nodes.items():
+                    if isinstance(ui, dict) and "x" in ui and "y" in ui:
+                        self._layout_pos[str(name)] = (float(ui["x"]), float(ui["y"]))
+            self.rebuild(fit_view=False)
+        finally:
+            self._undo_suppress = False
+            self._drag_undo_armed = False
+
+    def clear_undo_history(self) -> None:
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._drag_undo_armed = False
 
     def showEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().showEvent(event)
@@ -1555,6 +1742,7 @@ class WiringGraphView(QWidget):
     def set_session(self, session: ProjectSession | None) -> None:
         self._session = session
         self._layout_pos.clear()
+        self.clear_undo_history()
         self.rebuild(fit_view=True)
 
     def note_card_pos_live(self, card: ProcessCard) -> None:
@@ -1577,11 +1765,13 @@ class WiringGraphView(QWidget):
                 y=round(p.y(), 1),
                 out_side=card.out_side,
                 in_side=card.in_side,
+                port_sides=dict(card.port_sides) if card.port_sides else None,
                 kind=card.kind if card.kind != "process" else None,
                 label=card.label or None,
             )
             self.changed.emit()
         self._refresh_scene_rect()
+        self._drag_undo_armed = False
 
     def remember_card_pos(self, card: ProcessCard) -> None:
         """兼容旧调用：等价于松开时落盘。"""
@@ -1737,6 +1927,7 @@ class WiringGraphView(QWidget):
     # --- wiring drag ---
 
     def begin_wire(self, src_port: PortItem) -> None:
+        self.cancel_port_relocate()
         self.cancel_wire()
         self._wire_src = src_port
         self._view.setDragMode(QGraphicsView.DragMode.NoDrag)
@@ -1774,6 +1965,7 @@ class WiringGraphView(QWidget):
             QMessageBox.information(self, "连线", "不能连到同一模块")
             return
 
+        self._push_undo()
         src_svc = canon_service(src.service)
         dst_svc = (target.service or "").strip()
         # Simulink-like: connection carries the source signal; In port name follows Out.
@@ -1808,7 +2000,68 @@ class WiringGraphView(QWidget):
             if self._wire_line.scene():
                 self._scene.removeItem(self._wire_line)
             self._wire_line = None
+        if self._reloc_port is None:
+            self._view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+
+    # --- port side relocate (same view-level path as wire / route handle) ---
+
+    def begin_port_relocate(self, port: PortItem) -> None:
+        self.cancel_wire()
+        self.cancel_port_relocate()
+        self._reloc_port = port
+        port._home_pos = QPointF(port.pos())
+        port._origin_side = port.side
+        port._pending_side = None
+        self._reloc_card_was_movable = bool(
+            port.card.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable
+        )
+        port.card.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        self._view.setDragMode(QGraphicsView.DragMode.NoDrag)
+
+    def update_port_relocate(self, scene_pos: QPointF) -> None:
+        port = self._reloc_port
+        if port is None or not _qt_alive(port):
+            return
+        port.preview_on_side(port.nearest_card_side(scene_pos))
+
+    def finish_port_relocate(self) -> None:
+        port = self._reloc_port
+        if port is None:
+            self.cancel_port_relocate()
+            return
+        pending = port._pending_side
+        origin = port._origin_side
+        home = QPointF(port._home_pos)
+        self._reloc_port = None
+        if self._reloc_card_was_movable and _qt_alive(port.card):
+            port.card.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self._view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        if not _qt_alive(port):
+            return
+        if pending and pending != origin:
+            self.set_single_port_side(port, pending)
+        else:
+            port.setPos(home)
+            port.side = origin
+            port._pending_side = None
+            for e in list(port.card._edges):
+                if hasattr(e, "update_path"):
+                    e.update_path()
+
+    def cancel_port_relocate(self) -> None:
+        port = self._reloc_port
+        self._reloc_port = None
+        if port is not None and _qt_alive(port):
+            port.setPos(port._home_pos)
+            port.side = port._origin_side
+            port._pending_side = None
+            if self._reloc_card_was_movable and _qt_alive(port.card):
+                port.card.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+            for e in list(port.card._edges):
+                if hasattr(e, "update_path"):
+                    e.update_path()
+        if self._wire_src is None:
+            self._view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
 
     # --- context menus / edit ---
 
@@ -2119,6 +2372,7 @@ class WiringGraphView(QWidget):
     def _remove_edge(self, edge: EdgeCurve) -> None:
         if not self._session:
             return
+        self._push_undo()
         target = edge.flow
         flows = self._session.dataflows()
         new_flows = [f for f in flows if f is not target]
@@ -2163,12 +2417,8 @@ class WiringGraphView(QWidget):
             if chosen is act_del:
                 self.delete_node(card)
             return
-        act_edit = menu.addAction("编辑端口 / 方位…")
+        act_edit = menu.addAction("编辑端口…")
         act_import = menu.addAction("从此模块导入 hpp…")
-        side_menu = menu.addMenu("快捷：端口方位")
-        act_in_bottom = side_menu.addAction("In 放到下边（适合 gateway/planning）")
-        act_out_bottom = side_menu.addAction("Out 放到下边")
-        act_default = side_menu.addAction("恢复默认（Out 右 / In 左）")
         menu.addSeparator()
         act_del = menu.addAction("删除模块")
         chosen = menu.exec(global_pos)
@@ -2176,30 +2426,26 @@ class WiringGraphView(QWidget):
             self.edit_ports(card)
         elif chosen is act_import:
             self.import_hpp(default_process=card.process_name)
-        elif chosen is act_in_bottom:
-            self._set_card_sides(card, in_side="bottom")
-        elif chosen is act_out_bottom:
-            self._set_card_sides(card, out_side="bottom")
-        elif chosen is act_default:
-            self._set_card_sides(card, out_side="right", in_side="left")
         elif chosen is act_del:
             self.delete_node(card)
 
-    def _set_card_sides(
-        self,
-        card: ProcessCard,
-        *,
-        out_side: str | None = None,
-        in_side: str | None = None,
-    ) -> None:
+    def set_single_port_side(self, port: PortItem, side: str) -> None:
+        """Move one Out/In port (e.g. EgoMotion only) to another card edge."""
         if not self._session:
             return
-        if out_side is None:
-            out_side = card.out_side
-        if in_side is None:
-            in_side = card.in_side
-        self._session.set_node_ui(card.process_name, out_side=out_side, in_side=in_side)
-        card.set_port_sides(out_side=out_side, in_side=in_side)
+        self._push_undo()
+        card = port.card
+        key = short_service(port.service)
+        side_n = _norm_side(side, port.side)
+        card.port_sides[key] = side_n
+        # persist full map
+        self._session.set_node_ui(card.process_name, port_sides=dict(card.port_sides))
+        card._rebuild_ports()
+        card.prepareGeometryChange()
+        card.update()
+        for e in list(card._edges):
+            if hasattr(e, "update_path"):
+                e.update_path()
         self.changed.emit()
 
     def add_node(self) -> None:
@@ -2214,6 +2460,7 @@ class WiringGraphView(QWidget):
         if name in self._nodes:
             QMessageBox.warning(self, "添加模块", f"已存在：{name}")
             return
+        self._push_undo()
         self._session.upsert_deployment(name, compute_domain=domain, provides=[], requires=[])
         self.rebuild(fit_view=True)
         self.changed.emit()
@@ -2226,6 +2473,7 @@ class WiringGraphView(QWidget):
         if name in self._nodes:
             QMessageBox.information(self, "外部节点", f"已存在：{name}")
             return
+        self._push_undo()
         self._session.upsert_deployment(
             name,
             compute_domain="external",
@@ -2284,6 +2532,7 @@ class WiringGraphView(QWidget):
                 y=round(p.y(), 1),
                 out_side=card.out_side,
                 in_side=card.in_side,
+                port_sides=dict(card.port_sides) if card.port_sides else None,
                 kind=card.kind if card.kind != "process" else None,
                 label=card.label or None,
             )
@@ -2298,6 +2547,7 @@ class WiringGraphView(QWidget):
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
+        self._push_undo()
         self._session.remove_deployment(card.process_name)
         self.rebuild()
         self.changed.emit()
@@ -2337,16 +2587,12 @@ class WiringGraphView(QWidget):
             list(card.requires),
             self._port_candidates(card.process_name),
             self,
-            out_side=card.out_side,
-            in_side=card.in_side,
         )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        provides, requires, out_side, in_side = dlg.result_ports()
+        self._push_undo()
+        provides, requires = dlg.result_ports()
         self._session.set_ports(card.process_name, provides, requires)
-        self._session.set_node_ui(
-            card.process_name, out_side=out_side, in_side=in_side
-        )
         self.rebuild()
         self.changed.emit()
 
@@ -2553,6 +2799,7 @@ class WiringGraphView(QWidget):
             kind = str(ui.get("kind") or "")
             if is_external_node(kind=kind, process=name) and not kind:
                 kind = "external"
+            raw_ps = ui.get("port_sides") if isinstance(ui.get("port_sides"), dict) else {}
             card = ProcessCard(
                 name,
                 provides,
@@ -2565,6 +2812,7 @@ class WiringGraphView(QWidget):
                 kind=kind or "process",
                 label=str(ui.get("label") or ""),
                 compute_domain=str(d.get("compute_domain") or "ap_linux"),
+                port_sides={str(k): str(v) for k, v in raw_ps.items()},
             )
             self._scene.addItem(card)
             self._nodes[name] = card
