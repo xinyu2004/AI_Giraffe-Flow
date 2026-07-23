@@ -35,6 +35,8 @@ KNOWN_PROFILES = [
 
 # A 勾选 → C 子页显示（sm 并入 exec.yaml，勾 sm 也显示「执行」）
 PLATFORM_MODULE_KEYS = frozenset({"exec", "phm", "sm", "diag", "log", "ucm"})
+# compose 自动加减；禁止写进 req.apps 手改
+TAP_APP = "tools/iox_obs_tap"
 
 
 def _lines_to_list(text: str) -> list[str]:
@@ -43,6 +45,10 @@ def _lines_to_list(text: str) -> list[str]:
 
 def _list_to_lines(values: list | None) -> str:
     return "\n".join(str(x) for x in (values or []))
+
+
+def _strip_tap_apps(values: list | None) -> list[str]:
+    return [str(x).strip() for x in (values or []) if str(x).strip() and str(x).strip() != TAP_APP]
 
 
 class ReqEditor(QWidget):
@@ -93,13 +99,17 @@ class ReqEditor(QWidget):
         self._profile.currentIndexChanged.connect(self._on_profile_or_any)
         stage_f.addRow("profile", self._profile)
         self._live_en = QCheckBox("live_tap.enabled（iceoryx → Foxglove）")
+        self._live_en.setToolTip(
+            "开启后 Verify/compile_sil 自动加入 tools/iox_obs_tap；"
+            "run_sil 自动接 Foxglove WS。勿写入高级 apps。"
+        )
         self._live_en.toggled.connect(self._on_profile_or_any)
         self._live_svcs = QPlainTextEdit()
         self._live_svcs.setPlaceholderText(
             "live 白名单，每行一个 semantic 服务（如 EgoMotion / Trajectory）"
         )
         self._live_svcs.setMaximumHeight(70)
-        self._live_svcs.textChanged.connect(self._on_any)
+        self._live_svcs.textChanged.connect(self._on_profile_or_any)
         self._record_mode = QComboBox()
         self._record_mode.addItems(["minimal", "sampled", "full", "off"])
         self._record_mode.currentTextChanged.connect(self._on_profile_or_any)
@@ -200,7 +210,10 @@ class ReqEditor(QWidget):
         self._caps.setMaximumHeight(70)
         self._caps.textChanged.connect(self._on_any)
         adv_l.addWidget(self._caps)
-        apps_hint = QLabel("apps：SIL/参考进程列表（live tap 由 profile 自动加减）。")
+        apps_hint = QLabel(
+            "apps：业务/参考进程列表。"
+            f"勿手写 {TAP_APP}（由 live_tap 在 compose 时自动加减）。"
+        )
         apps_hint.setWordWrap(True)
         apps_hint.setStyleSheet("color:#666; font-size:11px;")
         adv_l.addWidget(apps_hint)
@@ -270,7 +283,7 @@ class ReqEditor(QWidget):
             self._record_mode.setCurrentText(str(rec or "minimal"))
             self._record_svcs.clear()
         self._trace.setCurrentText(str(obs.get("trace_export") or "on"))
-        self._apps.setPlainText(_list_to_lines(req.get("apps")))
+        self._apps.setPlainText(_list_to_lines(_strip_tap_apps(req.get("apps"))))
 
         acc = req.get("acceptance") or {}
         if isinstance(acc, dict):
@@ -308,35 +321,42 @@ class ReqEditor(QWidget):
         release = str(self._profile.currentData() or "") == "production-release"
         live_on = self._live_en.isChecked() and not release
         record_off = self._record_mode.currentText().strip() == "off"
+        live_svcs = _lines_to_list(self._live_svcs.toPlainText())
 
         self._live_en.setEnabled(not release)
         self._live_svcs.setEnabled(live_on)
-        # mode=off → 灰掉白名单；release 下 compose 视 record/trace 为 off，一并灰掉
         self._record_mode.setEnabled(not release)
         self._record_svcs.setEnabled(not release and not record_off)
         self._trace.setEnabled(not release)
 
         if release:
             self._obs_hint.setText(
-                "production-release：live_tap / record / trace_export 强制关闭（灰调不可改）；"
-                "不编 iox_obs_tap。bindings（含 dds）仍是产品栈，不会被本剖面自动去掉。"
+                "production-release：live/record/trace 灰调；不编 iox_obs_tap；"
+                "run_sil 不起 Foxglove。bindings（含 dds）仍保留。"
+                "主路径：compile_sil → run_sil。"
             )
             self._obs_hint.setStyleSheet("color:#a04000; font-size:11px;")
-        elif record_off or not live_on:
-            bits = []
-            if not live_on:
-                bits.append("live 关 → services 灰调")
-            if record_off:
-                bits.append("record.mode=off → services 灰调")
+        elif live_on and not live_svcs:
             self._obs_hint.setText(
-                "；".join(bits) + "。"
-                "live / record 均为 semantic 服务白名单。"
+                "live 已开但白名单为空 → Verify 将失败。请填 live_tap.services。"
+                "主路径：compile_sil → run_sil。"
+            )
+            self._obs_hint.setStyleSheet("color:#a04000; font-size:11px;")
+        elif live_on:
+            self._obs_hint.setText(
+                f"将编入 {TAP_APP}；run_sil 自动接 Foxglove。"
+                "勿写入高级 apps。主路径：compile_sil → run_sil。"
             )
             self._obs_hint.setStyleSheet("color:#666; font-size:11px;")
         else:
+            bits = []
+            if not live_on:
+                bits.append("live 关 → 不编 tap / run 不起 WS")
+            if record_off:
+                bits.append("record.mode=off → services 灰调")
             self._obs_hint.setText(
-                "live / record 均为 semantic 服务白名单。"
-                "vehicle-debug + live 开 → compose 自动加入 tools/iox_obs_tap。"
+                ("；".join(bits) + "。" if bits else "")
+                + "主路径：gf-config → compile_sil → run_sil。"
             )
             self._obs_hint.setStyleSheet("color:#666; font-size:11px;")
 
@@ -376,7 +396,13 @@ class ReqEditor(QWidget):
             },
             "trace_export": self._trace.currentText().strip() or "on",
         }
-        req["apps"] = _lines_to_list(self._apps.toPlainText())
+        req["apps"] = _strip_tap_apps(_lines_to_list(self._apps.toPlainText()))
+        # keep editor text clean if user pasted tap
+        cleaned = _list_to_lines(req["apps"])
+        if self._apps.toPlainText().strip() != cleaned:
+            self._loading = True
+            self._apps.setPlainText(cleaned)
+            self._loading = False
         prev_acc = req.get("acceptance") if isinstance(req.get("acceptance"), dict) else {}
         acceptance: dict = {
             "description": self._acc_desc.text().strip(),

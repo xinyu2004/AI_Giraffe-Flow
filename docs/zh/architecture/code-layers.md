@@ -53,7 +53,7 @@ Giraffe Flow 板端与工具链按三层分工，避免「业务改中间件、O
 `afc_with_uss` 一键路径（生成物落在**本项目**下）：
 
 ```bash
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
 # → projects/oem_a/afc_with_uss/generated/
 ```
 
@@ -84,7 +84,7 @@ bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
 - [`apps/simulators/uss_feed/`](../../apps/simulators/uss_feed/) — 发布 `UssZones`
 - [`apps/demo_pipeline/`](../../apps/demo_pipeline/) — 订阅消费
 
-项目侧脚本（手写、可上传）：[`projects/oem_a/afc_with_uss/scripts/smoke_sil.sh`](../../projects/oem_a/afc_with_uss/scripts/smoke_sil.sh)（另有 `compile_sil` / `run_sil` / `compile_hil`）。
+项目侧脚本（手写、可上传）：[`scripts/verify/oem_a_afc_with_uss/smoke_sil.sh`](../../scripts/verify/oem_a_afc_with_uss/smoke_sil.sh)（另有 `compile_sil` / `run_sil` / `compile_hil`）。
 
 ---
 

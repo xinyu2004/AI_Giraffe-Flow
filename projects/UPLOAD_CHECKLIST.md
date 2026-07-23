@@ -35,7 +35,7 @@ cd AI_Giraffe-Flow
 python3 -m venv .venv && source .venv/bin/activate   # 需要 Python ≥ 3.10
 pip install -e "tools/codegen[dev]"
 bash scripts/bootstrap_deps.sh                       # 拉 iceoryx + 源码编 attr/acl
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
 ```
 
 只要工具链：`cmake`、`g++`、`git`、`make`、`curl`（见 `scripts/bootstrap_deps.sh --check`）。

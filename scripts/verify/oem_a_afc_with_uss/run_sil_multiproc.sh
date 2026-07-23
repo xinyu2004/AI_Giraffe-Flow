@@ -1,22 +1,14 @@
 #!/usr/bin/env bash
-# SIL multiproc: RouDi + gateway + fcm + uss + planning (iceoryx main chain).
-# Gateway exits after N Trajectory samples (closes the loop).
-# X-track: GF_PLATFORM_DIR → exec Offer/Running + phm Alive；planning 可故障注入。
+# Verify: finite multiproc trajectory + exec/phm assertions (not product path).
+# Product run: projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #
 # Usage:
-#   bash projects/oem_a/afc_with_uss/scripts/run_sil_multiproc.sh
-#
-# Env:
-#   GF_BUILD_DIR         default: <repo>/build
-#   GF_MP_TRAJ_COUNT     Trajectory samples before gateway exits (default 5)
-#   GF_MP_TIMEOUT_SEC    overall timeout (default 45)
-#   GF_PLATFORM_DIR      default: <project>/platform  (also accepts project root)
-#   GF_PHM_FAULT_MS      planning skips Alive for N ms (default 500); 0=off
+#   bash scripts/verify/oem_a_afc_with_uss/run_sil_multiproc.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=_common.sh
-source "${SCRIPT_DIR}/_common.sh"
+# shellcheck source=_verify_common.sh
+source "${SCRIPT_DIR}/_verify_common.sh"
 
 gf_project_env
 
@@ -25,7 +17,6 @@ BUILD="${GF_BUILD_DIR:-${BUILD_SIL}}"
 TRAJ_COUNT="${GF_MP_TRAJ_COUNT:-15}"
 TIMEOUT_SEC="${GF_MP_TIMEOUT_SEC:-60}"
 export GF_PLATFORM_DIR="${GF_PLATFORM_DIR:-${PROJECT_DIR}/platform}"
-# Default fault window long enough to DeadlineMissed (phm timeout 300ms) then recover
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-400}"
 
 export LD_LIBRARY_PATH="${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
@@ -79,13 +70,11 @@ echo "[run_sil_multiproc] fcm / uss / planning ..."
 FCM_PID=$!
 "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
 USS_PID=$!
-# fault inject only on planning
 GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS}" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
 PLAN_PID=$!
 sleep 0.5
 
 echo "[run_sil_multiproc] gateway (expect ${TRAJ_COUNT} Trajectory) ..."
-# gateway: no fault inject
 GF_PHM_FAULT_MS=0 "${GW}" "${TRAJ_COUNT}" >"${LOG_DIR}/gateway.log" 2>&1 &
 GW_PID=$!
 

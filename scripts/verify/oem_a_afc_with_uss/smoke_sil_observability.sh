@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
+# Verify (not product path).
 # O-track: multiproc SIL → session JSONL → tag → MCAP (+ optional foxglove describe)
 #
 # Usage:
-#   bash projects/oem_a/afc_with_uss/scripts/smoke_sil_observability.sh
+#   bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
 #   # or if already built:
-#   GF_SKIP_COMPILE=1 bash projects/oem_a/afc_with_uss/scripts/smoke_sil_observability.sh
+#   GF_SKIP_COMPILE=1 bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=_common.sh
-source "${SCRIPT_DIR}/_common.sh"
+# shellcheck source=_verify_common.sh
+source "${SCRIPT_DIR}/_verify_common.sh"
 
 gf_project_env
 
@@ -18,7 +19,7 @@ LOG_DIR="${GF_BUILD_DIR:-${BUILD_SIL}}/iox_multiproc_logs"
 mkdir -p "${OUT_DIR}"
 
 if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
-  bash "${SCRIPT_DIR}/compile_sil.sh"
+  bash "${PROJECT_SCRIPTS}/compile_sil.sh"
 fi
 
 # Short multiproc for CI-ish runs

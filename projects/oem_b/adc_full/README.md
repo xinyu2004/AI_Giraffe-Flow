@@ -24,7 +24,7 @@
 ## MCU 桌面联调（P1 · 无真 MCU）
 
 ```bash
-bash projects/oem_b/adc_full/scripts/smoke_mcu_desktop.sh
+bash scripts/verify/oem_b_adc_full/smoke_mcu_desktop.sh
 ```
 
 构建 `cp_ipc_peer`（模拟 CP）+ `mcu_cp_gateway`（AP），经 `cross_domain_ipc` Unix socket 互传 `IPC_CanInfo_*` / `TrajPlot` / `P_Parking`。
@@ -58,5 +58,5 @@ gf-codegen generate projects/oem_b/adc_full/gf.sor.json --out projects/oem_b/adc
 iceoryx 双进程 SIL 演示仍以 [`afc_with_uss`](../oem_a/afc_with_uss/) 为准（拓扑更小）：
 
 ```bash
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
 ```

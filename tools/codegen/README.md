@@ -25,7 +25,7 @@ bash scripts/bootstrap_deps.sh
 # CI / 无 GUI：compose
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out projects/oem_a/afc_with_uss/generated/
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
 pytest tools/codegen/tests -q
 ```
 

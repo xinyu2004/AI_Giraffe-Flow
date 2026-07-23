@@ -18,7 +18,7 @@
 ```bash
 pip install -e "tools/codegen[dev]"
 bash scripts/bootstrap_deps.sh
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh   # SIL 双进程
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh   # SIL 双进程
 gf-codegen compose --project projects/oem_b/adc_full/project.yaml
 bash ci/scripts/smoke.sh                               # 全量冒烟（含 adc compose）
 ```

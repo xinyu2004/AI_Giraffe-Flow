@@ -22,5 +22,5 @@ echo "${TAG} run_hil: P0 stub — board deploy/run not automated yet."
 echo "${TAG}   build dir : ${BUILD_HIL}"
 echo "${TAG}   next steps: copy binaries + middleware/.deps-prefix libs to board,"
 echo "${TAG}               start RouDi, then uss_feed / demo_pipeline (same as SIL)."
-echo "${TAG}   optional  : bash ${SCRIPT_DIR}/deploy_hil.sh  (also stub)"
+echo "${TAG}   optional  : bash ${ROOT}/scripts/verify/oem_a_afc_with_uss/deploy_hil.sh  (stub)"
 exit 0

@@ -273,7 +273,7 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 ```bash
 gf-config projects/oem_a/afc_with_uss/project.yaml   # 先把 A/B/C 配稳
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil_multiproc.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
 ```
 
 ---

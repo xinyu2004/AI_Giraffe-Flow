@@ -43,8 +43,8 @@ cmake -B build-minimal -DGF_BUILD_TESTS=ON -DGF_USE_GENERATED=OFF \
 # configure-only is enough to prove SKU fragment is consumed; full build needs iceoryx like default
 grep -q "desktop_minimal\|GF_APPS=demo_pipeline\|SKU desktop_minimal" <(cmake -B build-minimal -DGF_BUILD_TESTS=ON -DGF_USE_GENERATED=OFF -DGF_SKU_CMAKE="${ROOT}/cmake/profiles/desktop_minimal.cmake" 2>&1) || true
 
-echo "== project smoke_sil (afc_with_uss) =="
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh
+echo "== project smoke_sil verify (afc_with_uss dual-process) =="
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
 
 echo "== optional aarch64 link =="
 bash scripts/cross_link_smoke.sh

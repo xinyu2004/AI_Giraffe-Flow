@@ -24,7 +24,7 @@
 ```text
 projects/<oem>/<product>/
   project.yaml  req.yaml  oem/  interfaces/  integration/
-  scripts/         # 可选：smoke_sil / compile_hil …
+  scripts/         # 仅四入口：compile_sil|hil + run_sil|hil（验证 → scripts/verify/）
   reports/  [golden/]
 ```
 

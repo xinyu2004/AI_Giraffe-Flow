@@ -18,14 +18,18 @@ AI_Giraffe-Flow/
 
 ```text
 bash scripts/bootstrap_deps.sh
-cmake -B build && cmake --build build
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil.sh   # SIL: compose → generate → compile → RouDi
+# 产品主路径
+bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 
 # HIL（交叉）
 bash projects/oem_a/afc_with_uss/scripts/compile_hil.sh
 
-project → gf-config 保存 / python -m gf_codegen.compose → gf.sor.json → lint/lineage
-         → generate（types + Proxy/Skeleton）→ iceoryx demo
+# 验证
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
+
+project → gf-config 保存 / compose → gf.sor.json → lint/lineage
+         → generate → compile_sil / run_sil
 ```
 
 上传前见：[projects/UPLOAD_CHECKLIST.md](projects/UPLOAD_CHECKLIST.md)

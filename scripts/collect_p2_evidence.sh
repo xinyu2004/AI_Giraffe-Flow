@@ -33,9 +33,9 @@ fi
 
 if [[ "${GF_EVIDENCE_RUN_SMOKE:-0}" == "1" ]]; then
   echo "${TAG} smoke_sil_multiproc ..."
-  bash "${PROJ}/scripts/smoke_sil_multiproc.sh" | tee "${PACK}/smoke/multiproc.txt"
+  bash "${ROOT}/scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh" | tee "${PACK}/smoke/multiproc.txt"
   echo "${TAG} smoke_sil_observability ..."
-  GF_SKIP_COMPILE=1 bash "${PROJ}/scripts/smoke_sil_observability.sh" | tee "${PACK}/smoke/observability.txt"
+  GF_SKIP_COMPILE=1 bash "${ROOT}/scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh" | tee "${PACK}/smoke/observability.txt"
 fi
 
 if [[ -f "${OBS}/session.mcap" ]]; then

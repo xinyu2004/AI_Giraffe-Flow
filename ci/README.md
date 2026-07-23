@@ -2,7 +2,7 @@
 
 | Script | Purpose |
 |--------|---------|
-| [scripts/smoke.sh](scripts/smoke.sh) | bootstrap → pytest → compose(afc+adc) → cmake/ctest → smoke_sil → optional aarch64 link |
+| [scripts/smoke.sh](scripts/smoke.sh) | bootstrap → pytest → compose(afc+adc) → cmake/ctest → verify smoke_sil → optional aarch64 link |
 
 ```bash
 bash ci/scripts/smoke.sh

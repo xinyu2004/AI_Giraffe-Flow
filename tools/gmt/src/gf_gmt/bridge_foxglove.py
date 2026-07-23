@@ -366,46 +366,67 @@ def replay_jsonl_ws(jsonl: Path, host: str, port: int, *, speed: float = 1.0) ->
     print(f"  topics: {', '.join(topics)}", flush=True)
     print("  Studio → Open connection → Foxglove WebSocket", flush=True)
 
-    while True:
-        conn, addr = srv.accept()
-        print(f"[bridge-ws] client {addr}", flush=True)
-        state = SessionState()
-        try:
-            if not _ws_handshake(conn):
-                conn.close()
-                continue
-            _send_json(conn, server_info_payload())
-            state.advertise_topics(conn, topics)
-
-            # Wait until Studio subscribes (or timeout)
-            deadline = time.monotonic() + 30.0
-            while time.monotonic() < deadline and not state.subscriptions:
-                if not state.poll_client(conn):
-                    break
-                time.sleep(0.05)
-
-            t0 = int(rows[0].get("t_ns") or 0) if rows else 0
-            wall0 = time.monotonic()
-            for row in rows:
-                if not state.poll_client(conn):
-                    break
-                t_ns = int(row.get("t_ns") or 0)
-                delay = max(0.0, ((t_ns - t0) / 1e9) / max(speed, 0.01) - (time.monotonic() - wall0))
-                if delay > 0:
-                    time.sleep(min(delay, 0.5))
-                topic = str(row.get("topic") or "/gf/stub")
-                data = row.get("data", row)
-                state.publish(conn, topic, t_ns, data)
-            print("[bridge-ws] replay done; connection stays open (Ctrl+C to stop)", flush=True)
-            while state.poll_client(conn):
-                time.sleep(0.2)
-        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-            print(f"[bridge-ws] client gone: {exc}", flush=True)
-        finally:
+    try:
+        while True:
             try:
-                conn.close()
-            except OSError:
-                pass
+                conn, addr = srv.accept()
+            except KeyboardInterrupt:
+                raise
+            except OSError as exc:
+                print(f"[bridge-ws] accept error: {exc}", flush=True)
+                continue
+            print(f"[bridge-ws] client {addr}", flush=True)
+            state = SessionState()
+            try:
+                if not _ws_handshake(conn):
+                    conn.close()
+                    continue
+                _send_json(conn, server_info_payload())
+                state.advertise_topics(conn, topics)
+
+                # Wait until Studio subscribes (or timeout)
+                deadline = time.monotonic() + 30.0
+                while time.monotonic() < deadline and not state.subscriptions:
+                    if not state.poll_client(conn):
+                        break
+                    time.sleep(0.05)
+
+                t0 = int(rows[0].get("t_ns") or 0) if rows else 0
+                wall0 = time.monotonic()
+                for row in rows:
+                    if not state.poll_client(conn):
+                        break
+                    t_ns = int(row.get("t_ns") or 0)
+                    delay = max(
+                        0.0,
+                        ((t_ns - t0) / 1e9) / max(speed, 0.01)
+                        - (time.monotonic() - wall0),
+                    )
+                    if delay > 0:
+                        time.sleep(min(delay, 0.5))
+                    topic = str(row.get("topic") or "/gf/stub")
+                    data = row.get("data", row)
+                    state.publish(conn, topic, t_ns, data)
+                print(
+                    "[bridge-ws] replay done; connection stays open (Ctrl+C to stop)",
+                    flush=True,
+                )
+                while state.poll_client(conn):
+                    time.sleep(0.2)
+            except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+                print(f"[bridge-ws] client gone: {exc}", flush=True)
+            finally:
+                try:
+                    conn.close()
+                except OSError:
+                    pass
+    except KeyboardInterrupt:
+        print("\n[bridge-ws] stopped", flush=True)
+    finally:
+        try:
+            srv.close()
+        except OSError:
+            pass
 
 
 def live_stdin_ws(
@@ -414,79 +435,160 @@ def live_stdin_ws(
     *,
     stream: TextIO | None = None,
 ) -> None:
-    """Live: wait for Studio subscribe, stream NDJSON from stdin as binary Message Data."""
+    """Live NDJSON from stdin → Foxglove WS.
+
+    Always drains stdin (so tap never blocks). Studio may connect / reconnect anytime;
+    messages are published only while a client is connected and subscribed.
+    """
     inp = stream if stream is not None else sys.stdin
     srv = _listen(host, port)
     print(f"Foxglove WS (live stdin) ws://{host}:{port}", flush=True)
-    print("  Studio → Open connection → Foxglove WebSocket", flush=True)
-    print("  Waiting for client; messages flow after Studio subscribes …", flush=True)
+    print("  Studio → Open connection → Foxglove WebSocket (anytime)", flush=True)
+    print("  Main chain / tap keep running; connect Studio whenever ready.", flush=True)
 
-    while True:
-        conn, addr = srv.accept()
-        print(f"[bridge-ws-live] client {addr}", flush=True)
-        state = SessionState()
+    fd = -1
+    if hasattr(inp, "fileno"):
         try:
-            if not _ws_handshake(conn):
-                conn.close()
-                continue
-            _send_json(conn, server_info_payload("gf_gmt-bridge-live"))
-            state.advertise_topics(conn, ["/gf/EgoMotion", "/gf/Trajectory"])
-
+            fd = inp.fileno()
+        except (OSError, io.UnsupportedOperation):
             fd = -1
-            if hasattr(inp, "fileno"):
-                try:
-                    fd = inp.fileno()
-                except (OSError, io.UnsupportedOperation):
-                    fd = -1
 
-            buf = ""
-            published = 0
-            while True:
-                if not state.poll_client(conn):
-                    print("[bridge-ws-live] client closed", flush=True)
-                    break
+    conn: socket.socket | None = None
+    state: SessionState | None = None
+    buf = ""
+    published = 0
+    dropped = 0
+    stdin_eof = False
 
-                lines: list[str] = []
-                if fd >= 0:
-                    r, _, _ = select.select([fd], [], [], 0.05)
-                    if r:
-                        chunk = os_read_chunk(inp)
-                        if chunk == "" and not buf:
-                            print("[bridge-ws-live] stdin EOF", flush=True)
-                            break
-                        buf += chunk
-                        while "\n" in buf:
-                            line, buf = buf.split("\n", 1)
-                            lines.append(line)
-                else:
-                    line = inp.readline()
-                    if line == "":
-                        break
-                    lines.append(line.rstrip("\n"))
-                    time.sleep(0.01)
-
-                for line in lines:
-                    try:
-                        row = parse_ndjson_row(line)
-                    except json.JSONDecodeError as exc:
-                        print(f"[bridge-ws-live] bad json: {exc}", flush=True)
-                        continue
-                    if row is None:
-                        continue
-                    topic = str(row.get("topic") or "/gf/stub")
-                    t_ns = int(row.get("t_ns") or 0)
-                    data = row.get("data", row)
-                    n = state.publish(conn, topic, t_ns, data)
-                    published += n
-                    if published and published % 50 == 0:
-                        print(f"[bridge-ws-live] published {published} msgs", flush=True)
-        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-            print(f"[bridge-ws-live] client gone: {exc}", flush=True)
-        finally:
+    def _close_client() -> None:
+        nonlocal conn, state
+        if conn is not None:
             try:
                 conn.close()
             except OSError:
                 pass
+        conn = None
+        state = None
+
+    try:
+        while not stdin_eof or conn is not None:
+            rlist: list[Any] = [srv]
+            if fd >= 0 and not stdin_eof:
+                rlist.append(fd)
+            if conn is not None:
+                rlist.append(conn)
+
+            try:
+                ready, _, _ = select.select(rlist, [], [], 0.2)
+            except InterruptedError:
+                continue
+
+            # Accept Studio anytime (single client; new accept after disconnect)
+            if conn is None and srv in ready:
+                try:
+                    new_conn, addr = srv.accept()
+                except OSError as exc:
+                    print(f"[bridge-ws-live] accept error: {exc}", flush=True)
+                else:
+                    print(f"[bridge-ws-live] client {addr}", flush=True)
+                    new_state = SessionState()
+                    try:
+                        if not _ws_handshake(new_conn):
+                            new_conn.close()
+                        else:
+                            _send_json(new_conn, server_info_payload("gf_gmt-bridge-live"))
+                            # Seed common topics; others advertise on first publish
+                            new_state.advertise_topics(
+                                new_conn, ["/gf/EgoMotion", "/gf/Trajectory"]
+                            )
+                            conn = new_conn
+                            state = new_state
+                            print(
+                                "[bridge-ws-live] ready — subscribe topics in Studio",
+                                flush=True,
+                            )
+                    except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+                        print(f"[bridge-ws-live] handshake failed: {exc}", flush=True)
+                        try:
+                            new_conn.close()
+                        except OSError:
+                            pass
+
+            # Poll client control frames (subscribe / close)
+            if conn is not None and state is not None:
+                try:
+                    if not state.poll_client(conn):
+                        print(
+                            "[bridge-ws-live] client closed — waiting for reconnect",
+                            flush=True,
+                        )
+                        _close_client()
+                except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+                    print(f"[bridge-ws-live] client gone: {exc}", flush=True)
+                    _close_client()
+
+            # Always drain stdin so the tap pipe never backs up
+            lines: list[str] = []
+            if fd >= 0 and fd in ready:
+                chunk = os_read_chunk(inp)
+                if chunk == "":
+                    if not buf:
+                        stdin_eof = True
+                        print("[bridge-ws-live] stdin EOF", flush=True)
+                else:
+                    buf += chunk
+                    while "\n" in buf:
+                        line, buf = buf.split("\n", 1)
+                        lines.append(line)
+            elif fd < 0 and not stdin_eof:
+                # Non-selectable stream (tests): blocking readline with short idle
+                line = inp.readline()
+                if line == "":
+                    stdin_eof = True
+                else:
+                    lines.append(line.rstrip("\n"))
+
+            for line in lines:
+                try:
+                    row = parse_ndjson_row(line)
+                except json.JSONDecodeError as exc:
+                    print(f"[bridge-ws-live] bad json: {exc}", flush=True)
+                    continue
+                if row is None:
+                    continue
+                topic = str(row.get("topic") or "/gf/stub")
+                t_ns = int(row.get("t_ns") or 0)
+                data = row.get("data", row)
+                if conn is None or state is None:
+                    dropped += 1
+                    if dropped == 1 or dropped % 200 == 0:
+                        print(
+                            f"[bridge-ws-live] no Studio yet — drained {dropped} msgs "
+                            "(connect anytime)",
+                            flush=True,
+                        )
+                    continue
+                try:
+                    n = state.publish(conn, topic, t_ns, data)
+                except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+                    print(f"[bridge-ws-live] client gone: {exc}", flush=True)
+                    _close_client()
+                    dropped += 1
+                    continue
+                published += n
+                if published and published % 50 == 0:
+                    print(f"[bridge-ws-live] published {published} msgs", flush=True)
+
+            if stdin_eof and conn is None:
+                break
+    except KeyboardInterrupt:
+        print("\n[bridge-ws-live] stopped", flush=True)
+    finally:
+        _close_client()
+        try:
+            srv.close()
+        except OSError:
+            pass
 
 
 def os_read_chunk(stream: TextIO, size: int = 4096) -> str:
@@ -529,18 +631,25 @@ def main_bridge(argv: list[str] | None = None) -> int:
             return 0
 
     if args.ws:
-        if args.stdin:
-            live_stdin_ws(args.host, args.port)
+        try:
+            if args.stdin:
+                live_stdin_ws(args.host, args.port)
+                return 0
+            src = args.jsonl
+            if src is None and args.mcap is not None:
+                print(
+                    "--ws needs --jsonl or --stdin (MCAP live decode not supported)",
+                    flush=True,
+                )
+                return 2
+            if src is None or not src.is_file():
+                print("need --jsonl FILE or --stdin with --ws", flush=True)
+                return 2
+            replay_jsonl_ws(src, args.host, args.port, speed=args.speed)
             return 0
-        src = args.jsonl
-        if src is None and args.mcap is not None:
-            print("--ws needs --jsonl or --stdin (MCAP live decode not supported)", flush=True)
-            return 2
-        if src is None or not src.is_file():
-            print("need --jsonl FILE or --stdin with --ws", flush=True)
-            return 2
-        replay_jsonl_ws(src, args.host, args.port, speed=args.speed)
-        return 0
+        except KeyboardInterrupt:
+            print("\nbridge stopped", flush=True)
+            return 0
 
     print(
         "usage: GMT bridge foxglove --mcap FILE [--serve] "

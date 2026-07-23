@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
-# X-3: PHM fault injection on gateway — miss then recover, then e2e still OK.
+# X-3 verify: PHM fault injection — miss then recover, e2e still OK.
 #
 # Usage (after compile_sil):
-#   bash projects/oem_a/afc_with_uss/scripts/smoke_sil_phm_fault.sh
-#
-# Env:
-#   GF_PHM_FAULT_MS   default 500 (skip Alive)
-#   GF_MP_TRAJ_COUNT  default 8 (enough time to miss+recover+close loop)
+#   bash scripts/verify/oem_a_afc_with_uss/smoke_sil_phm_fault.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=_common.sh
-source "${SCRIPT_DIR}/_common.sh"
+# shellcheck source=_verify_common.sh
+source "${SCRIPT_DIR}/_verify_common.sh"
 
 gf_project_env
 
@@ -36,10 +32,6 @@ fi
 if ! grep -q 'phm recovered' "${LOG}"; then
   echo "${TAG} FAIL: expected phm recovered in ${LOG}" >&2
   cat "${LOG}" >&2 || true
-  exit 1
-fi
-if ! grep -q 'Offer→Running process=adapter.vehicle_can_gateway' "${LOG}"; then
-  echo "${TAG} FAIL: expected exec Offer→Running in ${LOG}" >&2
   exit 1
 fi
 

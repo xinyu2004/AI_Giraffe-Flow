@@ -3,10 +3,10 @@
 #   peer (模拟 CP) ←Unix socket→ gateway (AP)
 #
 # Usage:
-#   bash projects/oem_b/adc_full/scripts/smoke_mcu_desktop.sh
+#   bash scripts/verify/oem_b_adc_full/smoke_mcu_desktop.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BUILD="${GF_BUILD_DIR:-${ROOT}/build-mcu-desktop}"
 ROUNDS="${GF_MCU_PEER_ROUNDS:-5}"
 TIMEOUT_SEC="${GF_MCU_TIMEOUT_SEC:-30}"

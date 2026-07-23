@@ -56,7 +56,7 @@ pytest tools/codegen/tests/test_merge_platform.py tools/codegen/tests/test_afc_b
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R.1 | 多进程 smoke | `bash projects/oem_a/afc_with_uss/scripts/smoke_sil_multiproc.sh` | □ | □ | □ | |
+| R.1 | 多进程 smoke | `bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh` | □ | □ | □ | |
 | R.2 | 端到端计数 | 日志可见 Trajectory / 各进程存活 | □ | □ | □ | |
 | R.3 | 双进程回归 | `bash …/smoke_sil.sh` 仍绿 | □ | □ | □ | |
 
@@ -130,8 +130,8 @@ pip install -e "tools/codegen[dev]" -e "tools/gmt[dev]"
 pytest tools/codegen/tests/test_merge_platform.py \
        tools/codegen/tests/test_afc_bench_golden.py -q
 
-bash projects/oem_a/afc_with_uss/scripts/smoke_sil_multiproc.sh
-GF_SKIP_COMPILE=1 bash projects/oem_a/afc_with_uss/scripts/smoke_sil_observability.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
+GF_SKIP_COMPILE=1 bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
 bash scripts/smoke_bd_cyclone.sh
 
 GF_EVIDENCE_UPDATE_GOLDEN=1 bash scripts/collect_p2_evidence.sh
