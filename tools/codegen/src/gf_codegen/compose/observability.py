@@ -8,6 +8,7 @@ PROFILE_DEBUG = "vehicle-debug"
 PROFILE_RELEASE = "production-release"
 VALID_PROFILES = frozenset({PROFILE_DEBUG, PROFILE_RELEASE})
 TAP_APP = "tools/iox_obs_tap"
+INJECT_APP = "tools/iox_obs_inject"
 
 
 def _short(svc: str) -> str:
@@ -70,12 +71,15 @@ def record_config(req: dict[str, Any]) -> tuple[str, list[str]]:
 
 
 def effective_apps(req: dict[str, Any]) -> list[str]:
-    """Apps list for GF_APPS: strip/add iox_obs_tap by live_tap + profile."""
+    """Apps list for GF_APPS: strip/add iox_obs_tap; add inject on vehicle-debug."""
     apps = [str(x).strip() for x in (req.get("apps") or []) if str(x).strip()]
-    apps = [a for a in apps if a != TAP_APP]
+    apps = [a for a in apps if a not in {TAP_APP, INJECT_APP}]
     enabled, _svcs = live_tap_config(req)
     if enabled:
         apps.append(TAP_APP)
+    # Host-only closed-loop inject binary: build on debug SIL, never release image
+    if normalize_profile(req) == PROFILE_DEBUG:
+        apps.append(INJECT_APP)
     return apps
 
 

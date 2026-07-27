@@ -4,6 +4,14 @@
 #
 # Usage:
 #   bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+#   GF_CXX=clang++ GF_CC=clang GF_BUILD_DIR=$PWD/build-clang bash …/compile_sil.sh
+#   GF_SIL_TOOLCHAIN_FILE=cmake/toolchains/host-clang.cmake GF_BUILD_DIR=$PWD/build-clang bash …/compile_sil.sh
+#
+# Env (P2.5):
+#   GF_BUILD_DIR              SIL build tree (default <repo>/build)
+#   GF_CC / GF_CXX            host compilers (e.g. clang / clang++)
+#   GF_SIL_TOOLCHAIN_FILE     optional CMake toolchain (overrides GF_CC/CXX)
+#   GF_DEPS_PREFIX            optional deps prefix when switching compilers
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,8 +22,12 @@ gf_project_env
 gf_ensure_bootstrap
 gf_prepare_codegen
 
+SIL_CMAKE_ARGS=()
+gf_sil_cmake_compiler_args SIL_CMAKE_ARGS
+
 echo "${TAG} cmake SIL compile (host, GF_USE_GENERATED=ON) → ${BUILD_SIL} ..."
 cmake -B "${BUILD_SIL}" \
+  "${SIL_CMAKE_ARGS[@]}" \
   -DGF_BUILD_TESTS=ON \
   -DGF_USE_GENERATED=ON \
   -DGF_GENERATED_DIR="${GEN_OUT}" \

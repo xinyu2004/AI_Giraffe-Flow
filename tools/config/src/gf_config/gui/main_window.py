@@ -96,6 +96,16 @@ class MainWindow(QMainWindow):
         file_menu.addAction(act_import_fidl)
 
         file_menu.addSeparator()
+
+        act_export_dot = QAction("导出 Graphviz .dot…", self)
+        act_export_dot.triggered.connect(lambda: self._export_graph(kind="dot"))
+        file_menu.addAction(act_export_dot)
+
+        act_export_svg = QAction("导出 Graphviz SVG…", self)
+        act_export_svg.triggered.connect(lambda: self._export_graph(kind="svg"))
+        file_menu.addAction(act_export_svg)
+
+        file_menu.addSeparator()
         act_quit = QAction("退出", self)
         act_quit.triggered.connect(self.close)
         file_menu.addAction(act_quit)
@@ -321,14 +331,16 @@ class MainWindow(QMainWindow):
         self._graph.focus_lineage()
         if rc == 0:
             self.statusBar().showMessage(
-                "Verify OK — 右侧 Lineage 页。需要 C++ API 时点 Generate (Ctrl+G)",
+                "Verify OK — 右侧 Lineage。需要 C++ API 时点 Generate (Ctrl+G)",
                 8000,
             )
             if show_dialog:
                 QMessageBox.information(
                     self,
                     "Verify",
-                    "成功。请查看右侧「Lineage」页。\n\n"
+                    "成功。请查看右侧「Lineage」。\n\n"
+                    "拓扑图见 B 画布；评审附件可用「文件 → 导出 Graphviz」。\n"
+                    "运行时序/回放请用 GMT GUI。\n\n"
                     "若要生成 Proxy/Skeleton：文件 → Generate 或 Ctrl+G。",
                 )
             return True
@@ -364,3 +376,59 @@ class MainWindow(QMainWindow):
             f"已生成 Proxy/Skeleton：\n{out}/include/gf_gen/\n\n"
             "可用 gf-codegen generate 在无 GUI 时同样产出。",
         )
+
+    def _export_graph(self, *, kind: str) -> None:
+        """Export SOR topology as Graphviz .dot or SVG (no in-app DAG page)."""
+        if not self._session:
+            QMessageBox.information(self, "导出", "请先打开项目")
+            return
+        sor = self._session.paths.out_sor
+        if not sor.is_file():
+            QMessageBox.warning(
+                self,
+                "导出",
+                f"尚无 {sor.name}。请先 Verify（Ctrl+R）生成 SOR。",
+            )
+            return
+        from gf_config.export_dag import export_sor_graph
+
+        default_name = f"{self._session.paths.project_dir.name}_dag"
+        if kind == "dot":
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                "导出 Graphviz .dot",
+                str(Path.cwd() / f"{default_name}.dot"),
+                "Graphviz (*.dot);;All (*)",
+            )
+            if not path:
+                return
+            out = Path(path)
+            if out.suffix.lower() != ".dot":
+                out = out.with_suffix(".dot")
+            try:
+                export_sor_graph(sor, dot_out=out)
+            except Exception as exc:  # noqa: BLE001
+                QMessageBox.critical(self, "导出失败", str(exc))
+                return
+            self.statusBar().showMessage(f"已导出 {out}", 8000)
+            QMessageBox.information(self, "导出", f"已写入：\n{out}")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出 Graphviz SVG",
+            str(Path.cwd() / f"{default_name}.svg"),
+            "SVG (*.svg);;All (*)",
+        )
+        if not path:
+            return
+        out = Path(path)
+        if out.suffix.lower() != ".svg":
+            out = out.with_suffix(".svg")
+        try:
+            export_sor_graph(sor, svg_out=out)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "导出失败", str(exc))
+            return
+        self.statusBar().showMessage(f"已导出 {out}", 8000)
+        QMessageBox.information(self, "导出", f"已写入：\n{out}")

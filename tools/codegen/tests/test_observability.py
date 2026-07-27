@@ -7,6 +7,7 @@ from pathlib import Path
 
 from gf_codegen.compose.emit_build_cmake import emit_build_cmake, emit_observability_json
 from gf_codegen.compose.observability import (
+    INJECT_APP,
     TAP_APP,
     effective_apps,
     live_tap_config,
@@ -31,6 +32,7 @@ def test_live_tap_disabled_on_production_release() -> None:
     assert mode == "off"
     apps = effective_apps(req)
     assert TAP_APP not in apps
+    assert INJECT_APP not in apps
     assert "adapters/vehicle_can_gateway" in apps
 
 
@@ -51,7 +53,9 @@ def test_live_tap_adds_app_on_debug() -> None:
     assert svcs == ["EgoMotion", "Trajectory"]
     apps = effective_apps(req)
     assert apps.count(TAP_APP) == 1
-    assert apps[-1] == TAP_APP
+    assert apps.count(INJECT_APP) == 1
+    assert TAP_APP in apps and INJECT_APP in apps
+    assert apps[-1] == INJECT_APP
 
 
 def test_record_empty_whitelist_fails_validate() -> None:
@@ -84,6 +88,7 @@ def test_emit_observability_and_cmake(tmp_path: Path) -> None:
     assert "GF_SKU_PROFILE" in text and "vehicle-debug" in text
     assert "GF_OBS_LIVE_TAP ON" in text
     assert TAP_APP in text
+    assert INJECT_APP in text
     data = json.loads(obs.read_text(encoding="utf-8"))
     assert data["live_tap"]["enabled"] is True
     assert data["live_tap"]["services"] == ["EgoMotion"]
@@ -103,3 +108,4 @@ def test_compose_afc_writes_observability(repo_root: Path, tmp_path: Path) -> No
         encoding="utf-8"
     )
     assert "tools/iox_obs_tap" in cmake
+    assert "tools/iox_obs_inject" in cmake

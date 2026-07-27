@@ -65,7 +65,8 @@ if(DEFINED GF_APPS)
          OR _gf_app STREQUAL "perception/fcm"
          OR _gf_app STREQUAL "sensing/uss"
          OR _gf_app STREQUAL "planning/driving"
-         OR _gf_app STREQUAL "tools/iox_obs_tap")
+         OR _gf_app STREQUAL "tools/iox_obs_tap"
+         OR _gf_app STREQUAL "tools/iox_obs_inject")
         message(STATUS "Giraffe Flow: skip app '${_gf_app}' (needs GF_WITH_ICEORYX)")
         continue()
       endif()

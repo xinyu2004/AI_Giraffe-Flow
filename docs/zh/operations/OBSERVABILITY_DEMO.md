@@ -14,9 +14,10 @@ source .venv/bin/activate
 bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
 ```
 
-## 1. Live：实时看 wiring 语义字段（推荐）
+## 1. Live：实时看 + 实时落盘（推荐）
 
-`run_sil` 读 `generated/observability.json`：live 有效则起 `gf_iox_obs_tap | GMT --ws`。
+`run_sil` 读 `generated/observability.json`：live 有效则起  
+`gf_iox_obs_tap`，fan-out 到 **GMT live**（8766）与 **Foxglove**（8765），可选 tee 落盘。
 
 ```bash
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
@@ -24,8 +25,25 @@ bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 # GF_SKIP_COMPILE=1 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 ```
 
-Foxglove Studio → **Open connection** → Foxglove WebSocket → `ws://127.0.0.1:8765`  
-连接后加 **Raw Messages** / **Plot**，勾选 `/gf/EgoMotion`、`/gf/Trajectory`。
+| 客户端 | 连接 |
+|--------|------|
+| **Foxglove Studio** | Open connection → `ws://127.0.0.1:8765` |
+| **GMT GUI** | 打开 **project.yaml** → host:port → **连接**；可关 **跟随最新**（只记盘不跟播） |
+| **回灌 playhead** | SIL：`GF_INJECT_MODE=playhead` → GMT「回灌」页连 `:8767`（跟 playhead 灌） |
+
+Foxglove 连接后加 **Raw Messages** / **Plot**，勾选 `/gf/EgoMotion`、`/gf/Trajectory`。
+
+落盘默认：`build/observability/session_live.jsonl`（`GF_LIVE_SESSION` 可改；`GF_LIVE_TEE=0` 关 tee）。
+
+```bash
+# 推荐：终端 run_sil + GUI 连接
+bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+GMT gui --project projects/oem_a/afc_with_uss
+# Ctrl+R 连接 / Ctrl+Shift+R 断开；M=标记点
+
+# 或高级：仅跟随已有 JSONL（不连 WS）
+# GMT gui --project … --follow
+```
 
 **另一台电脑：** 默认 `GF_WS_HOST=0.0.0.0`，Studio 填 `ws://<SIL 主机 LAN IP>:8765`。
 
@@ -58,9 +76,64 @@ GMT bridge foxglove --mcap build/observability/session.mcap
 GMT bridge foxglove --ws --jsonl build/observability/session_tagged.jsonl --port 8765
 ```
 
-## 4. Tag 窗示例
+## 4. Tag 窗示例（CLI）
 
 ```bash
 GMT measure tag --in build/observability/session.jsonl \
   --out build/observability/session_tagged.jsonl --label demo
 ```
+
+## 5. GMT GUI：录制 / Tag / 主机回放
+
+```bash
+GMT gui --project projects/oem_a/afc_with_uss \
+  --session build/observability/session.jsonl
+```
+
+- **文件**：从日志录制、导入 NDJSON、跟随 live、导出 MCAP / **VCD**  
+- **Tag**：● 标记点（`M`）/ ▬ 片段（`[` `]`）→ `session.tags.json`  
+- **回放**：本窗 scrub；或菜单打开 Foxglove WS 回放；动画 DAG 跟 playhead  
+
+## 5.1 GTKWave：时序对齐（与 Foxglove 互补）
+
+| 工具 | 看什么 |
+|------|--------|
+| **Foxglove** | 语义 topic 实时 / 回放（值含义） |
+| **GTKWave** | 离线时序、多轨对齐、抖动（`t_ns`） |
+
+```bash
+# 尖刺（stub fixture → VCD）
+bash scripts/verify/oem_a_afc_with_uss/smoke_gmt_vcd.sh
+
+# 或手工：
+GMT measure export --format vcd \
+  --in tools/gmt/fixtures/session_stub.jsonl \
+  --out build/observability/session_stub.vcd
+gtkwave build/observability/session_stub.vcd   # 若已安装
+```
+
+轨名：`gf.<Service>.<field>`（如 `gf.EgoMotion.seq`）。GUI：**文件 → 导出 VCD**。
+
+## 6. G3 闭环回灌
+
+**不要**与 gateway 同时发 EgoMotion。
+
+```bash
+# B1：替 gateway，全链消费者
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil_inject.sh
+
+# B2：单模块 DUT（例 sensing.uss）
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil_inject_b2.sh
+
+# 或手工 B1：
+GF_SKIP_COMPILE=1 GF_INJECT_SESSION=build/observability/session.jsonl \
+  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+
+# 手工 B2：
+GF_SKIP_COMPILE=1 GF_INJECT_SESSION=build/observability/session.jsonl \
+  GF_INJECT_DUT=sensing.uss \
+  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+```
+
+`vehicle-debug` compose 会编 `tools/iox_obs_inject`；`production-release` 不编。  
+详情：[apps/tools/iox_obs_inject/README.md](../../../apps/tools/iox_obs_inject/README.md)

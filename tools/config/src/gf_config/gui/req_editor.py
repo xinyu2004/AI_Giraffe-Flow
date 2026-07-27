@@ -37,6 +37,8 @@ KNOWN_PROFILES = [
 PLATFORM_MODULE_KEYS = frozenset({"exec", "phm", "sm", "diag", "log", "ucm"})
 # compose 自动加减；禁止写进 req.apps 手改
 TAP_APP = "tools/iox_obs_tap"
+INJECT_APP = "tools/iox_obs_inject"
+_AUTO_APPS = frozenset({TAP_APP, INJECT_APP})
 
 
 def _lines_to_list(text: str) -> list[str]:
@@ -48,7 +50,11 @@ def _list_to_lines(values: list | None) -> str:
 
 
 def _strip_tap_apps(values: list | None) -> list[str]:
-    return [str(x).strip() for x in (values or []) if str(x).strip() and str(x).strip() != TAP_APP]
+    return [
+        str(x).strip()
+        for x in (values or [])
+        if str(x).strip() and str(x).strip() not in _AUTO_APPS
+    ]
 
 
 class ReqEditor(QWidget):
@@ -212,7 +218,7 @@ class ReqEditor(QWidget):
         adv_l.addWidget(self._caps)
         apps_hint = QLabel(
             "apps：业务/参考进程列表。"
-            f"勿手写 {TAP_APP}（由 live_tap 在 compose 时自动加减）。"
+            f"勿手写 {TAP_APP} / {INJECT_APP}（compose 按 profile/live_tap 自动加减）。"
         )
         apps_hint.setWordWrap(True)
         apps_hint.setStyleSheet("color:#666; font-size:11px;")

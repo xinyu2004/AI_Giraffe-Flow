@@ -179,10 +179,19 @@ def pack_message_data(subscription_id: int, t_ns: int, data: Any) -> bytes:
 
 
 def parse_ndjson_row(line: str) -> dict[str, Any] | None:
-    line = line.strip()
+    """Parse one tap NDJSON line; return None for blanks / non-JSON noise (no raise)."""
+    line = line.strip().lstrip("\ufeff")
     if not line:
         return None
-    row = json.loads(line)
+    # iceoryx / shell noise occasionally leaks onto the pipe — ignore non-objects
+    if not line.startswith("{"):
+        return None
+    try:
+        row = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(row, dict):
+        return None
     if row.get("type") == "tag_meta":
         return None
     return row
@@ -352,7 +361,18 @@ class SessionState:
 def _listen(host: str, port: int) -> socket.socket:
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind((host, port))
+    try:
+        srv.bind((host, port))
+    except OSError as exc:
+        srv.close()
+        raise OSError(
+            exc.errno,
+            f"{exc.strerror}: ws://{host}:{port} already in use "
+            f"(旧 run_sil / GMT bridge 未退出)。"
+            f" 处理: 停掉另一终端的 run_sil，或 "
+            f"GF_SIL_KILL_STALE=1 bash …/run_sil.sh，或 "
+            f"`ss -ltnp | grep {port}` 后 kill",
+        ) from exc
     srv.listen(1)
     return srv
 
@@ -549,12 +569,15 @@ def live_stdin_ws(
                     lines.append(line.rstrip("\n"))
 
             for line in lines:
-                try:
-                    row = parse_ndjson_row(line)
-                except json.JSONDecodeError as exc:
-                    print(f"[bridge-ws-live] bad json: {exc}", flush=True)
-                    continue
+                row = parse_ndjson_row(line)
                 if row is None:
+                    # blank / non-JSON pipe noise — keep quiet unless it looked like JSON
+                    stripped = line.strip()
+                    if stripped.startswith("{") and len(stripped) > 1:
+                        print(
+                            f"[bridge-ws-live] bad json (skipped): {stripped[:80]!r}",
+                            flush=True,
+                        )
                     continue
                 topic = str(row.get("topic") or "/gf/stub")
                 t_ns = int(row.get("t_ns") or 0)
@@ -650,6 +673,9 @@ def main_bridge(argv: list[str] | None = None) -> int:
         except KeyboardInterrupt:
             print("\nbridge stopped", flush=True)
             return 0
+        except OSError as exc:
+            print(f"[bridge-ws] FATAL: {exc}", flush=True)
+            return 1
 
     print(
         "usage: GMT bridge foxglove --mcap FILE [--serve] "

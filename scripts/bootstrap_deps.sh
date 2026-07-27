@@ -16,7 +16,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TP="${ROOT}/middleware/third_party"
-PREFIX="${ROOT}/middleware/.deps-prefix"
+PREFIX="${GF_DEPS_PREFIX:-${ROOT}/middleware/.deps-prefix}"
 SYSROOT_LEGACY="${ROOT}/.deps-sysroot"
 LEGACY_PREFIX="${ROOT}/.deps-prefix"
 LEGACY_TP="${ROOT}/third_party"
@@ -37,6 +37,8 @@ Usage: bash scripts/bootstrap_deps.sh [options]
 
 Env:
   GF_CROSS_PREFIX   Cross triplet, e.g. aarch64-linux-gnu (empty = host build)
+  GF_CC / GF_CXX    Host compilers when not crossing (e.g. clang / clang++)
+  GF_DEPS_PREFIX    Install prefix (default middleware/.deps-prefix); isolate when switching compilers
   GF_ICEORYX_TAG    Override iceoryx git tag (default v2.0.8)
   GF_CYCLONEDDS_TAG Override CycloneDDS git tag (default 0.10.5)
 EOF
@@ -94,6 +96,8 @@ ACL_SRC="${TP}/acl"
 
 # Cross prefix: empty = host; e.g. aarch64-linux-gnu
 CROSS_PREFIX="${GF_CROSS_PREFIX:-}"
+HOST_CC="${GF_CC:-}"
+HOST_CXX="${GF_CXX:-}"
 
 CROSS_COMPILERS=(
   "aarch64-linux-gnu-g++|ARM64 Linux cross g++ (typical board target)"
@@ -240,7 +244,13 @@ build_autotools() {
     conf_args+=("--host=${CROSS_PREFIX}")
     info "${name}: cross host=${CROSS_PREFIX} (PKG_CONFIG_PATH/CPPFLAGS/LDFLAGS → ${PREFIX})"
   else
-    info "${name}: host build → ${PREFIX} (with staging search paths)"
+    if [[ -n "${HOST_CC}" ]]; then
+      conf_env+=("CC=${HOST_CC}")
+    fi
+    if [[ -n "${HOST_CXX}" ]]; then
+      conf_env+=("CXX=${HOST_CXX}")
+    fi
+    info "${name}: host build CC=${HOST_CC:-default} CXX=${HOST_CXX:-default} → ${PREFIX}"
   fi
 
   if ! (
@@ -268,11 +278,13 @@ build_autotools() {
 cat <<EOF
 ${BOLD}Giraffe Flow — dependency bootstrap (source-first / cross-ready)${RESET}
 ${DIM}repo: ${ROOT}${RESET}
-mode: $([[ "$CHECK_ONLY" -eq 1 ]] && echo "check only (--check)" || echo "check + fetch + build into middleware/.deps-prefix")
-toolchain: $([[ -n "$CROSS_PREFIX" ]] && echo "cross ${CROSS_PREFIX}-gcc/g++" || echo "host gcc/g++")
+mode: $([[ "$CHECK_ONLY" -eq 1 ]] && echo "check only (--check)" || echo "check + fetch + build into ${PREFIX}")
+toolchain: $([[ -n "$CROSS_PREFIX" ]] && echo "cross ${CROSS_PREFIX}-gcc/g++" || echo "host ${HOST_CC:-cc}/${HOST_CXX:-c++}")
+deps prefix: ${PREFIX}
 
-${BOLD}policy:${RESET} runtime deps (attr, acl, iceoryx, ...) are built from source with the
-      ${BOLD}same compiler${RESET} into ${DIM}middleware/.deps-prefix/${RESET} for CMake/iceoryx.
+${BOLD}policy:${RESET} runtime deps (attr, acl, …) are built from source with the
+      ${BOLD}same compiler${RESET} into ${DIM}${PREFIX}${RESET} for CMake/iceoryx.
+      Switch host CC/CXX → use a fresh ${DIM}GF_DEPS_PREFIX${RESET} or ${DIM}--clean${RESET} first.
       Host apt libacl1-dev is NOT the board path.
 
 EOF

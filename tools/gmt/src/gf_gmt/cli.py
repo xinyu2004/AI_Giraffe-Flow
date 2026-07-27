@@ -8,11 +8,20 @@ import sys
 from pathlib import Path
 
 from gf_gmt import __version__
-from gf_gmt.architect import dag_from_sor, load_json, load_yaml, run_architect_lineage
+from gf_gmt.architect import (
+    dag_from_sor,
+    format_dag,
+    load_json,
+    load_yaml,
+    run_architect_lineage,
+)
 from gf_gmt.bridge_foxglove import main_bridge
+from gf_gmt.bridge_live import main_live_bridge
 from gf_gmt.measure_export import export_session_jsonl, list_mcap_topics, write_mcap
+from gf_gmt.measure_ndjson import record_from_ndjson
 from gf_gmt.measure_record import record_from_sil_logs
 from gf_gmt.measure_tag import tag_session
+from gf_gmt.measure_vcd import export_session_vcd
 
 
 def _resolve_project(project: Path) -> tuple[dict, dict | None, Path | None]:
@@ -51,9 +60,17 @@ def main(argv: list[str] | None = None) -> int:
     p_lin.add_argument("--report", type=Path, default=None, help="Optional existing report")
     p_lin.add_argument("--json", action="store_true", help="Print full report JSON")
 
-    p_dag = arch_sub.add_parser("dag", help="Print process/dataflow DAG as JSON")
+    p_dag = arch_sub.add_parser(
+        "dag", help="Print process/dataflow DAG (json|mermaid|dot)"
+    )
     p_dag.add_argument("--project", type=Path, default=None)
     p_dag.add_argument("--sor", type=Path, default=None)
+    p_dag.add_argument(
+        "--format",
+        choices=("json", "mermaid", "dot"),
+        default="json",
+        help="Output format (default: json)",
+    )
 
     p_meas = sub.add_parser("measure", help="Record / tag / export")
     meas_sub = p_meas.add_subparsers(dest="meas_cmd", required=True)
@@ -89,10 +106,22 @@ def main(argv: list[str] | None = None) -> int:
     p_tag.add_argument("--label", type=str, default="")
     p_tag.add_argument("--topic", action="append", default=None, help="Repeatable filter")
 
-    p_exp = meas_sub.add_parser("export", help="Export session JSONL → MCAP")
+    p_exp = meas_sub.add_parser("export", help="Export session JSONL → MCAP or VCD")
     p_exp.add_argument("--in", dest="inp", type=Path, required=True, help="JSONL session")
-    p_exp.add_argument("--out", type=Path, required=True, help="Output .mcap")
-    p_exp.add_argument("--topic", type=str, default="/gf/stub", help="Default topic if row omits")
+    p_exp.add_argument("--out", type=Path, required=True, help="Output .mcap or .vcd")
+    p_exp.add_argument(
+        "--format",
+        choices=("mcap", "vcd"),
+        default=None,
+        help="Output format (default: from --out suffix, else mcap)",
+    )
+    p_exp.add_argument("--topic", type=str, default="/gf/stub", help="Default topic if row omits (mcap)")
+
+    p_nd = meas_sub.add_parser(
+        "import-ndjson", help="Import iox_obs_tap NDJSON → session JSONL (G2)"
+    )
+    p_nd.add_argument("--in", dest="inp", type=Path, required=True)
+    p_nd.add_argument("--out", type=Path, required=True)
 
     p_br = sub.add_parser("bridge", help="Visualization bridges")
     br_sub = p_br.add_subparsers(dest="br_cmd", required=True)
@@ -110,7 +139,59 @@ def main(argv: list[str] | None = None) -> int:
     p_fox.add_argument("--port", type=int, default=8765)
     p_fox.add_argument("--speed", type=float, default=1.0)
 
+    p_live = br_sub.add_parser(
+        "live",
+        help="GMT GUI live NDJSON bridge (stdin tap → WebSocket)",
+    )
+    p_live.add_argument(
+        "--stdin",
+        action="store_true",
+        help="Read NDJSON from stdin (pipe from gf_iox_obs_tap)",
+    )
+    p_live.add_argument("--host", default="127.0.0.1")
+    p_live.add_argument("--port", type=int, default=None)
+
+    p_gui = sub.add_parser(
+        "gui",
+        help="Host GUI: replay timeline + order/race + animated DAG (read-only)",
+    )
+    p_gui.add_argument(
+        "--session",
+        type=Path,
+        default=None,
+        help="session JSONL to open",
+    )
+    p_gui.add_argument("--sor", type=Path, default=None, help="gf.sor.json for topology")
+    p_gui.add_argument(
+        "--project",
+        type=Path,
+        default=None,
+        help="project dir / project.yaml (loads SOR if present)",
+    )
+    p_gui.add_argument(
+        "--follow",
+        action="store_true",
+        help="Tail session JSONL (default build/observability/session_live.jsonl)",
+    )
+
     args = parser.parse_args(argv)
+
+    if args.cmd == "gui":
+        try:
+            from gf_gmt.gui.main_window import run_gui
+        except ImportError as exc:
+            print(
+                "GMT gui requires PySide6. Install: pip install 'gf-gmt[gui]' "
+                f"or pip install PySide6  ({exc})",
+                file=sys.stderr,
+            )
+            return 2
+        return run_gui(
+            session=args.session,
+            sor=args.sor,
+            project=args.project,
+            follow=bool(args.follow),
+        )
 
     if args.cmd == "architect":
         if args.arch_cmd == "lineage":
@@ -146,7 +227,11 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print("GMT architect dag: need --project or --sor", file=sys.stderr)
                 return 2
-            print(json.dumps(dag_from_sor(sor), indent=2, ensure_ascii=False))
+            try:
+                sys.stdout.write(format_dag(dag_from_sor(sor), args.format))
+            except ValueError as exc:
+                print(f"GMT architect dag: {exc}", file=sys.stderr)
+                return 2
             return 0
 
     if args.cmd == "measure":
@@ -174,6 +259,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wrote {path} kept={kept}/{total}")
             return 0 if kept > 0 else 1
         if args.meas_cmd == "export":
+            fmt = args.format
+            if fmt is None:
+                suf = args.out.suffix.lower()
+                fmt = "vcd" if suf == ".vcd" else "mcap"
+            if fmt == "vcd":
+                if not args.inp.is_file():
+                    print(f"GMT measure export: missing {args.inp}", file=sys.stderr)
+                    return 2
+                path, n_vars, n_ev = export_session_vcd(args.inp, args.out)
+                print(f"wrote {path} vars={n_vars} events={n_ev}")
+                return 0 if n_vars > 0 else 1
             if not args.inp.is_file():
                 write_mcap(
                     args.out,
@@ -186,6 +282,10 @@ def main(argv: list[str] | None = None) -> int:
             topics = list_mcap_topics(path)
             print(f"wrote {path} topics={topics}")
             return 0
+        if args.meas_cmd == "import-ndjson":
+            path, n = record_from_ndjson(args.inp, args.out)
+            print(f"wrote {path} events={n}")
+            return 0 if n > 0 else 1
 
     if args.cmd == "bridge" and args.br_cmd == "foxglove":
         # Reuse bridge module argv shape
@@ -202,6 +302,15 @@ def main(argv: list[str] | None = None) -> int:
             fox_argv.append("--stdin")
         fox_argv += ["--host", args.host, "--port", str(args.port), "--speed", str(args.speed)]
         return main_bridge(fox_argv)
+
+    if args.cmd == "bridge" and args.br_cmd == "live":
+        from gf_gmt.bridge_live import DEFAULT_LIVE_PORT
+
+        live_argv: list[str] = ["--stdin"]
+        live_argv += ["--host", args.host]
+        port = args.port if args.port is not None else DEFAULT_LIVE_PORT
+        live_argv += ["--port", str(port)]
+        return main_live_bridge(live_argv)
 
     return 2
 

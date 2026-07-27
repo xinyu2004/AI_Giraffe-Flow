@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from gf_gmt.architect import dag_from_sor, run_architect_lineage
+from gf_gmt.architect import dag_from_sor, dag_to_dot, dag_to_mermaid, run_architect_lineage
 from gf_gmt.measure_export import MAGIC, export_session_jsonl, write_mcap
 
 
@@ -41,6 +41,31 @@ def test_dag_edges() -> None:
     dag = dag_from_sor(sor)
     assert len(dag["nodes"]) == 1
     assert len(dag["edges"]) == 1
+
+
+def test_dag_mermaid_and_dot() -> None:
+    sor = {
+        "deployments": [
+            {"process": "gateway", "provides": [], "requires": []},
+            {"process": "fcm", "provides": [], "requires": []},
+        ],
+        "dataflows": [
+            {
+                "from": "gateway",
+                "to": "fcm",
+                "service": "services.semantic.VehicleStatus",
+            }
+        ],
+    }
+    dag = dag_from_sor(sor)
+    mm = dag_to_mermaid(dag)
+    assert "flowchart LR" in mm
+    assert "gateway" in mm and "fcm" in mm
+    assert "VehicleStatus" in mm
+    dot = dag_to_dot(dag)
+    assert "digraph gf_dag" in dot
+    assert "gateway -> fcm" in dot
+    assert "VehicleStatus" in dot
 
 
 def test_mcap_export(tmp_path: Path) -> None:
@@ -160,6 +185,10 @@ def test_bridge_encode_ws_session_frames() -> None:
         ),
     ]
     assert all(r is not None for r in rows)
+    assert parse_ndjson_row("") is None
+    assert parse_ndjson_row("  ") is None
+    assert parse_ndjson_row("not-json") is None
+    assert parse_ndjson_row("{broken") is None
     frames = encode_ws_session_frames(rows)  # type: ignore[arg-type]
     assert json.loads(frames[0])["op"] == "serverInfo"
     adv = json.loads(frames[1])
@@ -176,3 +205,391 @@ def test_bridge_encode_ws_session_frames() -> None:
     packed = pack_message_data(7, 99, {"a": 1})
     assert packed[:1] == b"\x01"
     assert struct.unpack_from("<I", packed, 1)[0] == 7
+
+
+def test_session_skips_tag_meta(tmp_path: Path) -> None:
+    from gf_gmt.gui.session_model import load_session
+
+    p = tmp_path / "clip.jsonl"
+    p.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "tag_meta",
+                        "label": "x",
+                        "from_ns": 0,
+                        "to_ns": 1,
+                        "kept": 1,
+                    }
+                ),
+                json.dumps({"t_ns": 10, "topic": "/gf/EgoMotion", "data": {"seq": 1}}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    m = load_session(p)
+    assert len(m.events) == 1
+    assert m.events[0].topic == "/gf/EgoMotion"
+
+
+def test_session_model_dt_and_bind(tmp_path: Path) -> None:
+    from gf_gmt.gui.session_model import load_session
+
+    p = tmp_path / "s.jsonl"
+    p.write_text(
+        "\n".join(
+            [
+                json.dumps({"t_ns": 100, "topic": "/gf/EgoMotion", "data": {"seq": 1}}),
+                json.dumps({"t_ns": 250, "topic": "/gf/Trajectory", "data": {"seq": 2}}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    sor = {
+        "deployments": [
+            {"process": "a"},
+            {"process": "b"},
+        ],
+        "dataflows": [
+            {"from": "a", "to": "b", "service": "services.semantic.EgoMotion"},
+        ],
+    }
+    m = load_session(p, sor=sor)
+    assert len(m.events) == 2
+    assert m.events[0].dt_ns == 0
+    assert m.events[1].dt_ns == 150
+    assert m.events[0].from_proc == "a"
+    assert m.events[0].to_proc == "b"
+
+
+def test_editable_tags_and_clip(tmp_path: Path) -> None:
+    from gf_gmt.measure_tag import (
+        clip_by_tag,
+        load_tags,
+        new_tag,
+        save_tags,
+        tags_path_for_session,
+        upsert_tag,
+    )
+
+    session = tmp_path / "session.jsonl"
+    session.write_text(
+        "\n".join(
+            [
+                json.dumps({"t_ns": 100, "topic": "/gf/EgoMotion", "data": {"seq": 1}}),
+                json.dumps({"t_ns": 200, "topic": "/gf/Trajectory", "data": {"seq": 2}}),
+                json.dumps({"t_ns": 300, "topic": "/gf/EgoMotion", "data": {"seq": 3}}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    tag = new_tag(label="cut_in", from_ns=150, to_ns=300, topics=["/gf/EgoMotion"], notes="demo")
+    tags = upsert_tag([], tag)
+    tag.label = "renamed"
+    tags = upsert_tag(tags, tag)
+    tp = tags_path_for_session(session)
+    save_tags(tp, tags)
+    loaded = load_tags(tp)
+    assert len(loaded) == 1 and loaded[0].label == "renamed"
+    out = tmp_path / "clip.jsonl"
+    path, kept, total = clip_by_tag(session, out, loaded[0])
+    assert path == out and total == 3 and kept == 1
+    text = out.read_text(encoding="utf-8")
+    assert "tag_meta" in text and "renamed" in text and "/gf/EgoMotion" in text
+
+
+def test_record_from_ndjson(tmp_path: Path) -> None:
+    from gf_gmt.measure_ndjson import record_from_ndjson
+
+    nd = tmp_path / "tap.ndjson"
+    nd.write_text(
+        json.dumps(
+            {
+                "t_ns": 10,
+                "topic": "/gf/EgoMotion",
+                "data": {"speed_mps": 1.2, "gear": 4},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "session.jsonl"
+    path, n = record_from_ndjson(nd, out)
+    assert path.is_file() and n == 1
+    assert "speed_mps" in out.read_text(encoding="utf-8")
+
+
+def test_export_session_vcd(tmp_path: Path) -> None:
+    from gf_gmt.measure_vcd import export_session_vcd
+
+    stub = Path(__file__).resolve().parents[1] / "fixtures" / "session_stub.jsonl"
+    out = tmp_path / "stub.vcd"
+    path, n_vars, n_ev = export_session_vcd(stub, out)
+    assert path.is_file() and n_vars >= 1 and n_ev >= 1
+    text = out.read_text(encoding="utf-8")
+    assert "$timescale 1 ns $end" in text
+    assert "$enddefinitions $end" in text
+    assert "gf.EgoMotion.seq" in text
+    assert "gf.UssZones.nearest_cm" in text
+    assert "#1000000" in text
+
+
+def test_session_file_tail_and_append(tmp_path: Path) -> None:
+    from gf_gmt.gui.session_model import SessionFileTail, SessionModel
+    from gf_gmt.measure_ndjson import parse_tap_row
+
+    p = tmp_path / "live.jsonl"
+    p.write_text("", encoding="utf-8")
+    tail = SessionFileTail(path=p)
+    assert tail.poll_lines() == []
+
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"t_ns": 100, "topic": "/gf/EgoMotion", "data": {"seq": 1}}) + "\n")
+        f.write(json.dumps({"t_ns": 200, "topic": "/gf/Trajectory", "data": {"seq": 2}}) + "\n")
+    lines = tail.poll_lines()
+    assert len(lines) == 2
+    m = SessionModel()
+    rows = [r for r in (parse_tap_row(x) for x in lines) if r]
+    assert m.append_rows(rows) == 2
+    assert m.events[1].dt_ns == 100
+
+    # truncate → poll resets
+    p.write_text(
+        json.dumps({"t_ns": 9, "topic": "/gf/EgoMotion", "data": {"seq": 9}}) + "\n",
+        encoding="utf-8",
+    )
+    # simulate follow truncate detect
+    if p.stat().st_size < tail.offset:
+        tail.reset(p)
+        m.clear_events()
+    lines2 = tail.poll_lines()
+    rows2 = [r for r in (parse_tap_row(x) for x in lines2) if r]
+    assert m.append_rows(rows2) == 1
+    assert m.events[0].t_ns == 9
+
+
+def test_live_tag_mark(tmp_path: Path) -> None:
+    import os
+    import sys
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from gf_gmt.gui.tag_panel import TagPanel
+    from gf_gmt.measure_tag import load_tags, tags_path_for_session
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    session = tmp_path / "session_live.jsonl"
+    session.write_text("", encoding="utf-8")
+    panel = TagPanel()
+    panel.set_session(session)
+    panel.set_playhead_ns(1000)
+    msg1 = panel.live_drop_marker()
+    assert "标记" in msg1 and "1000" in msg1
+    tags = load_tags(tags_path_for_session(session))
+    assert len(tags) == 1 and tags[0].is_marker and tags[0].from_ns == 1000
+    panel.set_playhead_ns(1500)
+    msg2 = panel.live_mark_from()
+    assert "from=1500" in msg2
+    panel.set_playhead_ns(2000)
+    msg3 = panel.live_mark_to()
+    assert "2000" in msg3
+    tags = load_tags(tags_path_for_session(session))
+    assert any(t.kind == "range" and t.from_ns == 1500 and t.to_ns == 2000 for t in tags)
+    _ = app  # keep ref
+
+
+def test_live_bridge_hello_and_parse() -> None:
+    from gf_gmt.bridge_live import _parse, hello_payload, is_hello
+
+    msg = hello_payload()
+    assert is_hello(msg)
+    assert is_hello(_parse(json.dumps(msg)))
+    row = _parse(json.dumps({"t_ns": 1, "topic": "/gf/A", "data": {"seq": 1}}))
+    assert row and row["t_ns"] == 1
+    assert not is_hello(row)
+
+
+def test_live_bridge_ws_roundtrip() -> None:
+    import os
+    import socket
+    import threading
+    import time
+
+    from gf_gmt.bridge_live import _parse, serve_live_stdin
+    from gf_gmt.gui.live_client import LiveWsSession
+
+    srv_probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv_probe.bind(("127.0.0.1", 0))
+    port = srv_probe.getsockname()[1]
+    srv_probe.close()
+
+    r_fd, w_fd = os.pipe()
+    reader = os.fdopen(r_fd, "r", encoding="utf-8", closefd=True)
+    writer = os.fdopen(w_fd, "w", encoding="utf-8", closefd=True)
+    ndjson_line = json.dumps(
+        {"t_ns": 42, "topic": "/gf/EgoMotion", "data": {"speed_mps": 1.0}}
+    )
+
+    def _serve() -> None:
+        serve_live_stdin("127.0.0.1", port, stream=reader)
+
+    thread = threading.Thread(target=_serve, daemon=True)
+    thread.start()
+    time.sleep(0.15)
+
+    client = LiveWsSession()
+    client.connect("127.0.0.1", port)
+    writer.write(ndjson_line + "\n")
+    writer.flush()
+
+    lines: list[str] = []
+    for _ in range(100):
+        lines.extend(client.poll_lines())
+        if lines:
+            break
+        time.sleep(0.02)
+
+    client.close()
+    writer.close()
+    assert lines, "expected NDJSON line from live bridge"
+    row = _parse(lines[0])
+    assert row is not None and row["t_ns"] == 42
+    assert row["data"]["speed_mps"] == 1.0
+
+
+def test_inject_ctrl_client_seek() -> None:
+    """Mock playhead inject TCP server ↔ InjectCtrlClient."""
+    import socket
+    import threading
+    import time
+
+    from gf_gmt.gui.inject_client import InjectCtrlClient
+
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    port = srv.getsockname()[1]
+    srv.listen(1)
+    seeks: list[int] = []
+    stop = threading.Event()
+
+    def _serve() -> None:
+        srv.settimeout(0.5)
+        try:
+            conn, _ = srv.accept()
+        except OSError:
+            return
+        conn.settimeout(0.5)
+        buf = ""
+        try:
+            while not stop.is_set():
+                try:
+                    chunk = conn.recv(4096)
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                buf += chunk.decode("utf-8", errors="replace")
+                while "\n" in buf:
+                    line, buf = buf.split("\n", 1)
+                    line = line.strip()
+                    if not line:
+                        continue
+                    obj = json.loads(line)
+                    cmd = obj.get("cmd")
+                    if cmd == "hello":
+                        conn.sendall(
+                            b'{"op":"hello","proto":"gf_inject_ctrl","version":1,'
+                            b'"mode":"playhead","events":6,"index":-1,"port":'
+                            + str(port).encode()
+                            + b"}\n"
+                        )
+                        conn.sendall(
+                            b'{"op":"status","index":-1,"events":6,"sent":0,'
+                            b'"state":"paused","rate":1}\n'
+                        )
+                    elif cmd == "seek":
+                        idx = int(obj["index"])
+                        seeks.append(idx)
+                        conn.sendall(
+                            (
+                                f'{{"op":"published","index":{idx},'
+                                f'"topic":"/gf/EgoMotion","t_ns":1,"injected":true}}\n'
+                            ).encode()
+                        )
+                        conn.sendall(
+                            (
+                                f'{{"op":"status","index":{idx},"events":6,"sent":1,'
+                                f'"state":"paused","rate":1}}\n'
+                            ).encode()
+                        )
+        finally:
+            conn.close()
+
+    thread = threading.Thread(target=_serve, daemon=True)
+    thread.start()
+    time.sleep(0.05)
+    client = InjectCtrlClient()
+    client.connect("127.0.0.1", port)
+    assert client.last_hello is not None
+    assert client.last_hello.get("proto") == "gf_inject_ctrl"
+    client.seek(5)
+    got = False
+    for _ in range(50):
+        for msg in client.poll_messages():
+            if msg.get("op") == "published" and msg.get("index") == 5:
+                got = True
+                break
+        if got:
+            break
+        time.sleep(0.02)
+    client.close()
+    stop.set()
+    srv.close()
+    thread.join(timeout=1)
+    assert seeks == [5]
+    assert got
+
+
+def test_session_clock_scheme1(tmp_path: Path) -> None:
+    from gf_gmt.gui.session_model import SessionModel, load_session
+    from gf_gmt.gui.wall_time import SessionClock
+    from gf_gmt.measure_ndjson import parse_session_line
+
+    clock = SessionClock(wall_anchor_unix_ns=1_700_000_000_000_000_000, t0_ns=1000)
+    assert clock.ready
+    assert clock.wall_unix_ns(1000) == 1_700_000_000_000_000_000
+    assert clock.wall_unix_ns(1_000_000_000 + 1000) == 1_700_000_000_000_000_000 + 1_000_000_000
+    meta = clock.to_meta()
+    assert meta["type"] == "session_meta"
+    assert SessionClock.from_meta(meta) is not None
+
+    p = tmp_path / "s.jsonl"
+    with p.open("w", encoding="utf-8") as f:
+        f.write(json.dumps(meta) + "\n")
+        f.write(
+            json.dumps(
+                {"t_ns": 1000, "topic": "/gf/EgoMotion", "data": {"seq": 1, "v": 1.5}}
+            )
+            + "\n"
+        )
+        f.write(
+            json.dumps(
+                {"t_ns": 2000, "topic": "/gf/EgoMotion", "data": {"seq": 2, "v": 2.5}}
+            )
+            + "\n"
+        )
+    m = load_session(p)
+    assert m.clock.ready
+    assert m.clock.t0_ns == 1000
+    assert "202" in m.wall_str(1000) or m.wall_str(1000) != "—"
+    row = parse_session_line(json.dumps(meta))
+    assert row and row.get("type") == "session_meta"
+    m2 = SessionModel()
+    assert m2.append_rows([row]) == 0
+    assert m2.clock.ready

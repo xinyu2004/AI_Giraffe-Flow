@@ -9,10 +9,10 @@ SOR_JSON="${PROJECT_DIR}/gf.sor.json"
 GEN_OUT="${PROJECT_DIR}/generated"
 TAG="[afc_with_uss]"
 
-DEPS_PREFIX="${ROOT}/middleware/.deps-prefix"
+DEPS_PREFIX="${GF_DEPS_PREFIX:-${ROOT}/middleware/.deps-prefix}"
 THIRD_PARTY="${ROOT}/middleware/third_party"
-BUILD_SIL="${ROOT}/build"
-BUILD_HIL="${ROOT}/build-hil"
+BUILD_SIL="${GF_BUILD_DIR:-${ROOT}/build}"
+BUILD_HIL="${GF_BUILD_DIR_HIL:-${ROOT}/build-hil}"
 
 gf_project_env() {
   cd "${ROOT}"
@@ -32,7 +32,9 @@ gf_ensure_bootstrap() {
   if [[ "${need}" -eq 1 ]]; then
     echo "${TAG} bootstrap (if needed) ..."
     # shellcheck disable=SC2086
-    bash "${ROOT}/scripts/bootstrap_deps.sh" ${GF_BOOTSTRAP_EXTRA:-}
+    GF_DEPS_PREFIX="${DEPS_PREFIX}" \
+      GF_CC="${GF_CC:-}" GF_CXX="${GF_CXX:-}" \
+      bash "${ROOT}/scripts/bootstrap_deps.sh" ${GF_BOOTSTRAP_EXTRA:-}
   fi
 }
 
@@ -42,4 +44,28 @@ gf_prepare_codegen() {
 
   echo "${TAG} generate → ${GEN_OUT} ..."
   gf-codegen generate "${SOR_JSON}" --out "${GEN_OUT}"
+}
+
+# Fill nameref array with host compiler / toolchain cmake flags.
+# Env: GF_SIL_TOOLCHAIN_FILE | GF_CC / GF_CXX  (HIL uses compile_hil's GF_CROSS_* instead)
+gf_sil_cmake_compiler_args() {
+  local -n _out="$1"
+  _out=()
+  if [[ -n "${GF_SIL_TOOLCHAIN_FILE:-}" ]]; then
+    if [[ ! -f "${GF_SIL_TOOLCHAIN_FILE}" ]]; then
+      echo "${TAG} ERROR: GF_SIL_TOOLCHAIN_FILE not found: ${GF_SIL_TOOLCHAIN_FILE}" >&2
+      return 1
+    fi
+    echo "${TAG} SIL toolchain file=${GF_SIL_TOOLCHAIN_FILE}"
+    _out+=("-DCMAKE_TOOLCHAIN_FILE=${GF_SIL_TOOLCHAIN_FILE}")
+    return 0
+  fi
+  if [[ -n "${GF_CC:-}" ]]; then
+    echo "${TAG} SIL CC=${GF_CC}"
+    _out+=("-DCMAKE_C_COMPILER=${GF_CC}")
+  fi
+  if [[ -n "${GF_CXX:-}" ]]; then
+    echo "${TAG} SIL CXX=${GF_CXX}"
+    _out+=("-DCMAKE_CXX_COMPILER=${GF_CXX}")
+  fi
 }

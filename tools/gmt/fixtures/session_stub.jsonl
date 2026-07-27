@@ -1,3 +1,6 @@
-{"t_ns": 1000000, "data": {"seq": 0, "note": "boot"}}
-{"t_ns": 2000000, "data": {"seq": 1, "note": "ego"}}
-{"t_ns": 3000000, "data": {"seq": 2, "note": "uss"}}
+{"t_ns": 1000000, "topic": "/gf/EgoMotion", "data": {"seq": 0, "note": "boot"}}
+{"t_ns": 2000000, "topic": "/gf/Perception_In_St", "data": {"seq": 1, "note": "fcm-in"}}
+{"t_ns": 2500000, "topic": "/gf/UssZones", "data": {"seq": 1, "nearest_cm": 120}}
+{"t_ns": 3000000, "topic": "/gf/Perception_MESSAGE_Out_St", "data": {"seq": 2, "note": "fcm-out"}}
+{"t_ns": 4000000, "topic": "/gf/Trajectory", "data": {"seq": 2, "point_count": 8}}
+{"t_ns": 5000000, "topic": "/gf/EgoMotion", "data": {"seq": 3, "note": "ego"}}

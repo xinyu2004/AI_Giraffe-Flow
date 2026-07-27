@@ -7,7 +7,7 @@ Shared build modules for Giraffe Flow.
 | [Dependencies.cmake](Dependencies.cmake) | iceoryx / ACL from `middleware/third_party` + `.deps-prefix` |
 | [GfModules.cmake](GfModules.cmake) | **SKU 裁剪**：按 `GF_RUNTIME_MODULES` / `GF_APPS` / `GF_WITH_*` 加目录 |
 | [profiles/](profiles/) | `desktop_*` / `mcu_desktop` / `eu_stub` / `bd_stub` |
-| [toolchains/](toolchains/) | aarch64 / armhf 交叉 |
+| [toolchains/](toolchains/) | aarch64 / armhf 交叉；[host-clang.cmake](toolchains/host-clang.cmake) 主机 Clang（SIL） |
 
 ## req.yaml → CMake（F 轨）
 
@@ -42,3 +42,5 @@ req.yaml  ──compose──►  projects/<sku>/generated/gf_build.cmake
 **低配示例（afc_no_uss）：** compose 后仅 iceoryx + `demo_pipeline`；`log`/`exec`/… 无实现则 STATUS 跳过，不失败。
 
 SIL：`compile_sil.sh` 已传 `-DGF_SKU_CMAKE=<proj>/generated/gf_build.cmake`。
+
+**主机编译器（P2.5）：** `GF_CC`/`GF_CXX` 或 `GF_SIL_TOOLCHAIN_FILE`（见 [host-clang.cmake](toolchains/host-clang.cmake)）；换编译器时用独立 `GF_BUILD_DIR`，必要时独立 `GF_DEPS_PREFIX`。

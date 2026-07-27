@@ -4,7 +4,9 @@
 > 设计背景：[DESIGN.md](../architecture/DESIGN.md)
 
 本文将平台交付划分为 **P0–P3**。**P0 已收口**；**P1 骨架已齐**（大量 stub），验收见 [P1_REVIEW_CHECKLIST.md](P1_REVIEW_CHECKLIST.md)。  
-**当前阶段：P2 收口** — 细则 [P2_PLAN.md](P2_PLAN.md) · Review [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md) · 配置规格 [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)。
+**当前阶段：P2.5（主机工具链 + 架构师可视化）进行中 / 尖刺已齐** — 细则 [P2_5_PLAN.md](P2_5_PLAN.md) · P2 Review [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md) · 配置规格 [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)。
+
+**P2 状态：** 功能交付已齐（多进程 SIL、platform、可观测、Foxglove、证据包）；形式收口见 Review 清单。
 
 ---
 
@@ -114,6 +116,18 @@ HIL：`compile_hil.sh` 依赖交叉工具链；无工具链时 `cross_link_smoke
 - [x] **无 DEM** 配置/生成轨
 
 **P2 收口入口：** [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md)
+
+### P2.5 — 主机工具链 + 架构师可视化（接 P2）
+
+细则：[P2_5_PLAN.md](P2_5_PLAN.md)
+
+| 轨 | 内容 | 状态 |
+|----|------|------|
+| A | SIL 主机编译器可换（GCC/Clang/`GF_CC`·`GF_CXX`/`GF_SIL_TOOLCHAIN_FILE`） | ✅ |
+| B | 设计期真图 = gf-config B 画布；CLI/导出 Graphviz；**GMT GUI** 回放·先后·动画 DAG·live·Tag | ✅ |
+| C | GTKWave 路径：`GMT measure export --format vcd`（与 Foxglove 互补） | ✅ tip |
+
+**P2.5 边界：** DAG/GTKWave/GMT **不上车**；不改 wiring/req 产品语义；HIL 部署实现可后置。
 
 ### 明确不在 P2
 
