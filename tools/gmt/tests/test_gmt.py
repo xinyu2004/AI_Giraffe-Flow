@@ -505,12 +505,14 @@ def test_inject_ctrl_client_seek() -> None:
                     if cmd == "hello":
                         conn.sendall(
                             b'{"op":"hello","proto":"gf_inject_ctrl","version":1,'
-                            b'"mode":"playhead","events":6,"index":-1,"port":'
+                            b'"mode":"playhead","caps":["stream_window"],'
+                            b'"window_max_events":256,"window_buffers":2,'
+                            b'"events":0,"index":-1,"port":'
                             + str(port).encode()
                             + b"}\n"
                         )
                         conn.sendall(
-                            b'{"op":"status","index":-1,"events":6,"sent":0,'
+                            b'{"op":"status","index":-1,"events":0,"sent":0,'
                             b'"state":"paused","rate":1}\n'
                         )
                     elif cmd == "seek":
@@ -524,8 +526,19 @@ def test_inject_ctrl_client_seek() -> None:
                         )
                         conn.sendall(
                             (
-                                f'{{"op":"status","index":{idx},"events":6,"sent":1,'
+                                f'{{"op":"status","index":{idx},"events":0,"sent":1,'
                                 f'"state":"paused","rate":1}}\n'
+                            ).encode()
+                        )
+                    elif cmd == "inject":
+                        idx = int(obj["index"])
+                        seeks.append(idx)
+                        conn.sendall(
+                            (
+                                f'{{"op":"published","index":{idx},'
+                                f'"topic":{json.dumps(obj.get("topic"))},'
+                                f'"t_ns":{int(obj.get("t_ns") or 0)},'
+                                f'"injected":true}}\n'
                             ).encode()
                         )
         finally:
@@ -538,6 +551,7 @@ def test_inject_ctrl_client_seek() -> None:
     client.connect("127.0.0.1", port)
     assert client.last_hello is not None
     assert client.last_hello.get("proto") == "gf_inject_ctrl"
+    assert "stream_window" in (client.last_hello.get("caps") or [])
     client.seek(5)
     got = False
     for _ in range(50):
@@ -554,6 +568,81 @@ def test_inject_ctrl_client_seek() -> None:
     thread.join(timeout=1)
     assert seeks == [5]
     assert got
+
+
+def test_inject_stream_helpers() -> None:
+    from gf_gmt.gui.inject_client import (
+        InjectCtrlClient,
+        InjectStreamHelper,
+        hello_has_stream_window,
+        is_injectable_topic,
+    )
+    from gf_gmt.gui.session_model import SessionEvent, SessionModel
+
+    assert is_injectable_topic("/gf/EgoMotion")
+    assert is_injectable_topic("EgoMotion")
+    assert not is_injectable_topic("/gf/Trajectory")
+    assert hello_has_stream_window(
+        {"caps": ["stream_window"], "window_max_events": 256}
+    )
+    assert not hello_has_stream_window({"caps": []})
+    assert not hello_has_stream_window(None)
+
+    sent: list[dict] = []
+
+    class _FakeClient(InjectCtrlClient):
+        def __init__(self) -> None:  # noqa: D107
+            # skip socket init fields used by poll
+            self._sock = None
+            self._buf = ""
+            self._connected = True
+            self.last_hello = None
+            self.last_status = None
+            self.last_published = None
+
+        def send_cmd(self, obj: dict) -> None:
+            sent.append(obj)
+
+    client = _FakeClient()
+    helper = InjectStreamHelper(client)
+    helper.on_hello(
+        {
+            "caps": ["stream_window"],
+            "window_max_events": 256,
+            "window_buffers": 2,
+            "events": 0,
+        }
+    )
+    assert helper.stream_mode
+    assert helper.window_max_events == 256
+    helper.configure_session(10)
+    assert sent[0] == {"cmd": "session", "events": 10}
+    assert sent[1] == {"cmd": "reset"}
+
+    model = SessionModel()
+    model.events = [
+        SessionEvent(index=0, t_ns=1, topic="/gf/Trajectory", data={"a": 1}),
+        SessionEvent(index=1, t_ns=2, topic="/gf/EgoMotion", data={"v": 1.0}),
+        SessionEvent(index=2, t_ns=3, topic="/gf/EgoMotion", data={"v": 2.0}),
+        SessionEvent(index=3, t_ns=4, topic="/gf/Other", data={}),
+        SessionEvent(index=4, t_ns=5, topic="/gf/EgoMotion", data={"v": 3.0}),
+    ]
+    sent.clear()
+    assert helper.inject_model_index(model, 0) == ("skip", "/gf/Trajectory")
+    assert not sent
+    kind, topic = helper.inject_model_index(model, 1)
+    assert kind == "sent" and topic == "/gf/EgoMotion"
+    assert sent[0]["cmd"] == "inject"
+    assert sent[0]["index"] == 1
+
+    sent.clear()
+    n = helper.fill_window(model, "A", 0, count=2)
+    assert n == 2  # two EgoMotion frames from scan
+    cmds = [c["cmd"] for c in sent]
+    assert cmds[0] == "window_begin"
+    assert sent[0]["slot"] == "A" and sent[0]["base"] == 0
+    assert cmds.count("push") == 2
+    assert cmds[-1] == "window_end"
 
 
 def test_session_clock_scheme1(tmp_path: Path) -> None:

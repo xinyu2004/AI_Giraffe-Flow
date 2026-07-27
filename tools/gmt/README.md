@@ -25,40 +25,51 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 
 | 通道 | 端口 | 协议 | 用途 |
 |------|------|------|------|
-| **Live** | 8766 | WebSocket | live_tap 旁观 / 记盘（回灌时默认只订**下游**） |
-| **回灌** | 8767 | TCP | playhead inject seek |
+| **Live** | 8766 | WebSocket | live_tap 旁观；可选「录制」落盘（回灌时默认只订**下游**） |
+| **回灌** | 8767 | TCP | playhead stream（GMT 下发窗口 / inject 帧） |
 
-- 回灌「跟 playhead 灌」开启时：**自动关 Live「跟随最新」**（避免拽走 playhead）；Live 仍可只记盘  
+- 回灌「跟 playhead 灌」开启时：**自动关 Live「跟随最新」**（避免拽走 playhead）；Live 仍可旁观/录制  
 - 回灌结果：顶栏 **绿=已灌 / 红=跳过**，原因在状态栏（无弹窗）  
-- 「回灌」Tab：事件表（墙钟 / topic / 已发布|跳过），可点行跳 playhead  
+- 「回灌」Tab：事件表（墙钟 / topic / 已发布|跳过），可点行跳 playhead；可选「循环（到结尾确认）」  
 - 「变量轨」Tab：用户添加变量（每变量一行）；滚轮缩放时间窗；橙线 playhead  
 - 墙钟：**方案 1** — session 一条 `session_meta` 锚点 + `(t_ns - t0_ns)`（非每行 wall_time）  
-- 未加载 `project.yaml`：顶栏黄条提示；**回灌连接禁用**；Live 仍可仅记盘  
+- 未加载 `project.yaml`：顶栏黄条提示；**回灌连接禁用**；Live 仍可旁观  
 
 `GF_INJECT_LIVE=0` 可强制回灌时关掉 live_tap。
 
-- 连接：WS 收 tap NDJSON，落盘 `session_live.jsonl`；勾选 **跟随最新**（默认）则 playhead 贴尾，DAG/先后更新  
-- **取消「跟随最新」= 只记盘不跟播**：继续写 session，可停在某一帧 scrub / Tag（快捷键 `F` 切换）  
-- 断开：保留 session，可 scrub / Tag  
-- 高级：**仅跟随 live 文件…** + 传输条 **跟随文件** — 不连网，只 tail 已有 JSONL（是否跳最新仍由「跟随最新」控制）  
+- **连接 Live**：WS 收流进内存；**默认不落盘**；「跟随最新」控制 playhead 是否贴尾  
+- **录制**：顶栏「录制」按钮（录制中红底「录制中」）；默认 `session_live.jsonl`；若已存在非空文件则问 **新建**（`session_live_YYYYMMDD_HHMMSS.jsonl`）或 **覆盖**  
+- 断开：停止录制（若有）；保留内存 session，可 scrub / Tag  
+- 高级：**仅跟随 live 文件…** + 传输条 **跟随文件** — 不连网，只 tail 已有 JSONL  
 - Tag：`M` 标记点；`[` / `]` 片段；`Ctrl+R` / `Ctrl+Shift+R` 连接/断开  
 - GMT **不启动 SIL / 不调用 run_sil**  
 
 前提：`gf-config` A 页 `live_tap` 已开 + `vehicle-debug` 已 `compile_sil`。  
 `run_sil` 将 tap 同时 fan-out 到 `GMT bridge live`（8766，`GF_LIVE_PORT`）与 Foxglove（8765）。
 
-### 回灌（playhead）
+### 回灌（playhead = GMT stream）
 
-SIL 侧（B1/B2 拓扑由 `run_sil` 环境变量决定；GMT 不管）：
+**playhead**：完整 session 在上位机 GMT；板端 inject 只持 A/B 小窗（`caps: stream_window`）。  
+SIL 可不设 `GF_INJECT_SESSION`（stream-only）；GMT 打开 JSONL → 连接 8767 → scrub 时 `inject` 单帧 / 板端 `need_window` 时 GMT 填窗。
+
+```bash
+# SIL（stream / 无本地 session 文件）
+GF_INJECT_MODE=playhead \
+  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+
+# 可选：仍可传路径作 hint，playhead 不把整文件载入板端内存
+# GF_INJECT_SESSION=build/observability/session.jsonl GF_INJECT_MODE=playhead bash …
+```
+
+GMT：打开 session → **回灌**页 → 连接 `host:8767` → 勾选「跟 playhead 灌」→ scrub。  
+「循环（到结尾确认）」：板端 `eof` 时弹窗是否从 0 再来一圈。
+
+**continuous**：板端读文件（仅可灌 topic + `GF_INJECT_MAX_EVENTS` 上限）；可选 `GF_INJECT_LOOP=1`。见 [`apps/tools/iox_obs_inject/README.md`](../../apps/tools/iox_obs_inject/README.md)。
 
 ```bash
 GF_INJECT_SESSION=build/observability/session.jsonl \
-  GF_INJECT_MODE=playhead \
   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 ```
-
-GMT：打开**同一** session → **回灌**页 → 连接 `host:8767` → 勾选「跟 playhead 灌」→ scrub。  
-详见 [`apps/tools/iox_obs_inject/README.md`](../../apps/tools/iox_obs_inject/README.md)。
 
 ### GTKWave（离线时序）
 

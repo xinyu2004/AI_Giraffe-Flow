@@ -49,3 +49,26 @@ venv/
 projects/**/gf.sor.json
 projects/**/golden/gf.sor.json
 projects/**/reports/signal_lineage_report.yaml
+
+# Local IDE / agent
+.cursor/
+*.plan.md
+
+# CMake user-local presets
+CMakeUserPresets.json
+
+# Python packaging
+dist/
+wheelhouse/
+*.whl
+
+# SIL / observability runtime when not under build/ (build/ already ignored)
+observability/
+**/iox_multiproc_logs/
+
+# Session captures outside build/ — keep evidence_pack sample + GMT fixtures
+*.mcap
+!evidence_pack/**/*.mcap
+session*.jsonl
+!evidence_pack/**/session*.jsonl
+!tools/**/fixtures/session*.jsonl

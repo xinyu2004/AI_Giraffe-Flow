@@ -19,6 +19,8 @@ import struct
 import sys
 from typing import Any, TextIO
 
+from gf_gmt.conn_log import conn_status
+
 DEFAULT_LIVE_PORT = 8766
 
 
@@ -175,9 +177,11 @@ def serve_live_stdin(
     """Read NDJSON from stdin; forward each line to a connected GMT GUI client."""
     inp = stream if stream is not None else sys.stdin
     srv = _listen(host, port)
-    print(f"GMT live ws://{host}:{port}", flush=True)
-    print("  state=LISTENING — wait GMT GUI「连接 Live」", flush=True)
-    print("  GMT GUI → 连接 host:port", flush=True)
+
+    def _status(kind: str, msg: str) -> None:
+        conn_status("GMT Live", kind, msg)
+
+    _status("listen", f"LISTENING ws://{host}:{port}")
 
     fd = -1
     if hasattr(inp, "fileno"):
@@ -187,18 +191,23 @@ def serve_live_stdin(
             fd = -1
 
     conn: socket.socket | None = None
+    peer_label = ""
     buf = ""
     stdin_eof = False
     forwarded = 0
 
-    def _close_client() -> None:
-        nonlocal conn
+    def _close_client(*, reason: str = "") -> None:
+        nonlocal conn, peer_label
         if conn is not None:
             try:
                 conn.close()
             except OSError:
                 pass
+            who = peer_label or "?"
+            detail = f" ({reason})" if reason else ""
+            _status("bye", f"DISCONNECTED peer={who}{detail}")
         conn = None
+        peer_label = ""
 
     try:
         while not stdin_eof or conn is not None:
@@ -217,24 +226,22 @@ def serve_live_stdin(
                 try:
                     new_conn, addr = srv.accept()
                 except OSError as exc:
-                    print(f"[live-bridge] accept error: {exc}", flush=True)
+                    _status("err", f"accept error: {exc}")
                 else:
-                    print(f"[live-bridge] client {addr}", flush=True)
+                    who = f"{addr[0]}:{addr[1]}"
                     try:
                         new_conn.setblocking(True)
                         if not _ws_handshake(new_conn):
-                            print("[live-bridge] state=HANDSHAKE_FAIL", flush=True)
+                            _status("err", f"HANDSHAKE_FAIL peer={who}")
                             new_conn.close()
                         else:
                             new_conn.setblocking(False)
                             _ws_send_text(new_conn, json.dumps(hello_payload()))
                             conn = new_conn
-                            print(
-                                f"[live-bridge] state=CONNECTED peer={addr[0]}:{addr[1]}",
-                                flush=True,
-                            )
+                            peer_label = who
+                            _status("ok", f"CONNECTED peer={who} (listen :{port})")
                     except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                        print(f"[live-bridge] handshake failed: {exc}", flush=True)
+                        _status("err", f"handshake failed peer={who}: {exc}")
                         try:
                             new_conn.close()
                         except OSError:
@@ -243,24 +250,18 @@ def serve_live_stdin(
             if conn is not None and conn in ready:
                 frame = _ws_recv_frame(conn)
                 if frame is None:
-                    print("[live-bridge] state=DISCONNECTED (client closed)", flush=True)
-                    _close_client()
+                    _close_client(reason="client closed")
                 else:
                     opcode, payload = frame
                     if opcode == 0x8:
-                        print("[live-bridge] state=DISCONNECTED (ws close)", flush=True)
-                        _close_client()
+                        _close_client(reason="ws close")
                     elif opcode == 0x1:
                         msg = _parse(payload.decode("utf-8", errors="replace"))
                         if msg and msg.get("op") == "ping":
                             try:
                                 _ws_send_text(conn, json.dumps({"op": "pong"}))
                             except OSError:
-                                print(
-                                    "[live-bridge] state=DISCONNECTED (pong failed)",
-                                    flush=True,
-                                )
-                                _close_client()
+                                _close_client(reason="pong failed")
 
             lines: list[str] = []
             if fd >= 0 and fd in ready:
@@ -268,7 +269,7 @@ def serve_live_stdin(
                 if chunk == "":
                     if not buf:
                         stdin_eof = True
-                        print("[live-bridge] stdin EOF", flush=True)
+                        _status("bye", "stdin EOF")
                 else:
                     buf += chunk
                     while "\n" in buf:
@@ -292,20 +293,16 @@ def serve_live_stdin(
                     _ws_send_text(conn, stripped)
                     forwarded += 1
                     if forwarded % 100 == 0:
-                        print(f"[live-bridge] forwarded {forwarded} lines", flush=True)
+                        _status("ok", f"forwarded {forwarded} lines")
                 except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                    print(
-                        f"[live-bridge] state=DISCONNECTED send failed: {exc}",
-                        flush=True,
-                    )
-                    _close_client()
+                    _close_client(reason=f"send failed: {exc}")
 
             if stdin_eof and conn is None:
                 break
     except KeyboardInterrupt:
-        print("\n[live-bridge] stopped", flush=True)
+        _status("bye", "stopped")
     finally:
-        _close_client()
+        _close_client(reason="bridge exit")
         try:
             srv.close()
         except OSError:

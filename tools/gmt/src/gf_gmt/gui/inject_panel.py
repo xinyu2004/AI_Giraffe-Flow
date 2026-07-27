@@ -28,8 +28,10 @@ class InjectPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         tip = QLabel(
-            "顶栏可同时连 Live(ws:8766) 与回灌(tcp:8767)。\n"
-            "「跟 playhead 灌」时会自动关掉 Live「跟随最新」。绿=已 Send，红=跳过。"
+            "顶栏连回灌 tcp:8767。stream 模式：GMT 打开的 session 是权威源"
+            "（板端 A/B 小窗，不必再设 GF_INJECT_SESSION）。\n"
+            "MVP 仅 Send /gf/EgoMotion：绿=已灌，粉=跳过（如 Trajectory）。"
+            "「跟 playhead 灌」时会关 Live 跟随。"
         )
         tip.setWordWrap(True)
         tip.setStyleSheet("color:#555;")
@@ -41,6 +43,12 @@ class InjectPanel(QWidget):
             "开：时间轴 seek/播放/单步 → inject 发对应帧；关：只保持 TCP 连接"
         )
         tools.addWidget(self.follow_playhead)
+        self.loop_at_end = QCheckBox("循环（到结尾确认）")
+        self.loop_at_end.setChecked(False)
+        self.loop_at_end.setToolTip(
+            "板端 eof 时弹窗：继续则 seek 0 并清空结果表；停止则保持在结尾"
+        )
+        tools.addWidget(self.loop_at_end)
         tools.addStretch(1)
 
         self.state = QLabel("Inject: 未连接（请用顶栏连接）")
@@ -89,6 +97,13 @@ class InjectPanel(QWidget):
 
     def wants_playhead_sync(self) -> bool:
         return self.follow_playhead.isChecked() and self._connected
+
+    def wants_loop_confirm(self) -> bool:
+        return self.loop_at_end.isChecked()
+
+    def clear_results(self) -> None:
+        self._results.clear()
+        self._refill_table()
 
     def set_model(self, model: SessionModel | None) -> None:
         self._model = model

@@ -30,6 +30,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterable, TextIO
 
+from gf_gmt.conn_log import conn_status
 from gf_gmt.measure_export import list_mcap_topics
 
 # JSON Schema string for free-form object payloads (encoding=json)
@@ -462,9 +463,11 @@ def live_stdin_ws(
     """
     inp = stream if stream is not None else sys.stdin
     srv = _listen(host, port)
-    print(f"Foxglove WS (live stdin) ws://{host}:{port}", flush=True)
-    print("  Studio → Open connection → Foxglove WebSocket (anytime)", flush=True)
-    print("  Main chain / tap keep running; connect Studio whenever ready.", flush=True)
+
+    def _status(kind: str, msg: str) -> None:
+        conn_status("Foxglove", kind, msg)
+
+    _status("listen", f"LISTENING ws://{host}:{port}")
 
     fd = -1
     if hasattr(inp, "fileno"):
@@ -475,20 +478,25 @@ def live_stdin_ws(
 
     conn: socket.socket | None = None
     state: SessionState | None = None
+    peer_label = ""
     buf = ""
     published = 0
     dropped = 0
     stdin_eof = False
 
-    def _close_client() -> None:
-        nonlocal conn, state
+    def _close_client(*, reason: str = "") -> None:
+        nonlocal conn, state, peer_label
         if conn is not None:
             try:
                 conn.close()
             except OSError:
                 pass
+            who = peer_label or "?"
+            detail = f" ({reason})" if reason else ""
+            _status("bye", f"DISCONNECTED peer={who}{detail}")
         conn = None
         state = None
+        peer_label = ""
 
     try:
         while not stdin_eof or conn is not None:
@@ -508,12 +516,13 @@ def live_stdin_ws(
                 try:
                     new_conn, addr = srv.accept()
                 except OSError as exc:
-                    print(f"[bridge-ws-live] accept error: {exc}", flush=True)
+                    _status("err", f"accept error: {exc}")
                 else:
-                    print(f"[bridge-ws-live] client {addr}", flush=True)
+                    who = f"{addr[0]}:{addr[1]}"
                     new_state = SessionState()
                     try:
                         if not _ws_handshake(new_conn):
+                            _status("err", f"HANDSHAKE_FAIL peer={who}")
                             new_conn.close()
                         else:
                             _send_json(new_conn, server_info_payload("gf_gmt-bridge-live"))
@@ -523,12 +532,10 @@ def live_stdin_ws(
                             )
                             conn = new_conn
                             state = new_state
-                            print(
-                                "[bridge-ws-live] ready — subscribe topics in Studio",
-                                flush=True,
-                            )
+                            peer_label = who
+                            _status("ok", f"CONNECTED peer={who} (listen :{port})")
                     except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                        print(f"[bridge-ws-live] handshake failed: {exc}", flush=True)
+                        _status("err", f"handshake failed peer={who}: {exc}")
                         try:
                             new_conn.close()
                         except OSError:
@@ -538,14 +545,9 @@ def live_stdin_ws(
             if conn is not None and state is not None:
                 try:
                     if not state.poll_client(conn):
-                        print(
-                            "[bridge-ws-live] client closed — waiting for reconnect",
-                            flush=True,
-                        )
-                        _close_client()
+                        _close_client(reason="client closed")
                 except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                    print(f"[bridge-ws-live] client gone: {exc}", flush=True)
-                    _close_client()
+                    _close_client(reason=f"client gone: {exc}")
 
             # Always drain stdin so the tap pipe never backs up
             lines: list[str] = []
@@ -554,7 +556,7 @@ def live_stdin_ws(
                 if chunk == "":
                     if not buf:
                         stdin_eof = True
-                        print("[bridge-ws-live] stdin EOF", flush=True)
+                        _status("bye", "stdin EOF")
                 else:
                     buf += chunk
                     while "\n" in buf:
@@ -574,10 +576,7 @@ def live_stdin_ws(
                     # blank / non-JSON pipe noise — keep quiet unless it looked like JSON
                     stripped = line.strip()
                     if stripped.startswith("{") and len(stripped) > 1:
-                        print(
-                            f"[bridge-ws-live] bad json (skipped): {stripped[:80]!r}",
-                            flush=True,
-                        )
+                        _status("err", f"bad json (skipped): {stripped[:80]!r}")
                     continue
                 topic = str(row.get("topic") or "/gf/stub")
                 t_ns = int(row.get("t_ns") or 0)
@@ -585,33 +584,32 @@ def live_stdin_ws(
                 if conn is None or state is None:
                     dropped += 1
                     if dropped == 1 or dropped % 200 == 0:
-                        print(
-                            f"[bridge-ws-live] no Studio yet — drained {dropped} msgs "
-                            "(connect anytime)",
-                            flush=True,
+                        _status(
+                            "listen",
+                            f"no client — drained {dropped} msgs (connect anytime)",
                         )
                     continue
                 try:
                     n = state.publish(conn, topic, t_ns, data)
                 except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                    print(f"[bridge-ws-live] client gone: {exc}", flush=True)
-                    _close_client()
+                    _close_client(reason=f"client gone: {exc}")
                     dropped += 1
                     continue
                 published += n
                 if published and published % 50 == 0:
-                    print(f"[bridge-ws-live] published {published} msgs", flush=True)
+                    _status("ok", f"published {published} msgs")
 
             if stdin_eof and conn is None:
                 break
     except KeyboardInterrupt:
-        print("\n[bridge-ws-live] stopped", flush=True)
+        _status("bye", "stopped")
     finally:
-        _close_client()
+        _close_client(reason="bridge exit")
         try:
             srv.close()
         except OSError:
             pass
+        _status("bye", f"exit published={published} dropped={dropped}")
 
 
 def os_read_chunk(stream: TextIO, size: int = 4096) -> str:

@@ -9,10 +9,12 @@
 # Usage:
 #   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #   # B1 boundary inject (no gateway; full consumer chain):
+#   GF_INJECT_MODE=playhead bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+#   # continuous (board-side file):
 #   GF_INJECT_SESSION=build/observability/session.jsonl \
 #     bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #   # B2 single-module (DUT only + inject):
-#   GF_INJECT_SESSION=… GF_INJECT_DUT=sensing.uss \
+#   GF_INJECT_MODE=playhead GF_INJECT_DUT=sensing.uss \
 #     bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #
 # Env:
@@ -23,7 +25,7 @@
 #   GF_LIVE_SESSION  optional tee path (default build/observability/session_live.jsonl)
 #   GF_LIVE_TEE      default 1 — tee tap NDJSON to GF_LIVE_SESSION
 #   GF_SKIP_COMPILE=1  skip compile_sil (assume already built)
-#   GF_INJECT_SESSION  if set → inject mode (no gateway; run gf_iox_obs_inject)
+#   GF_INJECT_SESSION  continuous 必填；playhead 可选（GMT stream，可不设）
 #   GF_INJECT_MODE     continuous (default) | playhead — playhead waits for GMT on GF_INJECT_PORT
 #   GF_INJECT_PORT     default 8767 (playhead control TCP)
 #   GF_INJECT_HOST     default 0.0.0.0 (playhead bind)
@@ -31,12 +33,15 @@
 #   GF_INJECT_SERVICES default EgoMotion (or auto from DUT requires ∩ injectable)
 #   GF_INJECT_DUT      B2: SOR process id (e.g. sensing.uss) → only that app + inject
 #   GF_INJECT_APPS     B2 override: comma list uss,fcm,planning (skip SOR lookup)
+#   GF_INJECT_MAX_EVENTS  continuous: hard max events (default ~20000); ignore for playhead stream
+#   GF_INJECT_LOOP     continuous: 1 = replay from start until signal; playhead uses GMT UI loop
 #   GF_SIL_KILL_STALE  default 1 — 启动前释放被旧 SIL/GMT 占用的 8765/8766/8767
 #                      设 0 则端口忙时直接失败并提示如何手动停
-#   # playhead example:
-#   GF_INJECT_SESSION=… GF_INJECT_MODE=playhead \
-#     bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
-#   # then GMT gui → 回灌 tab → connect 127.0.0.1:8767
+#   # playhead (GMT stream; session file optional):
+#   GF_INJECT_MODE=playhead bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+#   # then GMT gui → open session → 回灌 tab → connect 127.0.0.1:8767
+#   # continuous still needs a file:
+#   GF_INJECT_SESSION=… bash …/run_sil.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -56,7 +61,16 @@ export LD_LIBRARY_PATH="${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:$
 INJECT_SESSION="${GF_INJECT_SESSION:-}"
 INJECT_ON=0
 INJECT_MODE="off" # off | b1 | b2
+DRIVE_HINT="${GF_INJECT_MODE:-continuous}"
 if [[ -n "${INJECT_SESSION}" ]]; then
+  INJECT_ON=1
+  if [[ -n "${GF_INJECT_DUT:-}" || -n "${GF_INJECT_APPS:-}" ]]; then
+    INJECT_MODE="b2"
+  else
+    INJECT_MODE="b1"
+  fi
+elif [[ "${DRIVE_HINT}" == "playhead" || "${DRIVE_HINT}" == "controlled" || "${DRIVE_HINT}" == "wait" ]]; then
+  # playhead stream: session file optional — GMT owns full JSONL
   INJECT_ON=1
   if [[ -n "${GF_INJECT_DUT:-}" || -n "${GF_INJECT_APPS:-}" ]]; then
     INJECT_MODE="b2"
@@ -264,7 +278,14 @@ INJ="${BUILD}/apps/tools/iox_obs_inject/gf_iox_obs_inject"
 NEED_BINS=("${ROUDI}")
 if [[ "${INJECT_ON}" == "1" ]]; then
   NEED_BINS+=("${INJ}")
-  if [[ ! -f "${INJECT_SESSION}" ]]; then
+  DRIVE_CHECK="${GF_INJECT_MODE:-continuous}"
+  if [[ -z "${INJECT_SESSION}" ]]; then
+    if [[ "${DRIVE_CHECK}" != "playhead" && "${DRIVE_CHECK}" != "controlled" && "${DRIVE_CHECK}" != "wait" ]]; then
+      echo "${TAG} ERROR: continuous inject requires GF_INJECT_SESSION" >&2
+      exit 1
+    fi
+    echo "${TAG} playhead stream: no GF_INJECT_SESSION (GMT owns session)"
+  elif [[ ! -f "${INJECT_SESSION}" ]]; then
     echo "${TAG} ERROR: GF_INJECT_SESSION not a file: ${INJECT_SESSION}" >&2
     exit 1
   fi
@@ -500,16 +521,46 @@ if [[ "${INJECT_ON}" == "1" ]]; then
   DRIVE_MODE="${GF_INJECT_MODE:-continuous}"
   INJ_PORT="${GF_INJECT_PORT:-8767}"
   INJ_HOST="${GF_INJECT_HOST:-0.0.0.0}"
-  echo "${TAG} inject from ${INJECT_SESSION} (services=${GF_INJECT_SERVICES} topology=${INJECT_MODE} drive=${DRIVE_MODE})"
-  export GF_INJECT_SESSION="${INJECT_SESSION}"
+  if [[ -n "${INJECT_SESSION}" ]]; then
+    echo "${TAG} inject from ${INJECT_SESSION} (services=${GF_INJECT_SERVICES} topology=${INJECT_MODE} drive=${DRIVE_MODE})"
+    export GF_INJECT_SESSION="${INJECT_SESSION}"
+  else
+    echo "${TAG} inject playhead stream (no session file; services=${GF_INJECT_SERVICES} topology=${INJECT_MODE})"
+    unset GF_INJECT_SESSION || true
+  fi
   export GF_INJECT_MODE="${DRIVE_MODE}"
   export GF_INJECT_PORT="${INJ_PORT}"
   export GF_INJECT_HOST="${INJ_HOST}"
-  GF_INJECT_SESSION="${INJECT_SESSION}" \
+  # Plain listen hint; colored LISTENING comes from inject (/dev/tty)
+  if [[ -t 2 ]]; then
+    export GF_STATUS_COLOR=1
+  fi
+  echo "${TAG} [GMT Inject] listen tcp://0.0.0.0:${INJ_PORT} (playhead)" >&2
+  : >"${LOG_DIR}/inject.log"
+  INJ_FIFO="${LOG_DIR}/inject.fifo"
+  rm -f "${INJ_FIFO}"
+  mkfifo "${INJ_FIFO}"
+  # tee starts reading before inject writes → no lost LISTENING/CONNECTED lines
+  tee -a "${LOG_DIR}/inject.log" <"${INJ_FIFO}" >&2 &
+  INJ_TEE_PID=$!
+  if command -v stdbuf >/dev/null 2>&1; then
+    _INJ_RUN=(stdbuf -oL -eL "${INJ}")
+  else
+    _INJ_RUN=("${INJ}")
+  fi
+  if [[ -n "${INJECT_SESSION}" ]]; then
+    GF_INJECT_SESSION="${INJECT_SESSION}" \
+      GF_INJECT_MODE="${DRIVE_MODE}" \
+      GF_INJECT_PORT="${INJ_PORT}" \
+      GF_INJECT_HOST="${INJ_HOST}" \
+      "${_INJ_RUN[@]}" "${INJECT_SESSION}" >"${INJ_FIFO}" 2>&1 &
+  else
+    # playhead stream-only: no argv path
     GF_INJECT_MODE="${DRIVE_MODE}" \
-    GF_INJECT_PORT="${INJ_PORT}" \
-    GF_INJECT_HOST="${INJ_HOST}" \
-    "${INJ}" "${INJECT_SESSION}" >"${LOG_DIR}/inject.log" 2>&1 &
+      GF_INJECT_PORT="${INJ_PORT}" \
+      GF_INJECT_HOST="${INJ_HOST}" \
+      "${_INJ_RUN[@]}" >"${INJ_FIFO}" 2>&1 &
+  fi
   INJ_PID=$!
 
   LIVE_FAN_PID=""
@@ -523,8 +574,8 @@ if [[ "${INJECT_ON}" == "1" ]]; then
       HINT_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
       HINT_IP="${HINT_IP:-127.0.0.1}"
     fi
-    echo "${TAG} GF_OBS_LIVE_SERVICES=${GF_OBS_LIVE_SERVICES} (downstream while inject)"
-    echo "${TAG} Foxglove → ws://${HINT_IP}:${PORT}  GMT Live → ws://${HINT_IP}:${LIVE_PORT}"
+    echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
+    echo "${TAG} listen Foxglove ws://${HINT_IP}:${PORT}  GMT-Live ws://${HINT_IP}:${LIVE_PORT}"
     if [[ "${LIVE_TEE}" == "1" ]]; then
       mkdir -p "$(dirname "${LIVE_SESSION}")"
       : > "${LIVE_SESSION}"
@@ -545,14 +596,10 @@ if [[ "${INJECT_ON}" == "1" ]]; then
   fi
 
   if [[ "${DRIVE_MODE}" == "playhead" || "${DRIVE_MODE}" == "controlled" || "${DRIVE_MODE}" == "wait" ]]; then
-    LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    echo "${TAG} playhead: inject listening 0.0.0.0:${INJ_PORT} (TCP)"
-    echo "${TAG} 本机 GMT → Host=127.0.0.1 → 回灌 tcp:${INJ_PORT}；可同时连 Live ws:${GF_LIVE_PORT:-8766}"
-    if [[ -n "${LAN_IP}" && "${LAN_IP}" != "127.0.0.1" ]]; then
-      echo "${TAG} 远端 GMT → Host=${LAN_IP} → 回灌+Live 均可连"
-    fi
-    echo "${TAG} Ctrl+C 结束"
+    echo "${TAG} Ctrl+C to stop (yellow=listen green=CONNECTED cyan=DISCONNECTED red=err)"
     wait "${INJ_PID}" || true
+    kill "${INJ_TEE_PID}" 2>/dev/null || true
+    rm -f "${INJ_FIFO}"
     if [[ -n "${LIVE_FAN_PID}" ]]; then
       kill "${LIVE_FAN_PID}" 2>/dev/null || true
     fi
@@ -561,6 +608,8 @@ if [[ "${INJECT_ON}" == "1" ]]; then
   fi
   # continuous: wait for inject to finish
   wait "${INJ_PID}" || true
+  kill "${INJ_TEE_PID}" 2>/dev/null || true
+  rm -f "${INJ_FIFO}"
   if [[ -n "${LIVE_FAN_PID}" ]]; then
     kill "${LIVE_FAN_PID}" 2>/dev/null || true
   fi
@@ -590,19 +639,19 @@ if [[ "${HOST}" == "0.0.0.0" || "${HOST}" == "::" ]]; then
   HINT_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
   HINT_IP="${HINT_IP:-<this-host-LAN-IP>}"
 fi
-echo "${TAG} GF_OBS_LIVE_SERVICES=${GF_OBS_LIVE_SERVICES}"
-echo "${TAG} Foxglove Studio → ws://${HINT_IP}:${PORT}"
-echo "${TAG} GMT GUI live → ws://${HINT_IP}:${LIVE_PORT}（窗内 host:port 连接）"
-echo "${TAG} (GMT bridge is NOT ROS foxglove_bridge; main chain stays iceoryx)"
+echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
+echo "${TAG} listen Foxglove ws://${HINT_IP}:${PORT}  GMT-Live ws://${HINT_IP}:${LIVE_PORT}"
+echo "${TAG} Ctrl+C to stop (yellow=listen green=CONNECTED cyan=DISCONNECTED red=err)"
+if [[ -t 2 ]]; then
+  export GF_STATUS_COLOR=1
+fi
 
 LIVE_SESSION="${GF_LIVE_SESSION:-${ROOT}/build/observability/session_live.jsonl}"
 LIVE_TEE="${GF_LIVE_TEE:-1}"
 if [[ "${LIVE_TEE}" == "1" ]]; then
   mkdir -p "$(dirname "${LIVE_SESSION}")"
   : > "${LIVE_SESSION}"
-  echo "${TAG} live tee → ${LIVE_SESSION}"
 fi
-echo "${TAG} Ctrl+C 结束"
 
 _live_fan() {
   if [[ "${LIVE_TEE}" == "1" ]]; then
