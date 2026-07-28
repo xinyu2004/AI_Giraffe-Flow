@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from gf_gmt.gui.session_model import SessionModel
+from gf_gmt.i18n import t
 
 
 class InjectPanel(QWidget):
@@ -28,37 +29,34 @@ class InjectPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         tip = QLabel(
-            "顶栏连回灌 tcp:8767。stream 模式：GMT 打开的 session 是权威源"
-            "（板端 A/B 小窗，不必再设 GF_INJECT_SESSION）。\n"
-            "MVP 仅 Send /gf/EgoMotion：绿=已灌，粉=跳过（如 Trajectory）。"
-            "「跟 playhead 灌」时会关 Live 跟随。"
+            t("Inject via top bar tcp:8767. Follow-playhead drives EgoMotion frames.")
         )
         tip.setWordWrap(True)
         tip.setStyleSheet("color:#555;")
 
         tools = QHBoxLayout()
-        self.follow_playhead = QCheckBox("跟 playhead 灌（使用下方播放/单步/滑块）")
+        self.follow_playhead = QCheckBox(t("Follow playhead"))
         self.follow_playhead.setChecked(True)
         self.follow_playhead.setToolTip(
-            "开：时间轴 seek/播放/单步 → inject 发对应帧；关：只保持 TCP 连接"
+            t("开：时间轴 seek/播放/单步 → inject 发对应帧；关：只保持 TCP 连接")
         )
         tools.addWidget(self.follow_playhead)
-        self.loop_at_end = QCheckBox("循环（到结尾确认）")
+        self.loop_at_end = QCheckBox(t("Loop at end"))
         self.loop_at_end.setChecked(False)
         self.loop_at_end.setToolTip(
-            "板端 eof 时弹窗：继续则 seek 0 并清空结果表；停止则保持在结尾"
+            t("板端 eof 时弹窗：继续则 seek 0 并清空结果表；停止则保持在结尾")
         )
         tools.addWidget(self.loop_at_end)
         tools.addStretch(1)
 
-        self.state = QLabel("Inject: 未连接（请用顶栏连接）")
+        self.state = QLabel(t("Inject: disconnected"))
         self.state.setStyleSheet("color:#555; font-weight:600;")
         self.detail = QLabel("—")
         self.detail.setWordWrap(True)
 
         self._table = QTableWidget(0, 6)
         self._table.setHorizontalHeaderLabels(
-            ["#", "墙钟", "t_ns", "topic", "结果", "说明"]
+            ["#", t("Wall"), "t_ns", "topic", t("Result"), t("Note")]
         )
         self._table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch
@@ -82,10 +80,10 @@ class InjectPanel(QWidget):
     def set_connected(self, on: bool, *, detail: str = "") -> None:
         self._connected = on
         if on:
-            self.state.setText("Inject: 已连接（playhead）— 用下方播放/单步控制灌入")
+            self.state.setText(t("Inject: connected (playhead)"))
             self.state.setStyleSheet("color:#2e7d32; font-weight:700;")
         else:
-            self.state.setText("Inject: 未连接（请用顶栏连接）")
+            self.state.setText(t("Inject: disconnected"))
             self.state.setStyleSheet("color:#555; font-weight:600;")
             self._results.clear()
             self._refill_table()
@@ -161,11 +159,11 @@ class InjectPanel(QWidget):
         if res is None:
             result_txt, reason, bg = "—", "", None
         elif res.get("injected"):
-            result_txt, reason = "已发布", str(res.get("reason") or "")
+            result_txt, reason = t("Published"), str(res.get("reason") or "")
             bg = QColor("#c8e6c9")
         else:
-            result_txt = "跳过"
-            reason = str(res.get("reason") or "非可灌 / injected=false")
+            result_txt = t("Skipped")
+            reason = str(res.get("reason") or t("非可灌 / injected=false"))
             bg = QColor("#ffcdd2")
         wall = self._model.wall_str(ev.t_ns, compact=True)
         vals = [

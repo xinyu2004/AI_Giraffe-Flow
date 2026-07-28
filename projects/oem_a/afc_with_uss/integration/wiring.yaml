@@ -128,11 +128,11 @@ canvas:
   nodes:
     external.vehicle_mcu:
       kind: external
-      label: MCU / 车身
+      label: MCU
       out_side: right
       in_side: top
-      x: -336.3
-      y: -87.7
+      x: -199.7
+      y: -180.8
     adapter.vehicle_can_gateway:
       out_side: right
       in_side: bottom

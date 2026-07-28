@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from gf_gmt.gui.session_model import SessionModel
+from gf_gmt.i18n import t
 from gf_gmt.measure_tag import TagRecord, load_tags, tags_path_for_session
 
 
@@ -451,7 +452,7 @@ class _MultiStripCanvas(QWidget):
             p.drawText(
                 self.rect(),
                 Qt.AlignmentFlag.AlignCenter,
-                "打开 session 后，点中间 ▼ 展开选变量",
+                t("Open a session, then ▼ to pick variables"),
             )
             return
         if not self._keys:
@@ -459,7 +460,7 @@ class _MultiStripCanvas(QWidget):
             p.drawText(
                 self.rect(),
                 Qt.AlignmentFlag.AlignCenter,
-                "尚未添加变量 — 点中间 ▼ 展开列表，双击或「添加 →」",
+                t("No variables yet — ▼ then Add →"),
             )
             return
 
@@ -635,7 +636,7 @@ class _MultiStripCanvas(QWidget):
             else:
                 p.restore()
                 p.setPen(QColor("#999"))
-                msg = "无样本" if not pts else "不在当前时窗 →「适应本轨」"
+                msg = t("no samples") if not pts else t("out of view — fit row")
                 p.drawText(
                     left + 8,
                     plot_top,
@@ -673,7 +674,7 @@ class _ArrowStrip(QWidget):
         self.setFixedHeight(16)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._expanded = False
-        self.setToolTip("点击展开 / 收起选变量")
+        self.setToolTip(t("Toggle variable picker"))
 
     def set_expanded(self, on: bool) -> None:
         self._expanded = bool(on)
@@ -725,10 +726,10 @@ class VarStripView(QWidget):
         self._btn_row_minus = QPushButton("▼")
         self._btn_row_minus.setFixedSize(30, 28)
         self._btn_row_minus.setStyleSheet(_row_h_btn)
-        self._btn_row_minus.setToolTip("所有轨整体变矮")
+        self._btn_row_minus.setToolTip(t("Shrink all rows"))
         self._btn_row_minus.clicked.connect(lambda: self._canvas.nudge_all_row_heights(-8))
         bar.addWidget(self._btn_row_minus)
-        lbl_row_h = QLabel("轨高")
+        lbl_row_h = QLabel(t("Height"))
         lbl_row_h.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_row_h.setFixedHeight(28)
         f = lbl_row_h.font()
@@ -739,7 +740,7 @@ class VarStripView(QWidget):
         self._btn_row_plus = QPushButton("▲")
         self._btn_row_plus.setFixedSize(30, 28)
         self._btn_row_plus.setStyleSheet(_row_h_btn)
-        self._btn_row_plus.setToolTip("所有轨整体变高")
+        self._btn_row_plus.setToolTip(t("Grow all rows"))
         self._btn_row_plus.clicked.connect(lambda: self._canvas.nudge_all_row_heights(8))
         bar.addWidget(self._btn_row_plus)
         bar.addStretch(1)
@@ -752,9 +753,9 @@ class VarStripView(QWidget):
         self._added.itemDoubleClicked.connect(self._on_added_double)
         self._added.currentTextChanged.connect(self._on_added_sel)
 
-        self._btn_add = QPushButton("添加 →")
+        self._btn_add = QPushButton(t("Add →"))
         self._btn_add.clicked.connect(self._on_add)
-        self._btn_remove = QPushButton("← 移除")
+        self._btn_remove = QPushButton(t("← Remove"))
         self._btn_remove.clicked.connect(self._on_remove)
 
         mid = QVBoxLayout()
@@ -767,10 +768,10 @@ class VarStripView(QWidget):
 
         lists = QHBoxLayout()
         left_col = QVBoxLayout()
-        left_col.addWidget(QLabel("可添加"))
+        left_col.addWidget(QLabel(t("Available")))
         left_col.addWidget(self._avail, stretch=1)
         right_col = QVBoxLayout()
-        right_col.addWidget(QLabel("已添加"))
+        right_col.addWidget(QLabel(t("Added")))
         right_col.addWidget(self._added, stretch=1)
         left_w = QWidget()
         left_w.setLayout(left_col)

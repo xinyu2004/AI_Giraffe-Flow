@@ -31,10 +31,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     from gf_config.gui.main_window import MainWindow
+    from gf_config.i18n import load_language, t
 
     app = QApplication(sys.argv)
     app.setApplicationName("gf-config")
     app.setOrganizationName("GiraffeFlow")
+    load_language()
 
     win = MainWindow()
     if args.project:
@@ -43,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # noqa: BLE001 — show in UI
             from PySide6.QtWidgets import QMessageBox
 
-            QMessageBox.critical(win, "Open failed", str(exc))
+            QMessageBox.critical(win, t("打开失败"), str(exc))
     win.show()
     return app.exec()
 

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from gf_gmt.gui.wall_time import SessionClock
+from gf_gmt.i18n import t
 from gf_gmt.measure_tag import (
     TagRecord,
     clip_by_tag,
@@ -47,10 +48,7 @@ class TagPanel(QWidget):
         self._playhead_ns: int | None = None
         self._clock: SessionClock = SessionClock()
 
-        hint = QLabel(
-            "标记点 ●：热键 M 在 playhead 钉一下，方便回头找；"
-            "片段 ▬：热键 [ / ] 定 from/to，可导出 clip。列表显示墙钟（方案 1）。"
-        )
+        hint = QLabel(t("Marker ● = M; Range ▬ = [ / ]."))
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#555;")
 
@@ -60,45 +58,45 @@ class TagPanel(QWidget):
 
         self._label = QLineEdit()
         self._kind = QComboBox()
-        self._kind.addItem("标记点 (marker)", "marker")
-        self._kind.addItem("片段 (range)", "range")
+        self._kind.addItem(t("Marker"), "marker")
+        self._kind.addItem(t("Range"), "range")
         self._from = QLineEdit()
         self._from.setPlaceholderText("from_ns / at_ns")
         self._to = QLineEdit()
-        self._to.setPlaceholderText("to_ns（标记点可留空或同 from）")
+        self._to.setPlaceholderText(t("to_ns（标记点可留空或同 from）"))
         self._topics = QLineEdit()
-        self._topics.setPlaceholderText("逗号分隔 topic，可选")
+        self._topics.setPlaceholderText(t("逗号分隔 topic，可选"))
         self._notes = QTextEdit()
         self._notes.setMaximumHeight(80)
 
         form = QFormLayout()
-        form.addRow("标签", self._label)
-        form.addRow("类型", self._kind)
+        form.addRow(t("Label"), self._label)
+        form.addRow(t("Type"), self._kind)
         form.addRow("from / at", self._from)
         form.addRow("to_ns", self._to)
         form.addRow("topics", self._topics)
-        form.addRow("备注", self._notes)
+        form.addRow(t("Notes"), self._notes)
 
         self._play_lbl = QLabel("playhead=—")
         self._play_lbl.setStyleSheet("color:#333;")
 
         btn_row = QHBoxLayout()
-        self._btn_mark = QPushButton("钉标记 ●")
-        self._btn_mark.setToolTip("在 playhead 打一个标记点（热键 M）")
+        self._btn_mark = QPushButton(t("Pin mark ●"))
+        self._btn_mark.setToolTip(t("在 playhead 打一个标记点（热键 M）"))
         self._btn_mark.clicked.connect(self._on_drop_marker)
-        self._btn_new = QPushButton("新建")
+        self._btn_new = QPushButton(t("新建"))
         self._btn_new.clicked.connect(self._on_new)
-        self._btn_save = QPushButton("保存")
+        self._btn_save = QPushButton(t("Save"))
         self._btn_save.clicked.connect(self._on_save)
-        self._btn_del = QPushButton("删除")
+        self._btn_del = QPushButton(t("Delete"))
         self._btn_del.clicked.connect(self._on_delete)
-        self._btn_jump = QPushButton("跳转")
+        self._btn_jump = QPushButton(t("Jump"))
         self._btn_jump.clicked.connect(self._on_jump)
         self._btn_from = QPushButton("from←playhead")
         self._btn_from.clicked.connect(lambda: self._fill_bound("from"))
         self._btn_to = QPushButton("to←playhead")
         self._btn_to.clicked.connect(lambda: self._fill_bound("to"))
-        self._btn_clip = QPushButton("导出 clip…")
+        self._btn_clip = QPushButton(t("Export clip…"))
         self._btn_clip.clicked.connect(self._on_clip)
         for b in (
             self._btn_mark,
@@ -148,7 +146,7 @@ class TagPanel(QWidget):
             self._play_lbl.setText("playhead=—")
         else:
             wall = self._clock.format(t_ns)
-            self._play_lbl.setText(f"playhead={t_ns}  墙钟={wall}")
+            self._play_lbl.setText(f"playhead={t_ns}  {t('Wall')}={wall}")
 
     def live_drop_marker(self, t_ns: int | None = None, *, label: str = "") -> str:
         """One-shot bookmark at playhead (primary live Tag action)."""

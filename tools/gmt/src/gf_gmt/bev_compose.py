@@ -293,9 +293,13 @@ class LiveBevComposer:
             t = self._n * 100_000_000  # 0.1s steps
         if self.state.has_adas:
             lo = self.state.lane_offset_m
-            # Scenario story path follows lane_offset — ignore stub Trajectory crooks.
-            traj_x = [0.0, 20.0, 40.0]
-            traj_y = [lo, lo, lo]
+            # Prefer planning Trajectory (ego-frame → world y for render_bev_png).
+            if len(self.state.traj_x) >= 2 and len(self.state.traj_y) >= 2:
+                traj_x = list(self.state.traj_x)
+                traj_y = [lo + y for y in self.state.traj_y]
+            else:
+                traj_x = [0.0, 20.0, 40.0]
+                traj_y = [lo, lo, lo]
             fs = FrameState(
                 t_ns=t,
                 scenario_id=self.state.scenario_id or "live",

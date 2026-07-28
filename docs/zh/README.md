@@ -2,24 +2,24 @@
 
 **English:** [../en/README.md](../en/README.md) · 根: [../../README_zh.md](../../README_zh.md)
 
+## 三条主线（从根 README 进来）
+
+| 主线 | 入口 |
+|------|------|
+| **gf-config** | [../../tools/config/README_zh.md](../../tools/config/README_zh.md) · [architecture/sor-authoring.md](architecture/sor-authoring.md) · [operations/WORKFLOW.md](operations/WORKFLOW.md) |
+| **Giraffe 模块** | [../../middleware/README.md](../../middleware/README.md) · [architecture/DESIGN.md](architecture/DESIGN.md) · [../../projects/oem_a/afc_with_uss/](../../projects/oem_a/afc_with_uss/) |
+| **GMT** | [../../tools/gmt/README_zh.md](../../tools/gmt/README_zh.md) · [operations/OBSERVABILITY_DEMO.md](operations/OBSERVABILITY_DEMO.md) |
+
+## 专题索引
+
 | 文档 | 说明 |
 |------|------|
 | [architecture/DESIGN.md](architecture/DESIGN.md) | 总体设计 |
-| [architecture/component-composition.md](architecture/component-composition.md) | 可组合组件 / 外仓 |
-| [architecture/heterogeneous-compute.md](architecture/heterogeneous-compute.md) | AP + MCU CP 双拓扑 |
-| [architecture/sor-authoring.md](architecture/sor-authoring.md) | **SOR / compose --project 一键集成** |
-| [architecture/portability-hal.md](architecture/portability-hal.md) | ARM / MIPS / RISC-V OSAL |
-| [operations/ROADMAP.md](operations/ROADMAP.md) | **P0–P3 路线图** |
-| [operations/P0_PLAN.md](operations/P0_PLAN.md) | P0 实施（已收口） |
-| [operations/P1_PLAN.md](operations/P1_PLAN.md) | P1：gf-config 信号链接 GUI / 裁剪 / MCU |
-| [operations/P2_PLAN.md](operations/P2_PLAN.md) | P2：多进程 SIL / 可观测 / platform 骨架 |
-| [operations/MIDDLEWARE_CONFIG_PLAN.md](operations/MIDDLEWARE_CONFIG_PLAN.md) | **中间件模块 × gf-config 配什么** |
+| [architecture/sor-authoring.md](architecture/sor-authoring.md) | SOR / compose |
+| [architecture/heterogeneous-compute.md](architecture/heterogeneous-compute.md) | AP + MCU |
+| [operations/ROADMAP.md](operations/ROADMAP.md) | 路线图 |
 | [operations/WORKFLOW.md](operations/WORKFLOW.md) | 操作流程 |
-| [dependencies/THIRD_PARTY_EVALUATION.md](dependencies/THIRD_PARTY_EVALUATION.md) | 三方库评估 |
+| [operations/OBSERVABILITY_DEMO.md](operations/OBSERVABILITY_DEMO.md) | Live / Foxglove / 回灌 |
+| [dependencies/THIRD_PARTY_EVALUATION.md](dependencies/THIRD_PARTY_EVALUATION.md) | 三方库 |
 
-## 阅读顺序
-
-1. [README_zh.md](../../README_zh.md)  
-2. [ROADMAP.md](operations/ROADMAP.md)  
-3. [DESIGN.md](architecture/DESIGN.md)  
-4. [STRUCTURE.md](../../STRUCTURE.md)
+阅读顺序：根 [README_zh.md](../../README_zh.md) → 上表三条主线 → 需要时再开 DESIGN / ROADMAP。

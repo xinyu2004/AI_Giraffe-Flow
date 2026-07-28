@@ -1,87 +1,198 @@
 # AI Giraffe Flow
 
-**Lightweight SOA middleware + toolchain** — desktop first, **ARM Linux embedded** primary; MIPS / RISC-V reserved via OSAL.
+**Lightweight middleware + toolchain for cross-platform SOA systems.**
+
+Desktop-first, **ARM Linux** embedded primary (OSAL reserved for MIPS / RISC-V). The middleware is a trimmable `gf_ara::*` runtime with pluggable transports; the toolchain wraps it—**gf-config** turns vehicle contracts into SOR and codegen, **GMT** turns multi-process bring-up from log-chasing into scrub / inject / Foxglove. The product core remains the **Giraffe modules** that actually run on SIL and on the board.
 
 **中文:** [README_zh.md](README_zh.md)
 
-> Status: **projects + `gf-codegen` MVP ready** (compose/lint/suggest/type generate). Iceoryx two-process demo is next — [P0_PLAN](docs/zh/operations/P0_PLAN.md) (zh).
-
-[STRUCTURE.md](STRUCTURE.md) · [Roadmap](docs/en/operations/ROADMAP.md) · [P0 plan (zh)](docs/zh/operations/P0_PLAN.md) · [Upload checklist](projects/UPLOAD_CHECKLIST.md)
-
 ---
 
-## What this repo is
+## Overview
 
-| Piece | Role |
-|-------|------|
-| **Runtime** | `gf_ara::*`, trimmable modules incl. **ucm** (OTA), **diag** (DoIP) |
-| **Transports** | iceoryx, SOME/IP, DDS, cross_domain_ipc |
-| **Contract** | **`gf.sor.json`** (SOR) |
-| **gf-codegen** | `compose` → `lint` → `generate` |
-| **GMT** | Giraffe Measure Tool — architect / measure / bridge |
-
-Production perception/planning live in **external repos**; use `apps/simulators/` here.
-
----
-
-## Ecosystem: roles → codegen → board → GMT
-
-| Role | Owns | Does not own |
-|------|------|--------------|
-| Module engineer | `io_types.hpp` | DBC, wiring, SKU, JSON fragments |
-| System integrator | `projects/<oem>/<vehicle>/` | Algorithm code |
-| Platform / middleware | runtime, bindings, schemas | Per-vehicle deltas |
-| DevOps | `req.yaml` acceptance, CI | Signal tables |
+| # | Pillar | Role | Dig in |
+|---|--------|------|--------|
+| **1** | **gf-config** | Toolchain · configure | [tools/config](tools/config/README.md) · [SOR](docs/en/architecture/sor-authoring.md) |
+| **2** | **Giraffe modules** | **Product core** · runtime & processes | [middleware](middleware/README.md) · [Design](docs/en/architecture/DESIGN.md) · [Sample](projects/oem_a/afc_with_uss/) |
+| **3** | **GMT** | Toolchain · observe / inject | [tools/gmt](tools/gmt/README.md) · [Observability demo](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
 ```text
-four inputs + project.yaml → compose → gf.sor.json → lint/lineage → generate → build → onboard
-Host loop: trace/MCAP → GMT / Foxglove → fix wiring → re-compose
+┌─ Toolchain (configure) ──────────────────────────────┐
+│  gf-config · req.yaml / wiring.yaml                  │
+│       │ compose / lint / generate                    │
+│       ▼                                              │
+│  gf.sor.json  +  Proxy / Skeleton / deploy lists     │
+└───────────────────────┬──────────────────────────────┘
+                        │
+                        ▼
+┌─ Giraffe modules (core · SIL / board) ───────────────┐
+│                                                      │
+│  ┌─ middleware / gf_ara ─────────────────────────┐   │
+│  │  com  ──► bindings: iceoryx | SOME/IP | DDS   │   │
+│  │  exec / phm / sm     OSAL (ARM…)    log/trace │   │
+│  │  ucm / diag (skeleton)                        │   │
+│  └───────────────────────────────────────────────┘   │
+│                        ▲                             │
+│                        │ semantic service names      │
+│  ┌─ apps (reference processes) ──────────────────┐   │
+│  │  adapters     gateway / MCU CP boundary       │   │
+│  │  sensing      e.g. USS → UssZones             │   │
+│  │  perception   e.g. FCM stub                   │   │
+│  │  planning     e.g. Trajectory                 │   │
+│  │  tools        tap / inject                    │   │
+│  └───────────────────────────────────────────────┘   │
+│                                                      │
+│  projects/<oem>/<sku>/   integration + compile_sil   │
+└───────────────────────┬──────────────────────────────┘
+                        │ tap (8765/8766) · inject (8767)
+                        ▼
+┌─ Toolchain (observe) ────────────────────────────────┐
+│  GMT GUI · Foxglove · Tag / MCAP / playhead inject   │
+└──────────────────────────────────────────────────────┘
 ```
 
-Example: [projects/oem_a/afc_with_uss/](projects/oem_a/afc_with_uss/) · [WORKFLOW](docs/en/operations/WORKFLOW.md)
+---
+
+### 1. gf-config (configure toolchain)
+
+Defines **what** and **who talks to whom** — not algorithms.
+
+- Tab A → `req.yaml` (SKU / trim / live_tap)
+- Tab B → `wiring.yaml` (signal graph)
+- Verify / Generate → SOR + codegen
+
+![gf-config — signal graph (B)](result_pic/gf-config.png)
+
+```bash
+gf-config projects/oem_a/afc_with_uss/project.yaml
+```
+
+Details: [tools/config/README.md](tools/config/README.md) · [WORKFLOW](docs/en/operations/WORKFLOW.md)
 
 ---
 
-## Onboard vs host PC (full toolchain)
+### 2. Giraffe modules (core)
 
-| Capability | Onboard | Host PC |
-|------------|:-------:|:-------:|
-| gf_ara runtime, bindings, adapters | ● | desktop profile for T0 |
-| External app repos (perception/planning) | ● | cross-build |
-| MCU (AUTOSAR CP, no gf) | ● optional | |
-| gf-codegen (compose/lint/generate) | | ● (not in prod image) |
-| GMT, Foxglove, MCAP replay | | ● |
-| Cross-build, CI, SOR/wiring/DBC edit | | ● |
-| lineage / golden diff gates | | ● |
+What actually runs on the board and in SIL. Production algorithms may live in **external repos**; this tree ships a **trimmable platform + reference processes** on one semantic contract.
 
-Details: [DESIGN.md](docs/en/architecture/DESIGN.md) · expanded zh: [README_zh.md](README_zh.md)
+#### 2.1 Layers
+
+| Layer | Path | Role |
+|-------|------|------|
+| **API / runtime** | `middleware/` | Public `gf_ara::*`; trim via SKU `runtime_modules` |
+| **Transports** | `middleware/bindings/` | iceoryx, SOME/IP, DDS, cross_domain_ipc (MCU) |
+| **Exec / health** | exec / phm / sm | Launch, heartbeat, state groups |
+| **Portability** | `osal/` · `hal/` | Clock/thread; ARM Linux first |
+| **Reference apps** | `apps/` | Gateway, sensing/perception/planning stubs, obs tools — **not production algos** |
+| **Integration** | `projects/` | OEM DBC / wiring / hpp / SIL·HIL scripts |
+
+Rule: **apps depend only on semantic service names**; OEM deltas stay in adapter/gateway. See [DESIGN](docs/en/architecture/DESIGN.md).
+
+#### 2.2 Middleware packages (SKU-trim)
+
+| Package | Role |
+|---------|------|
+| [com](middleware/com/) | Unified com (Proxy / Skeleton) |
+| [bindings/iceoryx](middleware/bindings/iceoryx/) … | Transport backends |
+| [exec](middleware/exec/) / [phm](middleware/phm/) / [sm](middleware/sm/) | Execution / health / state |
+| [osal](middleware/osal/) | OS abstraction |
+| [ucm](middleware/ucm/) / [diag](middleware/diag/) | OTA / DoIP skeletons |
+| [log](middleware/log/) / [trace](middleware/trace/) | Logging & timing |
+
+Overview: [middleware/README.md](middleware/README.md)
+
+#### 2.3 Reference chain (sample SKU)
+
+[oem_a / afc_with_uss](projects/oem_a/afc_with_uss/):
+
+```text
+Vehicle state (pick one)
+  · gateway (no inject)   or   · inject (playhead; gateway off)
+        │
+        ▼ EgoMotion
+   ┌────┴────┬────────────┐
+   ▼         ▼            ▼
+  USS      FCM stub     (Ego subscribers)
+   │         │
+   ▼         ▼
+ UssZones   Perception_Out
+        \   /
+         ▼
+      planning → Trajectory
+        │
+        ▼
+   tap → Foxglove / GMT Live
+```
+
+| Process | Role |
+|---------|------|
+| `adapter.vehicle_can_gateway` | CAN/sim → EgoMotion, Perception_In… (off under inject) |
+| `sensing.uss` | Ego → UssZones |
+| `perception.fcm` | Perception_In or (inject) Ego → perception stub |
+| `planning.driving` | Ego (+ optional perc/USS) → Trajectory |
+| `gf_iox_obs_tap` | Allowlisted services → NDJSON |
+| `gf_iox_obs_inject` | playhead / continuous Ego inject |
+
+Production perception/planning: **external packages**. See [apps/](apps/README.md).
+
+#### 2.4 Product path (SIL)
+
+```bash
+bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+
+GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
+  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+```
+
+Scripts: [scripts/README.md](projects/oem_a/afc_with_uss/scripts/README.md)  
+Scenarios: [scenarios/README.md](projects/oem_a/afc_with_uss/scenarios/README.md)
+
+#### 2.5 Boundary vs toolchain
+
+| Giraffe modules own | Toolchain owns |
+|---------------------|----------------|
+| In-process I/O, real pub/sub on iceoryx | wiring / SKU trim → gf-config |
+| SIL: RouDi + apps + tap/inject | Studio layout, Tag, MCAP → GMT / Foxglove |
+| Semantic contract on target | DBC / lineage gates → compose |
 
 ---
 
-## Roadmap
+### 3. GMT (observe toolchain)
 
-| Phase | Focus |
-|-------|--------|
-| **P0** | SOR, codegen, iceoryx demo, ARM OSAL — [ROADMAP](docs/en/operations/ROADMAP.md) |
-| **P1** | Bindings, GMT, `compose --project`, ucm/diag stubs |
-| **P2** | MCAP, evidence, Foxglove |
-| **P3** | Production profile, DoIP/OTA bench, multi-arch OSAL |
+In multi-process SIL, terminal logs rarely answer “who published what, when.” GMT attaches the same tap stream to a host timeline and Foxglove: **scrub / speed** align DAG and variables, **playhead inject** drives Ego into the chain frame-by-frame (gateway off, no dual publish), then **Tag → MCAP** when you need a clip. Few ports, one `run_sil` companion—cheap to “change and look again.” It **does not replace modules**; it makes them repeatedly verifiable.
 
-**Next:** P0 track B — iceoryx demo + richer `generate` — [P0_PLAN (zh)](docs/zh/operations/P0_PLAN.md)
+![GMT — Vars scrub / Live + Inject](result_pic/GMT.png)
+
+| Port | Role |
+|------|------|
+| **8765** | Foxglove (module I/O → optional BEV) |
+| **8766** | GMT Live (optional) |
+| **8767** | playhead inject |
+
+```bash
+pip install -e tools/gmt -e 'tools/gmt[gui]'
+GMT gui --project projects/oem_a/afc_with_uss \
+  --session projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl
+```
+
+Details: [tools/gmt/README.md](tools/gmt/README.md) · [OBSERVABILITY_DEMO](docs/zh/operations/OBSERVABILITY_DEMO.md)
 
 ---
 
 ## Repo map
 
-[STRUCTURE.md](STRUCTURE.md) · [projects/](projects/)
+| Path | Role |
+|------|------|
+| [middleware/](middleware/) | **Giraffe runtime (core)** |
+| [apps/](apps/) | Reference apps / adapters / tap·inject |
+| [projects/](projects/) | OEM integration |
+| [tools/config/](tools/config/) | gf-config |
+| [tools/codegen/](tools/codegen/) | gf-codegen |
+| [tools/gmt/](tools/gmt/) | GMT |
+| [docs/](docs/README.md) | Docs index |
 
-## Docs
-
-| Link | Content |
-|------|---------|
-| [DESIGN.md](docs/en/architecture/DESIGN.md) | Design |
-| [sor-authoring.md](docs/en/architecture/sor-authoring.md) | SOR / four inputs |
-| [ROADMAP.md](docs/en/operations/ROADMAP.md) | Phases |
+[STRUCTURE.md](STRUCTURE.md) · [ROADMAP](docs/en/operations/ROADMAP.md)
 
 ## License
 

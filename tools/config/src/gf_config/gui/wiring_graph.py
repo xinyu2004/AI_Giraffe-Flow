@@ -93,23 +93,11 @@ def service_color(svc: str) -> QColor:
 
 
 _PORT_SIDES = ("left", "right", "top", "bottom")
-_SIDE_LABEL = {"left": "左", "right": "右", "top": "上", "bottom": "下"}
+_SIDE_LABEL = {"left": "left", "right": "right", "top": "top", "bottom": "bottom"}
 
 
 def is_external_node(*, kind: str = "", process: str = "") -> bool:
     return kind == "external" or process.startswith("external.")
-
-
-def role_of(process: str, *, kind: str = "") -> str:
-    if is_external_node(kind=kind, process=process):
-        return "External · MCU/车身"
-    if process.startswith("adapter."):
-        return "Adapter"
-    if process.startswith(("sensing.", "perception.", "planning.")):
-        return "SOA App"
-    if "mcu" in process:
-        return "MCU / CP"
-    return "Process"
 
 
 def _norm_side(side: str | None, default: str) -> str:
@@ -196,27 +184,22 @@ class PortItem(QGraphicsEllipseItem):
         if self.direction == "out":
             fill = QColor("#2ecc71") if selected else QColor("#58d68d")
             tip_dir = "Out"
-            move_hint = "拖动改边；Ctrl+拖 = 拉线"
         else:
             fill = QColor("#e67e22") if selected else QColor("#f39c12")
             tip_dir = "In"
-            move_hint = "拖动到卡片其它边松手吸附"
         if linked:
             border = QColor("#ffffff") if selected else QColor("#f8f9f9")
-            tip = "已连"
+            tip = "linked"
             pen = QPen(border, 2.5 if selected else 1.5)
         else:
             border = QColor("#922b21")
-            tip = "未连"
+            tip = "unlinked"
             pen = QPen(border, 2.0 if selected else 1.6)
             pen.setStyle(Qt.PenStyle.DashLine)
         self.setBrush(QBrush(fill))
         self.setPen(pen)
         side_l = _SIDE_LABEL.get(self.side, self.side)
-        self.setToolTip(
-            f"{tip_dir}: {short_service(self.service)}（{tip} · {side_l}侧）\n"
-            f"{move_hint}\n右键：菜单改边"
-        )
+        self.setToolTip(f"{tip_dir}: {short_service(self.service)} ({tip} · {side_l})")
         s = self.SIZE
         if self.direction == "in":
             self.setRect(-s / 2, -s / 2 + 1, s, s - 2)
@@ -287,9 +270,9 @@ class PortItem(QGraphicsEllipseItem):
         if self.card.graph is None:
             return
         menu = QMenu()
-        menu.addAction(f"{short_service(self.service)} — 移到：").setEnabled(False)
+        menu.addAction(f"{short_service(self.service)} — move to:").setEnabled(False)
         for s in _PORT_SIDES:
-            act = menu.addAction(f"  {_SIDE_LABEL[s]}侧")
+            act = menu.addAction(f"  {_SIDE_LABEL[s]}")
             act.setData(s)
             if s == self.side:
                 act.setCheckable(True)
@@ -302,11 +285,11 @@ class PortItem(QGraphicsEllipseItem):
 
 class ProcessCard(QGraphicsItem):
     WIDTH = 200
-    # MCU/车身：相对原 EXT(150×78) → 宽×1.5、高×3
-    EXT_WIDTH = 225
-    EXT_HEIGHT = 234
+    # External MCU card: compact (no port list / tutorial lines)
+    EXT_WIDTH = 180
+    EXT_HEIGHT = 56
     LINE = 16
-    HEADER = 62  # title + role + domain
+    HEADER = 28  # title only
 
     def __init__(
         self,
@@ -434,7 +417,7 @@ class ProcessCard(QGraphicsItem):
                 e.update_path()
 
     def _compute_height(self) -> float:
-        # MCU/车身：紧凑块放大（宽×1.5 / 高×3），仍不展示信号端口
+        # External MCU: compact block, no signal ports on canvas
         if self.is_external():
             return float(self.EXT_HEIGHT)
         n = (
@@ -584,41 +567,26 @@ class ProcessCard(QGraphicsItem):
         title = self.label or self.process_name
         painter.drawText(
             QRectF(8, y, w - 16, 20),
-            Qt.AlignmentFlag.AlignLeft,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
             title,
         )
-        y += 20
+
+        if external:
+            return
 
         font_small = QFont()
         font_small.setPointSize(8)
         painter.setFont(font_small)
-        painter.setPen(QColor("#5d6d63") if self._dimmed else QColor("#7fb39a"))
-        painter.drawText(8, y + 12, role_of(self.process_name, kind=self.kind))
-        y += 16
-        # compute_domain：部署域（写进 wiring/SOR；卡片上可见）
-        dom_c = QColor("#4a4030") if self._dimmed else QColor("#c9a227")
-        painter.setPen(dom_c)
-        painter.drawText(8, y + 12, f"部署:{self.compute_domain}")
-
-        if external:
-            y += 28
-            painter.setPen(QColor("#8a7a40") if self._dimmed else QColor("#f0e6b0"))
-            painter.drawText(8, y + 12, "↔ 仅连 gateway")
-            y += 28
-            painter.setPen(QColor("#6e6340") if self._dimmed else QColor("#d5c48a"))
-            painter.drawText(8, y + 12, "VehicleBus / Trajectory")
-            return
-
         y = self.HEADER
         outs = self._visible_provides()
         ins = self._visible_requires()
-        # 颜色 = 方向（与连线无关）；未连在行尾标 !
+        # Color = direction; unlinked ports get a trailing !
         out_head = QColor("#145a32") if self._dimmed else QColor("#00e676")
         out_ok = QColor("#1e8449") if self._dimmed else QColor("#69f0ae")
         in_head = QColor("#6e2c00") if self._dimmed else QColor("#ff9100")
         in_ok = QColor("#935116") if self._dimmed else QColor("#ffb74d")
         painter.setPen(out_head)
-        painter.drawText(8, y + 12, "● Out（绿）· 拖改边 / Ctrl拖拉线")
+        painter.drawText(8, y + 12, "Out")
         y += self.LINE
         for svc in outs:
             linked = self.is_port_linked("out", svc)
@@ -627,7 +595,7 @@ class ProcessCard(QGraphicsItem):
             painter.drawText(16, y + 12, f"{short_service(svc)}{mark}")
             y += self.LINE
         painter.setPen(in_head)
-        painter.drawText(8, y + 12, "■ In（橙）· 拖动改边")
+        painter.drawText(8, y + 12, "In")
         y += self.LINE
         for svc in ins:
             linked = self.is_port_linked("in", svc)
@@ -705,7 +673,7 @@ class RouteHandle(QGraphicsEllipseItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
         self.setCursor(Qt.CursorShape.SizeAllCursor)
-        self.setToolTip("拖动调整连线路径（Ctrl+S 保存）")
+        self.setToolTip("Drag to adjust route (Ctrl+S to save)")
         self._updating = False
         self.hide()
 
@@ -1084,7 +1052,7 @@ class MissingEdge(QGraphicsPathItem):
 
 
 class McuPeerLink(QGraphicsPathItem):
-    """MCU/车身 ↔ gateway 的特殊边界连线（画布不展示具体信号端口）。"""
+    """External MCU ↔ gateway boundary link (services stay in yaml)."""
 
     def __init__(
         self,
@@ -1108,10 +1076,10 @@ class McuPeerLink(QGraphicsPathItem):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         mcu._edges.append(self)
         gateway._edges.append(self)
-        label = "MCU ↔ gateway"
+        label = "gateway"
         if services:
             shorts = sorted({short_service(s) for s in services})
-            label = f"MCU ↔ gateway（{' / '.join(shorts[:3])}）"
+            label = " / ".join(shorts[:3])
         self._label = QGraphicsSimpleTextItem(label)
         font = QFont()
         font.setPointSize(9)
@@ -1490,26 +1458,21 @@ class AddNodeDialog(QDialog):
         self._domain = QComboBox()
         self._domain.setEditable(False)
         # 普通 SOA/Adapter 模块；MCU 走单独入口，不在此选 external
-        self._domain.addItem("ap_linux — 域控 Linux（默认，几乎总是这个）", "ap_linux")
-        self._domain.addItem("host — 桌面联调 PC（开发机跑 sim）", "host")
+        self._domain.addItem("ap_linux — AP Linux (default)", "ap_linux")
+        self._domain.addItem("host — desktop / sim PC", "host")
         self._domain.setCurrentIndex(0)
         self._domain.setToolTip(
-            "compute_domain：进程跑在哪个算力域。\n"
-            "写入 wiring.yaml → Verify 合成进 gf.sor.json 的 deployments[]。\n"
-            "异构 AP+MCU 拓扑时用于选 binding / 裁剪；ap_only 项目里多为元数据。\n"
-            "卡片上会显示「部署:ap_linux」。"
+            "compute_domain: where the process runs.\n"
+            "Written to wiring.yaml → Verify → gf.sor.json deployments[]."
         )
         hint = QLabel(
-            "「部署域」= wiring 字段 compute_domain（不是 computer）。\n"
-            "画布上体现为卡片第三行「部署:xxx」；进 SOR 后供异构部署/裁剪使用。\n"
-            "当前多数项目选 ap_linux 即可。\n\n"
-            "MCU/车身不是普通模块：请空白处右键 →「添加 MCU/车身」\n"
-            "（金框特殊节点，无信号端口，只连 gateway）。"
+            "compute_domain is a wiring field (into SOR).\n"
+            "For an external MCU node: blank canvas → right-click → Add external MCU."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#888;font-size:11px;")
         form.addRow("进程名", self._name)
-        form.addRow("部署域（compute_domain）", self._domain)
+        form.addRow("compute_domain", self._domain)
         form.addRow(hint)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -1566,9 +1529,8 @@ class WiringGraphView(QWidget):
         self._search_hits.setVisible(False)
 
         self._legend = QLabel(
-            "●绿=Out · ■橙=In（颜色=方向）· 行尾 ! =未连\n"
-            "拖绿色/橙色圆点改边（松手吸附）；Out 用 Ctrl+拖拉线；右键也可改边\n"
-            "MCU/车身=金框特殊节点 · Ctrl+Z/Y 撤销重做 · Verify 见「Lineage」"
+            "Out=green · In=orange · ! = unlinked\n"
+            "Drag ports to move; Ctrl+drag Out to wire · Ctrl+Z/Y undo"
         )
         self._legend.setWordWrap(True)
         self._legend.setStyleSheet("color: #a9cfc0; font-size: 11px;")
@@ -1579,7 +1541,7 @@ class WiringGraphView(QWidget):
         flows_l.addWidget(self._legend)
         flows_l.addWidget(self._search)
         flows_l.addWidget(self._search_hits)
-        flows_l.addWidget(QLabel("全部 dataflows（右键画布可删边）"))
+        flows_l.addWidget(QLabel("dataflows"))
         flows_l.addWidget(self._flow_list)
 
         self._lineage = LineageView()
@@ -2083,7 +2045,7 @@ class WiringGraphView(QWidget):
 
         menu = QMenu(self)
         act_add = menu.addAction("添加模块…")
-        act_ext = menu.addAction("添加 MCU/车身 节点…")
+        act_ext = menu.addAction("Add external MCU…")
         act_import = menu.addAction("导入 hpp/h…")
         chosen = menu.exec(self._view.mapToGlobal(pos))
         if chosen is act_add:
@@ -2237,9 +2199,8 @@ class WiringGraphView(QWidget):
 
     def show_peer_menu(self, peer: McuPeerLink, global_pos) -> None:  # type: ignore[no-untyped-def]
         menu = QMenu(self)
-        menu.addAction("MCU ↔ gateway 边界（yaml 仍保留 VehicleBus/Trajectory）").setEnabled(False)
-        act_focus_mcu = menu.addAction("选中 MCU")
-        act_focus_gw = menu.addAction("选中 gateway")
+        act_focus_mcu = menu.addAction("Select MCU")
+        act_focus_gw = menu.addAction("Select gateway")
         chosen = menu.exec(global_pos)
         if chosen is act_focus_mcu:
             self._scene.clearSelection()
@@ -2411,8 +2372,7 @@ class WiringGraphView(QWidget):
     def show_card_menu(self, card: ProcessCard, global_pos) -> None:  # type: ignore[no-untyped-def]
         menu = QMenu(self)
         if card.is_external():
-            menu.addAction("MCU/车身：无信号端口，只连 gateway").setEnabled(False)
-            act_del = menu.addAction("删除 MCU/车身")
+            act_del = menu.addAction("Delete external MCU")
             chosen = menu.exec(global_pos)
             if chosen is act_del:
                 self.delete_node(card)
@@ -2466,7 +2426,7 @@ class WiringGraphView(QWidget):
         self.changed.emit()
 
     def add_external_mcu_node(self) -> None:
-        """Placeholder: MCU/车身 — 信号来源与控车去向。"""
+        """Add external MCU boundary node (VehicleBus / Trajectory via gateway)."""
         if not self._session:
             return
         name = "external.vehicle_mcu"
@@ -2483,7 +2443,7 @@ class WiringGraphView(QWidget):
         self._session.set_node_ui(
             name,
             kind="external",
-            label="MCU / 车身",
+            label="MCU",
             out_side="right",
             in_side="left",
             x=-280.0,
@@ -2511,12 +2471,7 @@ class WiringGraphView(QWidget):
                 break
         self.rebuild(fit_view=True)
         self.changed.emit()
-        QMessageBox.information(
-            self,
-            "MCU / 车身",
-            "已添加特殊边界节点：画布无信号端口，只与 gateway 一条金色虚线。\n"
-            "yaml 仍保留 VehicleBus / Trajectory 供 Verify；Ctrl+S 保存布局。",
-        )
+        QMessageBox.information(self, "external MCU", f"Added {name}")
 
     def flush_canvas(self) -> None:
         """Persist node positions / sides into wiring.canvas before save."""
@@ -2576,9 +2531,8 @@ class WiringGraphView(QWidget):
         if card.is_external():
             QMessageBox.information(
                 self,
-                "MCU / 车身",
-                "这是特殊边界节点：画布上无信号端口，只与 gateway 一条边界连线。\n\n"
-                "wiring.yaml 底层仍保留 VehicleBus / Trajectory dataflow，供 Verify 使用。",
+                "external MCU",
+                "No editable ports on canvas (boundary link to gateway only).",
             )
             return
         dlg = PortEditDialog(
@@ -2835,7 +2789,7 @@ class WiringGraphView(QWidget):
             dst_n = self._nodes.get(dst)
             if not src_n or not dst_n:
                 continue
-            # MCU/车身相关流：画布合并为一条边界线；yaml 仍保留具体 service
+            # External-MCU flows: one boundary link on canvas; yaml keeps services
             if src_n.is_external() or dst_n.is_external():
                 a, b = (src, dst) if src_n.is_external() else (dst, src)
                 key = (a, b)
@@ -2903,9 +2857,7 @@ class WiringGraphView(QWidget):
             self._scene.addItem(peer)
             peer.update_path()
             self._peers.append(peer)
-            pitem = QListWidgetItem(
-                f"[MCU边界] {mcu_name}  ↔  {gw_name}"
-            )
+            pitem = QListWidgetItem(f"[boundary] {mcu_name} ↔ {gw_name}")
             pitem.setData(
                 Qt.ItemDataRole.UserRole, ("peer", len(self._peers) - 1)
             )
@@ -2917,7 +2869,7 @@ class WiringGraphView(QWidget):
                 provided_by.setdefault(short_service(p), []).append(name)
 
         # 仅当某 In 端口「完全没有」入边时才提示缺失；
-        # MCU/车身不参与缺失虚线（边界由 peer link 表达）。
+        # External MCU has no missing-edge dashes (peer link covers the boundary).
         for cons_name, card in self._nodes.items():
             if card.is_external():
                 continue

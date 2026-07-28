@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from gf_gmt.gui.session_model import SessionModel
+from gf_gmt.i18n import t
 
 
 class OrderRaceView(QWidget):
@@ -21,13 +22,13 @@ class OrderRaceView(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._hint = QLabel(
-            "先后 / 竞态：按时间列出事件与 Δt（墙钟=方案1锚点）。单击行跳转；同 t_ns 标黄=并发。"
+            t("Order: events by time (Δt). Click to seek; yellow = same t_ns.")
         )
         self._hint.setWordWrap(True)
         self._hint.setStyleSheet("color:#555;")
         self._table = QTableWidget(0, 7)
         self._table.setHorizontalHeaderLabels(
-            ["#", "墙钟", "t_ns", "Δt_ns", "topic", "from → to", "seq"]
+            ["#", t("Wall"), "t_ns", "Δt_ns", "topic", "from → to", "seq"]
         )
         self._table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch

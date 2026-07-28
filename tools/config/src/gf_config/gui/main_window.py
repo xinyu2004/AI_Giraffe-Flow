@@ -19,12 +19,13 @@ from gf_config.core import ProjectSession
 from gf_config.gui.platform_editor import PlatformEditor
 from gf_config.gui.req_editor import ReqEditor
 from gf_config.gui.wiring_graph import WiringGraphView
+from gf_config.i18n import get_language, switch_language_and_restart, t
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("gf-config — Giraffe Flow（A/B/C）")
+        self.setWindowTitle(t("gf-config — Giraffe Flow（A/B/C）"))
         self.resize(1280, 800)
         self._session: ProjectSession | None = None
 
@@ -33,12 +34,12 @@ class MainWindow(QMainWindow):
         self._graph = WiringGraphView()
         self._platform = PlatformEditor()
 
-        self._tabs.addTab(self._req, "A · SKU")
-        self._tabs.addTab(self._graph, "B · 信号链接")
-        self._tabs.addTab(self._platform, "C · 平台")
+        self._tabs.addTab(self._req, t("A · SKU"))
+        self._tabs.addTab(self._graph, t("B · 信号链接"))
+        self._tabs.addTab(self._platform, t("C · 平台"))
         self.setCentralWidget(self._tabs)
 
-        self._path_label = QLabel("未打开项目")
+        self._path_label = QLabel(t("未打开项目"))
         status = QStatusBar()
         status.addWidget(self._path_label, stretch=1)
         self.setStatusBar(status)
@@ -51,21 +52,21 @@ class MainWindow(QMainWindow):
         self._build_menu()
 
     def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("文件")
+        file_menu = self.menuBar().addMenu(t("文件"))
 
-        act_open = QAction("打开 project.yaml…", self)
+        act_open = QAction(t("打开 project.yaml…"), self)
         act_open.setShortcut(QKeySequence.StandardKey.Open)
         act_open.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_open.triggered.connect(self._browse_open)
         file_menu.addAction(act_open)
 
-        act_save = QAction("保存（只写盘，不检查）", self)
+        act_save = QAction(t("保存（只写盘，不检查）"), self)
         act_save.setShortcut(QKeySequence.StandardKey.Save)
         act_save.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_save.triggered.connect(self._save)
         file_menu.addAction(act_save)
 
-        act_save_verify = QAction("保存并 Verify…", self)
+        act_save_verify = QAction(t("保存并 Verify…"), self)
         act_save_verify.setShortcut("Ctrl+Shift+S")
         act_save_verify.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_save_verify.triggered.connect(self._save_and_verify)
@@ -73,13 +74,13 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        act_verify = QAction("Verify（合成 SOR / 检查闭环）", self)
+        act_verify = QAction(t("Verify（合成 SOR / 检查闭环）"), self)
         act_verify.setShortcut("Ctrl+R")
         act_verify.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_verify.triggered.connect(lambda: self._verify(show_dialog=True))
         file_menu.addAction(act_verify)
 
-        act_gen = QAction("Generate（Proxy/Skeleton）…", self)
+        act_gen = QAction(t("Generate（Proxy/Skeleton）…"), self)
         act_gen.setShortcut("Ctrl+G")
         act_gen.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_gen.triggered.connect(self._generate)
@@ -87,61 +88,61 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        act_import_hpp = QAction("导入 hpp/h…", self)
+        act_import_hpp = QAction(t("导入 hpp/h…"), self)
         act_import_hpp.triggered.connect(self._graph.import_hpp)
         file_menu.addAction(act_import_hpp)
 
-        act_import_fidl = QAction("导入 fidl…", self)
+        act_import_fidl = QAction(t("导入 fidl…"), self)
         act_import_fidl.triggered.connect(self._graph.import_fidl)
         file_menu.addAction(act_import_fidl)
 
         file_menu.addSeparator()
 
-        act_export_dot = QAction("导出 Graphviz .dot…", self)
+        act_export_dot = QAction(t("导出 Graphviz .dot…"), self)
         act_export_dot.triggered.connect(lambda: self._export_graph(kind="dot"))
         file_menu.addAction(act_export_dot)
 
-        act_export_svg = QAction("导出 Graphviz SVG…", self)
+        act_export_svg = QAction(t("导出 Graphviz SVG…"), self)
         act_export_svg.triggered.connect(lambda: self._export_graph(kind="svg"))
         file_menu.addAction(act_export_svg)
 
         file_menu.addSeparator()
-        act_quit = QAction("退出", self)
+        act_quit = QAction(t("退出"), self)
         act_quit.triggered.connect(self.close)
         file_menu.addAction(act_quit)
 
-        edit_menu = self.menuBar().addMenu("编辑")
-        act_undo = QAction("撤销（信号图）", self)
+        edit_menu = self.menuBar().addMenu(t("编辑"))
+        act_undo = QAction(t("撤销（信号图）"), self)
         act_undo.setShortcut(QKeySequence.StandardKey.Undo)
         act_undo.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_undo.triggered.connect(self._undo_graph)
         edit_menu.addAction(act_undo)
-        act_redo = QAction("重做（信号图）", self)
+        act_redo = QAction(t("重做（信号图）"), self)
         act_redo.setShortcut(QKeySequence.StandardKey.Redo)
         act_redo.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_redo.triggered.connect(self._redo_graph)
         edit_menu.addAction(act_redo)
-        act_redo_y = QAction("重做（Ctrl+Y）", self)
+        act_redo_y = QAction(t("重做（Ctrl+Y）"), self)
         act_redo_y.setShortcut("Ctrl+Y")
         act_redo_y.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_redo_y.triggered.connect(self._redo_graph)
         edit_menu.addAction(act_redo_y)
 
-        view_menu = self.menuBar().addMenu("视图")
+        view_menu = self.menuBar().addMenu(t("视图"))
 
-        act_tab_a = QAction("A · SKU", self)
+        act_tab_a = QAction(t("A · SKU"), self)
         act_tab_a.setShortcut("Ctrl+1")
         act_tab_a.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_tab_a.triggered.connect(lambda: self._tabs.setCurrentWidget(self._req))
         view_menu.addAction(act_tab_a)
 
-        act_tab_b = QAction("B · 信号链接", self)
+        act_tab_b = QAction(t("B · 信号链接"), self)
         act_tab_b.setShortcut("Ctrl+2")
         act_tab_b.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_tab_b.triggered.connect(lambda: self._tabs.setCurrentWidget(self._graph))
         view_menu.addAction(act_tab_b)
 
-        act_tab_c = QAction("C · 平台", self)
+        act_tab_c = QAction(t("C · 平台"), self)
         act_tab_c.setShortcut("Ctrl+3")
         act_tab_c.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_tab_c.triggered.connect(lambda: self._tabs.setCurrentWidget(self._platform))
@@ -149,19 +150,19 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        act_fit = QAction("适应窗口", self)
+        act_fit = QAction(t("适应窗口"), self)
         act_fit.setShortcut("Ctrl+0")
         act_fit.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_fit.triggered.connect(self._fit_graph)
         view_menu.addAction(act_fit)
 
-        act_reset_zoom = QAction("恢复默认大小", self)
+        act_reset_zoom = QAction(t("恢复默认大小"), self)
         act_reset_zoom.setShortcut("Ctrl+H")
         act_reset_zoom.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_reset_zoom.triggered.connect(self._graph.reset_zoom)
         view_menu.addAction(act_reset_zoom)
 
-        act_reload = QAction("重载信号图", self)
+        act_reload = QAction(t("重载信号图"), self)
         act_reload.setShortcut("F5")
         act_reload.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_reload.triggered.connect(lambda: self._graph.rebuild(fit_view=False))
@@ -169,28 +170,44 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        act_flows = QAction("右侧 · 连线列表", self)
+        act_flows = QAction(t("右侧 · 连线列表"), self)
         act_flows.triggered.connect(self._show_flows_panel)
         view_menu.addAction(act_flows)
 
-        act_lineage = QAction("右侧 · Lineage 报告", self)
+        act_lineage = QAction(t("右侧 · Lineage 报告"), self)
         act_lineage.setShortcut("Ctrl+L")
         act_lineage.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_lineage.triggered.connect(self._show_lineage_panel)
         view_menu.addAction(act_lineage)
 
-        act_toggle_right = QAction("折叠/展开右侧面板", self)
+        act_toggle_right = QAction(t("折叠/展开右侧面板"), self)
         act_toggle_right.triggered.connect(self._graph.toggle_right_panel)
         view_menu.addAction(act_toggle_right)
 
         view_menu.addSeparator()
 
-        act_del_edge = QAction("删除选中边", self)
+        act_del_edge = QAction(t("删除选中边"), self)
         act_del_edge.setShortcut(QKeySequence.StandardKey.Delete)
         act_del_edge.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_del_edge.triggered.connect(self._graph.delete_selection)
         view_menu.addAction(act_del_edge)
 
+        lang_menu = self.menuBar().addMenu(t("语言"))
+        act_zh = QAction(t("中文"), self)
+        act_zh.setCheckable(True)
+        act_zh.setChecked(get_language() == "zh")
+        act_zh.triggered.connect(lambda: self._on_language("zh"))
+        lang_menu.addAction(act_zh)
+        act_en = QAction(t("English"), self)
+        act_en.setCheckable(True)
+        act_en.setChecked(get_language() == "en")
+        act_en.triggered.connect(lambda: self._on_language("en"))
+        lang_menu.addAction(act_en)
+
+    def _on_language(self, lang: str) -> None:
+        if lang == get_language():
+            return
+        switch_language_and_restart(lang)
     def _fit_graph(self) -> None:
         self._tabs.setCurrentWidget(self._graph)
         self._graph.fit_in_window()
@@ -198,18 +215,18 @@ class MainWindow(QMainWindow):
     def _undo_graph(self) -> None:
         self._tabs.setCurrentWidget(self._graph)
         if not self._graph._undo_stack:
-            self.statusBar().showMessage("没有可撤销的操作", 2000)
+            self.statusBar().showMessage(t("没有可撤销的操作"), 2000)
             return
         self._graph.undo()
-        self.statusBar().showMessage("已撤销（信号图）", 2000)
+        self.statusBar().showMessage(t("已撤销（信号图）"), 2000)
 
     def _redo_graph(self) -> None:
         self._tabs.setCurrentWidget(self._graph)
         if not self._graph._redo_stack:
-            self.statusBar().showMessage("没有可重做的操作", 2000)
+            self.statusBar().showMessage(t("没有可重做的操作"), 2000)
             return
         self._graph.redo()
-        self.statusBar().showMessage("已重做（信号图）", 2000)
+        self.statusBar().showMessage(t("已重做（信号图）"), 2000)
 
     def _show_flows_panel(self) -> None:
         self._tabs.setCurrentWidget(self._graph)

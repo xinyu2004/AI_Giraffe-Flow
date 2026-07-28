@@ -1,31 +1,32 @@
-# gf-config（主机配置 GUI）
+# gf-config (host configuration GUI)
 
-PySide6 工具：按 **SKU** 编辑 `req.yaml`，用 **类 Simulink 信号图** 编辑 `wiring.yaml`，一键 `compose` + lineage。
+**中文:** [README_zh.md](README_zh.md)
 
-> **流程：** 改 A/B 页 → **Ctrl+S 保存**（只写盘）→ **Verify（Ctrl+R）** 合成 SOR + lineage → 可选 **Generate（Ctrl+G）** 产出 Proxy/Skeleton。  
-> CI/无 GUI：`python -m gf_codegen.compose --project …`；代码生成仍用 `gf-codegen generate`。
->
-> 工具边界：`gf-config` = 唯一作者 GUI · `gf-codegen` = lint/generate/import · GMT = 只读 CI + measure
+PySide6 tool: edit **SKU** via `req.yaml`, edit the **Simulink-like signal graph** via `wiring.yaml`, then one-shot `compose` + lineage.
 
-## `req.yaml` vs `wiring.yaml`（怎么分工）
+> **Flow:** edit tabs A/B → **Ctrl+S Save** (disk only) → **Verify (Ctrl+R)** builds SOR + lineage → optional **Generate (Ctrl+G)** for Proxy/Skeleton.  
+> Headless / CI: `python -m gf_codegen.compose --project …`; codegen remains `gf-codegen generate`.  
+> Boundaries: `gf-config` = authoring GUI · `gf-codegen` = lint / generate / import · GMT = read-only CI + measure
+
+## `req.yaml` vs `wiring.yaml`
 
 | | **req.yaml** | **wiring.yaml** |
 |--|--------------|-----------------|
-| **一句话** | 这辆车 / 这个 SKU **要什么、裁什么、验什么** | 这个项目里进程 **怎么连、谁提供谁订阅** |
-| **谁改** | A 页（产品 / 集成负责人勾选 SKU） | B 页（集成工程师画信号图） |
-| **典型内容** | `variant` / `topology` / `product` · `capabilities` · `runtime_modules` · `bindings` · `observability` · `apps` · `acceptance` | `modules`（hpp）· `deployments`（provides/requires）· `dataflows` · `bindings`（模块 IO） |
-| **进流水线** | `merge_req` → SOR 产品变体 + lineage 门禁 | `apply_wiring` → SOR deployments/dataflows/types |
-| **不写什么** | 不写具体 from→to 边 | 不写「要不要编进 com/phm」这类 SKU 裁剪 |
+| **In one line** | What this vehicle / SKU **needs, trims, and accepts** | How processes **connect** (who provides / requires) |
+| **Who edits** | Tab A (product / integrator SKU) | Tab B (integrator signal graph) |
+| **Typical content** | `variant` / `topology` / `product` · `capabilities` · `runtime_modules` · `bindings` · `observability` · `apps` · `acceptance` | `modules` (hpp) · `deployments` (provides/requires) · `dataflows` · `bindings` (module IO) |
+| **Pipeline** | `merge_req` → SOR product variants + lineage gates | `apply_wiring` → SOR deployments / dataflows / types |
+| **Does not own** | Concrete from→to edges | Whether com/phm is compiled in (SKU trim) |
 
 ```text
-req.yaml（SKU 契约） ──┐
-                       ├── gf-config 保存 → compose → gf.sor.json → Generate / lineage
-wiring.yaml（集成连线）─┘
+req.yaml (SKU contract) ──┐
+                          ├── gf-config save → compose → gf.sor.json → Generate / lineage
+wiring.yaml (wiring)    ──┘
 ```
 
-**记忆口诀：** req = *what / how much*（要什么能力、中间件裁多深、验收列哪些服务）；wiring = *who talks to whom*（进程端口与信号边）。
+**Mnemonic:** req = *what / how much*; wiring = *who talks to whom*.
 
-## 安装
+## Install
 
 ```bash
 cd /path/to/AI_Giraffe-Flow
@@ -34,45 +35,45 @@ pip install -e "tools/codegen[dev]"
 pip install -e tools/config
 ```
 
-## 启动
+## Launch
 
 ```bash
 gf-config projects/oem_a/afc_with_uss/project.yaml
 ```
 
-## 页签
+## Tabs
 
-| 页签 | 作用 |
-|------|------|
-| A · SKU / 中间件 | 完整编辑 `req.yaml`（含 capabilities / observability / apps / acceptance） |
-| B · 信号链接 | 类 Simulink 画布 → `wiring.yaml`；**右侧「连线 / Lineage」** |
+| Tab | Role |
+|-----|------|
+| A · SKU / middleware | Full `req.yaml` (capabilities / observability / apps / acceptance) |
+| B · Signal graph | Simulink-like canvas → `wiring.yaml`; **right pane Lineage** |
 
-已取消独立 C 页：Lineage 并入 B 页右侧。Verify / Generate 后自动切到右侧「Lineage」。
+No separate C tab: Lineage lives on the right of B. Verify / Generate switches focus to Lineage.
 
-**文件菜单：** 打开 · 保存（Ctrl+S）· 保存并 Verify · Verify（Ctrl+R）· Generate（Ctrl+G）· 导入 hpp/fidl  
+**File menu:** Open · Save (Ctrl+S) · Save & Verify · Verify (Ctrl+R) · Generate (Ctrl+G) · Import hpp/fidl  
 
-**视图菜单：** 适应窗口（Ctrl+0）· 默认大小（Ctrl+H）· 重载（F5）· 右侧连线/Lineage（Ctrl+L）· 删边（Delete）
+**View menu:** Fit (Ctrl+0) · Default zoom (Ctrl+H) · Reload (F5) · Lineage pane (Ctrl+L) · Delete edge (Delete)
 
-日常：改 A/B → **保存** → **Verify** 看右侧 Lineage → 需要编 APP 时再 **Generate**。
+Daily loop: edit A/B → **Save** → **Verify** → **Generate** when apps need rebuild.
 
-## 类 Simulink 日常四步（B 页）
+## Tab B — four steps
 
-| # | 操作 | 效果 |
-|---|------|------|
-| 1 | **空白处右键 → 添加模块** | 新建 process（`deployments[]`） |
-| 2 | **选中模块右键 → 删除** | 删 deployment，并级联删相关 dataflows |
-| 3 | **双击模块** | 增删 In/Out 端口、切换方向、改 service 名 |
-| 4 | **从右侧 Out 拖到左侧 In** | 生成 `dataflows`；以 Out 信号名为准（In 不同名自动改同名） |
+| # | Action | Effect |
+|---|--------|--------|
+| 1 | **Right-click empty → Add module** | New process (`deployments[]`) |
+| 2 | **Right-click module → Delete** | Drop deployment + related dataflows |
+| 3 | **Double-click module** | Edit In/Out ports, direction, service names |
+| 4 | **Drag Out → In** | Creates `dataflows`; Out name wins (In renamed if needed) |
 
-其它：单击信号线（含缺失虚线）可选中；搜索框模糊定位；菜单导入 hpp / **fidl**；Ctrl+滚轮缩放。
+Also: click edges (incl. missing dashed) to select; search box; import hpp / **fidl**; Ctrl+wheel zoom.
 
-**FIDL 导入：** 文件 → 导入 fidl… → 勾选 struct / broadcast / method / interface 作为端口 → 写回 `wiring.modules[].fidl` 与 provides/requires。解析库在 `gf_codegen.compose.parse_fidl`。  
-**导出：** 当前**不支持**从 wiring/SOR 导出 `.fidl` / `.fdepl`（P1 优先导入；导出属后置，且完整 `.fdepl` 需 SOME/IP ID 模型，随 B/vsomeip）。
+**FIDL import:** File → Import fidl… → pick struct / broadcast / method / interface ports → writes `wiring.modules[].fidl` and provides/requires (`gf_codegen.compose.parse_fidl`).  
+**Export:** wiring/SOR → `.fidl` / `.fdepl` **not supported** yet (import first; full `.fdepl` needs SOME/IP ID model).
 
-## 验收清单（Cfg 已交付）
+## Acceptance
 
-- [x] 打开 `afc_with_uss` 可见带端口的连线图  
-- [x] 右键增删节点 / 拖线 / Save 写回 `wiring.yaml`  
-- [x] A 页改 req（含 acceptance）可写回  
-- [x] Verify 后右侧 Lineage 红绿显示检查项  
-- [x] CI 不强制跑 Qt  
+- [x] Open `afc_with_uss` shows ported graph  
+- [x] Add/remove nodes / drag edges / Save writes `wiring.yaml`  
+- [x] Tab A req (incl. acceptance) round-trips  
+- [x] Verify shows Lineage pass/fail  
+- [x] CI does not require Qt  

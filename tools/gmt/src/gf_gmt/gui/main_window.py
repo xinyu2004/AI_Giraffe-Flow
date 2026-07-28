@@ -53,12 +53,13 @@ from gf_gmt.gui.wall_time import SessionClock
 from gf_gmt.measure_export import export_session_jsonl
 from gf_gmt.measure_ndjson import parse_session_line, record_from_ndjson
 from gf_gmt.measure_record import record_from_sil_logs
+from gf_gmt.i18n import get_language, switch_language_and_restart, t
 
 
 class GmtMainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("GMT — 选项目 → Live / 回灌 / Tag / 回放")
+        self.setWindowTitle(t("GMT — 选项目 → Live / 回灌 / Tag / 回放"))
         self.resize(1380, 780)
         self._model = SessionModel()
         self._sor: dict[str, Any] | None = None
@@ -98,17 +99,17 @@ class GmtMainWindow(QMainWindow):
 
         # —— 统一连接条：共用 Host；Live ws:8766 与 回灌 tcp:8767 同级 ——
         conn = QHBoxLayout()
-        self._btn_proj = QPushButton("加载项目…")
+        self._btn_proj = QPushButton(t("加载项目…"))
         self._btn_proj.setToolTip(
-            "选择 project.yaml（与 gf-config / codegen 同一入口；SOR 在同目录）"
+            t("选择 project.yaml（与 gf-config / codegen 同一入口；SOR 在同目录）")
         )
         self._btn_proj.clicked.connect(self._open_project)
         conn.addWidget(self._btn_proj)
         conn.addWidget(QLabel("Host"))
         self._host_edit = QLineEdit("127.0.0.1")
         self._host_edit.setToolTip(
-            "SIL / 观测机地址（本机 127.0.0.1；远端填局域网 IP）\n"
-            "Live 与回灌共用此 Host"
+            t("SIL / 观测机地址（本机 127.0.0.1；远端填局域网 IP）\n"
+            "Live 与回灌共用此 Host")
         )
         self._host_edit.setMaximumWidth(140)
         conn.addWidget(self._host_edit)
@@ -120,29 +121,29 @@ class GmtMainWindow(QMainWindow):
         self._port_spin.setToolTip(f"Live WebSocket 端口（默认 {DEFAULT_LIVE_PORT}）")
         self._port_spin.setMaximumWidth(72)
         conn.addWidget(self._port_spin)
-        self._btn_live_connect = QPushButton("连接")
+        self._btn_live_connect = QPushButton(t("连接"))
         self._btn_live_connect.setToolTip(
-            "连 live_tap 旁路（ws:8766）；默认只看流不落盘，需落盘请点「录制」"
+            t("连 live_tap 旁路（ws:8766）；默认只看流不落盘，需落盘请点「录制」")
         )
         self._btn_live_connect.clicked.connect(self._connect_live)
-        self._btn_live_disconnect = QPushButton("断开")
+        self._btn_live_disconnect = QPushButton(t("断开"))
         self._btn_live_disconnect.setEnabled(False)
         self._btn_live_disconnect.clicked.connect(self._disconnect_live)
-        self._btn_live_rec = QPushButton("录制")
+        self._btn_live_rec = QPushButton(t("录制"))
         self._btn_live_rec.setCheckable(True)
         self._btn_live_rec.setEnabled(False)
         self._btn_live_rec.setToolTip(
-            "将 Live 流落盘；已有 session_live.jsonl 时可新建或覆盖"
+            t("将 Live 流落盘；已有 session_live.jsonl 时可新建或覆盖")
         )
         self._btn_live_rec.toggled.connect(self._on_live_record_toggled)
-        self._live_state = QLabel("空闲")
+        self._live_state = QLabel(t("空闲"))
         self._live_state.setStyleSheet("color:#555; min-width: 4.5em;")
         conn.addWidget(self._btn_live_connect)
         conn.addWidget(self._btn_live_disconnect)
         conn.addWidget(self._btn_live_rec)
         conn.addWidget(self._live_state)
 
-        conn.addWidget(QLabel("│ 回灌 tcp"))
+        conn.addWidget(QLabel(t("│ 回灌 tcp")))
         self._inject_port_spin = QSpinBox()
         self._inject_port_spin.setRange(1, 65535)
         self._inject_port_spin.setValue(DEFAULT_INJECT_PORT)
@@ -151,24 +152,24 @@ class GmtMainWindow(QMainWindow):
         )
         self._inject_port_spin.setMaximumWidth(72)
         conn.addWidget(self._inject_port_spin)
-        self._btn_inject_connect = QPushButton("连接")
+        self._btn_inject_connect = QPushButton(t("连接"))
         self._btn_inject_connect.setToolTip(
-            "连 playhead inject（TCP JSON）；需 GF_INJECT_MODE=playhead"
+            t("连 playhead inject（TCP JSON）；需 GF_INJECT_MODE=playhead")
         )
         self._btn_inject_connect.clicked.connect(self._on_inject_connect_clicked)
-        self._btn_inject_disconnect = QPushButton("断开")
+        self._btn_inject_disconnect = QPushButton(t("断开"))
         self._btn_inject_disconnect.setEnabled(False)
         self._btn_inject_disconnect.clicked.connect(self._disconnect_inject)
-        self._inject_state = QLabel("空闲")
+        self._inject_state = QLabel(t("空闲"))
         self._inject_state.setStyleSheet("color:#555; min-width: 4.5em;")
         conn.addWidget(self._btn_inject_connect)
         conn.addWidget(self._btn_inject_disconnect)
         conn.addWidget(self._inject_state)
 
-        self._follow_latest = QCheckBox("跟随最新")
+        self._follow_latest = QCheckBox(t("跟随最新"))
         self._follow_latest.setChecked(True)
         self._follow_latest.setToolTip(
-            "仅影响 playhead：开=贴最新；关=停在当前帧（与是否录制落盘无关）"
+            t("仅影响 playhead：开=贴最新；关=停在当前帧（与是否录制落盘无关）")
         )
         self._follow_latest.toggled.connect(self._on_follow_latest_toggled)
         conn.addWidget(self._follow_latest)
@@ -176,7 +177,7 @@ class GmtMainWindow(QMainWindow):
         root.addLayout(conn)
 
         self._proj_banner = QLabel(
-            "⚠ 请先「加载项目…」选择 project.yaml（回灌已禁用；Live 仍可旁观）"
+            t("⚠ 请先「加载项目…」选择 project.yaml（回灌已禁用；Live 仍可旁观）")
         )
         self._proj_banner.setWordWrap(True)
         self._proj_banner.setStyleSheet(
@@ -186,32 +187,32 @@ class GmtMainWindow(QMainWindow):
         root.addWidget(self._proj_banner)
 
         transport = QHBoxLayout()
-        self._btn_open = QPushButton("打开 session…")
+        self._btn_open = QPushButton(t("打开 session…"))
         self._btn_open.clicked.connect(self._open_session)
-        self._btn_record = QPushButton("从日志录制…")
+        self._btn_record = QPushButton(t("从日志录制…"))
         self._btn_record.clicked.connect(self._record_from_logs)
-        self._btn_sor = QPushButton("加载 SOR…")
+        self._btn_sor = QPushButton(t("加载 SOR…"))
         self._btn_sor.clicked.connect(self._open_sor)
-        self._btn_live = QPushButton("仅跟随文件…")
-        self._btn_live.setToolTip("高级：不连 WS，只尾随已有 JSONL")
+        self._btn_live = QPushButton(t("仅跟随文件…"))
+        self._btn_live.setToolTip(t("高级：不连 WS，只尾随已有 JSONL"))
         self._btn_live.clicked.connect(self._open_live_follow)
         self._btn_home = QPushButton("|◀")
-        self._btn_home.setToolTip("跳到开头")
+        self._btn_home.setToolTip(t("跳到开头"))
         self._btn_home.clicked.connect(self._jump_start)
         self._btn_back = QPushButton("◀")
-        self._btn_back.setToolTip("后退一步")
+        self._btn_back.setToolTip(t("后退一步"))
         self._btn_back.clicked.connect(self._step_back)
-        self._btn_play = QPushButton("播放")
+        self._btn_play = QPushButton(t("播放"))
         self._btn_play.clicked.connect(self._toggle_play)
         self._btn_step = QPushButton("▶")
-        self._btn_step.setToolTip("前进一步")
+        self._btn_step.setToolTip(t("前进一步"))
         self._btn_step.clicked.connect(self._step_once)
         self._btn_end = QPushButton("▶|")
-        self._btn_end.setToolTip("跳到末尾")
+        self._btn_end.setToolTip(t("跳到末尾"))
         self._btn_end.clicked.connect(self._jump_end)
         self._btn_fox = QPushButton("Foxglove")
         self._btn_fox.clicked.connect(self._start_foxglove_replay)
-        self._btn_mcap = QPushButton("导出 MCAP")
+        self._btn_mcap = QPushButton(t("导出 MCAP"))
         self._btn_mcap.clicked.connect(self._export_mcap)
 
         for w in (
@@ -229,19 +230,25 @@ class GmtMainWindow(QMainWindow):
         ):
             transport.addWidget(w)
 
-        transport.addWidget(QLabel("速率"))
+        transport.addWidget(QLabel(t("倍速%")))
         self._rate = QSpinBox()
-        self._rate.setRange(1, 2000)
-        self._rate.setValue(200)
-        self._rate.setToolTip("事件步进：毫秒/步；勾选「按 Δt」时为相对时间倍速分母")
+        self._rate.setRange(10, 800)
+        self._rate.setValue(100)
+        self._rate.setSuffix("%")
+        self._rate.setToolTip(
+            t(
+                "播放速度：越大越快。100%=默认；"
+                "未勾「按 Δt」时约 200ms/事件；勾选后按事件时间缩放。"
+            )
+        )
         transport.addWidget(self._rate)
-        self._use_dt = QCheckBox("按 Δt")
-        self._use_dt.setToolTip("播放间隔按相邻事件 Δt（缩放：rate 为 ms 对应 1e6 ns 的基准）")
+        self._use_dt = QCheckBox(t("按 Δt"))
+        self._use_dt.setToolTip(t("播放间隔按相邻事件真实 Δt，再乘倍速%"))
         transport.addWidget(self._use_dt)
-        self._follow = QCheckBox("跟随文件")
+        self._follow = QCheckBox(t("跟随文件"))
         self._follow.setToolTip(
-            "轮询 JSONL 新行（「仅跟随 live 文件」用）。"
-            "是否跳到最新由上方「跟随最新」决定。"
+            t("轮询 JSONL 新行（「仅跟随 live 文件」用）。"
+            "是否跳到最新由上方「跟随最新」决定。")
         )
         self._follow.toggled.connect(self._on_follow_toggled)
         transport.addWidget(self._follow)
@@ -267,16 +274,16 @@ class GmtMainWindow(QMainWindow):
         self._inject_panel.seek_requested.connect(self._seek_index)
         self._var_strip = VarStripView()
         self._var_strip.seek_ns_requested.connect(self._seek_ns)
-        self._tabs.addTab(self._order, "先后 / 竞态")
-        self._tabs.addTab(self._dag, "动画 DAG")
-        self._tabs.addTab(self._var_strip, "变量轨")
-        self._tabs.addTab(self._tags, "Tag 编辑")
-        self._tabs.addTab(self._inject_panel, "回灌")
+        self._tabs.addTab(self._order, t("Order"))
+        self._tabs.addTab(self._dag, t("DAG"))
+        self._tabs.addTab(self._var_strip, t("Vars"))
+        self._tabs.addTab(self._tags, t("Tag"))
+        self._tabs.addTab(self._inject_panel, t("Inject"))
         root.addWidget(self._tabs, stretch=1)
 
         status = QStatusBar()
         self._path_label = QLabel(
-            "请先加载项目 → 填 Host → Live(ws:8766) 或 回灌(tcp:8767) 点「连接」"
+            t("请先加载项目 → 填 Host → Live(ws:8766) 或 回灌(tcp:8767) 点「连接」")
         )
         status.addWidget(self._path_label, stretch=1)
         self.setStatusBar(status)
@@ -285,104 +292,104 @@ class GmtMainWindow(QMainWindow):
         self._refresh_project_gate()
 
     def _build_menus(self) -> None:
-        file_menu = self.menuBar().addMenu("文件")
-        act_proj = QAction("加载项目…", self)
+        file_menu = self.menuBar().addMenu(t("文件"))
+        act_proj = QAction(t("加载项目…"), self)
         act_proj.setShortcut(QKeySequence("Ctrl+Shift+O"))
         act_proj.triggered.connect(self._open_project)
         file_menu.addAction(act_proj)
-        act_proj_dir = QAction("加载项目目录…", self)
-        act_proj_dir.setToolTip("备选：直接选 SKU 目录（等价于该目录下的 project.yaml）")
+        act_proj_dir = QAction(t("加载项目目录…"), self)
+        act_proj_dir.setToolTip(t("备选：直接选 SKU 目录（等价于该目录下的 project.yaml）"))
         act_proj_dir.triggered.connect(self._open_project_dir)
         file_menu.addAction(act_proj_dir)
 
-        act_sess = QAction("打开 session JSONL…", self)
+        act_sess = QAction(t("打开 session JSONL…"), self)
         act_sess.setShortcut(QKeySequence.StandardKey.Open)
         act_sess.triggered.connect(self._open_session)
         file_menu.addAction(act_sess)
 
-        act_rec = QAction("从 SIL 日志录制…", self)
+        act_rec = QAction(t("从 SIL 日志录制…"), self)
         act_rec.triggered.connect(self._record_from_logs)
         file_menu.addAction(act_rec)
 
-        act_ndjson = QAction("从 tap NDJSON 导入…", self)
+        act_ndjson = QAction(t("从 tap NDJSON 导入…"), self)
         act_ndjson.triggered.connect(self._import_ndjson)
         file_menu.addAction(act_ndjson)
 
-        act_live = QAction("仅跟随 live 文件…", self)
+        act_live = QAction(t("仅跟随 live 文件…"), self)
         act_live.triggered.connect(self._open_live_follow)
         file_menu.addAction(act_live)
 
-        act_sor = QAction("加载 gf.sor.json…", self)
+        act_sor = QAction(t("加载 gf.sor.json…"), self)
         act_sor.triggered.connect(self._open_sor)
         file_menu.addAction(act_sor)
 
         file_menu.addSeparator()
-        act_mcap = QAction("导出 MCAP…", self)
+        act_mcap = QAction(t("导出 MCAP…"), self)
         act_mcap.triggered.connect(self._export_mcap)
         file_menu.addAction(act_mcap)
 
-        act_vcd = QAction("导出 VCD（GTKWave）…", self)
+        act_vcd = QAction(t("导出 VCD（GTKWave）…"), self)
         act_vcd.triggered.connect(self._export_vcd)
         file_menu.addAction(act_vcd)
 
-        act_dot = QAction("导出 Graphviz .dot…", self)
+        act_dot = QAction(t("导出 Graphviz .dot…"), self)
         act_dot.triggered.connect(self._export_dot)
         file_menu.addAction(act_dot)
 
         file_menu.addSeparator()
-        act_quit = QAction("退出", self)
+        act_quit = QAction(t("退出"), self)
         act_quit.triggered.connect(self.close)
         file_menu.addAction(act_quit)
 
-        conn_menu = self.menuBar().addMenu("连接")
-        act_start = QAction("连接 Live (ws)", self)
+        conn_menu = self.menuBar().addMenu(t("连接"))
+        act_start = QAction(t("连接 Live (ws)"), self)
         act_start.setShortcut(QKeySequence("Ctrl+R"))
         act_start.triggered.connect(self._connect_live)
         conn_menu.addAction(act_start)
-        act_stop = QAction("断开 Live", self)
+        act_stop = QAction(t("断开 Live"), self)
         act_stop.setShortcut(QKeySequence("Ctrl+Shift+R"))
         act_stop.triggered.connect(self._disconnect_live)
         conn_menu.addAction(act_stop)
         conn_menu.addSeparator()
-        act_inj = QAction("连接回灌 (tcp)", self)
+        act_inj = QAction(t("连接回灌 (tcp)"), self)
         act_inj.setShortcut(QKeySequence("Ctrl+I"))
         act_inj.triggered.connect(self._on_inject_connect_clicked)
         conn_menu.addAction(act_inj)
-        act_inj_off = QAction("断开回灌", self)
+        act_inj_off = QAction(t("断开回灌"), self)
         act_inj_off.setShortcut(QKeySequence("Ctrl+Shift+I"))
         act_inj_off.triggered.connect(self._disconnect_inject)
         conn_menu.addAction(act_inj_off)
 
-        replay_menu = self.menuBar().addMenu("回放")
-        act_play = QAction("播放 / 暂停", self)
+        replay_menu = self.menuBar().addMenu(t("回放"))
+        act_play = QAction(t("播放 / 暂停"), self)
         act_play.setShortcut(QKeySequence(Qt.Key.Key_Space))
         act_play.triggered.connect(self._toggle_play)
         replay_menu.addAction(act_play)
-        act_step = QAction("前进一步", self)
+        act_step = QAction(t("前进一步"), self)
         act_step.setShortcut(QKeySequence(Qt.Key.Key_Right))
         act_step.triggered.connect(self._step_once)
         replay_menu.addAction(act_step)
-        act_back = QAction("后退一步", self)
+        act_back = QAction(t("后退一步"), self)
         act_back.setShortcut(QKeySequence(Qt.Key.Key_Left))
         act_back.triggered.connect(self._step_back)
         replay_menu.addAction(act_back)
-        act_home = QAction("跳到开头", self)
+        act_home = QAction(t("跳到开头"), self)
         act_home.setShortcut(QKeySequence(Qt.Key.Key_Home))
         act_home.triggered.connect(self._jump_start)
         replay_menu.addAction(act_home)
-        act_end = QAction("跳到末尾", self)
+        act_end = QAction(t("跳到末尾"), self)
         act_end.setShortcut(QKeySequence(Qt.Key.Key_End))
         act_end.triggered.connect(self._jump_end)
         replay_menu.addAction(act_end)
         replay_menu.addSeparator()
-        act_fox = QAction("打开 Foxglove 回放…", self)
+        act_fox = QAction(t("打开 Foxglove 回放…"), self)
         act_fox.triggered.connect(self._start_foxglove_replay)
         replay_menu.addAction(act_fox)
-        act_fox_stop = QAction("停止 Foxglove 回放进程", self)
+        act_fox_stop = QAction(t("停止 Foxglove 回放进程"), self)
         act_fox_stop.triggered.connect(self._stop_foxglove)
         replay_menu.addAction(act_fox_stop)
         replay_menu.addSeparator()
-        act_follow = QAction("切换跟随最新", self)
+        act_follow = QAction(t("切换跟随最新"), self)
         act_follow.setShortcut(QKeySequence(Qt.Key.Key_F))
         act_follow.triggered.connect(
             lambda: self._follow_latest.setChecked(
@@ -392,38 +399,55 @@ class GmtMainWindow(QMainWindow):
         replay_menu.addAction(act_follow)
 
         tag_menu = self.menuBar().addMenu("Tag")
-        act_mark = QAction("钉标记点 ●", self)
+        act_mark = QAction(t("钉标记点 ●"), self)
         act_mark.setShortcut(QKeySequence(Qt.Key.Key_M))
         act_mark.triggered.connect(self._live_tag_marker)
         tag_menu.addAction(act_mark)
-        act_tag_from = QAction("片段 from ← playhead", self)
+        act_tag_from = QAction(t("片段 from ← playhead"), self)
         act_tag_from.setShortcut(QKeySequence(Qt.Key.Key_BracketLeft))
         act_tag_from.triggered.connect(self._live_tag_from)
         tag_menu.addAction(act_tag_from)
-        act_tag_to = QAction("片段 to ← playhead 并保存", self)
+        act_tag_to = QAction(t("片段 to ← playhead 并保存"), self)
         act_tag_to.setShortcut(QKeySequence(Qt.Key.Key_BracketRight))
         act_tag_to.triggered.connect(self._live_tag_to)
         tag_menu.addAction(act_tag_to)
 
-        view_menu = self.menuBar().addMenu("视图")
-        view_menu.addAction("先后 / 竞态", lambda: self._tabs.setCurrentWidget(self._order))
-        view_menu.addAction("动画 DAG", lambda: self._tabs.setCurrentWidget(self._dag))
-        view_menu.addAction("变量轨", lambda: self._tabs.setCurrentWidget(self._var_strip))
-        view_menu.addAction("Tag 编辑", lambda: self._tabs.setCurrentWidget(self._tags))
-        view_menu.addAction("回灌", lambda: self._tabs.setCurrentWidget(self._inject_panel))
+        view_menu = self.menuBar().addMenu(t("视图"))
+        view_menu.addAction(t("Order"), lambda: self._tabs.setCurrentWidget(self._order))
+        view_menu.addAction(t("DAG"), lambda: self._tabs.setCurrentWidget(self._dag))
+        view_menu.addAction(t("Vars"), lambda: self._tabs.setCurrentWidget(self._var_strip))
+        view_menu.addAction(t("Tag"), lambda: self._tabs.setCurrentWidget(self._tags))
+        view_menu.addAction(t("Inject"), lambda: self._tabs.setCurrentWidget(self._inject_panel))
+
+        lang_menu = self.menuBar().addMenu(t("语言"))
+        act_zh = QAction(t("中文"), self)
+        act_zh.setCheckable(True)
+        act_zh.setChecked(get_language() == "zh")
+        act_zh.triggered.connect(lambda: self._on_language("zh"))
+        lang_menu.addAction(act_zh)
+        act_en = QAction(t("English"), self)
+        act_en.setCheckable(True)
+        act_en.setChecked(get_language() == "en")
+        act_en.triggered.connect(lambda: self._on_language("en"))
+        lang_menu.addAction(act_en)
+
+    def _on_language(self, lang: str) -> None:
+        if lang == get_language():
+            return
+        switch_language_and_restart(lang)
 
     def _refresh_project_gate(self) -> None:
         """未加载项目：醒目提示；回灌连接由 _refresh_conn_bar_ui 按项目态禁用。"""
         has = self._project_dir is not None and self._sor is not None
         self._proj_banner.setVisible(not has)
         if has:
-            self._btn_proj.setText(f"项目: {self._project_dir.name}")
+            self._btn_proj.setText(f'{t("项目")}: {self._project_dir.name}')
             self._btn_proj.setStyleSheet("font-weight:700;")
         else:
             self._proj_banner.setText(
-                "⚠ 请先「加载项目…」选择 project.yaml（回灌已禁用；Live 仍可旁观）"
+                t("⚠ 请先「加载项目…」选择 project.yaml（回灌已禁用；Live 仍可旁观）")
             )
-            self._btn_proj.setText("加载项目…")
+            self._btn_proj.setText(t("加载项目…"))
             self._btn_proj.setStyleSheet("")
         self._refresh_conn_bar_ui()
 
@@ -460,27 +484,27 @@ class GmtMainWindow(QMainWindow):
         self._btn_inject_connect.setEnabled(not inj_on and has_proj)
         self._btn_inject_disconnect.setEnabled(inj_on)
         if not has_proj:
-            self._btn_inject_connect.setToolTip("请先加载 project.yaml 后再连接回灌")
+            self._btn_inject_connect.setToolTip(t("请先加载 project.yaml 后再连接回灌"))
         else:
             self._btn_inject_connect.setToolTip(
-                "连 playhead inject（TCP JSON）；需 GF_INJECT_MODE=playhead"
+                t("连 playhead inject（TCP JSON）；需 GF_INJECT_MODE=playhead")
             )
 
         green = "color:#2e7d32; font-weight:700; min-width: 5em;"
         idle_s = "color:#555; min-width: 5em;"
 
         if live_on:
-            self._live_state.setText("已连接")
+            self._live_state.setText(t("已连接"))
             self._live_state.setStyleSheet(green)
         else:
-            self._live_state.setText("空闲")
+            self._live_state.setText(t("空闲"))
             self._live_state.setStyleSheet(idle_s)
 
         if inj_on:
-            self._inject_state.setText("已连接")
+            self._inject_state.setText(t("已连接"))
             self._inject_state.setStyleSheet(green)
         else:
-            self._inject_state.setText("空闲")
+            self._inject_state.setText(t("空闲"))
             self._inject_state.setStyleSheet(idle_s)
             self._inject_last_ok = None
 
@@ -499,7 +523,7 @@ class GmtMainWindow(QMainWindow):
         if bits:
             self.setWindowTitle("GMT — ● " + " · ".join(bits))
         else:
-            self.setWindowTitle("GMT — 选项目 → Live / 回灌 / Tag / 回放")
+            self.setWindowTitle(t("GMT — 选项目 → Live / 回灌 / Tag / 回放"))
 
     def _refresh_live_state_label(self) -> None:
         self._refresh_conn_bar_ui()
@@ -522,7 +546,7 @@ class GmtMainWindow(QMainWindow):
             self._stick_tail = False
             self._refresh_conn_bar_ui()
             self.statusBar().showMessage(
-                "回灌「跟 playhead 灌」已开 → Live 跟随已禁用（仍可连 Live 旁观/录制）",
+                t("回灌「跟 playhead 灌」已开 → Live 跟随已禁用（仍可连 Live 旁观/录制）"),
                 5000,
             )
             return
@@ -532,10 +556,10 @@ class GmtMainWindow(QMainWindow):
             return
         if on and not self._model.empty:
             self._seek_index(len(self._model.events) - 1)
-            self.statusBar().showMessage("跟随最新 ON — 贴最新事件", 2500)
+            self.statusBar().showMessage(t("跟随最新 ON — 贴最新事件"), 2500)
         else:
             self.statusBar().showMessage(
-                "跟随最新 OFF — playhead 不跟播（可 scrub / Tag）",
+                t("跟随最新 OFF — playhead 不跟播（可 scrub / Tag）"),
                 4000,
             )
 
@@ -601,8 +625,8 @@ class GmtMainWindow(QMainWindow):
         self._stick_tail = self._follow_latest.isChecked()
         self._follow_timer.start()
         self._on_follow_tick()
-        mode = "跟随最新" if self._stick_tail else "不跟播"
-        self.statusBar().showMessage(f"跟随 live（{mode}）：{p}", 5000)
+        mode = t("跟随最新") if self._stick_tail else t("不跟播")
+        self.statusBar().showMessage(f'{t("跟随 live")}（{mode}）：{p}', 5000)
 
     def _close_live_log(self) -> None:
         if self._live_log_fp is not None:
@@ -615,13 +639,13 @@ class GmtMainWindow(QMainWindow):
     def _style_live_record_btn(self) -> None:
         recording = self._live_log_fp is not None
         if recording:
-            self._btn_live_rec.setText("录制中")
+            self._btn_live_rec.setText(t("录制中"))
             self._btn_live_rec.setStyleSheet(
                 "QPushButton { background:#c62828; color:#fff; font-weight:700; "
                 "border:1px solid #8e0000; padding:2px 10px; }"
             )
         else:
-            self._btn_live_rec.setText("录制")
+            self._btn_live_rec.setText(t("录制"))
             self._btn_live_rec.setStyleSheet("")
         if self._btn_live_rec.isChecked() != recording:
             self._btn_live_rec.blockSignals(True)
@@ -637,15 +661,15 @@ class GmtMainWindow(QMainWindow):
         default = self._default_live_session()
         if default.is_file() and default.stat().st_size > 0:
             box = QMessageBox(self)
-            box.setWindowTitle("Live 录制")
+            box.setWindowTitle(t("Live 录制"))
             box.setIcon(QMessageBox.Icon.Question)
             box.setText(
                 f"已存在 {default.name}（{default.stat().st_size} 字节）。\n"
-                "新建时间戳文件，还是覆盖？"
+                + t("新建时间戳文件，还是覆盖？")
             )
-            btn_new = box.addButton("新建", QMessageBox.ButtonRole.AcceptRole)
-            btn_over = box.addButton("覆盖", QMessageBox.ButtonRole.DestructiveRole)
-            box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+            btn_new = box.addButton(t("新建"), QMessageBox.ButtonRole.AcceptRole)
+            btn_over = box.addButton(t("覆盖"), QMessageBox.ButtonRole.DestructiveRole)
+            box.addButton(t("取消"), QMessageBox.ButtonRole.RejectRole)
             box.exec()
             clicked = box.clickedButton()
             if clicked is btn_new:
@@ -663,7 +687,7 @@ class GmtMainWindow(QMainWindow):
         try:
             self._live_log_fp = path.open("a", encoding="utf-8")
         except OSError as exc:
-            QMessageBox.critical(self, "Live 录制", f"无法写入 {path}\n{exc}")
+            QMessageBox.critical(self, t("Live 录制"), f'{t("无法写入")} {path}\n{exc}')
             return False
         self._session_path = path
         self._tags.set_session(path, clock=self._model.clock)
@@ -673,7 +697,7 @@ class GmtMainWindow(QMainWindow):
             write_session_meta_line(self._live_log_fp, self._model.clock)
         self._style_live_record_btn()
         self._refresh_conn_bar_ui()
-        self.statusBar().showMessage(f"Live 录制中 → {path}", 6000)
+        self.statusBar().showMessage(f'{t("Live 录制中")} → {path}', 6000)
         return True
 
     def _stop_live_record(self, *, quiet: bool = False) -> None:
@@ -683,7 +707,7 @@ class GmtMainWindow(QMainWindow):
         self._refresh_conn_bar_ui()
         if not quiet:
             self.statusBar().showMessage(
-                f"Live 录制已停止"
+                t("Live 录制已停止")
                 + (f"：{path}" if path else ""),
                 5000,
             )
@@ -736,21 +760,21 @@ class GmtMainWindow(QMainWindow):
             return
         if self._inject_panel.wants_playhead_sync():
             self._force_live_follow_off(
-                reason="已开回灌 playhead → Live 以旁观方式连接（不跟随最新）"
+                reason=t("已开回灌 playhead → Live 以旁观方式连接（不跟随最新）")
             )
         if self._project_dir is None:
             reply = QMessageBox.question(
                 self,
                 "Live",
-                "尚未加载项目（SOR / 动画 DAG / 变量轨对齐）。\n"
+                t("尚未加载项目（SOR / 动画 DAG / 变量轨对齐）。\n"
                 "是否现在打开 project.yaml？\n\n"
-                "选「否」仍可旁观连接（无 DAG）。",
+                "选「否」仍可旁观连接（无 DAG）。"),
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self._open_project()
             if self._project_dir is None:
                 self.statusBar().showMessage(
-                    "Live 无项目：仅旁观（动画 DAG 为空）",
+                    t("Live 无项目：仅旁观（动画 DAG 为空）"),
                     5000,
                 )
 
@@ -761,7 +785,7 @@ class GmtMainWindow(QMainWindow):
         if preserve:
             self._live_observe_only = True
             self._force_live_follow_off(
-                reason="已有 session/回灌 → Live 旁观（不覆盖时间轴）"
+                reason=t("已有 session/回灌 → Live 旁观（不覆盖时间轴）")
             )
         else:
             self._live_observe_only = False
@@ -777,10 +801,10 @@ class GmtMainWindow(QMainWindow):
                 self,
                 "Live",
                 f"无法连接 ws://{host}:{port}\n{exc}\n\n"
-                "Live = tap 旁路 WebSocket（默认 8766）。\n"
+                + t("Live = tap 旁路 WebSocket（默认 8766）。\n"
                 "回灌 playhead 时 SIL 默认仍开 live（只订下游）；"
                 "若连不上请看 run_sil 是否打印 downstream tap。\n"
-                "回灌控制请用顶栏「回灌 tcp:8767」。",
+                "回灌控制请用顶栏「回灌 tcp:8767」。"),
             )
             return
 
@@ -793,7 +817,7 @@ class GmtMainWindow(QMainWindow):
                 10000,
             )
         else:
-            mode = "跟随最新" if self._follow_latest.isChecked() else "不跟播"
+            mode = t("跟随最新") if self._follow_latest.isChecked() else t("不跟播")
             self.statusBar().showMessage(
                 f"Live 已连接 ws://{host}:{port}（{mode}；落盘请点「录制」）",
                 8000,
@@ -814,7 +838,7 @@ class GmtMainWindow(QMainWindow):
         self._live_observe_only = False
         self._set_live_ui(False)
         n = len(self._model.events)
-        note = "（旁观模式未改时间轴）" if observe else ""
+        note = t("（旁观模式未改时间轴）") if observe else ""
         self.statusBar().showMessage(
             f"Live 已断开 · 保留 session（{n} events）{note}"
             + (f"：{self._session_path}" if self._session_path else ""),
@@ -855,8 +879,8 @@ class GmtMainWindow(QMainWindow):
         if self._project_dir is None or self._sor is None:
             reply = QMessageBox.warning(
                 self,
-                "回灌",
-                "回灌需要先加载 project.yaml（SOR / 事件对齐）。\n是否现在打开？",
+                t("回灌"),
+                t("回灌需要先加载 project.yaml（SOR / 事件对齐）。\n是否现在打开？"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
             )
@@ -871,7 +895,7 @@ class GmtMainWindow(QMainWindow):
     def _on_follow_playhead_toggled(self, on: bool) -> None:
         if on and self._inject_active:
             self._force_live_follow_off(
-                reason="已开「跟 playhead 灌」→ Live 跟随已关"
+                reason=t("已开「跟 playhead 灌」→ Live 跟随已关")
             )
             if not self._model.empty:
                 self._inject_seek(self._slider.value())
@@ -883,9 +907,9 @@ class GmtMainWindow(QMainWindow):
         if self._model.empty:
             QMessageBox.warning(
                 self,
-                "回灌",
-                "请先打开 session JSONL（GMT 为权威源）。\n"
-                "stream 模式下板端不必再设 GF_INJECT_SESSION。",
+                t("回灌"),
+                t("请先打开 session JSONL（GMT 为权威源）。\n"
+                "stream 模式下板端不必再设 GF_INJECT_SESSION。"),
             )
             return
         # Disable before blocking hello — avoid double-connect (new ephemeral ports)
@@ -898,12 +922,12 @@ class GmtMainWindow(QMainWindow):
             self._refresh_conn_bar_ui()
             QMessageBox.critical(
                 self,
-                "回灌",
+                t("回灌"),
                 f"无法连接 inject ctrl tcp://{host}:{port}\n{exc}\n\n"
-                "远端请确认：\n"
+                + t("远端请确认：\n"
                 "1) SIL 机 GF_INJECT_MODE=playhead，且 ss 能看到 0.0.0.0:8767\n"
                 "2) 防火墙放行 TCP 8767\n"
-                "3) 用本页「连接 inject」，不要点上方 Live（那是 ws://8766）",
+                "3) 用本页「连接 inject」，不要点上方 Live（那是 ws://8766）"),
             )
             return
         self._inject = client
@@ -925,7 +949,7 @@ class GmtMainWindow(QMainWindow):
                 self._refresh_conn_bar_ui()
                 QMessageBox.critical(
                     self,
-                    "回灌",
+                    t("回灌"),
                     f"stream session/reset 失败：{exc}",
                 )
                 client.close()
@@ -943,10 +967,10 @@ class GmtMainWindow(QMainWindow):
                 warn = f"\n⚠ 事件数不一致：inject={n_inj} GUI={n_gui}（请用同一 session）"
                 QMessageBox.warning(
                     self,
-                    "回灌 session 不一致",
+                    t("回灌 session 不一致"),
                     f"inject 侧事件数 = {n_inj}，GMT 当前 session = {n_gui}。\n\n"
-                    "legacy（无 stream_window）两边必须打开同一 JSONL。\n"
-                    "stream 模式请升级板端 inject，由 GMT 下发窗口。",
+                    + t("legacy（无 stream_window）两边必须打开同一 JSONL。\n"
+                    "stream 模式请升级板端 inject，由 GMT 下发窗口。"),
                 )
             detail = f"tcp://{host}:{port} · inject events={n_inj} · GUI={n_gui}{warn}"
         self._inject_last_ok = None
@@ -955,7 +979,7 @@ class GmtMainWindow(QMainWindow):
         self._set_inject_ui(True)
         if self._inject_panel.wants_playhead_sync():
             self._force_live_follow_off(
-                reason="回灌已连且跟 playhead → Live 跟随已关（可另连 Live 旁观/录制）"
+                reason=t("回灌已连且跟 playhead → Live 跟随已关（可另连 Live 旁观/录制）")
             )
         self._inject_timer.start()
         mode = "stream" if self._inject_stream else "legacy"
@@ -977,7 +1001,7 @@ class GmtMainWindow(QMainWindow):
         self._inject_eof_asking = False
         self._inject_panel.set_connected(False, detail="—")
         self._set_inject_ui(False)
-        self.statusBar().showMessage("Inject 已断开", 3000)
+        self.statusBar().showMessage(t("Inject 已断开"), 3000)
 
     def _poll_inject_msgs(self, msgs: list[dict[str, Any]]) -> None:
         for msg in msgs:
@@ -1007,7 +1031,7 @@ class GmtMainWindow(QMainWindow):
                         }
                     )
                     continue
-                self._inject_panel.set_detail(f"回灌错误：{err}")
+                self._inject_panel.set_detail(f'{t("回灌错误")}：{err}')
                 idx = self._slider.value()
                 if err in {"index out of range", "at end"} and idx >= 0:
                     reason = (
@@ -1015,7 +1039,7 @@ class GmtMainWindow(QMainWindow):
                         if self._inject_stream
                         else (
                             f"超出 inject session（{err}）— "
-                            "请确认 GF_INJECT_SESSION 与 GUI 同一文件"
+                            + t("请确认 GF_INJECT_SESSION 与 GUI 同一文件")
                         )
                     )
                     self._inject_panel.record_result(
@@ -1024,7 +1048,7 @@ class GmtMainWindow(QMainWindow):
                         topic="",
                         reason=reason,
                     )
-                self.statusBar().showMessage(f"回灌失败：{err}", 6000)
+                self.statusBar().showMessage(f'{t("回灌失败")}：{err}', 6000)
 
     def _on_inject_need_window(self, msg: dict[str, Any]) -> None:
         if (
@@ -1040,22 +1064,22 @@ class GmtMainWindow(QMainWindow):
                 f"need_window from={msg.get('from')} → pushed {n} EgoMotion"
             )
         except ConnectionError as exc:
-            self.statusBar().showMessage(f"填窗失败：{exc}", 4000)
+            self.statusBar().showMessage(f'{t("填窗失败")}：{exc}', 4000)
             self._disconnect_inject()
 
     def _on_inject_eof(self, _msg: dict[str, Any]) -> None:
         if self._inject_eof_asking:
             return
         if not self._inject_panel.wants_loop_confirm():
-            self._inject_panel.set_detail("eof（未勾选循环）")
-            self.statusBar().showMessage("回灌到结尾", 4000)
+            self._inject_panel.set_detail(t("eof（未勾选循环）"))
+            self.statusBar().showMessage(t("回灌到结尾"), 4000)
             return
         self._inject_eof_asking = True
         try:
             reply = QMessageBox.question(
                 self,
-                "回灌到结尾",
-                "已到 session 结尾。是否从开头继续循环？",
+                t("回灌到结尾"),
+                t("已到 session 结尾。是否从开头继续循环？"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
             )
@@ -1074,7 +1098,7 @@ class GmtMainWindow(QMainWindow):
                         return
                 self._seek_index(0)
             else:
-                self._inject_panel.set_detail("eof — 已停止")
+                self._inject_panel.set_detail(t("eof — 已停止"))
         finally:
             self._inject_eof_asking = False
 
@@ -1084,7 +1108,7 @@ class GmtMainWindow(QMainWindow):
         if not self._inject.connected:
             # Peer closed (or replaced); sync UI — do not auto-reconnect
             self._disconnect_inject()
-            self.statusBar().showMessage("Inject 连接已断开", 4000)
+            self.statusBar().showMessage(t("Inject 连接已断开"), 4000)
             return
         self._poll_inject_msgs(self._inject.poll_messages())
 
@@ -1108,9 +1132,9 @@ class GmtMainWindow(QMainWindow):
             if ok:
                 reason = ""
             elif "EgoMotion" in topic:
-                reason = "白名单未命中 / Send 失败"
+                reason = t("白名单未命中 / Send 失败")
             else:
-                reason = "MVP 仅灌 EgoMotion，本 topic 跳过"
+                reason = t("MVP 仅灌 EgoMotion，本 topic 跳过")
             self._inject_panel.record_result(
                 index_i,
                 injected=ok,
@@ -1151,7 +1175,7 @@ class GmtMainWindow(QMainWindow):
                         int(index),
                         injected=False,
                         topic=topic,
-                        reason="MVP 仅 EgoMotion",
+                        reason=t("MVP 仅 EgoMotion"),
                         t_ns=ev.t_ns,
                     )
                     self._inject_panel.set_detail(
@@ -1167,7 +1191,7 @@ class GmtMainWindow(QMainWindow):
                 self._inject.seek(int(index))
                 self._poll_inject_msgs(self._inject.poll_messages())
         except ConnectionError as exc:
-            self.statusBar().showMessage(f"inject seek 失败：{exc}", 4000)
+            self.statusBar().showMessage(f'{t("inject seek 失败")}：{exc}', 4000)
             self._disconnect_inject()
         finally:
             self._inject_syncing = False
@@ -1196,9 +1220,9 @@ class GmtMainWindow(QMainWindow):
         proj = f"{self._project_dir.name} · " if self._project_dir else ""
         mode = ""
         if self._live_active or self._follow.isChecked():
-            mode = " [跟随]" if follow else " [不跟播]"
+            mode = t(" [跟随]") if follow else t(" [不跟播]")
             if self._live_log_fp is not None:
-                mode += "·录制"
+                mode += t("·录制")
         if self._session_path:
             self._path_label.setText(f"{proj}{self._session_path} · {n} events{mode}")
         elif self._live_active:
@@ -1215,7 +1239,7 @@ class GmtMainWindow(QMainWindow):
         start = str(self._default_live_session())
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "跟随 live session JSONL",
+            t("跟随 live session JSONL"),
             start,
             "JSONL (*.jsonl);;All (*)",
         )
@@ -1237,17 +1261,17 @@ class GmtMainWindow(QMainWindow):
             self._stick_tail = self._follow_latest.isChecked()
             self._follow_timer.start()
             self.statusBar().showMessage(
-                "跟随文件 ON"
+                t("跟随文件 ON")
                 + (
-                    "（跟随最新）"
+                    t("（跟随最新）")
                     if self._follow_latest.isChecked()
-                    else "（不跟播）"
+                    else t("（不跟播）")
                 ),
                 2500,
             )
         else:
             self._follow_timer.stop()
-            self.statusBar().showMessage("跟随文件 OFF", 2000)
+            self.statusBar().showMessage(t("跟随文件 OFF"), 2000)
 
     def _on_follow_tick(self) -> None:
         if self._session_path is None:
@@ -1295,7 +1319,7 @@ class GmtMainWindow(QMainWindow):
         self._pause_follow_latest()
         idx = self._model.nearest_index(t)
         self._seek_index(idx)
-        self.statusBar().showMessage(f"跳转到 t≈{t}  → #{idx}", 3000)
+        self.statusBar().showMessage(f'{t("跳转到")} t≈{t}  → #{idx}', 3000)
 
     def load_project(
         self, project: Path, *, offer_session: bool = True
@@ -1311,20 +1335,20 @@ class GmtMainWindow(QMainWindow):
             ).is_file():
                 QMessageBox.warning(
                     self,
-                    "项目",
+                    t("项目"),
                     f"{proj_dir}\n下未找到 project.yaml\n"
-                    "请选 SKU 目录或其 project.yaml（与 gf-config 同一入口）。",
+                    + t("请选 SKU 目录或其 project.yaml（与 gf-config 同一入口）。"),
                 )
                 return
         elif p.is_file():
             QMessageBox.warning(
                 self,
-                "项目",
+                t("项目"),
                 f"请选择 project.yaml，而不是：\n{p.name}",
             )
             return
         else:
-            QMessageBox.warning(self, "项目", f"路径不存在：\n{p}")
+            QMessageBox.warning(self, t("项目"), f'{t("路径不存在")}：\n{p}')
             return
 
         self._project_dir = proj_dir
@@ -1332,7 +1356,7 @@ class GmtMainWindow(QMainWindow):
         if not sor.is_file():
             QMessageBox.warning(
                 self,
-                "项目",
+                t("项目"),
                 f"未找到 {sor}\n请先在 gf-config Verify / Compose。",
             )
             self._path_label.setText(f"项目={proj_dir}（无 SOR）")
@@ -1360,7 +1384,7 @@ class GmtMainWindow(QMainWindow):
         ):
             reply = QMessageBox.question(
                 self,
-                "打开 session？",
+                t("打开 session？"),
                 f"发现 {cand}\n是否加载？（也可先 run_sil 再 GUI「连接」）",
             )
             if reply == QMessageBox.StandardButton.Yes:
@@ -1405,12 +1429,12 @@ class GmtMainWindow(QMainWindow):
                 )
                 self._inject_panel.set_detail(detail)
             except ConnectionError as exc:
-                self.statusBar().showMessage(f"inject session 重置失败：{exc}", 4000)
+                self.statusBar().showMessage(f'{t("inject session 重置失败")}：{exc}', 4000)
                 self._disconnect_inject()
                 return
         if n:
             self._seek_index(0)
-        self.statusBar().showMessage("已加载 session", 3000)
+        self.statusBar().showMessage(t("已加载 session"), 3000)
 
     def _load_clip_path(self, path: object) -> None:
         p = Path(str(path))
@@ -1419,14 +1443,14 @@ class GmtMainWindow(QMainWindow):
             self._model = load_session(p, sor=self._sor)
             self._apply_model()
             self._tabs.setCurrentWidget(self._order)
-            QMessageBox.information(self, "clip", f"已加载 clip：\n{p}")
+            QMessageBox.information(self, "clip", f'{t("已加载 clip")}：\n{p}')
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "clip", str(exc))
 
     def _open_session(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "打开 session JSONL",
+            t("打开 session JSONL"),
             str(self._default_obs_dir()),
             "JSONL (*.jsonl);;All (*)",
         )
@@ -1435,27 +1459,27 @@ class GmtMainWindow(QMainWindow):
         try:
             self.load_session_path(Path(path))
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "打开失败", str(exc))
+            QMessageBox.critical(self, t("打开失败"), str(exc))
 
     def _open_project(self) -> None:
         start = self._project_dir or (Path.cwd() / "projects")
         hint = start / "project.yaml"
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "打开 project.yaml",
+            t("打开 project.yaml"),
             str(hint if hint.is_file() else start),
             "project.yaml (project.yaml);;YAML (*.yaml *.yml);;All (*)",
         )
         if path:
             self.load_project(Path(path))
-            self.statusBar().showMessage(f"已加载项目 {path}", 4000)
+            self.statusBar().showMessage(f'{t("已加载项目")} {path}', 4000)
 
     def _open_project_dir(self) -> None:
         start = str(self._project_dir or Path.cwd() / "projects")
-        path = QFileDialog.getExistingDirectory(self, "选择项目目录（备选）", start)
+        path = QFileDialog.getExistingDirectory(self, t("选择项目目录（备选）"), start)
         if path:
             self.load_project(Path(path))
-            self.statusBar().showMessage(f"已加载项目 {path}", 4000)
+            self.statusBar().showMessage(f'{t("已加载项目")} {path}', 4000)
 
     def _record_from_logs(self) -> None:
         start_logs = Path.cwd() / "build"
@@ -1464,14 +1488,14 @@ class GmtMainWindow(QMainWindow):
             pass
         log_dir = QFileDialog.getExistingDirectory(
             self,
-            "选择 SIL multiproc / iox_*_logs 目录",
+            t("选择 SIL multiproc / iox_*_logs 目录"),
             str(start_logs),
         )
         if not log_dir:
             return
         out, _ = QFileDialog.getSaveFileName(
             self,
-            "保存 session.jsonl",
+            t("保存 session.jsonl"),
             str(self._default_obs_dir() / "session.jsonl"),
             "JSONL (*.jsonl)",
         )
@@ -1488,23 +1512,23 @@ class GmtMainWindow(QMainWindow):
                 observability_json=obs,
             )
             self.load_session_path(path)
-            note = f"observability={obs}" if obs else "无 whitelist（全量解析）"
+            note = f"observability={obs}" if obs else t("无 whitelist（全量解析）")
             if n == 0:
                 QMessageBox.warning(
                     self,
-                    "录制",
+                    t("录制"),
                     f"写入 {path}\n事件数=0\n({note})\n"
-                    "检查日志目录或 record.services / mode=off。",
+                    + t("检查日志目录或 record.services / mode=off。"),
                 )
             else:
-                QMessageBox.information(self, "录制", f"写入 {path}\n事件数={n}\n{note}")
+                QMessageBox.information(self, t("录制"), f"写入 {path}\n事件数={n}\n{note}")
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "录制失败", str(exc))
+            QMessageBox.critical(self, t("录制失败"), str(exc))
 
     def _import_ndjson(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "导入 tap NDJSON",
+            t("导入 tap NDJSON"),
             str(Path.cwd()),
             "JSONL/NDJSON (*.jsonl *.ndjson);;All (*)",
         )
@@ -1512,7 +1536,7 @@ class GmtMainWindow(QMainWindow):
             return
         out, _ = QFileDialog.getSaveFileName(
             self,
-            "保存为 session.jsonl",
+            t("保存为 session.jsonl"),
             str(self._default_obs_dir() / "session_from_tap.jsonl"),
             "JSONL (*.jsonl)",
         )
@@ -1524,17 +1548,17 @@ class GmtMainWindow(QMainWindow):
         try:
             path_out, n = record_from_ndjson(Path(path), out_path)
             self.load_session_path(path_out)
-            QMessageBox.information(self, "导入", f"写入 {path_out}\n事件数={n}")
+            QMessageBox.information(self, t("导入"), f"写入 {path_out}\n事件数={n}")
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "导入失败", str(exc))
+            QMessageBox.critical(self, t("导入失败"), str(exc))
 
     def _export_mcap(self) -> None:
         if self._session_path is None or not self._session_path.is_file():
-            QMessageBox.information(self, "导出", "请先打开 session")
+            QMessageBox.information(self, t("导出"), t("请先打开 session"))
             return
         out, _ = QFileDialog.getSaveFileName(
             self,
-            "导出 MCAP",
+            t("导出 MCAP"),
             str(self._session_path.with_suffix(".mcap")),
             "MCAP (*.mcap)",
         )
@@ -1545,19 +1569,19 @@ class GmtMainWindow(QMainWindow):
             out_path = out_path.with_suffix(".mcap")
         try:
             export_session_jsonl(self._session_path, out_path)
-            QMessageBox.information(self, "导出", f"已写入 {out_path}")
+            QMessageBox.information(self, t("导出"), f'{t("已写入")} {out_path}')
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "导出失败", str(exc))
+            QMessageBox.critical(self, t("导出失败"), str(exc))
 
     def _export_vcd(self) -> None:
         if self._session_path is None or not self._session_path.is_file():
-            QMessageBox.information(self, "导出", "请先打开 session")
+            QMessageBox.information(self, t("导出"), t("请先打开 session"))
             return
         from gf_gmt.measure_vcd import export_session_vcd
 
         out, _ = QFileDialog.getSaveFileName(
             self,
-            "导出 VCD（GTKWave）",
+            t("导出 VCD（GTKWave）"),
             str(self._session_path.with_suffix(".vcd")),
             "VCD (*.vcd)",
         )
@@ -1570,22 +1594,22 @@ class GmtMainWindow(QMainWindow):
             path, n_vars, n_ev = export_session_vcd(self._session_path, out_path)
             QMessageBox.information(
                 self,
-                "导出",
+                t("导出"),
                 f"已写入 {path}\nvars={n_vars} events={n_ev}\n"
                 f"打开：gtkwave {path}",
             )
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "导出失败", str(exc))
+            QMessageBox.critical(self, t("导出失败"), str(exc))
 
     def _export_dot(self) -> None:
         if not self._sor:
-            QMessageBox.information(self, "导出", "请先加载 SOR / 项目")
+            QMessageBox.information(self, t("导出"), t("请先加载 SOR / 项目"))
             return
         from gf_gmt.architect import dag_from_sor, dag_to_dot
 
         out, _ = QFileDialog.getSaveFileName(
             self,
-            "导出 Graphviz .dot",
+            t("导出 Graphviz .dot"),
             str(self._default_obs_dir() / "dag.dot"),
             "Graphviz (*.dot)",
         )
@@ -1595,11 +1619,11 @@ class GmtMainWindow(QMainWindow):
         if out_path.suffix.lower() != ".dot":
             out_path = out_path.with_suffix(".dot")
         out_path.write_text(dag_to_dot(dag_from_sor(self._sor)), encoding="utf-8")
-        QMessageBox.information(self, "导出", f"已写入 {out_path}")
+        QMessageBox.information(self, t("导出"), f'{t("已写入")} {out_path}')
 
     def _start_foxglove_replay(self) -> None:
         if self._session_path is None or not self._session_path.is_file():
-            QMessageBox.information(self, "Foxglove", "请先打开 session")
+            QMessageBox.information(self, "Foxglove", t("请先打开 session"))
             return
         self._stop_foxglove()
         # Prefer 8768 so GUI offline replay does not fight SIL live Foxglove (:8765).
@@ -1648,8 +1672,8 @@ class GmtMainWindow(QMainWindow):
         tip = ""
         if port != 8765:
             tip = (
-                "\n（检测到 :8765 已被占用，多半是 SIL live；"
-                "离线回放改用本端口，勿与 live 混连。）"
+                t("\n（检测到 :8765 已被占用，多半是 SIL live；"
+                "离线回放改用本端口，勿与 live 混连。）")
             )
         QMessageBox.information(
             self,
@@ -1676,7 +1700,7 @@ class GmtMainWindow(QMainWindow):
         start = str(self._project_dir or Path.cwd())
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "加载 gf.sor.json",
+            t("加载 gf.sor.json"),
             start,
             "JSON (*.json);;All (*)",
         )
@@ -1691,31 +1715,32 @@ class GmtMainWindow(QMainWindow):
             self._dag.set_model(self._model)
             if self._model.events:
                 self._seek_index(self._slider.value())
-            self.statusBar().showMessage(f"已加载 SOR {path}", 4000)
+            self.statusBar().showMessage(f'{t("已加载 SOR")} {path}', 4000)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "SOR 失败", str(exc))
+            QMessageBox.critical(self, t("SOR 失败"), str(exc))
 
     def _toggle_play(self) -> None:
         if self._model.empty:
             return
         self._playing = not self._playing
-        self._btn_play.setText("暂停" if self._playing else "播放")
+        self._btn_play.setText(t("暂停") if self._playing else t("播放"))
         if self._playing:
             self._timer.start(self._next_interval_ms())
         else:
             self._timer.stop()
 
     def _next_interval_ms(self) -> int:
-        base = max(1, int(self._rate.value()))
+        # Spinbox = speed percent (100 = default). Larger → shorter interval → faster.
+        speed_pct = max(10, int(self._rate.value()))
         if not self._use_dt.isChecked() or self._model.empty:
-            return base
+            return max(1, int(200.0 * 100.0 / speed_pct))
         cur = self._slider.value()
         nxt = min(cur + 1, len(self._model.events) - 1)
         dt = self._model.events[nxt].dt_ns if nxt > cur else 0
-        # map 1e6 ns → rate ms (user rate scales wall clock)
         if dt <= 0:
-            return base
-        scaled = int(dt / 1_000_000.0 * (base / 200.0))
+            return max(1, int(200.0 * 100.0 / speed_pct))
+        # 1e6 ns → 1 ms at 100%; scale by speed%
+        scaled = int(dt / 1_000_000.0 * (100.0 / speed_pct))
         return max(1, min(scaled, 5000))
 
     def _on_tick(self) -> None:
@@ -1796,12 +1821,12 @@ class GmtMainWindow(QMainWindow):
         ev = self._model.events[index]
         live = ""
         if self._follow.isChecked() or self._live_active:
-            live = " 跟随" if self._follow_latest.isChecked() else ""
+            live = t(" 跟随") if self._follow_latest.isChecked() else ""
             if self._live_log_fp is not None:
-                live += " 录制"
+                live += t(" 录制")
         wall = self._model.wall_str(ev.t_ns)
         self._t_label.setText(
-            f"墙钟={wall}  t={ev.t_ns}  #{index}/{len(self._model.events) - 1}{live}"
+            f'{t("Wall")}={wall}  t={ev.t_ns}  #{index}/{len(self._model.events) - 1}{live}'
         )
         self._order.highlight_upto(index)
         self._dag.set_playhead_index(index)
@@ -1829,8 +1854,13 @@ def run_gui(
     project: Path | None = None,
     follow: bool = False,
 ) -> int:
+    from PySide6.QtCore import QCoreApplication
     from PySide6.QtWidgets import QApplication
+    from gf_gmt.i18n import load_language
 
+    QCoreApplication.setOrganizationName("GiraffeFlow")
+    QCoreApplication.setApplicationName("gf-gmt")
+    load_language()
     app = QApplication.instance() or QApplication(sys.argv)
     win = GmtMainWindow()
     if project:

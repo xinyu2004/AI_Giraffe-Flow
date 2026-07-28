@@ -258,6 +258,39 @@ def test_bev_compose_from_module_topics() -> None:
     assert any(r["topic"] == TOPIC_CAM for r in exp)
 
 
+def test_bev_prefers_planning_traj_when_adas() -> None:
+    from gf_gmt.bev_compose import LiveBevComposer
+
+    comp = LiveBevComposer()
+    comp.update(
+        {
+            "t_ns": 1,
+            "topic": "/gf/AdasDemo",
+            "data": {
+                "phase": "changing",
+                "lane_offset_m": 1.5,
+                "lead_dist_m": 40.0,
+                "cipo_x_m": 40.0,
+                "cipo_y_m": 0.0,
+            },
+        }
+    )
+    cam = comp.update(
+        {
+            "t_ns": 2,
+            "topic": "/gf/Trajectory",
+            "data": {
+                "points_x_m": [0.0, 10.0, 20.0],
+                "points_y_m": [0.0, 1.0, 2.0],
+            },
+        }
+    )
+    assert cam is not None
+    assert comp.state.has_adas
+    # ego-frame stored as-is; world offset applied at render time
+    assert comp.state.traj_y == [0.0, 1.0, 2.0]
+
+
 def test_bev_script_three_phases_no_adas_topic() -> None:
     from gf_gmt.bev_compose import (
         TOPIC_ADAS,

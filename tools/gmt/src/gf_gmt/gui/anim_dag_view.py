@@ -20,19 +20,18 @@ from PySide6.QtWidgets import (
 
 from gf_gmt.architect import dag_from_sor
 from gf_gmt.gui.session_model import SessionEvent, SessionModel
+from gf_gmt.i18n import t
 
 
 class AnimDagView(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._hint = QLabel(
-            "动画 DAG：只点亮当前 playhead 一条事件。"
-            "单跳=橙边；fan-out（同服务多订阅）=蓝边 + 「FAN」标签，"
-            "发布端深橙、订阅端浅蓝——同一次发布的多条边会一起亮。"
+            t("DAG: highlight the playhead event. Orange=1 hop; blue+FAN=fan-out.")
         )
         self._hint.setWordWrap(True)
         self._hint.setStyleSheet("color:#555;")
-        self._activity = QLabel("当前：—")
+        self._activity = QLabel(t("Current: —"))
         self._activity.setWordWrap(True)
         self._activity.setStyleSheet("color:#333; font-weight:600;")
         self._scene = QGraphicsScene(self)
@@ -54,7 +53,7 @@ class AnimDagView(QWidget):
         self._scene.clear()
         self._node_items.clear()
         self._edge_items.clear()
-        self._activity.setText("当前：—")
+        self._activity.setText(t("Current: —"))
         if not sor:
             self._scene.addText("打开项目 SOR 后显示拓扑")
             return
@@ -203,21 +202,24 @@ class AnimDagView(QWidget):
                 src = " / ".join(srcs)
                 dest_list = " | ".join(dests)
                 self._activity.setText(
-                    f"当前：#{current.index} t={current.t_ns}  "
+                    f'{t("Current: —").rstrip("—").strip()} '
+                    f"#{current.index} t={current.t_ns}  "
                     f"【fan-out×{len(active_edges)}】{topic}  "
                     f"{src} → [{dest_list}]"
                 )
             elif current.from_proc and current.to_proc:
                 self._activity.setText(
-                    f"当前：#{current.index} t={current.t_ns}  "
+                    f'{t("Current: —").rstrip("—").strip()} '
+                    f"#{current.index} t={current.t_ns}  "
                     f"{topic}  {current.from_proc}→{current.to_proc}"
                 )
             else:
                 self._activity.setText(
-                    f"当前：#{current.index} t={current.t_ns}  {topic}"
+                    f'{t("Current: —").rstrip("—").strip()} '
+                    f"#{current.index} t={current.t_ns}  {topic}"
                 )
         else:
-            self._activity.setText("当前：—")
+            self._activity.setText(t("Current: —"))
 
         idle_edge = QPen(QColor("#90a4ae"), 2)
         hot_single = QPen(QColor("#e65100"), 4)
