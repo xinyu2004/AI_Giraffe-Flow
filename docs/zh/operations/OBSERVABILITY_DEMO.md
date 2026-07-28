@@ -70,6 +70,25 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
 GMT bridge foxglove --mcap build/observability/session.mcap
 ```
 
+## 2b. ADAS 场景 demo（合场景 · 无需 SIL）
+
+**主文件** `overtake_acc_aeb.jsonl`：变道超车 → ACC → AEB。`AdasDemo` 是 JSONL topic，不是新 app。
+
+```bash
+python scripts/gen_adas_scenarios.py
+GMT bridge foxglove --ws --synth-bev \
+  --jsonl projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl --port 8765
+# Studio → ws://127.0.0.1:8765 · Image + Plot(AdasDemo.*)
+
+GMT gui --project projects/oem_a/afc_with_uss \
+  --session projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl
+```
+
+注入：场景联调推荐  
+`GF_INJECT_MODE=playhead GF_INJECT_LIVE=all bash …/run_sil.sh`  
+（保留 EgoMotion；`run_sil` 默认 `GF_SYNTH_BEV=1`，Foxglove 用 **EgoMotion+Trajectory 合成 BEV**，无需另开 `--synth-bev` 命令）。  
+`AdasDemo` 仍可在 GMT 变量轨对照剧本；主链 BEV 不依赖 JSONL 画图。
+
 ## 3. WebSocket 回放（非 live）
 
 ```bash

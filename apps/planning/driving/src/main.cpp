@@ -52,28 +52,32 @@ int main() {
       last_uss = *t.Value();
     }
 
-    if (last_perc && last_ego && last_uss) {
+    // Demo / inject: EgoMotion is the drive signal. Perception_In comes from
+    // gateway (off during inject), so do not hard-gate Trajectory on FCM.
+    if (last_ego) {
+      const auto& ego = *last_ego;
+      const int dyn =
+          last_perc ? static_cast<int>(last_perc->dyn_obj_count) : 0;
+      const int nearest =
+          last_uss ? static_cast<int>(last_uss->nearest_cm) : -1;
+
       gf_gen::Trajectory traj{};
-      traj.timestamp_ns = last_ego->timestamp_ns;
+      traj.timestamp_ns = ego.timestamp_ns;
       traj.point_count = 3;
       traj.points_x_m[0] = 0.0f;
       traj.points_y_m[0] = 0.0f;
-      traj.points_x_m[1] = last_ego->speed_mps;
+      traj.points_x_m[1] = ego.speed_mps;
       traj.points_y_m[1] = 0.5f;
-      traj.points_x_m[2] = last_ego->speed_mps * 2.0f;
+      traj.points_x_m[2] = ego.speed_mps * 2.0f;
       traj.points_y_m[2] = 1.0f;
-      traj.gear_shift_first = last_ego->gear;
+      traj.gear_shift_first = ego.gear;
       traj.gear_shift_second = 0;
       if (static_cast<bool>(traj_pub.Send(traj))) {
         std::cout << "gf-planning-driving: Trajectory#" << seq
-                  << " dyn=" << static_cast<int>(last_perc->dyn_obj_count)
-                  << " nearest_cm=" << static_cast<int>(last_uss->nearest_cm)
-                  << std::endl;
+                  << " dyn=" << dyn << " nearest_cm=" << nearest << std::endl;
         ++seq;
       }
-      last_perc.reset();
       last_ego.reset();
-      last_uss.reset();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }

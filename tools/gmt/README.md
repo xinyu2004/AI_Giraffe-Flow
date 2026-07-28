@@ -71,6 +71,26 @@ GF_INJECT_SESSION=build/observability/session.jsonl \
   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 ```
 
+### ADAS 场景 demo（阶段 0 · 无需 Vision Pilot）
+
+**主文件：** `overtake_acc_aeb.jsonl`（变道超车 → ACC → AEB）。`AdasDemo` 仅为 JSONL topic，不是新 app。
+
+```bash
+python scripts/gen_adas_scenarios.py
+# Foxglove
+GMT bridge foxglove --ws --synth-bev --speed 1.0 \
+  --jsonl projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl --port 8765
+# Studio → ws://127.0.0.1:8765 → Image: /gf/camera/front/compressed
+#          Plot: AdasDemo.speed_mps · lead_dist_m · lane_offset_m · brake_active
+
+# GMT 变量轨
+GMT gui --project projects/oem_a/afc_with_uss \
+  --session projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl
+```
+
+注入联调（二选一）：`GF_INJECT_MODE=playhead`（GMT 打开同一 jsonl 回灌）或  
+`GF_INJECT_MODE=continuous GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl`。
+
 ### GTKWave（离线时序）
 
 ```bash

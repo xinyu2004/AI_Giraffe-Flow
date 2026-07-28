@@ -36,6 +36,34 @@ from gf_gmt.measure_export import list_mcap_topics
 # JSON Schema string for free-form object payloads (encoding=json)
 _JSON_SCHEMA = json.dumps({"type": "object", "additionalProperties": True})
 
+# Foxglove CompressedImage (JSON encoding; data is base64)
+_COMPRESSED_IMAGE_SCHEMA = json.dumps(
+    {
+        "type": "object",
+        "properties": {
+            "timestamp": {
+                "type": "object",
+                "properties": {
+                    "sec": {"type": "integer"},
+                    "nsec": {"type": "integer"},
+                },
+            },
+            "frame_id": {"type": "string"},
+            "data": {"type": "string", "contentEncoding": "base64"},
+            "format": {"type": "string"},
+        },
+    }
+)
+
+_IMAGE_TOPIC_SUFFIXES = ("/compressed", "/image", "/Image")
+
+
+def is_image_topic(topic: str) -> bool:
+    t = topic or ""
+    if "camera" in t.lower() and "compressed" in t.lower():
+        return True
+    return any(t.endswith(s) for s in _IMAGE_TOPIC_SUFFIXES)
+
 
 def describe_mcap(mcap: Path) -> dict[str, Any]:
     topics = list_mcap_topics(mcap)
@@ -158,6 +186,15 @@ def server_info_payload(name: str = "gf_gmt-bridge") -> dict[str, Any]:
 
 
 def channel_desc(channel_id: int, topic: str) -> dict[str, Any]:
+    if is_image_topic(topic):
+        return {
+            "id": channel_id,
+            "topic": topic,
+            "encoding": "json",
+            "schemaName": "foxglove.CompressedImage",
+            "schema": _COMPRESSED_IMAGE_SCHEMA,
+            "schemaEncoding": "jsonschema",
+        }
     return {
         "id": channel_id,
         "topic": topic,
@@ -378,13 +415,30 @@ def _listen(host: str, port: int) -> socket.socket:
     return srv
 
 
-def replay_jsonl_ws(jsonl: Path, host: str, port: int, *, speed: float = 1.0) -> None:
+def replay_jsonl_ws(
+    jsonl: Path,
+    host: str,
+    port: int,
+    *,
+    speed: float = 1.0,
+    synth_bev: bool = False,
+) -> None:
     rows = rows_from_jsonl(jsonl)
+    if synth_bev:
+        from gf_gmt.bev_compose import expand_rows_with_bev
+
+        rows = expand_rows_with_bev(rows, drop_adas_topic=True)
     topics = sorted({str(r.get("topic") or "/gf/stub") for r in rows}) or ["/gf/stub"]
 
     srv = _listen(host, port)
     print(f"Foxglove WS (replay) ws://{host}:{port}", flush=True)
     print(f"  topics: {', '.join(topics)}", flush=True)
+    if synth_bev:
+        print(
+            "  synth BEV: /gf/camera/front/compressed "
+            "(Ego/Trajectory + scenario story; AdasDemo not advertised)",
+            flush=True,
+        )
     print("  Studio → Open connection → Foxglove WebSocket", flush=True)
 
     try:
@@ -455,19 +509,35 @@ def live_stdin_ws(
     port: int,
     *,
     stream: TextIO | None = None,
+    synth_bev: bool = False,
+    bev_script: Path | None = None,
 ) -> None:
     """Live NDJSON from stdin → Foxglove WS.
 
     Always drains stdin (so tap never blocks). Studio may connect / reconnect anytime;
     messages are published only while a client is connected and subscribed.
+    When synth_bev=True, compose /gf/camera/front/compressed from EgoMotion/Trajectory
+    (+ optional scenario script for three-phase story). /gf/AdasDemo is never advertised.
     """
+    from gf_gmt.bev_compose import AdasScriptIndex, LiveBevComposer, is_adas_demo_topic
+
     inp = stream if stream is not None else sys.stdin
     srv = _listen(host, port)
+    script = AdasScriptIndex.load(bev_script) if bev_script else None
+    bev = LiveBevComposer(script=script) if synth_bev else None
 
     def _status(kind: str, msg: str) -> None:
         conn_status("Foxglove", kind, msg)
 
     _status("listen", f"LISTENING ws://{host}:{port}")
+    if synth_bev:
+        if script is not None:
+            _status(
+                "listen",
+                f"synth BEV + scenario script ({len(script.times)} Adas frames → Image only)",
+            )
+        else:
+            _status("listen", "synth BEV from EgoMotion/Trajectory (module I/O)")
 
     fd = -1
     if hasattr(inp, "fileno"):
@@ -498,6 +568,26 @@ def live_stdin_ws(
         state = None
         peer_label = ""
 
+    def _publish_row(topic: str, t_ns: int, data: Any) -> None:
+        nonlocal published, dropped, conn, state
+        if conn is None or state is None:
+            dropped += 1
+            if dropped == 1 or dropped % 200 == 0:
+                _status(
+                    "listen",
+                    f"no client — drained {dropped} msgs (connect anytime)",
+                )
+            return
+        try:
+            n = state.publish(conn, topic, t_ns, data)
+        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+            _close_client(reason=f"client gone: {exc}")
+            dropped += 1
+            return
+        published += n
+        if published and published % 50 == 0:
+            _status("ok", f"published {published} msgs")
+
     try:
         while not stdin_eof or conn is not None:
             rlist: list[Any] = [srv]
@@ -526,10 +616,12 @@ def live_stdin_ws(
                             new_conn.close()
                         else:
                             _send_json(new_conn, server_info_payload("gf_gmt-bridge-live"))
-                            # Seed common topics; others advertise on first publish
-                            new_state.advertise_topics(
-                                new_conn, ["/gf/EgoMotion", "/gf/Trajectory"]
-                            )
+                            seed = [
+                                "/gf/EgoMotion",
+                                "/gf/Trajectory",
+                                "/gf/camera/front/compressed",
+                            ]
+                            new_state.advertise_topics(new_conn, seed)
                             conn = new_conn
                             state = new_state
                             peer_label = who
@@ -573,7 +665,6 @@ def live_stdin_ws(
             for line in lines:
                 row = parse_ndjson_row(line)
                 if row is None:
-                    # blank / non-JSON pipe noise — keep quiet unless it looked like JSON
                     stripped = line.strip()
                     if stripped.startswith("{") and len(stripped) > 1:
                         _status("err", f"bad json (skipped): {stripped[:80]!r}")
@@ -581,23 +672,17 @@ def live_stdin_ws(
                 topic = str(row.get("topic") or "/gf/stub")
                 t_ns = int(row.get("t_ns") or 0)
                 data = row.get("data", row)
-                if conn is None or state is None:
-                    dropped += 1
-                    if dropped == 1 or dropped % 200 == 0:
-                        _status(
-                            "listen",
-                            f"no client — drained {dropped} msgs (connect anytime)",
+                # AdasDemo is script-only: feed BEV, never publish to Studio.
+                if not is_adas_demo_topic(topic):
+                    _publish_row(topic, t_ns, data)
+                if bev is not None:
+                    cam = bev.update(row)
+                    if cam is not None:
+                        _publish_row(
+                            str(cam["topic"]),
+                            int(cam["t_ns"]),
+                            cam["data"],
                         )
-                    continue
-                try:
-                    n = state.publish(conn, topic, t_ns, data)
-                except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                    _close_client(reason=f"client gone: {exc}")
-                    dropped += 1
-                    continue
-                published += n
-                if published and published % 50 == 0:
-                    _status("ok", f"published {published} msgs")
 
             if stdin_eof and conn is None:
                 break
@@ -636,6 +721,18 @@ def main_bridge(argv: list[str] | None = None) -> int:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--speed", type=float, default=1.0)
+    p.add_argument(
+        "--synth-bev",
+        action="store_true",
+        help="Compose BEV CompressedImage from EgoMotion/Trajectory (live or jsonl)",
+    )
+    p.add_argument(
+        "--bev-script",
+        type=Path,
+        default=None,
+        help="Scenario JSONL with AdasDemo frames — used only to enrich BEV Image "
+        "(not published as /gf/AdasDemo)",
+    )
     args = p.parse_args(argv)
 
     if args.mcap:
@@ -654,7 +751,12 @@ def main_bridge(argv: list[str] | None = None) -> int:
     if args.ws:
         try:
             if args.stdin:
-                live_stdin_ws(args.host, args.port)
+                live_stdin_ws(
+                    args.host,
+                    args.port,
+                    synth_bev=bool(args.synth_bev),
+                    bev_script=args.bev_script,
+                )
                 return 0
             src = args.jsonl
             if src is None and args.mcap is not None:
@@ -666,7 +768,13 @@ def main_bridge(argv: list[str] | None = None) -> int:
             if src is None or not src.is_file():
                 print("need --jsonl FILE or --stdin with --ws", flush=True)
                 return 2
-            replay_jsonl_ws(src, args.host, args.port, speed=args.speed)
+            replay_jsonl_ws(
+                src,
+                args.host,
+                args.port,
+                speed=args.speed,
+                synth_bev=bool(args.synth_bev),
+            )
             return 0
         except KeyboardInterrupt:
             print("\nbridge stopped", flush=True)

@@ -68,6 +68,8 @@ class GmtMainWindow(QMainWindow):
         self._ws: LiveWsSession | None = None
         self._live_log_fp: TextIO | None = None
         self._live_active = False
+        # When True: Live WS connected but must not wipe/append into inject/file session.
+        self._live_observe_only = False
         self._inject: InjectCtrlClient | None = None
         self._inject_helper: InjectStreamHelper | None = None
         self._inject_stream = False  # hello caps contains stream_window
@@ -754,12 +756,22 @@ class GmtMainWindow(QMainWindow):
 
         host = self._host_edit.text().strip() or "127.0.0.1"
         port = int(self._port_spin.value())
-        self._begin_live_memory_session()
+        # Open file session / inject authority must survive Live connect.
+        preserve = self._session_path is not None or self._inject_active
+        if preserve:
+            self._live_observe_only = True
+            self._force_live_follow_off(
+                reason="已有 session/回灌 → Live 旁观（不覆盖时间轴）"
+            )
+        else:
+            self._live_observe_only = False
+            self._begin_live_memory_session()
 
         ws = LiveWsSession()
         try:
             ws.connect(host, port)
         except (OSError, TimeoutError, ConnectionError) as exc:
+            self._live_observe_only = False
             self._close_live_log()
             QMessageBox.critical(
                 self,
@@ -775,11 +787,17 @@ class GmtMainWindow(QMainWindow):
         self._ws = ws
         self._ws_timer.start()
         self._set_live_ui(True)
-        mode = "跟随最新" if self._follow_latest.isChecked() else "不跟播"
-        self.statusBar().showMessage(
-            f"Live 已连接 ws://{host}:{port}（{mode}；落盘请点「录制」）",
-            8000,
-        )
+        if self._live_observe_only:
+            self.statusBar().showMessage(
+                f"Live 旁观 ws://{host}:{port}（保留 session/回灌；可录制落盘，不写入时间轴）",
+                10000,
+            )
+        else:
+            mode = "跟随最新" if self._follow_latest.isChecked() else "不跟播"
+            self.statusBar().showMessage(
+                f"Live 已连接 ws://{host}:{port}（{mode}；落盘请点「录制」）",
+                8000,
+            )
 
     def _disconnect_live(self) -> None:
         self._ws_timer.stop()
@@ -792,10 +810,13 @@ class GmtMainWindow(QMainWindow):
         self._follow.blockSignals(True)
         self._follow.setChecked(False)
         self._follow.blockSignals(False)
+        observe = self._live_observe_only
+        self._live_observe_only = False
         self._set_live_ui(False)
         n = len(self._model.events)
+        note = "（旁观模式未改时间轴）" if observe else ""
         self.statusBar().showMessage(
-            f"Live 已断开 · 保留 session（{n} events）"
+            f"Live 已断开 · 保留 session（{n} events）{note}"
             + (f"：{self._session_path}" if self._session_path else ""),
             8000,
         )
@@ -811,13 +832,20 @@ class GmtMainWindow(QMainWindow):
             row = parse_session_line(line)
             if row is None:
                 continue
-            if row.get("type") != "session_meta" and not self._model.clock.ready:
+            if (
+                not self._live_observe_only
+                and row.get("type") != "session_meta"
+                and not self._model.clock.ready
+            ):
                 self._write_live_session_meta_if_needed(int(row.get("t_ns") or 0))
             if self._live_log_fp is not None:
                 self._live_log_fp.write(line + "\n")
                 self._live_log_fp.flush()
             rows.append(row)
         if not rows:
+            return
+        # Keep inject/file session indices stable — Foxglove shows live topics.
+        if self._live_observe_only:
             return
         self._append_live_rows(rows)
 
@@ -859,6 +887,7 @@ class GmtMainWindow(QMainWindow):
                 "请先打开 session JSONL（GMT 为权威源）。\n"
                 "stream 模式下板端不必再设 GF_INJECT_SESSION。",
             )
+            return
         # Disable before blocking hello — avoid double-connect (new ephemeral ports)
         self._btn_inject_connect.setEnabled(False)
         self._inject_port_spin.setEnabled(False)
@@ -1573,35 +1602,34 @@ class GmtMainWindow(QMainWindow):
             QMessageBox.information(self, "Foxglove", "请先打开 session")
             return
         self._stop_foxglove()
+        # Prefer 8768 so GUI offline replay does not fight SIL live Foxglove (:8765).
+        port = 8768
+        try:
+            import socket
+
+            with socket.create_connection(("127.0.0.1", 8765), timeout=0.2):
+                sil_live = True
+        except OSError:
+            sil_live = False
+        if not sil_live:
+            port = 8765
         gmt = shutil.which("GMT")
+        cmd_base = [
+            "bridge",
+            "foxglove",
+            "--ws",
+            "--jsonl",
+            str(self._session_path),
+            "--synth-bev",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ]
         if gmt:
-            cmd = [
-                gmt,
-                "bridge",
-                "foxglove",
-                "--ws",
-                "--jsonl",
-                str(self._session_path),
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8765",
-            ]
+            cmd = [gmt, *cmd_base]
         else:
-            cmd = [
-                sys.executable,
-                "-m",
-                "gf_gmt.cli",
-                "bridge",
-                "foxglove",
-                "--ws",
-                "--jsonl",
-                str(self._session_path),
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8765",
-            ]
+            cmd = [sys.executable, "-m", "gf_gmt.cli", *cmd_base]
         self._fox_proc = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -1613,18 +1641,27 @@ class GmtMainWindow(QMainWindow):
                 self,
                 "Foxglove",
                 f"进程已退出（码 {self._fox_proc.returncode}）。\n"
-                "检查端口 8765 是否被占用，或用 CLI 调试。",
+                f"检查端口 {port} 是否被占用，或用 CLI 调试。",
             )
             self._fox_proc = None
             return
+        tip = ""
+        if port != 8765:
+            tip = (
+                "\n（检测到 :8765 已被占用，多半是 SIL live；"
+                "离线回放改用本端口，勿与 live 混连。）"
+            )
         QMessageBox.information(
             self,
             "Foxglove",
-            "已启动 WS 回放：ws://127.0.0.1:8765\n"
-            "Foxglove Studio → Open connection。\n"
-            "勿与 live bridge 同时占同一端口。",
+            f"已启动 WS 回放：ws://127.0.0.1:{port}\n"
+            "Foxglove Studio → Open connection。"
+            f"{tip}",
         )
-        self.statusBar().showMessage("Foxglove 回放进程已启动", 5000)
+        self.statusBar().showMessage(
+            f"Foxglove 回放已启动 ws://127.0.0.1:{port}",
+            5000,
+        )
 
     def _stop_foxglove(self) -> None:
         if self._fox_proc is not None and self._fox_proc.poll() is None:

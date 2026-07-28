@@ -23,13 +23,16 @@
 #   GF_WS_PORT       default 8765
 #   GF_LIVE_PORT     default 8766 (GMT GUI live bridge)
 #   GF_LIVE_SESSION  optional tee path (default build/observability/session_live.jsonl)
-#   GF_LIVE_TEE      default 1 — tee tap NDJSON to GF_LIVE_SESSION
+#   GF_SYNTH_BEV       default 1 — Foxglove live bridge composes BEV from EgoMotion/Trajectory
 #   GF_SKIP_COMPILE=1  skip compile_sil (assume already built)
 #   GF_INJECT_SESSION  continuous 必填；playhead 可选（GMT stream，可不设）
 #   GF_INJECT_MODE     continuous (default) | playhead — playhead waits for GMT on GF_INJECT_PORT
 #   GF_INJECT_PORT     default 8767 (playhead control TCP)
 #   GF_INJECT_HOST     default 0.0.0.0 (playhead bind)
-#   GF_INJECT_LIVE     default 1 — keep live_tap during inject but only downstream topics
+#   GF_INJECT_LIVE     default 1 — keep live_tap during inject
+#                      1 = downstream only (exclude injectable EgoMotion)
+#                      all|passthrough = keep full live whitelist (EgoMotion+…) for scenario demo
+#                      0 = force live_tap OFF
 #   GF_INJECT_SERVICES default EgoMotion (or auto from DUT requires ∩ injectable)
 #   GF_INJECT_DUT      B2: SOR process id (e.g. sensing.uss) → only that app + inject
 #   GF_INJECT_APPS     B2 override: comma list uss,fcm,planning (skip SOR lookup)
@@ -109,17 +112,22 @@ else
   echo "${TAG} WARN: missing ${OBS_JSON} — run compile_sil first; live Foxglove off" >&2
 fi
 
-# Inject replaces gateway. Live tap may stay on for downstream观察 (not injectable topics).
+# Inject replaces gateway. Live tap may stay on.
 if [[ "${INJECT_ON}" == "1" ]]; then
-  echo "${TAG} inject mode=${INJECT_MODE}: gateway OFF (session=${INJECT_SESSION})"
-  if [[ "${GF_INJECT_LIVE:-1}" == "0" ]]; then
+  echo "${TAG} inject mode=${INJECT_MODE}: gateway OFF (session=${INJECT_SESSION:-GMT-stream})"
+  _INJ_LIVE="${GF_INJECT_LIVE:-1}"
+  if [[ "${_INJ_LIVE}" == "0" ]]; then
     LIVE_ON=0
     echo "${TAG} GF_INJECT_LIVE=0 → live_tap forced OFF"
   elif [[ "${LIVE_ON}" == "1" ]]; then
-    # 默认只订下游：从 live 白名单去掉正在灌的服务（MVP：EgoMotion）
-    export GF_LIVE_SVCS_RAW="${LIVE_SVCS}"
-    export GF_INJECT_SERVICES_FOR_FILTER="${GF_INJECT_SERVICES:-EgoMotion}"
-    eval "$(python - <<'PY'
+    if [[ "${_INJ_LIVE}" == "all" || "${_INJ_LIVE}" == "passthrough" || "${_INJ_LIVE}" == "full" ]]; then
+      # Scenario / ADAS demo: keep EgoMotion on Foxglove/GMT Live (same as whitelist)
+      echo "${TAG} inject+live: GF_INJECT_LIVE=${_INJ_LIVE} → full tap → ${LIVE_SVCS}"
+    else
+      # Default G3: only订下游 — 从 live 白名单去掉正在灌的服务（MVP：EgoMotion）
+      export GF_LIVE_SVCS_RAW="${LIVE_SVCS}"
+      export GF_INJECT_SERVICES_FOR_FILTER="${GF_INJECT_SERVICES:-EgoMotion}"
+      eval "$(python - <<'PY'
 import os
 raw = os.environ.get("GF_LIVE_SVCS_RAW") or ""
 inj = os.environ.get("GF_INJECT_SERVICES_FOR_FILTER") or "EgoMotion"
@@ -144,10 +152,12 @@ print("LIVE_SVCS=%s" % ",".join(keep))
 print("LIVE_ON=%s" % ("1" if keep else "0"))
 PY
 )"
-    if [[ "${LIVE_ON}" == "1" ]]; then
-      echo "${TAG} inject+live: downstream tap only → ${LIVE_SVCS} (excluded injectable)"
-    else
-      echo "${TAG} inject+live: no downstream services left after filter — live_tap OFF"
+      if [[ "${LIVE_ON}" == "1" ]]; then
+        echo "${TAG} inject+live: downstream tap only → ${LIVE_SVCS} (excluded injectable; GF_INJECT_LIVE=all to keep EgoMotion)"
+      else
+        echo "${TAG} inject+live: no downstream services left after filter — live_tap OFF"
+        echo "${TAG} tip: for scenario demo use GF_INJECT_LIVE=all bash …/run_sil.sh"
+      fi
     fi
   fi
 fi
@@ -576,6 +586,29 @@ if [[ "${INJECT_ON}" == "1" ]]; then
     fi
     echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
     echo "${TAG} listen Foxglove ws://${HINT_IP}:${PORT}  GMT-Live ws://${HINT_IP}:${LIVE_PORT}"
+    # Default: compose BEV from EgoMotion/Trajectory on the Foxglove bridge
+    _FOX_BEV=()
+    _FOX_SCRIPT=()
+    if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
+      _FOX_BEV=(--synth-bev)
+      echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → /gf/camera/front/compressed; GF_SYNTH_BEV=0 to disable)"
+      # Scenario story (三幕) → Image only; never publish /gf/AdasDemo to Studio.
+      # GF_BEV_SCRIPT=0 disables; else INJECT_SESSION or default overtake_acc_aeb.jsonl.
+      _BEV_SCRIPT=""
+      if [[ "${GF_BEV_SCRIPT:-}" == "0" ]]; then
+        _BEV_SCRIPT=""
+      elif [[ -n "${GF_BEV_SCRIPT:-}" && -f "${GF_BEV_SCRIPT}" ]]; then
+        _BEV_SCRIPT="${GF_BEV_SCRIPT}"
+      elif [[ -n "${INJECT_SESSION}" && -f "${INJECT_SESSION}" ]]; then
+        _BEV_SCRIPT="${INJECT_SESSION}"
+      elif [[ -f "${PROJECT_DIR}/scenarios/overtake_acc_aeb.jsonl" ]]; then
+        _BEV_SCRIPT="${PROJECT_DIR}/scenarios/overtake_acc_aeb.jsonl"
+      fi
+      if [[ -n "${_BEV_SCRIPT}" ]]; then
+        _FOX_SCRIPT=(--bev-script "${_BEV_SCRIPT}")
+        echo "${TAG} Foxglove --bev-script ${_BEV_SCRIPT} (三幕→Image; Studio 无 AdasDemo topic)"
+      fi
+    fi
     if [[ "${LIVE_TEE}" == "1" ]]; then
       mkdir -p "$(dirname "${LIVE_SESSION}")"
       : > "${LIVE_SESSION}"
@@ -585,11 +618,11 @@ if [[ "${INJECT_ON}" == "1" ]]; then
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
           | tee "${LIVE_SESSION}" \
           | tee >(GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}") \
-          | GMT bridge foxglove --ws --stdin --host "${HOST}" --port "${PORT}"
+          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
       else
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
           | tee >(GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}") \
-          | GMT bridge foxglove --ws --stdin --host "${HOST}" --port "${PORT}"
+          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
       fi
     ) &
     LIVE_FAN_PID=$!
@@ -653,16 +686,35 @@ if [[ "${LIVE_TEE}" == "1" ]]; then
   : > "${LIVE_SESSION}"
 fi
 
+_FOX_BEV=()
+_FOX_SCRIPT=()
+if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
+  _FOX_BEV=(--synth-bev)
+  echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → BEV)"
+  _BEV_SCRIPT=""
+  if [[ "${GF_BEV_SCRIPT:-}" == "0" ]]; then
+    _BEV_SCRIPT=""
+  elif [[ -n "${GF_BEV_SCRIPT:-}" && -f "${GF_BEV_SCRIPT}" ]]; then
+    _BEV_SCRIPT="${GF_BEV_SCRIPT}"
+  elif [[ -f "${PROJECT_DIR}/scenarios/overtake_acc_aeb.jsonl" ]]; then
+    _BEV_SCRIPT="${PROJECT_DIR}/scenarios/overtake_acc_aeb.jsonl"
+  fi
+  if [[ -n "${_BEV_SCRIPT}" ]]; then
+    _FOX_SCRIPT=(--bev-script "${_BEV_SCRIPT}")
+    echo "${TAG} Foxglove --bev-script ${_BEV_SCRIPT} (三幕→Image)"
+  fi
+fi
+
 _live_fan() {
   if [[ "${LIVE_TEE}" == "1" ]]; then
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
       | tee "${LIVE_SESSION}" \
       | tee >(GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}") \
-      | GMT bridge foxglove --ws --stdin --host "${HOST}" --port "${PORT}"
+      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
   else
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
       | tee >(GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}") \
-      | GMT bridge foxglove --ws --stdin --host "${HOST}" --port "${PORT}"
+      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
   fi
 }
 

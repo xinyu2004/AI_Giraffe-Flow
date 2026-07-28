@@ -138,6 +138,17 @@ def main(argv: list[str] | None = None) -> int:
     p_fox.add_argument("--host", default="127.0.0.1")
     p_fox.add_argument("--port", type=int, default=8765)
     p_fox.add_argument("--speed", type=float, default=1.0)
+    p_fox.add_argument(
+        "--synth-bev",
+        action="store_true",
+        help="Compose BEV from EgoMotion/Trajectory (live --stdin or --jsonl)",
+    )
+    p_fox.add_argument(
+        "--bev-script",
+        type=Path,
+        default=None,
+        help="Scenario JSONL (AdasDemo) → enrich BEV Image only; not published to Studio",
+    )
 
     p_live = br_sub.add_parser(
         "live",
@@ -300,6 +311,10 @@ def main(argv: list[str] | None = None) -> int:
             fox_argv.append("--ws")
         if getattr(args, "stdin", False):
             fox_argv.append("--stdin")
+        if getattr(args, "synth_bev", False):
+            fox_argv.append("--synth-bev")
+        if getattr(args, "bev_script", None) is not None:
+            fox_argv += ["--bev-script", str(args.bev_script)]
         fox_argv += ["--host", args.host, "--port", str(args.port), "--speed", str(args.speed)]
         return main_bridge(fox_argv)
 

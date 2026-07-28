@@ -207,6 +207,169 @@ def test_bridge_encode_ws_session_frames() -> None:
     assert struct.unpack_from("<I", packed, 1)[0] == 7
 
 
+def test_bev_compose_from_module_topics() -> None:
+    from gf_gmt.bev_compose import TOPIC_CAM, LiveBevComposer, expand_rows_with_bev
+
+    comp = LiveBevComposer()
+    assert comp.update({"t_ns": 1, "topic": "/gf/other", "data": {}}) is None
+    cam = comp.update(
+        {
+            "t_ns": 100_000_000,
+            "topic": "/gf/EgoMotion",
+            "data": {
+                "speed_mps": 12.0,
+                "yaw_rate_degps": 0,
+                "steer_angle_deg": 0,
+                "gear": 4,
+                "timestamp_ns": 100_000_000,
+            },
+        }
+    )
+    assert cam is not None
+    assert cam["topic"] == TOPIC_CAM
+    assert cam["data"]["format"] == "png"
+    png1 = cam["data"]["data"]
+    cam2 = comp.update(
+        {
+            "t_ns": 300_000_000,
+            "topic": "/gf/EgoMotion",
+            "data": {
+                "speed_mps": 12.0,
+                "timestamp_ns": 300_000_000,
+                "yaw_rate_degps": 0,
+                "steer_angle_deg": 0,
+                "gear": 4,
+            },
+        }
+    )
+    assert cam2 is not None
+    # Same speed but odom advanced → PNG bytes must change (scrolling ground)
+    assert cam2["data"]["data"] != png1
+
+    rows = [
+        {"t_ns": 1, "topic": "/gf/EgoMotion", "data": {"speed_mps": 5.0}},
+        {
+            "t_ns": 1,
+            "topic": "/gf/Trajectory",
+            "data": {"points_x_m": [0.0, 8.0], "points_y_m": [0.0, 0.0]},
+        },
+    ]
+    exp = expand_rows_with_bev(rows)
+    assert any(r["topic"] == TOPIC_CAM for r in exp)
+
+
+def test_bev_script_three_phases_no_adas_topic() -> None:
+    from gf_gmt.bev_compose import (
+        TOPIC_ADAS,
+        TOPIC_CAM,
+        AdasScriptIndex,
+        LiveBevComposer,
+        expand_rows_with_bev,
+    )
+
+    root = Path(__file__).resolve().parents[3]
+    script_path = (
+        root
+        / "projects"
+        / "oem_a"
+        / "afc_with_uss"
+        / "scenarios"
+        / "overtake_acc_aeb.jsonl"
+    )
+    if not script_path.is_file():
+        return
+    idx = AdasScriptIndex.load(script_path)
+    assert idx is not None and len(idx.times) > 100
+    # Mid overtake (~8s) should be changing / prepare
+    mid = idx.nearest(8_000_000_000)
+    assert mid is not None
+    assert mid.get("phase") in {"prepare", "changing", "cruise", "done"}
+
+    comp = LiveBevComposer(script=idx)
+    cam = comp.update(
+        {
+            "t_ns": 8_000_000_000,
+            "topic": "/gf/EgoMotion",
+            "data": {
+                "speed_mps": 24.0,
+                "timestamp_ns": 8_000_000_000,
+                "yaw_rate_degps": 1.0,
+                "steer_angle_deg": 2.0,
+                "gear": 4,
+            },
+        }
+    )
+    assert cam is not None and cam["topic"] == TOPIC_CAM
+    assert comp.state.has_adas
+    assert comp.state.phase != ""
+
+    rows = [
+        {
+            "t_ns": 1,
+            "topic": TOPIC_ADAS,
+            "data": {"phase": "brake", "lane_offset_m": 0.0, "lead_dist_m": 10.0},
+        },
+        {"t_ns": 1, "topic": "/gf/EgoMotion", "data": {"speed_mps": 5.0}},
+    ]
+    exp = expand_rows_with_bev(rows, drop_adas_topic=True)
+    assert not any(str(r.get("topic")).endswith("AdasDemo") for r in exp)
+    assert any(r["topic"] == TOPIC_CAM for r in exp)
+
+
+def test_overtake_acc_aeb_phases() -> None:
+    from gf_gmt.adas_scenarios import gen_overtake_acc_aeb
+
+    frames = gen_overtake_acc_aeb(duration_s=75.0)
+    assert len(frames) == 750
+    phases = {f.phase for f in frames}
+    assert "changing" in phases and "follow" in phases and "brake" in phases
+    assert frames[0].lane_offset_m == 0.0
+    assert frames[250].lane_offset_m > 3.0  # ~25s into ACC, already in left lane
+    assert abs(frames[250].traj_y[-1] - 3.5) < 0.01  # path stays in left lane
+    assert any(f.brake_active for f in frames)
+    assert all(f.scenario_id == "overtake_acc_aeb" for f in frames)
+
+
+def test_adas_scenarios_and_bev(tmp_path: Path) -> None:
+    from gf_gmt.adas_scenarios import (
+        TOPIC_ADAS,
+        TOPIC_CAM,
+        TOPIC_EGO,
+        generate_all,
+        gen_aeb_cutin,
+        iter_playback_rows,
+        render_bev_png,
+        write_scenario_jsonl,
+    )
+    from gf_gmt.bridge_foxglove import channel_desc, is_image_topic
+
+    frames = gen_aeb_cutin(duration_s=12.0)
+    assert len(frames) == 120
+    assert any(f.brake_active for f in frames)
+    assert any(f.phase == "brake" for f in frames)
+    png = render_bev_png(frames[100])
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+    out = tmp_path / "aeb_cutin.jsonl"
+    n = write_scenario_jsonl(out, frames)
+    assert n == len(frames) * 3
+    text = out.read_text(encoding="utf-8")
+    assert TOPIC_EGO in text and TOPIC_ADAS in text
+
+    rows = [json.loads(line) for line in text.splitlines() if line.strip()]
+    expanded = list(iter_playback_rows(rows, synth_bev=True))
+    cam = [r for r in expanded if r["topic"] == TOPIC_CAM]
+    assert cam
+    assert cam[0]["data"]["format"] == "png"
+    assert is_image_topic(TOPIC_CAM)
+    ch = channel_desc(9, TOPIC_CAM)
+    assert ch["schemaName"] == "foxglove.CompressedImage"
+
+    written = generate_all(tmp_path / "all")
+    assert "overtake_acc_aeb" in written
+    assert set(written) >= {"overtake_acc_aeb", "acc_follow", "aeb_cutin", "lane_change"}
+
+
 def test_session_skips_tag_meta(tmp_path: Path) -> None:
     from gf_gmt.gui.session_model import load_session
 
