@@ -17,38 +17,43 @@ Desktop-first, **ARM Linux** embedded primary (OSAL reserved for MIPS / RISC-V).
 | **3** | **GMT** | Toolchain · observe / inject | [tools/gmt](tools/gmt/README.md) · [Observability demo](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
 ```text
-┌─ Toolchain (configure) ──────────────────────────────┐
+┌─ Host tool · configure ──────────────────────────────┐
 │  gf-config · req.yaml / wiring.yaml                  │
 │       │ compose / lint / generate                    │
 │       ▼                                              │
 │  gf.sor.json  +  Proxy / Skeleton / deploy lists     │
 └───────────────────────┬──────────────────────────────┘
-                        │
+                        │ flash / build into target
                         ▼
-┌─ Giraffe modules (core · SIL / board) ───────────────┐
-│                                                      │
-│  ┌─ middleware / gf_ara ─────────────────────────┐   │
-│  │  com  ──► bindings: iceoryx | SOME/IP | DDS   │   │
-│  │  exec / phm / sm     OSAL (ARM…)    log/trace │   │
-│  │  ucm / diag (skeleton)                        │   │
-│  └───────────────────────────────────────────────┘   │
-│                        ▲                             │
-│                        │ semantic service names      │
-│  ┌─ apps (reference processes) ──────────────────┐   │
-│  │  adapters     gateway / MCU CP boundary       │   │
-│  │  sensing      e.g. USS → UssZones             │   │
-│  │  perception   e.g. FCM stub                   │   │
-│  │  planning     e.g. Trajectory                 │   │
-│  │  tools        tap / inject                    │   │
-│  └───────────────────────────────────────────────┘   │
-│                                                      │
-│  projects/<oem>/<sku>/   integration + compile_sil   │
-└───────────────────────┬──────────────────────────────┘
-                        │ tap (8765/8766) · inject (8767)
-                        ▼
-┌─ Toolchain (observe) ────────────────────────────────┐
-│  GMT GUI · Foxglove · Tag / MCAP / playhead inject   │
-└──────────────────────────────────────────────────────┘
+
+         ╔══ ARM · MIPS · RISC-V · … ══╗
+   ║║║  ┌────────────╨─────────────────────┐  ║║║
+   ║║║  │   ▓▓▓  SIL / HIL · BOARD  ▓▓▓    │  ║║║
+   ║║║  │                                  │  ║║║
+   ║║║  │  Giraffe modules · product core  │  ║║║
+   ║║║  │                                  │  ║║║
+   ║║║  │  ┌─ SoC · middleware / gf_ara ─┐ │  ║║║
+   ║║║  │  │ com → iceoryx|SOME/IP|DDS   │ │  ║║║
+   ║║║  │  │ exec / phm / sm · OSAL/log  │ │  ║║║
+   ║║║  │  └─────────────────────────────┘ │  ║║║
+   ║║║  │             │ semantic services  │  ║║║
+   ║║║  │  ┌─ apps (on-board processes) ─┐ │  ║║║
+   ║║║  │  │ gateway · sensing · FCM     │ │  ║║║
+   ║║║  │  │ planning · tap / inject     │ │  ║║║
+   ║║║  │  └─────────────────────────────┘ │  ║║║
+   ║║║  │  projects/<oem>/<sku> + SIL      │  ║║║
+   ║║║  └───┬──────────────────────────┬───┘  ║║║
+            │                          │
+            ▼ tap / observe            ▲ inject / drive
+            │                          │
+╔═══════════╧══════════════════════════╧═══════════════╗
+║   Host tool · GMT          observe / inject          ║
+║══════════════════════════════════════════════════════║
+║   · Live ws (8766)     · Order / race                ║
+║   · Animated DAG       · Vars strip                  ║
+║   · Tag / clip         · MCAP · VCD export           ║
+║   · Foxglove (8765)    · playhead inject (8767)      ║
+╚══════════════════════════════════════════════════════╝
 ```
 
 ---
