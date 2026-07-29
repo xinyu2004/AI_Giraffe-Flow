@@ -66,9 +66,13 @@ wheelhouse/
 observability/
 **/iox_multiproc_logs/
 
-# Session captures outside build/ — keep evidence_pack sample + GMT fixtures
+# Session captures outside build/ — GMT fixtures only
 *.mcap
-!evidence_pack/**/*.mcap
 session*.jsonl
-!evidence_pack/**/session*.jsonl
 !tools/**/fixtures/session*.jsonl
+
+# Local demo captures (do not ship)
+evidence_pack/
+
+# Architecture GIF generator (local helper)
+result_pic/_gen_architecture_gif.py

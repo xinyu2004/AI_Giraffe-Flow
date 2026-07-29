@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 560" width="640" height="560" role="img" aria-label="Giraffe Flow architecture: gf-config to board to GMT with animated tap and inject">
+  <defs>
+    <marker id="ah-down" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#2e7d32"/>
+    </marker>
+    <marker id="ah-up" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#c62828"/>
+    </marker>
+    <marker id="ah-gray" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#78909c"/>
+    </marker>
+    <style><![CDATA[
+      .box { fill:#f7f9fb; stroke:#546e7a; stroke-width:1.5; }
+      .box-title { font:700 13px ui-sans-serif,system-ui,sans-serif; fill:#263238; }
+      .muted { font:12px ui-sans-serif,system-ui,sans-serif; fill:#546e7a; }
+      .small { font:11px ui-monospace,Menlo,monospace; fill:#37474f; }
+      .board { fill:#1b2a24; stroke:#c9a227; stroke-width:2; }
+      .board-title { font:700 13px ui-sans-serif,system-ui,sans-serif; fill:#ffe082; }
+      .board-text { font:12px ui-sans-serif,system-ui,sans-serif; fill:#c8e6c9; }
+      .inner { fill:#0f3d36; stroke:#26a69a; stroke-width:1.5; }
+      .inner-t { font:11px ui-monospace,Menlo,monospace; fill:#b2dfdb; }
+      .inner-apps { fill:#3e2723; stroke:#ff8a65; stroke-width:1.5; }
+      .inner-apps-t { font:11px ui-monospace,Menlo,monospace; fill:#ffccbc; }
+      .gmt { fill:#e3f2fd; stroke:#1565c0; stroke-width:2.5; }
+      .gmt-title { font:700 13px ui-sans-serif,system-ui,sans-serif; fill:#0d47a1; }
+      .pin { fill:#c9a227; }
+      .flow-down { fill:none; stroke:#2e7d32; stroke-width:2.2; marker-end:url(#ah-down); }
+      .flow-up { fill:none; stroke:#c62828; stroke-width:2.2; marker-end:url(#ah-up); }
+      .flow-gray { fill:none; stroke:#78909c; stroke-width:1.6; marker-end:url(#ah-gray); }
+    ]]></style>
+  </defs>
+
+  <rect class="box" x="80" y="12" width="480" height="78" rx="8"/>
+  <text class="box-title" x="100" y="36">Host tool · configure — gf-config</text>
+  <text class="muted" x="100" y="56">req.yaml / wiring.yaml → compose / lint / generate</text>
+  <text class="small" x="100" y="74">gf.sor.json + Proxy / Skeleton / deploy lists</text>
+
+  <line class="flow-gray" x1="320" y1="90" x2="320" y2="118"/>
+  <text class="muted" x="336" y="110">flash / build</text>
+
+  <rect x="200" y="118" width="240" height="22" rx="4" fill="#fff8e1" stroke="#c9a227"/>
+  <text class="small" x="320" y="133" text-anchor="middle" fill="#8d6e63">ARM · MIPS · RISC-V · …</text>
+
+  <rect class="board" x="90" y="148" width="460" height="220" rx="10"/>
+  <g class="pin"><rect x="78" y="168" width="12" height="8" rx="1"/><rect x="550" y="168" width="12" height="8" rx="1"/><rect x="78" y="184" width="12" height="8" rx="1"/><rect x="550" y="184" width="12" height="8" rx="1"/><rect x="78" y="200" width="12" height="8" rx="1"/><rect x="550" y="200" width="12" height="8" rx="1"/><rect x="78" y="216" width="12" height="8" rx="1"/><rect x="550" y="216" width="12" height="8" rx="1"/><rect x="78" y="232" width="12" height="8" rx="1"/><rect x="550" y="232" width="12" height="8" rx="1"/><rect x="78" y="248" width="12" height="8" rx="1"/><rect x="550" y="248" width="12" height="8" rx="1"/><rect x="78" y="264" width="12" height="8" rx="1"/><rect x="550" y="264" width="12" height="8" rx="1"/><rect x="78" y="280" width="12" height="8" rx="1"/><rect x="550" y="280" width="12" height="8" rx="1"/><rect x="78" y="296" width="12" height="8" rx="1"/><rect x="550" y="296" width="12" height="8" rx="1"/><rect x="78" y="312" width="12" height="8" rx="1"/><rect x="550" y="312" width="12" height="8" rx="1"/></g>
+  <text class="board-title" x="320" y="176" text-anchor="middle">▓▓▓  SIL / HIL · BOARD  ▓▓▓</text>
+  <text class="board-text" x="320" y="198" text-anchor="middle">Giraffe modules · product core</text>
+
+  <rect class="inner" x="120" y="214" width="400" height="52" rx="6"/>
+  <text class="inner-t" x="136" y="234" fill="#80cbc4">SoC · middleware / gf_ara</text>
+  <text class="inner-t" x="136" y="252">com → iceoryx | SOME/IP | DDS · exec/phm/sm · OSAL</text>
+
+  <rect class="inner-apps" x="120" y="278" width="400" height="52" rx="6"/>
+  <text class="inner-apps-t" x="136" y="298" fill="#ffab91">apps (on-board processes)</text>
+  <text class="inner-apps-t" x="136" y="316">gateway · sensing · FCM · planning · tap / inject</text>
+  <text class="board-text" x="320" y="352" text-anchor="middle" font-size="11">projects/&lt;oem&gt;/&lt;sku&gt; + SIL</text>
+
+  <path class="flow-down" d="M220 368 L220 412" stroke-dasharray="8 6">
+    <animate attributeName="stroke-dashoffset" from="0" to="-28" dur="1.1s" repeatCount="indefinite"/>
+  </path>
+  <text class="small" x="232" y="396" fill="#2e7d32">tap / observe</text>
+
+  <path class="flow-up" d="M420 412 L420 368" stroke-dasharray="8 6">
+    <animate attributeName="stroke-dashoffset" from="0" to="-28" dur="1.1s" repeatCount="indefinite"/>
+  </path>
+  <text class="small" x="432" y="396" fill="#c62828">inject / drive</text>
+
+  <rect class="gmt" x="80" y="420" width="480" height="120" rx="8"/>
+  <text class="gmt-title" x="100" y="444">Host tool · GMT — observe / inject</text>
+  <text class="small" x="100" y="468">· Live ws (8766)</text>
+  <text class="small" x="330" y="468">· Order / race</text>
+  <text class="small" x="100" y="486">· Animated DAG</text>
+  <text class="small" x="330" y="486">· Vars strip</text>
+  <text class="small" x="100" y="504">· Tag / clip</text>
+  <text class="small" x="330" y="504">· MCAP · VCD export</text>
+  <text class="small" x="100" y="522">· Foxglove (8765)</text>
+  <text class="small" x="330" y="522">· playhead inject (8767)</text>
+</svg>

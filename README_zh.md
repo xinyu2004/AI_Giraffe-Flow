@@ -16,45 +16,7 @@
 | **2** | **Giraffe 模块** | **产品主体** · 运行时与进程 | [middleware](middleware/README.md) · [设计](docs/zh/architecture/DESIGN.md) · [示例](projects/oem_a/afc_with_uss/) |
 | **3** | **GMT** | 工具链 · 观测侧 | [tools/gmt](tools/gmt/README_zh.md) · [可观测演示](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
-```text
-┌─ 主机工具 · 配置 ────────────────────────────────────┐
-│  gf-config · req.yaml / wiring.yaml                  │
-│       │ compose / lint / generate                    │
-│       ▼                                              │
-│  gf.sor.json  +  Proxy / Skeleton / 部署清单          │
-└───────────────────────┬──────────────────────────────┘
-                        │ 烧录 / 编进目标
-                        ▼
-
-         ╔══ ARM · MIPS · RISC-V · … ══╗
-   ║║║  ┌────────────╨─────────────────────┐  ║║║
-   ║║║  │     ▓▓▓  SIL / HIL · 板端  ▓▓▓     │  ║║║
-   ║║║  │                                  │  ║║║
-   ║║║  │  Giraffe 模块 · 产品主体         │  ║║║
-   ║║║  │                                  │  ║║║
-   ║║║  │  ┌─ SoC · middleware / gf_ara ─┐ │  ║║║
-   ║║║  │  │ com → iceoryx|SOME/IP|DDS   │ │  ║║║
-   ║║║  │  │ exec / phm / sm · OSAL/log  │ │  ║║║
-   ║║║  │  └─────────────────────────────┘ │  ║║║
-   ║║║  │             │ semantic 服务名    │  ║║║
-   ║║║  │  ┌─ apps（板上进程）───────────┐ │  ║║║
-   ║║║  │  │ gateway · sensing · FCM     │ │  ║║║
-   ║║║  │  │ planning · tap / inject     │ │  ║║║
-   ║║║  │  └─────────────────────────────┘ │  ║║║
-   ║║║  │  projects/<oem>/<sku> + SIL      │  ║║║
-   ║║║  └───┬──────────────────────────┬───┘  ║║║
-            │                          │
-            ▼ tap / 观测               ▲ inject / 回灌
-            │                          │
-╔═══════════╧══════════════════════════╧═══════════════╗
-║   主机工具 · GMT            观测 / 回灌               ║
-║══════════════════════════════════════════════════════║
-║   · Live ws (8766)     · Order / 先后                 ║
-║   · 动画 DAG           · Vars 变量                    ║
-║   · Tag / clip         · MCAP · VCD 导出              ║
-║   · Foxglove (8765)    · playhead 回灌 (8767)         ║
-╚══════════════════════════════════════════════════════╝
-```
+![架构：gf-config → 板端 → GMT（tap / inject 动画）](result_pic/architecture_flow_zh.gif)
 
 ---
 
