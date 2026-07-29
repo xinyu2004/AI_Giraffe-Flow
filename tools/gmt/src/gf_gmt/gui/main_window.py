@@ -1313,13 +1313,13 @@ class GmtMainWindow(QMainWindow):
         if self._model.empty:
             return
         try:
-            t = int(t_ns)  # type: ignore[arg-type]
+            seek_t = int(t_ns)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             return
         self._pause_follow_latest()
-        idx = self._model.nearest_index(t)
+        idx = self._model.nearest_index(seek_t)
         self._seek_index(idx)
-        self.statusBar().showMessage(f'{t("跳转到")} t≈{t}  → #{idx}', 3000)
+        self.statusBar().showMessage(f'{t("跳转到")} t≈{seek_t}  → #{idx}', 3000)
 
     def load_project(
         self, project: Path, *, offer_session: bool = True
