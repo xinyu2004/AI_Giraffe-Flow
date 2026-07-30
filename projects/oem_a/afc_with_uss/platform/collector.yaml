@@ -1,0 +1,13 @@
+# Event Collector 最小集（非 Classic DEM 全编辑器）
+# 有 CP：forward→cp_dem；无 CP：local_store（DEM-lite over DoIP）
+schema_version: "0.1"
+forward: local_store  # cp_dem | local_store | both
+sources:
+  - phm
+  - process
+  - com
+local:
+  enabled: true
+  max_entries: 256
+# optional: internal event_id → DTC
+# dtc_map: []

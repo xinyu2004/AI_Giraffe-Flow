@@ -1,4 +1,4 @@
-# Resolve board/runtime third-party deps declared in deps/DEPENDENCIES.yaml.
+# Resolve board/runtime third-party deps declared in dep-manifest/DEPENDENCIES.yaml.
 #
 # Policy (P0+): runtime deps are built from source with the active toolchain.
 #   - attr/acl → scripts/bootstrap_deps.sh installs into middleware/.deps-prefix/
@@ -25,7 +25,7 @@ elseif(GF_WITH_ICEORYX OR EXISTS "${GF_THIRD_PARTY_DIR}/iceoryx/iceoryx_meta/CMa
   endif()
 endif()
 
-# --- iceoryx classic C++ (pin: deps/versions.lock.md) ---
+# --- iceoryx classic C++ (pin: dep-manifest/versions.lock.md) ---
 set(_gf_iox_root "${GF_THIRD_PARTY_DIR}/iceoryx")
 set(_gf_iox_meta "${_gf_iox_root}/iceoryx_meta")
 
@@ -63,7 +63,7 @@ if(GF_WITH_ICEORYX)
   set(BINDING_C OFF CACHE BOOL "" FORCE)
   set(DOWNLOAD_TOML_LIB ON CACHE BOOL "" FORCE)
 
-  add_subdirectory("${_gf_iox_meta}" "${CMAKE_BINARY_DIR}/_deps/iceoryx_meta" EXCLUDE_FROM_ALL)
+  add_subdirectory("${_gf_iox_meta}" "${CMAKE_BINARY_DIR}/_dep-manifest/iceoryx_meta" EXCLUDE_FROM_ALL)
   set(GF_ICEORYX_FOUND TRUE)
   message(STATUS "Giraffe Flow: iceoryx from ${_gf_iox_root} (via iceoryx_meta)")
 else()
@@ -72,7 +72,7 @@ else()
 endif()
 
 # --- CycloneDDS (optional; default vendor when GF_WITH_DDS) ---
-# Source tree: middleware/third_party/cyclonedds (pin: deps/versions.lock.md).
+# Source tree: middleware/third_party/cyclonedds (pin: dep-manifest/versions.lock.md).
 # Offline CI uses bindings/dds stub backend; add_subdirectory only when present.
 set(_gf_cdds_root "${GF_THIRD_PARTY_DIR}/cyclonedds")
 set(GF_CYCLONEDDS_FOUND FALSE)
@@ -82,7 +82,7 @@ if(GF_WITH_DDS AND EXISTS "${_gf_cdds_root}/CMakeLists.txt")
   set(ENABLE_SECURITY OFF CACHE BOOL "" FORCE)
   set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-  add_subdirectory("${_gf_cdds_root}" "${CMAKE_BINARY_DIR}/_deps/cyclonedds" EXCLUDE_FROM_ALL)
+  add_subdirectory("${_gf_cdds_root}" "${CMAKE_BINARY_DIR}/_dep-manifest/cyclonedds" EXCLUDE_FROM_ALL)
   set(GF_CYCLONEDDS_FOUND TRUE)
   message(STATUS "Giraffe Flow: CycloneDDS from ${_gf_cdds_root}")
 elseif(GF_WITH_DDS)

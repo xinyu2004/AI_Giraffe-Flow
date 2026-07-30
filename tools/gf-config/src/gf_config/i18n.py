@@ -14,8 +14,10 @@ _EN: dict[str, str] = {
     "中文": "中文",
     "English": "English",
     "正在切换语言并重启应用…": "Switching language and restarting…",
-    "gf-config — Giraffe Flow（A/B/C）": "gf-config — Giraffe Flow (A/B/C)",
+    "gf-config — Giraffe Flow（信号与应用 / 平台）": "gf-config — Giraffe Flow (Signals & Apps / Platform)",
     "未打开项目": "No project open",
+    "1 · 信号与应用": "1 · Signals & apps",
+    "2 · 平台运行时": "2 · Platform runtime",
     "A · SKU": "A · SKU",
     "B · 信号链接": "B · Signal graph",
     "C · 平台": "C · Platform",
@@ -41,6 +43,8 @@ _EN: dict[str, str] = {
     "右侧 · 连线列表": "Right · Connections",
     "右侧 · Lineage 报告": "Right · Lineage report",
     "折叠/展开右侧面板": "Toggle right panel",
+    "折叠/展开左侧 SKU": "Toggle left SKU",
+    "折叠 / 展开左侧 SKU": "Collapse / expand left SKU",
     "删除选中边": "Delete selected edge",
     "没有可撤销的操作": "Nothing to undo",
     "已撤销（信号图）": "Undone (graph)",
@@ -50,6 +54,34 @@ _EN: dict[str, str] = {
     "打开失败": "Open failed",
     "保存失败": "Save failed",
     "有未保存的更改，是否保存？": "Unsaved changes. Save?",
+    # SKU panel
+    "剖面 / 观测": "Profile / observability",
+    "ap_only=无 CP；ap_mcu_cp=MCU CP gateway": "ap_only=no CP; ap_mcu_cp=MCU CP gateway",
+    "vehicle-debug 可开 live；production-release 强制关": (
+        "vehicle-debug allows live; production-release forces it off"
+    ),
+    "开启后 Verify/compile_sil 自动加入 tools/iox_obs_tap；run_sil 自动接 Foxglove WS。": (
+        "When on, Verify/compile_sil adds tools/iox_obs_tap; run_sil starts Foxglove WS."
+    ),
+    "wiring_all（推荐）": "wiring_all (recommended)",
+    "explicit：每行一服务": "explicit: one service per line",
+    "record 白名单，每行一个": "record allowlist, one per line",
+    "required_services，每行一个": "required_services, one per line",
+    "runtime_modules → 页 2": "runtime_modules → tab 2",
+    "（未识别）": " (unknown)",
+    "production-release：live/record/trace 灰调；不编 iox_obs_tap；run_sil 不起 Foxglove。bindings 仍保留。": (
+        "production-release: live/record/trace disabled; no iox_obs_tap; "
+        "run_sil skips Foxglove. bindings kept."
+    ),
+    "wiring_all：天花板=画布 dataflows；将编入 tap（codegen）。GMT 可再过滤。": (
+        "wiring_all: ceiling = canvas dataflows; builds tap (codegen). GMT may filter."
+    ),
+    "explicit 已开但白名单为空 → Verify 将失败。请填 live svcs。": (
+        "explicit on but empty allowlist → Verify fails. Fill live svcs."
+    ),
+    "将编入 tap；run_sil 自动接 Foxglove。": "Will build tap; run_sil starts Foxglove.",
+    "live 关 → 不编 tap": "live off → no tap",
+    "record=off → services 灰调": "record=off → services disabled",
 }
 
 

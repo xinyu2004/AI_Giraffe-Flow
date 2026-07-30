@@ -7,7 +7,7 @@
 **目标一句话：** 在主机用 Python 做出 `gf-codegen`，使下面命令成功，并为 `afc_with_uss` 写出 SOR + lineage：
 
 ```bash
-pip install -e tools/codegen
+pip install -e tools/gf-codegen
 gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
 ```
 
@@ -40,7 +40,7 @@ gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
 ### 2.1 目录
 
 ```text
-tools/codegen/
+tools/gf-codegen/
   pyproject.toml
   README.md
   IMPLEMENTATION.md          # 本文
@@ -99,8 +99,8 @@ where = ["src"]
 ```bash
 cd /path/to/AI_Giraffe-Flow
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e "tools/codegen[dev]"   # 或 pip install -e tools/codegen
-pytest tools/codegen/tests -q
+pip install -e "tools/gf-codegen[dev]"   # 或 pip install -e tools/gf-codegen
+pytest tools/gf-codegen/tests -q
 ```
 
 ### 2.3 CLI 形状（`cli.py`）
@@ -353,12 +353,12 @@ adapter.vehicle_can_gateway ─EgoMotion─► sensing.uss ─UssZones─► per
 
 ## 6. 验收清单（打勾即第一版集成工具侧完成）
 
-- [ ] `pip install -e tools/codegen` 后 `gf-codegen --help` 可用  
+- [ ] `pip install -e tools/gf-codegen` 后 `gf-codegen --help` 可用  
 - [ ] `gf-codegen lint projects/oem_b/adc_full/golden/gf.sor.json` 退出 0  
 - [ ] `gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml` 退出 0  
 - [ ] 生成 `projects/oem_a/afc_with_uss/gf.sor.json`（或 `--out` 指定路径）  
 - [ ] 生成 `projects/oem_a/afc_with_uss/reports/signal_lineage_report.yaml`，`ok: true`  
-- [ ] `pytest tools/codegen/tests` 全绿  
+- [ ] `pytest tools/gf-codegen/tests` 全绿  
 - [ ] 人工审 SOR 后复制为 `projects/oem_a/afc_with_uss/golden/gf.sor.json`，更新 `req.yaml` 的 `sor_golden`  
 - [ ] README / 走查中的命令与真实 CLI 一致  
 

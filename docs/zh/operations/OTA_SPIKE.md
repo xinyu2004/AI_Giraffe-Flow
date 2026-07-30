@@ -8,7 +8,7 @@
 | 项 | P2 选型 |
 |----|---------|
 | 更新编排入口 | **UCM**（`ara::ucm` 语义状态机；配置空壳 `platform/ucm.yaml`） |
-| 后端候选 | **RAUC**（优先写入 `deps/versions.lock.md`）；SWUpdate 不作为主路径 |
+| 后端候选 | **RAUC**（优先写入 `dep-manifest/versions.lock.md`）；SWUpdate 不作为主路径 |
 | PHM 配合 | 更新窗 **`SetPaused(true)`**；结束 Unpause + 立刻 Alive |
 | 真包 / A/B 分区 | **→ P3** 台架演练 |
 

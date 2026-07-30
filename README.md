@@ -12,7 +12,7 @@ Desktop-first, **ARM Linux** embedded primary (OSAL reserved for MIPS / RISC-V).
 
 | # | Pillar | Role | Dig in |
 |---|--------|------|--------|
-| **1** | **gf-config** | Toolchain · configure | [tools/config](tools/config/README.md) · [SOR](docs/en/architecture/sor-authoring.md) |
+| **1** | **gf-config** | Toolchain · configure | [tools/gf-config](tools/gf-config/README.md) · [SOR](docs/en/architecture/sor-authoring.md) |
 | **2** | **Giraffe modules** | **Product core** · runtime & processes | [middleware](middleware/README.md) · [Design](docs/en/architecture/DESIGN.md) · [Sample](projects/oem_a/afc_with_uss/) |
 | **3** | **GMT** | Toolchain · observe / inject | [tools/gmt](tools/gmt/README.md) · [Observability demo](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
@@ -34,7 +34,7 @@ Defines **what** and **who talks to whom** — not algorithms.
 gf-config projects/oem_a/afc_with_uss/project.yaml
 ```
 
-Details: [tools/config/README.md](tools/config/README.md) · [WORKFLOW](docs/en/operations/WORKFLOW.md)
+Details: [tools/gf-config/README.md](tools/gf-config/README.md) · [WORKFLOW](docs/en/operations/WORKFLOW.md)
 
 ---
 
@@ -154,8 +154,8 @@ Details: [tools/gmt/README.md](tools/gmt/README.md) · [OBSERVABILITY_DEMO](docs
 | [middleware/](middleware/) | **Giraffe runtime (core)** |
 | [apps/](apps/) | Reference apps / adapters / tap·inject |
 | [projects/](projects/) | OEM integration |
-| [tools/config/](tools/config/) | gf-config |
-| [tools/codegen/](tools/codegen/) | gf-codegen |
+| [tools/gf-config/](tools/gf-config/) | gf-config |
+| [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |
 | [tools/gmt/](tools/gmt/) | GMT |
 | [docs/](docs/README.md) | Docs index |
 

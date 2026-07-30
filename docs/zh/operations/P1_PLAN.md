@@ -59,7 +59,7 @@ flowchart LR
 
 | 项 | 说明 |
 |----|------|
-| 入口 | `gf-config` · [`tools/config/`](../../../tools/config/) |
+| 入口 | `gf-config` · [`tools/gf-config/`](../../../tools/gf-config/) |
 | A | 完整 `req.yaml`（含 acceptance） |
 | B | 类 Simulink：端口 / 拖线 / 布局保持 / hpp / 搜索 |
 | C | lineage 失败标红 |
@@ -227,6 +227,6 @@ iceoryx 路径：  hpp / fidl 进 SOR types → iceoryx binding（不用 fdepl /
 
 ```bash
 source .venv/bin/activate
-pip install -e "tools/codegen[dev]" -e tools/config
+pip install -e "tools/gf-codegen[dev]" -e tools/gf-config
 gf-config projects/oem_a/afc_with_uss/project.yaml
 ```

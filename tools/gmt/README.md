@@ -16,7 +16,7 @@ In multi-process SIL, terminal logs rarely answer â€œwho published what, when.â€
 | **`GMT gui`** | Live / Tag / animated DAG / **var strip** / **playhead inject** / export |
 
 ```bash
-pip install -e tools/gmt -e tools/codegen
+pip install -e tools/gmt -e tools/gf-codegen
 pip install -e 'tools/gmt[gui]'
 
 GMT gui

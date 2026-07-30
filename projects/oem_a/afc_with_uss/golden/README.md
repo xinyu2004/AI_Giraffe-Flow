@@ -7,7 +7,7 @@
 GF_EVIDENCE_UPDATE_GOLDEN=1 bash scripts/collect_p2_evidence.sh
 
 # CI 不依赖提交 SOR：稳定不变量
-pytest tools/codegen/tests/test_afc_bench_golden.py -q
+pytest tools/gf-codegen/tests/test_afc_bench_golden.py -q
 ```
 
 若本地已有 `golden/gf.sor.json`，同文件测试会做深比对。`req.yaml` → `acceptance.sor_golden` 指向本路径。

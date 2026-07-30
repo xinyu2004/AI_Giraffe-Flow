@@ -4,7 +4,7 @@
 
 PySide6 tool: edit **SKU** via `req.yaml`, edit the **Simulink-like signal graph** via `wiring.yaml`, then one-shot `compose` + lineage.
 
-> **Flow:** edit tabs A/B → **Ctrl+S Save** (disk only) → **Verify (Ctrl+R)** builds SOR + lineage → optional **Generate (Ctrl+G)** for Proxy/Skeleton.  
+> **Flow:** edit tabs 1/2 → **Ctrl+S Save** (disk only) → **Verify (Ctrl+R)** builds SOR + lineage → optional **Generate (Ctrl+G)** for Proxy/Skeleton.  
 > Headless / CI: `python -m gf_codegen.compose --project …`; codegen remains `gf-codegen generate`.  
 > Boundaries: `gf-config` = authoring GUI · `gf-codegen` = lint / generate / import · GMT = read-only CI + measure
 
@@ -13,7 +13,7 @@ PySide6 tool: edit **SKU** via `req.yaml`, edit the **Simulink-like signal graph
 | | **req.yaml** | **wiring.yaml** |
 |--|--------------|-----------------|
 | **In one line** | What this vehicle / SKU **needs, trims, and accepts** | How processes **connect** (who provides / requires) |
-| **Who edits** | Tab A (product / integrator SKU) | Tab B (integrator signal graph) |
+| **Who edits** | Tab 1 thin SKU + tab 2 `runtime_modules` | Tab 1 canvas |
 | **Typical content** | `variant` / `topology` / `product` · `capabilities` · `runtime_modules` · `bindings` · `observability` · `apps` · `acceptance` | `modules` (hpp) · `deployments` (provides/requires) · `dataflows` · `bindings` (module IO) |
 | **Pipeline** | `merge_req` → SOR product variants + lineage gates | `apply_wiring` → SOR deployments / dataflows / types |
 | **Does not own** | Concrete from→to edges | Whether com/phm is compiled in (SKU trim) |
@@ -31,8 +31,8 @@ wiring.yaml (wiring)    ──┘
 ```bash
 cd /path/to/AI_Giraffe-Flow
 source .venv/bin/activate
-pip install -e "tools/codegen[dev]"
-pip install -e tools/config
+pip install -e "tools/gf-codegen[dev]"
+pip install -e tools/gf-config
 ```
 
 ## Launch
@@ -41,29 +41,30 @@ pip install -e tools/config
 gf-config projects/oem_a/afc_with_uss/project.yaml
 ```
 
-## Tabs
+## Tabs (P3 · two pages)
 
 | Tab | Role |
 |-----|------|
-| A · SKU / middleware | Full `req.yaml` (capabilities / observability / apps / acceptance) |
-| B · Signal graph | Simulink-like canvas → `wiring.yaml`; **right pane Lineage** |
+| **1 · Signals & apps** (default) | **Left thin SKU open**; canvas; **right Lineage collapsed** (◀ to expand) |
+| **2 · Platform runtime** | Top `runtime_modules`; subpages: exec/FG · PHM · diag · log · OTA · **Event collector** |
 
-No separate C tab: Lineage lives on the right of B. Verify / Generate switches focus to Lineage.
+Shortcuts: Ctrl+1 / Ctrl+2. Verify / Generate returns to tab 1 Lineage.
 
 **File menu:** Open · Save (Ctrl+S) · Save & Verify · Verify (Ctrl+R) · Generate (Ctrl+G) · Import hpp/fidl  
 
 **View menu:** Fit (Ctrl+0) · Default zoom (Ctrl+H) · Reload (F5) · Lineage pane (Ctrl+L) · Delete edge (Delete)
 
-Daily loop: edit A/B → **Save** → **Verify** → **Generate** when apps need rebuild.
+Daily: tab 1 graph / thin SKU → tab 2 modules → **Save** → **Verify** → **Generate** when needed.
 
-## Tab B — four steps
+## Tab 1 canvas — four steps
 
 | # | Action | Effect |
 |---|--------|--------|
 | 1 | **Right-click empty → Add module** | New process (`deployments[]`) |
 | 2 | **Right-click module → Delete** | Drop deployment + related dataflows |
 | 3 | **Double-click module** | Edit In/Out ports, direction, service names |
-| 4 | **Drag Out → In** | Creates `dataflows`; Out name wins (In renamed if needed) |
+| 4 | **Drag Out↔In** | Creates `dataflows` (either side can start); Out name wins (In renamed if needed) |
+| — | **Ctrl+drag port** | Move port to another card edge (top/bottom/left/right); bare drag = wire |
 
 Also: click edges (incl. missing dashed) to select; search box; import hpp / **fidl**; Ctrl+wheel zoom.
 
@@ -74,6 +75,6 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 
 - [x] Open `afc_with_uss` shows ported graph  
 - [x] Add/remove nodes / drag edges / Save writes `wiring.yaml`  
-- [x] Tab A req (incl. acceptance) round-trips  
+- [x] Tab 1 thin SKU + tab 2 runtime_modules / platform round-trip  
 - [x] Verify shows Lineage pass/fail  
 - [x] CI does not require Qt  

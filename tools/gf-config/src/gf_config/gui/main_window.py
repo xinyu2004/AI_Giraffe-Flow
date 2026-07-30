@@ -1,4 +1,4 @@
-"""Main window: A·SKU / B·信号链接 / C·平台（Lineage 在 B 右侧）。"""
+"""Main window: 1 · 信号与应用 / 2 · 平台运行时."""
 
 from __future__ import annotations
 
@@ -8,11 +8,16 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QFileDialog,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QStatusBar,
     QTabWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from gf_config.core import ProjectSession
@@ -25,8 +30,8 @@ from gf_config.i18n import get_language, switch_language_and_restart, t
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle(t("gf-config — Giraffe Flow（A/B/C）"))
-        self.resize(1280, 800)
+        self.setWindowTitle(t("gf-config — Giraffe Flow（信号与应用 / 平台）"))
+        self.resize(1400, 860)
         self._session: ProjectSession | None = None
 
         self._tabs = QTabWidget()
@@ -34,9 +39,38 @@ class MainWindow(QMainWindow):
         self._graph = WiringGraphView()
         self._platform = PlatformEditor()
 
-        self._tabs.addTab(self._req, t("A · SKU"))
-        self._tabs.addTab(self._graph, t("B · 信号链接"))
-        self._tabs.addTab(self._platform, t("C · 平台"))
+        # 页 1：左 SKU（默认展开）| 箭头 | 画布（右侧连线默认收起）
+        self._sku_panel = QWidget()
+        sku_l = QVBoxLayout(self._sku_panel)
+        sku_l.setContentsMargins(0, 0, 0, 0)
+        sku_l.setSpacing(0)
+        sku_l.addWidget(self._req)
+        # 定宽：避免 Preferred 留白像「可左右拉」的空框
+        self._sku_panel.setFixedWidth(312)
+        self._sku_panel.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
+        )
+
+        self._btn_toggle_sku = QToolButton()
+        # 面板在左：展开时 ◀=收起；收起后 ▶=展开
+        self._btn_toggle_sku.setText("◀")
+        self._btn_toggle_sku.setToolTip(t("折叠 / 展开左侧 SKU"))
+        self._btn_toggle_sku.setFixedWidth(22)
+        self._btn_toggle_sku.clicked.connect(self._toggle_sku_panel)
+        self._sku_collapsed = False
+        self._sku_panel.setVisible(True)
+
+        signals_page = QWidget()
+        signals_l = QHBoxLayout(signals_page)
+        signals_l.setContentsMargins(0, 0, 0, 0)
+        signals_l.setSpacing(0)
+        signals_l.addWidget(self._sku_panel, stretch=0)
+        signals_l.addWidget(self._btn_toggle_sku, stretch=0)
+        signals_l.addWidget(self._graph, stretch=1)
+        self._signals_page: QWidget = signals_page
+
+        self._tabs.addTab(self._signals_page, t("1 · 信号与应用"))
+        self._tabs.addTab(self._platform, t("2 · 平台运行时"))
         self.setCentralWidget(self._tabs)
 
         self._path_label = QLabel(t("未打开项目"))
@@ -47,7 +81,6 @@ class MainWindow(QMainWindow):
         self._req.changed.connect(self._mark_dirty)
         self._graph.changed.connect(self._mark_dirty)
         self._platform.changed.connect(self._mark_dirty)
-        self._req.modules_changed.connect(self._platform.set_runtime_modules)
 
         self._build_menu()
 
@@ -130,23 +163,17 @@ class MainWindow(QMainWindow):
 
         view_menu = self.menuBar().addMenu(t("视图"))
 
-        act_tab_a = QAction(t("A · SKU"), self)
-        act_tab_a.setShortcut("Ctrl+1")
-        act_tab_a.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_tab_a.triggered.connect(lambda: self._tabs.setCurrentWidget(self._req))
-        view_menu.addAction(act_tab_a)
+        act_tab1 = QAction(t("1 · 信号与应用"), self)
+        act_tab1.setShortcut("Ctrl+1")
+        act_tab1.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_tab1.triggered.connect(lambda: self._tabs.setCurrentWidget(self._signals_page))
+        view_menu.addAction(act_tab1)
 
-        act_tab_b = QAction(t("B · 信号链接"), self)
-        act_tab_b.setShortcut("Ctrl+2")
-        act_tab_b.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_tab_b.triggered.connect(lambda: self._tabs.setCurrentWidget(self._graph))
-        view_menu.addAction(act_tab_b)
-
-        act_tab_c = QAction(t("C · 平台"), self)
-        act_tab_c.setShortcut("Ctrl+3")
-        act_tab_c.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_tab_c.triggered.connect(lambda: self._tabs.setCurrentWidget(self._platform))
-        view_menu.addAction(act_tab_c)
+        act_tab2 = QAction(t("2 · 平台运行时"), self)
+        act_tab2.setShortcut("Ctrl+2")
+        act_tab2.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_tab2.triggered.connect(lambda: self._tabs.setCurrentWidget(self._platform))
+        view_menu.addAction(act_tab2)
 
         view_menu.addSeparator()
 
@@ -180,6 +207,10 @@ class MainWindow(QMainWindow):
         act_lineage.triggered.connect(self._show_lineage_panel)
         view_menu.addAction(act_lineage)
 
+        act_toggle_sku = QAction(t("折叠/展开左侧 SKU"), self)
+        act_toggle_sku.triggered.connect(self._toggle_sku_panel)
+        view_menu.addAction(act_toggle_sku)
+
         act_toggle_right = QAction(t("折叠/展开右侧面板"), self)
         act_toggle_right.triggered.connect(self._graph.toggle_right_panel)
         view_menu.addAction(act_toggle_right)
@@ -208,12 +239,23 @@ class MainWindow(QMainWindow):
         if lang == get_language():
             return
         switch_language_and_restart(lang)
+
+    def _toggle_sku_panel(self) -> None:
+        self._sku_collapsed = not self._sku_collapsed
+        self._sku_panel.setVisible(not self._sku_collapsed)
+        # 收起 ▶ / 展开 ◀（与右侧 ▶收起 / ◀展开 对称）
+        self._btn_toggle_sku.setText("▶" if self._sku_collapsed else "◀")
+
+    def ensure_sku_panel(self) -> None:
+        if self._sku_collapsed:
+            self._toggle_sku_panel()
+
     def _fit_graph(self) -> None:
-        self._tabs.setCurrentWidget(self._graph)
+        self._tabs.setCurrentWidget(self._signals_page)
         self._graph.fit_in_window()
 
     def _undo_graph(self) -> None:
-        self._tabs.setCurrentWidget(self._graph)
+        self._tabs.setCurrentWidget(self._signals_page)
         if not self._graph._undo_stack:
             self.statusBar().showMessage(t("没有可撤销的操作"), 2000)
             return
@@ -221,7 +263,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(t("已撤销（信号图）"), 2000)
 
     def _redo_graph(self) -> None:
-        self._tabs.setCurrentWidget(self._graph)
+        self._tabs.setCurrentWidget(self._signals_page)
         if not self._graph._redo_stack:
             self.statusBar().showMessage(t("没有可重做的操作"), 2000)
             return
@@ -229,11 +271,11 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(t("已重做（信号图）"), 2000)
 
     def _show_flows_panel(self) -> None:
-        self._tabs.setCurrentWidget(self._graph)
+        self._tabs.setCurrentWidget(self._signals_page)
         self._graph.focus_flows()
 
     def _show_lineage_panel(self) -> None:
-        self._tabs.setCurrentWidget(self._graph)
+        self._tabs.setCurrentWidget(self._signals_page)
         self._graph.focus_lineage()
 
     def _browse_open(self) -> None:
@@ -263,7 +305,7 @@ class MainWindow(QMainWindow):
             self._graph.set_lineage_placeholder(
                 "尚无 lineage。菜单：文件 → Verify（Ctrl+R）"
             )
-        self._tabs.setCurrentWidget(self._graph)
+        self._tabs.setCurrentWidget(self._signals_page)
         self.statusBar().showMessage("已打开", 3000)
 
     def _mark_dirty(self) -> None:
@@ -299,7 +341,7 @@ class MainWindow(QMainWindow):
         return "\n".join(lines)
 
     def _save(self) -> None:
-        """写盘 only — flush A+B+C；不跑 lineage。"""
+        """写盘 only — flush 页1+页2；不跑 lineage。"""
         if not self._session:
             QMessageBox.information(self, "保存", "请先打开项目")
             return
@@ -312,7 +354,7 @@ class MainWindow(QMainWindow):
             return
         if had_dirty:
             self._path_label.setText(f"{self._session.paths.project_file}  ·  ✓ 已保存")
-            self.statusBar().showMessage("✓ 已保存 A/B/C（未 Verify）", 8000)
+            self.statusBar().showMessage("✓ 已保存（未 Verify）", 8000)
             QMessageBox.information(
                 self,
                 "保存",
@@ -329,7 +371,7 @@ class MainWindow(QMainWindow):
             return
         self._graph.flush_canvas()
         self._session.save_all()
-        self.statusBar().showMessage("已保存 A/B/C，正在 Verify…", 2000)
+        self.statusBar().showMessage("已保存，正在 Verify…", 2000)
         self._verify(show_dialog=False)
 
     def _verify(self, *, show_dialog: bool = False) -> bool:
@@ -344,7 +386,7 @@ class MainWindow(QMainWindow):
             return False
         self._graph.set_lineage_report(report or "")
         self._graph.rebuild()
-        self._tabs.setCurrentWidget(self._graph)
+        self._tabs.setCurrentWidget(self._signals_page)
         self._graph.focus_lineage()
         if rc == 0:
             self.statusBar().showMessage(
@@ -356,7 +398,7 @@ class MainWindow(QMainWindow):
                     self,
                     "Verify",
                     "成功。请查看右侧「Lineage」。\n\n"
-                    "拓扑图见 B 画布；评审附件可用「文件 → 导出 Graphviz」。\n"
+                    "拓扑图见页 1 画布；评审附件可用「文件 → 导出 Graphviz」。\n"
                     "运行时序/回放请用 GMT GUI。\n\n"
                     "若要生成 Proxy/Skeleton：文件 → Generate 或 Ctrl+G。",
                 )
@@ -377,7 +419,7 @@ class MainWindow(QMainWindow):
             return
         self._graph.set_lineage_report(report or "")
         self._graph.rebuild()
-        self._tabs.setCurrentWidget(self._graph)
+        self._tabs.setCurrentWidget(self._signals_page)
         self._graph.focus_lineage()
         if rc != 0:
             QMessageBox.warning(

@@ -24,13 +24,13 @@ echo "[smoke_bd_stub] ctest ..."
 ctest --test-dir "${BUILD}" -R 'gf_(dds|someip)_binding_smoke' --output-on-failure
 
 echo "[smoke_bd_stub] emit-idl ..."
-SOR_JSON="${ROOT}/tools/codegen/tests/fixtures/emit_idl_sample.sor.json"
+SOR_JSON="${ROOT}/tools/gf-codegen/tests/fixtures/emit_idl_sample.sor.json"
 IDL_OUT="${BUILD}/idl"
 mkdir -p "${IDL_OUT}"
 if command -v gf-codegen >/dev/null 2>&1; then
   gf-codegen emit-idl "${SOR_JSON}" --out "${IDL_OUT}"
 else
-  PYTHONPATH="${ROOT}/tools/codegen/src${PYTHONPATH:+:${PYTHONPATH}}" \
+  PYTHONPATH="${ROOT}/tools/gf-codegen/src${PYTHONPATH:+:${PYTHONPATH}}" \
     "${ROOT}/.venv/bin/python" -c "from gf_codegen.cli import main; raise SystemExit(main(['emit-idl', '${SOR_JSON}', '--out', '${IDL_OUT}']))"
 fi
 test -f "${IDL_OUT}/gf_types.idl"

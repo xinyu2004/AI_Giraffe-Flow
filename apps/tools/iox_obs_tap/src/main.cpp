@@ -1,8 +1,7 @@
-// P2.5: iceoryx observability tap — subscribe allowlisted services → NDJSON stdout.
+// Fallback tap (EgoMotion + Trajectory only). Prefer codegen:
+//   gf-codegen generate → ${GF_GENERATED_DIR}/src/obs_tap_main.cpp
 // Pipe into: GMT bridge foxglove --ws --stdin
-//
-// Env GF_OBS_LIVE_SERVICES: comma-separated short names (default: EgoMotion,Trajectory).
-// Only services implemented below are honored; others are warned on stderr.
+// Env GF_OBS_LIVE_SERVICES: comma-separated short names.
 
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
 #include "gf_gen/proxy/ego_motion_proxy.hpp"

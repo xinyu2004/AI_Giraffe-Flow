@@ -92,7 +92,7 @@ CAN → gateway ─EgoMotion─► sensing.uss ─UssZones─► perception.fron
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 ```
 
-实施规格：[IMPLEMENTATION.md](../../../tools/codegen/IMPLEMENTATION.md) · 总计划：[P0_PLAN.md](../../../docs/zh/operations/P0_PLAN.md)
+实施规格：[IMPLEMENTATION.md](../../../tools/gf-codegen/IMPLEMENTATION.md) · 总计划：[P0_PLAN.md](../../../docs/zh/operations/P0_PLAN.md)
 
 ---
 
@@ -116,7 +116,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 
 ```bash
 # 在仓库根目录
-pip install -e "tools/codegen[dev]" -e "tools/config"
+pip install -e "tools/gf-codegen[dev]" -e "tools/gf-config"
 # 作者路径：开 gf-config → 保存 → Generate
 # 或 CI：
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml

@@ -2,7 +2,7 @@
 
 > 对应计划：[P1_PLAN.md](P1_PLAN.md) · 路线图：[ROADMAP.md](ROADMAP.md)  
 > 用法：按 **R0 → R7** 顺序逐项过；每项勾选「通过 / 需改 / 延后」，并在备注栏写修改意图。  
-> 前置：仓库根目录 · 已 `source .venv/bin/activate`（或 `PATH` 含 `.venv/bin`）· `pip install -e tools/codegen[dev] -e tools/gmt[dev]`
+> 前置：仓库根目录 · 已 `source .venv/bin/activate`（或 `PATH` 含 `.venv/bin`）· `pip install -e tools/gf-codegen[dev] -e tools/gmt[dev]`
 
 **整体判定（review 结束后填）：**
 
@@ -38,7 +38,7 @@
 | R1.7 | C 页 lineage | compose 后 C 页绿/红与报告一致 | □ | □ | □ | |
 | R1.8 | 不写 SOR | GUI 只动 req/wiring，不手改 `gf.sor.json` | □ | □ | □ | |
 
-**代码/文档：** `tools/config/` · `tools/config/README.md` · `tools/config/src/gf_config/gui/`
+**代码/文档：** `tools/gf-config/` · `tools/gf-config/README.md` · `tools/gf-config/src/gf_config/gui/`
 
 ---
 
@@ -65,11 +65,11 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R3.1 | parse_fidl 单测 | `pytest tools/codegen/tests/test_parse_fidl.py -q` | □ | □ | □ | |
+| R3.1 | parse_fidl 单测 | `pytest tools/gf-codegen/tests/test_parse_fidl.py -q` | □ | □ | □ | |
 | R3.2 | 样例 fidl | `projects/oem_a/afc_with_uss/interfaces/demo_fidl/VehicleStatus.fidl` 候选含 VehiclePose / SpeedChanged 等 | □ | □ | □ | |
 | R3.3 | GUI 导入写回 | Save 后 `wiring.modules[].fidl` + provides/requires | □ | □ | □ | |
 | R3.4 | compose 合类型 | modules 挂 fidl 后 SOR types 有对应 struct | □ | □ | □ | |
-| R3.5 | parse_fdepl | `pytest tools/codegen/tests/test_parse_fdepl.py -q`；样例 `.fdepl` ServiceID=0x1234 | □ | □ | □ | |
+| R3.5 | parse_fdepl | `pytest tools/gf-codegen/tests/test_parse_fdepl.py -q`；样例 `.fdepl` ServiceID=0x1234 | □ | □ | □ | |
 | R3.6 | 边界确认 | **不**导出 fidl/fdepl；fdepl **不**代替 `req.bindings` | □ | □ | □ | |
 
 ---
@@ -147,14 +147,14 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 ```bash
 # 在仓库根
 source .venv/bin/activate
-pip install -e "tools/codegen[dev]" -e "tools/gmt[dev]"
+pip install -e "tools/gf-codegen[dev]" -e "tools/gmt[dev]"
 
 bash scripts/smoke_eu_stub.sh
 bash scripts/smoke_bd_stub.sh
 bash projects/oem_b/adc_full/scripts/smoke_mcu_desktop.sh
 bash scripts/smoke_ta.sh
 
-pytest tools/codegen/tests tools/gmt/tests -q
+pytest tools/gf-codegen/tests tools/gmt/tests -q
 ```
 
 ---

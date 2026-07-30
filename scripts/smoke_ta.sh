@@ -5,15 +5,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 export PATH="${ROOT}/.venv/bin:${PATH}"
-export PYTHONPATH="${ROOT}/tools/gmt/src:${ROOT}/tools/codegen/src${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${ROOT}/tools/gmt/src:${ROOT}/tools/gf-codegen/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 if [[ ! -x .venv/bin/python ]]; then
   python3 -m venv .venv
 fi
-.venv/bin/pip install -q -e "tools/codegen[dev]" -e "tools/gmt[dev]"
+.venv/bin/pip install -q -e "tools/gf-codegen[dev]" -e "tools/gmt[dev]"
 
 echo "[smoke_ta] pytest gmt + parse_arxml ..."
-.venv/bin/pytest tools/gmt/tests tools/codegen/tests/test_parse_arxml.py -q --tb=short
+.venv/bin/pytest tools/gmt/tests tools/gf-codegen/tests/test_parse_arxml.py -q --tb=short
 
 echo "[smoke_ta] compose afc_with_uss (for architect) ..."
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml

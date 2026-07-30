@@ -16,4 +16,4 @@ bash scripts/smoke_bd_stub.sh           # offline stub
 **主链 SIL 仍为 iceoryx** — 见 [CYCLONEDDS_BYPASS.md](../../../docs/zh/operations/CYCLONEDDS_BYPASS.md)。  
 **vsomeip** 保持 stub。
 
-Pin: [deps/versions.lock.md](../../../deps/versions.lock.md) · Parent: [bindings/README.md](../README.md)
+Pin: [dep-manifest/versions.lock.md](../../../dep-manifest/versions.lock.md) · Parent: [bindings/README.md](../README.md)

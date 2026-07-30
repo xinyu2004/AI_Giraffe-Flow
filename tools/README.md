@@ -4,8 +4,8 @@
 
 | Binary | Dir | 职责 | 不做 |
 |--------|-----|------|------|
-| **gf-codegen** | [codegen/](codegen/) | CLI：`lint` · `suggest` · `generate` · `emit-idl` · `import`；compose 仅作库 / `python -m gf_codegen.compose` | **无 GUI** |
-| **gf-config** | [config/](config/) | **唯一作者 GUI**：SKU + 信号图；**保存自动 compose**；可选 **Generate** | 不做 runtime 观测 |
+| **gf-codegen** | [gf-codegen/](gf-codegen/) | CLI：`lint` · `suggest` · `generate` · `emit-idl` · `import`；compose 仅作库 / `python -m gf_codegen.compose` | **无 GUI** |
+| **gf-config** | [gf-config/](gf-config/) | **唯一作者 GUI**：SKU + 信号图；**保存自动 compose**；可选 **Generate** | 不做 runtime 观测 |
 | **GMT** | [gmt/](gmt/) | 只读 architect（CI）+ measure / bridge（P1+） | 不 import、不 generate、不回写 SOR |
 | **bridge** (host) | [bridge/](bridge/) | optional ROS 2 helpers | — |
 
@@ -21,8 +21,8 @@ Analysis → GMT measure / bridge（只读 / 运行数据）
 
 | Legacy | Maps to |
 |--------|---------|
-| [importer/](importer/) | codegen/plugins/import |
-| [lint/](lint/) | codegen/plugins/lint |
+| [importer/](importer/) | gf-codegen/plugins/import |
+| [lint/](lint/) | gf-codegen/plugins/lint |
 | [architect/](architect/) | gmt/plugins/architect（CLI；GUI → gf-config） |
 | [record_replay/](record_replay/) | gmt/plugins/measure |
 

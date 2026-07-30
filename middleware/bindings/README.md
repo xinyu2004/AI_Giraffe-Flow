@@ -9,4 +9,4 @@ Transport plugins behind `gf_ara::com`.
 | [dds](dds/) | DDS (CycloneDDS) | `cyclonedds` |
 | [cross_domain_ipc](cross_domain_ipc/) | AP ↔ MCU CP | gateway process |
 
-Parent: [../README.md](../README.md) · Deps: [../../deps/DEPENDENCIES.yaml](../../deps/DEPENDENCIES.yaml)
+Parent: [../README.md](../README.md) · Deps: [../../dep-manifest/DEPENDENCIES.yaml](../../dep-manifest/DEPENDENCIES.yaml)

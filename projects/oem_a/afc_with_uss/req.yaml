@@ -23,9 +23,8 @@ bindings:
 observability:
   live_tap:
     enabled: true
-    services:
-    - services.semantic.EgoMotion
-    - services.semantic.Trajectory
+    mode: wiring_all
+    # mode=wiring_all → ceiling = wiring.dataflows（本列表忽略；GMT 可再过滤）
   record:
     mode: minimal
     services:

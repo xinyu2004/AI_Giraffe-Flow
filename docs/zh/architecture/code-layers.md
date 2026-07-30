@@ -31,7 +31,7 @@ Giraffe Flow 板端与工具链按三层分工，避免「业务改中间件、O
 | [`middleware/bindings/`](../../middleware/bindings/) | 传输插件；P0 为 [`iceoryx/`](../../middleware/bindings/iceoryx/) |
 | [`middleware/osal/`](../../middleware/osal/) | `gf::osal`：单调时钟、sleep |
 | [`cmake/`](../../cmake/)、[`scripts/bootstrap_deps.sh`](../../scripts/bootstrap_deps.sh) | 构建与第三方源码拉取 |
-| [`tools/codegen/`](../../tools/codegen/) | 主机工具本身（Python；**不上板**） |
+| [`tools/gf-codegen/`](../../tools/gf-codegen/) | 主机工具本身（Python；**不上板**） |
 | [`schemas/`](../../schemas/) | SOR 契约 / 示例 |
 
 对外命名空间示例：`gf_ara::com::binding::iceoryx::{InitRuntime, EventPublisher, EventSubscriber}`。
@@ -92,7 +92,7 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
 
 | 类别 | 上传？ | 典型路径 |
 |------|--------|----------|
-| 静态平台 | **是** | `middleware/**`、`cmake/`、`tools/codegen/src` |
+| 静态平台 | **是** | `middleware/**`、`cmake/`、`tools/gf-codegen/src` |
 | 手写输入 / 业务 / 项目脚本 | **是** | `projects/**`（除工作产物）、`apps/**/src` |
 | compose / generate / lineage 工作产物 | **否** | `**/gf.sor.json`、`**/generated/`、`**/reports/` |
 | 本地构建与依赖检出 | **否** | `build/`、`middleware/.deps-prefix/`、`middleware/third_party/*/`、`.venv/` |

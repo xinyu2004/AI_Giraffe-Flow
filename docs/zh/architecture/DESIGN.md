@@ -271,17 +271,17 @@ AI_Giraffe-Flow/
   schemas/                 # SOR 契约，semver
   middleware/              # 板端 runtime：core/com/bindings/osal/hal/…
     third_party/           # 上游检出（钉扎后）
-  tools/codegen/           # gf-codegen
+  tools/gf-codegen/           # gf-codegen
   tools/bridge/            # 主机侧桥（如 ROS2）
   tools/gmt/               # GMT
   apps/adapters|simulators/
   projects/                # OEM 集成输入（req.yaml 含契约与部署裁剪）
-  deps/                    # 第三方依赖清单与版本锁
+  dep-manifest/                    # 第三方依赖清单与版本锁
   docs/en/  docs/zh/
   ci/
 ```
 
-仓库内已落地的骨架说明见根目录 [STRUCTURE.md](../../../STRUCTURE.md) 与 [deps/README.md](../../../deps/README.md)。
+仓库内已落地的骨架说明见根目录 [STRUCTURE.md](../../../STRUCTURE.md) 与 [dep-manifest/README.md](../../../dep-manifest/README.md)。
 
 制品线可分：`gf-runtime`、`gf-tools`、`gf-schemas`。  
 板端 CI **不编** GUI 类 tools。  

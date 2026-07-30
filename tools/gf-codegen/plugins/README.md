@@ -4,7 +4,7 @@
 |--------|------------|------|
 | import/ | tools/importer | OEM ARXML/DBC/YAML → gf.sor.json |
 | lint/ | tools/lint | SOR validation gate before generate |
-| generate/ | tools/codegen | SOR → gf_ara Proxy/Skeleton, manifests, bindings |
+| generate/ | tools/gf-codegen | SOR → gf_ara Proxy/Skeleton, manifests, bindings |
 
 Single binary: `gf-codegen`.
 

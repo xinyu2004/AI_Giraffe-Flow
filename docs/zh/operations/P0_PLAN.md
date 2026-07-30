@@ -16,14 +16,14 @@
 联调入口：
 
 ```bash
-pip install -e "tools/codegen[dev]"
+pip install -e "tools/gf-codegen[dev]"
 bash scripts/bootstrap_deps.sh
 bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh   # SIL 双进程
 gf-codegen compose --project projects/oem_b/adc_full/project.yaml
 bash ci/scripts/smoke.sh                               # 全量冒烟（含 adc compose）
 ```
 
-详细规格：[tools/codegen/IMPLEMENTATION.md](../../../tools/codegen/IMPLEMENTATION.md) · 上传清单：[UPLOAD_CHECKLIST.md](../../../projects/UPLOAD_CHECKLIST.md)
+详细规格：[tools/gf-codegen/IMPLEMENTATION.md](../../../tools/gf-codegen/IMPLEMENTATION.md) · 上传清单：[UPLOAD_CHECKLIST.md](../../../projects/UPLOAD_CHECKLIST.md)
 
 **下一步（P1，本文件不再排期）：** 见 [ROADMAP.md](ROADMAP.md) — 三 binding / GMT CLI / MCU gateway 模拟等；勿继续堆 GMT GUI。
 
@@ -83,7 +83,7 @@ flowchart TD
 | 项 | 选择 |
 |----|------|
 | 语言 | **Python 3** CLI（板上不装） |
-| 包布局 | `tools/codegen/`（`pyproject.toml` 或可 `pip install -e`） |
+| 包布局 | `tools/gf-codegen/`（`pyproject.toml` 或可 `pip install -e`） |
 | 入口 | 控制台脚本 `gf-codegen` |
 | DBC | **cantools**（主机依赖，P0 为 compose/import 提前启用） |
 | YAML/JSON | PyYAML + json；对照 `schemas/gf.sor.schema.json` |
@@ -116,7 +116,7 @@ flowchart TD
 
 ### 2.4 建议目录与详细规格
 
-[tools/codegen/IMPLEMENTATION.md](../../../tools/codegen/IMPLEMENTATION.md)
+[tools/gf-codegen/IMPLEMENTATION.md](../../../tools/gf-codegen/IMPLEMENTATION.md)
 
 ### 2.5 第一版集成验收清单（compose）
 

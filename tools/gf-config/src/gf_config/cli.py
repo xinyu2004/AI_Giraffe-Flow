@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError:
         print(
             "PySide6 is required. Install with:\n"
-            "  pip install -e tools/codegen -e tools/config",
+            "  pip install -e tools/gf-codegen -e tools/gf-config",
             file=sys.stderr,
         )
         return 2

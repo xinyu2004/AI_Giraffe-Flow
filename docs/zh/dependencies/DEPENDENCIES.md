@@ -30,4 +30,4 @@
 
 RAUC、OSTree — 见 manifest `ota_stack`。
 
-策略：先改 [DEPENDENCIES.yaml](../../deps/DEPENDENCIES.yaml) 与 [versions.lock.md](../../deps/versions.lock.md)。
+策略：先改 [DEPENDENCIES.yaml](../../dep-manifest/DEPENDENCIES.yaml) 与 [versions.lock.md](../../dep-manifest/versions.lock.md)。

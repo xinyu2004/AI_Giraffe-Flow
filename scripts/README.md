@@ -24,5 +24,5 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
 
 ### Policy (board / cross)
 
-`runtime_board` deps 见 [deps/](../deps/) 与 [middleware/third_party/](../middleware/third_party/)。  
-Pins: [deps/versions.lock.md](../deps/versions.lock.md)
+`runtime_board` deps 见 [dep-manifest/](../dep-manifest/) 与 [middleware/third_party/](../middleware/third_party/)。  
+Pins: [dep-manifest/versions.lock.md](../dep-manifest/versions.lock.md)

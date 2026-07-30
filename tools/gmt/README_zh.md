@@ -16,7 +16,7 @@
 | **`GMT gui`** | Live / Tag / 动画 DAG / **变量轨** / **回灌 playhead** / 导出 |
 
 ```bash
-pip install -e tools/gmt -e tools/codegen
+pip install -e tools/gmt -e tools/gf-codegen
 pip install -e 'tools/gmt[gui]'
 
 GMT gui

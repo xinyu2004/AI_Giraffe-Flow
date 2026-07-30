@@ -242,8 +242,8 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 | 交付 | 路径 |
 |------|------|
 | Review 清单 | [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md) |
-| 版本锁 | [deps/versions.lock.md](../../../deps/versions.lock.md)（cyclonedds **0.10.5**） |
-| bench golden | `tools/codegen/tests/test_afc_bench_golden.py`；（可选快照）`projects/oem_a/afc_with_uss/golden/gf.sor.json` |
+| 版本锁 | [dep-manifest/versions.lock.md](../../../dep-manifest/versions.lock.md)（cyclonedds **0.10.5**） |
+| bench golden | `tools/gf-codegen/tests/test_afc_bench_golden.py`；（可选快照）`projects/oem_a/afc_with_uss/golden/gf.sor.json` |
 | 证据包 | `evidence_pack/p2_afc_with_uss/` · `scripts/collect_p2_evidence.sh` |
 | U · OTA Spike | [OTA_SPIKE.md](OTA_SPIKE.md)（可选） |
 

@@ -1,7 +1,7 @@
 # 第三方库初步评估
 
 > **English:** [THIRD_PARTY_EVALUATION.md](../../en/dependencies/THIRD_PARTY_EVALUATION.md)  
-> 清单：[deps/DEPENDENCIES.yaml](../../../deps/DEPENDENCIES.yaml)
+> 清单：[dep-manifest/DEPENDENCIES.yaml](../../../dep-manifest/DEPENDENCIES.yaml)
 
 **原则：** `gf.sor.json` 为唯一契约；三方库为传输/序列化/工具引擎。OTA **不包含 SWUpdate**。
 

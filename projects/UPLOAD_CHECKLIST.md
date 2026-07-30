@@ -22,10 +22,10 @@
 | 路径 | 说明 |
 |------|------|
 | `middleware/` | 静态：core / com / bindings / osal / hal …（不含 third_party 检出与 `.deps-prefix`） |
-| `tools/codegen/`、`tools/bridge/` | gf-codegen；可选 ROS2 桥（主机侧） |
+| `tools/gf-codegen/`、`tools/bridge/` | gf-codegen；可选 ROS2 桥（主机侧） |
 | `projects/` | 集成输入 + 项目脚本；契约在 `req.yaml`；`adc_full` / `afc_with_uss` 均可 compose |
 | `apps/` | 参考 App 源码 |
-| `schemas/`、`cmake/`、`scripts/`、`deps/`、`docs/`、`ci/` | 契约、构建、文档 |
+| `schemas/`、`cmake/`、`scripts/`、`dep-manifest/`、`docs/`、`ci/` | 契约、构建、文档 |
 | 根 `README*`、`STRUCTURE.md`、`.gitignore` | |
 
 ## 他人拿到后怎么跑
@@ -33,7 +33,7 @@
 ```bash
 cd AI_Giraffe-Flow
 python3 -m venv .venv && source .venv/bin/activate   # 需要 Python ≥ 3.10
-pip install -e "tools/codegen[dev]"
+pip install -e "tools/gf-codegen[dev]"
 bash scripts/bootstrap_deps.sh                       # 拉 iceoryx + 源码编 attr/acl
 bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
 ```
@@ -43,6 +43,6 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
 ## 入口文档
 
 1. [code-layers.md](../docs/zh/architecture/code-layers.md) — **静态 / 生成 / 手写**  
-2. [tools/codegen/README.md](../tools/codegen/README.md) — 工具用法  
+2. [tools/gf-codegen/README.md](../tools/gf-codegen/README.md) — 工具用法  
 3. [afc_with_uss/INTEGRATOR_WALKTHROUGH.md](oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md) — 集成审阅  
 4. [P0_PLAN.md](../docs/zh/operations/P0_PLAN.md) — 计划与状态  

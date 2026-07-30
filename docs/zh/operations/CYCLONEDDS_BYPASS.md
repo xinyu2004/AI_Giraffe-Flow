@@ -1,7 +1,7 @@
 # P2 B 轨：CycloneDDS 与主链边界
 
 > 配套：`scripts/smoke_bd_cyclone.sh` · `cmake/profiles/bd_cyclone.cmake`  
-> 钉扎：`deps/versions.lock.md` → **cyclonedds 0.10.5**
+> 钉扎：`dep-manifest/versions.lock.md` → **cyclonedds 0.10.5**
 
 ## 结论
 

@@ -136,7 +136,7 @@ def append_chevron(path: QPainterPath, tip: QPointF, ux: float, uy: float, *, ar
 
 
 class PortItem(QGraphicsEllipseItem):
-    """Out (green) / In (orange). Left-drag = move to card edge (view-level); Out Ctrl+drag = wire."""
+    """Out (green) / In (orange). Bare drag = wire; Ctrl+drag = move to card edge."""
 
     SIZE = 16.0
     HIT = 22.0  # larger pick target than the painted disc
@@ -164,7 +164,7 @@ class PortItem(QGraphicsEllipseItem):
         self.setAcceptedMouseButtons(
             Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton
         )
-        self.setCursor(Qt.CursorShape.SizeAllCursor)
+        self.setCursor(Qt.CursorShape.CrossCursor)
         self._home_pos = QPointF(0, 0)
         self._origin_side = self.side
         self._pending_side: str | None = None
@@ -199,7 +199,11 @@ class PortItem(QGraphicsEllipseItem):
         self.setBrush(QBrush(fill))
         self.setPen(pen)
         side_l = _SIDE_LABEL.get(self.side, self.side)
-        self.setToolTip(f"{tip_dir}: {short_service(self.service)} ({tip} · {side_l})")
+        # 裸拖连线（Out↔In）；Ctrl+拖 = 改边
+        self.setToolTip(
+            f"{tip_dir}: {short_service(self.service)} ({tip} · {side_l})\n"
+            "拖拽连线 · Ctrl+拖拽改端口边 · 右键选边"
+        )
         s = self.SIZE
         if self.direction == "in":
             self.setRect(-s / 2, -s / 2 + 1, s, s - 2)
@@ -257,11 +261,11 @@ class PortItem(QGraphicsEllipseItem):
             self._origin_side = self.side
             self._pending_side = None
             ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
-            # Out + Ctrl → 拉线；否则拖动改边（与调节线同一套 view 级拖动）
-            if self.direction == "out" and ctrl:
-                self.card.graph.begin_wire(self)
-            else:
+            # 裸拖（Out/In）→ 拉线；Ctrl+拖拽 → 改端口边
+            if ctrl:
                 self.card.graph.begin_port_relocate(self)
+            else:
+                self.card.graph.begin_wire(self)
             event.accept()
             return
         super().mousePressEvent(event)
@@ -1530,7 +1534,7 @@ class WiringGraphView(QWidget):
 
         self._legend = QLabel(
             "Out=green · In=orange · ! = unlinked\n"
-            "Drag ports to move; Ctrl+drag Out to wire · Ctrl+Z/Y undo"
+            "拖拽 Out/In 连线 · Ctrl+拖拽改端口边 · Ctrl+Z/Y 撤销"
         )
         self._legend.setWordWrap(True)
         self._legend.setStyleSheet("color: #a9cfc0; font-size: 11px;")
@@ -1555,23 +1559,27 @@ class WiringGraphView(QWidget):
         right = QVBoxLayout(self._right_panel)
         right.setContentsMargins(0, 0, 0, 0)
         right.addWidget(self._right_tabs)
-        self._right_panel.setMinimumWidth(300)
+        self._right_panel.setMinimumWidth(280)
+        self._right_panel.setMaximumWidth(420)
         self._right_panel.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
         )
 
         self._btn_toggle_right = QToolButton()
-        # 面板在右：展开时 ▶=点此收起；收起后 ◀=点此展开
-        self._btn_toggle_right.setText("▶")
+        # 面板在右：展开时 ▶=收起；收起后 ◀=展开。默认收起，画布优先。
+        self._btn_toggle_right.setText("◀")
         self._btn_toggle_right.setToolTip("折叠 / 展开右侧面板（连线 + Lineage）")
         self._btn_toggle_right.setFixedWidth(22)
         self._btn_toggle_right.clicked.connect(self._toggle_right_panel)
-        self._right_collapsed = False
+        self._right_collapsed = True
+        self._right_panel.setVisible(False)
 
         layout = QHBoxLayout(self)
-        layout.addWidget(self._view, stretch=3)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._view, stretch=1)
         layout.addWidget(self._btn_toggle_right, stretch=0)
-        layout.addWidget(self._right_panel, stretch=1)
+        layout.addWidget(self._right_panel, stretch=0)
 
         self._flow_list.currentRowChanged.connect(self._highlight_list_edge)
 
@@ -1921,34 +1929,37 @@ class WiringGraphView(QWidget):
                 target = cur
                 break
             cur = cur.parentItem()
-        if target is None or target.direction != "in":
-            return
+        if target is None or target.direction == src.direction:
+            return  # need Out↔In pair (either drag direction)
         if target.card is src.card:
             QMessageBox.information(self, "连线", "不能连到同一模块")
             return
 
+        out_port = src if src.direction == "out" else target
+        in_port = target if src.direction == "out" else src
+
         self._push_undo()
-        src_svc = canon_service(src.service)
-        dst_svc = (target.service or "").strip()
-        # Simulink-like: connection carries the source signal; In port name follows Out.
-        if not dst_svc:
-            new_req = list(target.card.requires) + [src_svc]
+        out_svc = canon_service(out_port.service)
+        in_svc = (in_port.service or "").strip()
+        # Simulink-like: connection carries the Out signal; In port name follows Out.
+        if not in_svc:
+            new_req = list(in_port.card.requires) + [out_svc]
             self._session.set_ports(
-                target.card.process_name, list(target.card.provides), new_req
+                in_port.card.process_name, list(in_port.card.provides), new_req
             )
-        elif short_service(dst_svc) != short_service(src_svc):
+        elif short_service(in_svc) != short_service(out_svc):
             new_req = [
-                src_svc if short_service(r) == short_service(dst_svc) else r
-                for r in target.card.requires
+                out_svc if short_service(r) == short_service(in_svc) else r
+                for r in in_port.card.requires
             ]
             self._session.set_ports(
-                target.card.process_name, list(target.card.provides), new_req
+                in_port.card.process_name, list(in_port.card.provides), new_req
             )
 
         ok = self._session.add_dataflow(
-            src.card.process_name,
-            src_svc,
-            target.card.process_name,
+            out_port.card.process_name,
+            out_svc,
+            in_port.card.process_name,
         )
         if not ok:
             QMessageBox.information(self, "连线", "该 dataflow 已存在")

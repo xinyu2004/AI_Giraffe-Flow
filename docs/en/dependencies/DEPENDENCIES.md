@@ -27,4 +27,4 @@
 | **ROS 2 rclcpp** | Prefer DDS-direct first |
 | **DLT / SQLite** | P1+ (`log` DLT mode, persistency) |
 
-Policy: declare in `deps/DEPENDENCIES.yaml`, pin in `versions.lock.md`, keep board CI free of host UI/ROS desktop deps.
+Policy: declare in `dep-manifest/DEPENDENCIES.yaml`, pin in `versions.lock.md`, keep board CI free of host UI/ROS desktop deps.

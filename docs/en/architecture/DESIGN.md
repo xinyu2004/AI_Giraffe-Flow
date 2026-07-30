@@ -256,12 +256,12 @@ AI_Giraffe-Flow/
   tools/                   # codegen, bridge/ros2 (host)
   apps/                    # reference processes; customer prod apps in other repos
   projects/                # OEM inputs + per-SKU req.yaml
-  deps/                    # third-party manifests + version lock
+  dep-manifest/                    # third-party manifests + version lock
   docs/en/  docs/zh/
   ci/
 ```
 
-Skeleton already in-tree: [STRUCTURE.md](../../../STRUCTURE.md) · [deps/README.md](../../../deps/README.md).
+Skeleton already in-tree: [STRUCTURE.md](../../../STRUCTURE.md) · [dep-manifest/README.md](../../../dep-manifest/README.md).
 
 Artifact lines may split into `gf-runtime`, `gf-tools`, `gf-schemas`.  
 Board CI **must not** build GUI tools.  

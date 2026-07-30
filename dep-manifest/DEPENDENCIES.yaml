@@ -134,7 +134,7 @@ dependencies:
     integration: pip
     enabled_profiles: [desktop]
     notes: >
-      Host-only. Install via pip install -e tools/config. Not for production images.
+      Host-only. Install via pip install -e tools/gf-config. Not for production images.
 
   - id: spdlog
     name: spdlog

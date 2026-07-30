@@ -1,6 +1,6 @@
 # iceoryx binding
 
-Static platform binding for Eclipse iceoryx classic (pin: [versions.lock.md](../../../deps/versions.lock.md)).
+Static platform binding for Eclipse iceoryx classic (pin: [versions.lock.md](../../../dep-manifest/versions.lock.md)).
 
 ```bash
 bash scripts/bootstrap_deps.sh

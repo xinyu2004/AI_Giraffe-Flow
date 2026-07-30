@@ -1,51 +1,53 @@
 # 中间件模块与 gf-config 配置规划
 
-> 配套：[P2_PLAN.md](P2_PLAN.md) · [DESIGN.md](../architecture/DESIGN.md) · [ROADMAP.md](ROADMAP.md)  
-> **状态（2026-07-20）：** 决策已冻结（见 §9）；`afc_with_uss/platform/*.yaml` 空壳已落盘；gf-config 目标形态见 §4。
+> 配套：[ROADMAP.md](ROADMAP.md) · [DESIGN.md](../architecture/DESIGN.md) · [P2_PLAN.md](P2_PLAN.md)  
+> **状态（2026-07-30）：** **P3 两页 UI 已落地**（页 1 信号与应用 · 页 2 平台运行时 + Collector 最小编辑）；废止「不做 DEM」旧口径。历史冻结字段见 §8。
 
-本文回答两件事：
+本文回答：
 
-1. **`gf_ara::*`（对标 `ara::*`）各中间件模块**，完整 AP 视角要什么、我们分阶段做什么。  
-2. **`gf-config` 到底配置什么** — 避免把 A 页做成「第二个 Vector」，也避免把一切塞进 GMT。
+1. **`gf_ara::*` 各模块**完整 AP 视角要什么、我们分阶段做什么。  
+2. **`gf-config` 配什么、几页、什么顺序** — 先信号图，再平台细节；GMT 不写配置。
 
 ---
 
-## 0. 总原则（先读）
+## 0. 总原则
 
 | # | 原则 |
 |---|------|
-| P1 | **配置分三层**：① SKU 要不要 · ② com 谁连谁 · ③ 平台小表（manifest） |
-| P2 | **只有 `com` 需要「信号图」级配置**；其余模块 **不是** 第二套 dataflow |
-| P3 | **`gf-config` = 作者 GUI**；**codegen = 生成/校验**；**GMT = 只读评审与度量**（不写配置） |
-| P4 | **不做 Classic DEM**；诊断走 **`ara::diag` / `gf_ara::diag`** |
+| P1 | **配置仍分三层资产**：① 开关 · ② com 拓扑 · ③ 平台小表；**GUI 收成两页**（见 §4） |
+| P2 | **只有 `com` 需要信号图**；其余模块不是第二套 dataflow |
+| P3 | **`gf-config` = 作者 GUI**；**codegen = 生成/校验**；**GMT = 观测 / OTA 操作面**（**不写** wiring/req/platform） |
+| P4 | **不做完整 Classic DEM**；必做 **Event Collector 最小集**（有 CP 则转发；无 CP/纯 DoIP 则 AP 侧 DEM-lite 子集） |
 | P5 | **先 YAML 资产，后 GUI**；GUI 只编辑已冻结字段 |
-| P6 | 命名对外一律 **`gf_ara::<fc>`**，文档可写对标 `ara::<fc>` |
+| P6 | 对外命名 **`gf_ara::<fc>`**；文档可写对标 `ara::<fc>` |
+| P7 | **工作流顺序**：打开 project → **先画应用节点与信号** → **再配平台运行时** → Verify / Generate |
 
 ```text
-① SKU（要不要编进镜像）     → req.yaml · gf-config「SKU」页（薄）
-② com 集成拓扑（谁连谁）     → wiring.yaml · gf-config「信号链接」页（主战场）
-③ 平台清单（exec/phm/diag…） → platform/*.yaml · gf-config「平台」页（后置）
+① 薄 SKU（profile/bindings/观测…）  ┐
+② com 拓扑（节点 + 连线）           ├─→ gf-config【1 · 信号与应用】（默认首页）
+                                   ┘         wiring.yaml + req 薄字段
+③ runtime_modules + platform/*     ──→ gf-config【2 · 平台运行时】
+                                              （含 Event Collector）
                                     │
                                     ▼
                          compose → gf.sor.json → generate / CMake
                                     │
                                     ▼
-                         GMT：只读 lineage / measure（不写回）
+              GMT：只读 lineage / measure / Live·Inject；OTA sheet 经 DoIP 操作（不写回配置）
 ```
 
 ---
 
-## 1. 三层配置模型
+## 1. 三层配置模型（资产）与两页 GUI（交互）
 
-| 层 | 问题 | 载体 | gf-config |
-|----|------|------|-----------|
-| **① 开关** | 本 SKU 要不要这个 FC / binding / app？ | `req.runtime_modules` / `bindings` / `apps` / `capabilities` | **SKU 页（瘦身）** |
-| **② 拓扑** | 哪个进程 provide/require 哪个服务？边怎么走？ | `wiring.yaml` | **信号链接页** |
-| **③ 清单** | 进程进哪个 FG？Alive 周期？DID 表？log 默认级？ | `platform/*.yaml` | **平台页（后置）**；P2 可手改 YAML |
+| 层 | 问题 | 载体 | gf-config（P3） |
+|----|------|------|----------------|
+| **① 开关（薄）** | 本 SKU 要不要 binding / 观测 / 剖面？ | `req.yaml` 薄字段 | **页 1** 顶栏/侧栏 |
+| **①′ 模块开关** | 要不要编进 exec/phm/…？ | `req.runtime_modules` | **页 2** 顶部（与平台表同页） |
+| **② 拓扑** | 谁 provide/require？边怎么走？ | `wiring.yaml` | **页 1** 画布（主战场） |
+| **③ 清单** | FG？Alive？DID？Collector？ | `platform/*.yaml` | **页 2** 子导航 |
 
-**和「完整 ARA」的关系：**  
-完整 AP 里 exec/sm/phm/diag/ucm 都有较重 Manifest；我们把它们收成 **③ 的小表**，而不是假装「只勾要不要」。  
-「要不要」是 ①；「要了之后填什么」是 ③；只有 com 的「服务关系」是 ②。
+「要不要编模块」与「要了填什么」同属运行时，故 **runtime_modules 不再独占一页排在画图之前**。
 
 ---
 
@@ -55,138 +57,114 @@
 
 | 模块 | 对标 | 配置负担 | ① 开关 | ② 拓扑 | ③ 清单 | 实现阶段 | 备注 |
 |------|------|----------|--------|--------|--------|----------|------|
-| **core** | `ara::core` | 无 | 常开 | — | — | ✅ P0 | 无独立配置 |
-| **com** | `ara::com` | **高** | bindings 勾选栈 | **wiring 主配置** | QoS/实例可选后置 | ✅ P0+ | **唯一信号图** |
-| **osal** | （平台） | 低 | 架构 CMake | — | — | ✅ P0 | 不进 gf-config |
-| **log** | `ara::log` | 低 | runtime_modules | — | 默认级别/通道 | P0–P2 | 见 §3.5 |
-| **exec** | `ara::exec` | 中 | runtime_modules | — | 进程↔FG/依赖/上报 | P1 stub → **P2 清单** | 见 §3.2 |
-| **sm** | `ara::sm` | 中低 | runtime_modules | — | FG 状态/转移（可极简） | P1 stub → **P2 极简 / P3 加深** | 见 §3.3 |
-| **phm** | `ara::phm` | 中 | runtime_modules | — | supervised entity 表 | P1 stub → **P2 清单** | 见 §3.4 |
-| **diag** | `ara::diag` | 中 | runtime_modules | — | DoIP + DID(/RID) | P1 stub → **P2 清单** | **非 DEM**；见 §3.6 |
-| **ucm** | `ara::ucm` | 中 | runtime_modules | — | 包源/回滚策略（后置） | P1 stub → **P2 Spike / P3** | 见 §3.7 |
-| **trace** | （扩展） | 低 | 可选 | — | 导出开关 | P2 | 服务 GMT/录制 |
-| **per** | `ara::per` | 低 | runtime_modules | — | 存储路径/配额（后置） | P1 骨架 → P3 | |
-| **tsync** | `ara::tsync` | 低 | runtime_modules | — | 主从角色（后置） | P1 骨架 → P3 | |
-| **nm** | `ara::nm` | 中 | runtime_modules | — | 网络通道 | P3 | |
-| **crypto / iam / idsm / fw** | 安全簇 | 高 | runtime_modules | — | 策略表 | P3+ | 不进 P2 |
-| **hal** | （扩展） | 中 | 板级 profile | — | 板级 yaml | P3 | 非 ARA FC |
-| **DEM** | Classic | — | — | — | — | **不做** | 明确排除 |
+| **core** | `ara::core` | 无 | 常开 | — | — | ✅ P0 | |
+| **com** | `ara::com` | **高** | bindings | **wiring** | QoS 可选后置 | ✅ P0+ | **唯一信号图** |
+| **osal** | （平台） | 低 | CMake | — | — | ✅ P0 | 不进 gf-config |
+| **log** | `ara::log` | 低 | runtime_modules | — | 级别/通道 | P0–P3 lite | §3.5 |
+| **exec** | `ara::exec` | 中 | runtime_modules | — | 进程↔FG | ✅ P2 清单 | §3.2 |
+| **sm** | `ara::sm` | 中低 | runtime_modules | — | FG/转移 | P2 名单 → **P3 状态机** | §3.3 |
+| **phm** | `ara::phm` | 中 | runtime_modules | — | entity 表 | ✅ P2 → P3 Logical | §3.4 |
+| **diag** | `ara::diag` | 中 | runtime_modules | — | DoIP + DID | stub → **P3 会话** | §3.6 |
+| **ucm** | `ara::ucm` | 中 | runtime_modules | — | 包源/回滚 | Spike → **P3+GMT OTA** | §3.7 |
+| **Event Collector** | （AP 侧） | 中 | 常随 phm/diag | — | 源/转发/存储 | **P3 最小集** | §3.9；**非 Classic DEM** |
+| **trace** | （扩展） | 低 | 可选 | — | 导出 | P2+ | |
+| **per** / **tsync** | `ara::*` | 低 | runtime_modules | — | 路径/角色 | **P3 骨架** | |
+| **nm** / 安全簇 | | 高 | runtime_modules | — | 策略 | P3+ | |
+| **hal** | （扩展） | 中 | 板级 | — | 板级 yaml | P3z | |
+| **Classic DEM 全栈** | Classic | — | — | — | — | **不做** | 编辑器/全量 FDC 等 |
 
 ---
 
 ## 3. 分模块：完整 AP 要什么 vs 我们配什么
 
-### 3.1 `gf_ara::com`（配置最重 · 已有主路径）
+### 3.1 `gf_ara::com`
 
 | 完整 AP | Giraffe / gf-config |
 |---------|---------------------|
-| Service Interface、Someip/DDS 部署、实例、E2E… | **wiring**：deployments provides/requires + dataflows；bindings 勾选栈；Generate → Proxy/Skeleton |
-| | SOME/IP 数字 ID / `.fdepl` → 随 vsomeip 轨后置，**不是** req.bindings 本身 |
+| Service Interface、部署、实例、E2E… | **wiring** deployments + dataflows；bindings；Generate → Proxy/Skeleton |
 
-**gf-config：** 信号链接页（必做）+ SKU 页 bindings（薄）。  
-**不做：** 在 A 页重复编辑每一条 dataflow。
+**gf-config：** 页 1 画布 + 薄 bindings。  
+**不做：** 在 SKU 区重复编辑每一条 dataflow。
 
----
-
-### 3.2 `gf_ara::exec`（`ara::exec`）
+### 3.2 `gf_ara::exec`
 
 | 完整 AP | 我们的 ③（`platform/exec.yaml`） |
 |---------|----------------------------------|
-| Execution Manifest：进程、FG、启动配置、资源组、依赖 | **最小集：** `name`、`function_group`、`depends_on[]`、`execution_client` |
-| Machine State / 多机 | **不做（P2）**；P3 再议 |
+| Execution Manifest | **最小集：** `name`、`function_group`、`depends_on[]`、`execution_client` |
+| Machine State / 多机 | P3 再议 |
 
-**① 开关：** `runtime_modules` 含 `exec`（或平台默认常开）。  
-**② 拓扑：** 无（进程列表来自 wiring.deployments，exec 只引用）。  
-**gf-config：**  
-- 现：**不强制 GUI**；YAML。  
-- 后：平台页「进程运行」——下拉 FG、勾选上报；进程名只读自 wiring。
+进程名只读自 wiring（非 `external.*`）。**gf-config：** 页 2「执行 / 功能组」。
 
-**校验：** `name` ∈ wiring 且非 `external.*`（或 external 显式排除）。
+### 3.3 `gf_ara::sm`
 
----
+| 完整 AP | 规划 |
+|---------|------|
+| FG 状态机、与 exec 协同 | **P2：** `exec.yaml` → `function_groups[]`；**P3：** 状态机加深（可仍同文件或拆 `sm.yaml`，实现时冻结） |
+| 复杂降级图 | P3+ |
 
-### 3.3 `gf_ara::sm`（`ara::sm`）
+**gf-config：** 页 2；P3 起可编辑转移/初始，不做完整「第二个 Stateflow」。
 
-| 完整 AP | 我们的规划 |
-|---------|------------|
-| 功能组状态机、请求/拒绝、与 exec 协同 | **P2：** 极简 — 默认 FG 列表 + 「启动进入 Running」；或与 exec 同文件 `function_groups[]` |
-| 复杂降级图 | **P3** |
-
-**① 开关：** `runtime_modules: sm`（可与 exec 同开）。  
-**② 拓扑：** 无。  
-**③（已冻结）：** **并入 `platform/exec.yaml` → `function_groups[]`**；**不建** `sm.yaml`。复杂降级图 → P3。
-
-**gf-config：** 平台页「执行 / 功能组」——FG 名单 + 初始状态 + 进程隶属；不做完整状态机编辑器。
-
----
-
-### 3.4 `gf_ara::phm`（`ara::phm`）
+### 3.4 `gf_ara::phm`
 
 | 完整 AP | 我们的 ③（`platform/phm.yaml`） |
 |---------|--------------------------------|
-| Alive / Deadline / Logical supervision | **Alive + 可选 Deadline**；`on_failure: log\|notify_sm\|terminate`（P2 先实现 log） |
-| 跨 ECU PHM | **不做（P2）** |
+| Alive / Deadline / Logical | **P2：** Alive + 可选 Deadline；**P3：** Logical + `notify_sm` / Collector |
+| 跨 ECU PHM | 有 CP 时经 Collector 转发，不做第二套跨域 PHM |
 
-**① 开关：** `runtime_modules: phm`。  
-**gf-config（P2）：** 平台页表格：entity ↔ process、周期、超时。
+**gf-config：** 页 2 表格。
 
----
+### 3.5 `gf_ara::log`
 
-### 3.5 `gf_ara::log`（`ara::log`）
+载体：`platform/log.yaml`（`default_level`、`contexts[]`）。  
+观测粗开关（live_tap/record）留在 **页 1 薄 SKU**，与 log 级别分工。
 
-| 完整 AP | 我们的配置 |
-|---------|------------|
-| DLT 应用/上下文、远程、过滤 | **①** 模块开关；**③** 默认级别（app/ctx）、是否落盘（可选） |
-| | **不做** 完整 DLT 网络配置器（P2） |
-
-**载体（已冻结）：** 建 **`platform/log.yaml`**（`default_level`、`contexts[]`）；后期再扩。  
-SKU 页可保留极简 `observability.record` / `trace_export`（录制/导出粗开关，与 log 级别分工）。
-
-**gf-config（P2）：** 平台页「日志」编辑 `log.yaml`。
-
----
-
-### 3.6 `gf_ara::diag`（`ara::diag`）— 不是 DEM
+### 3.6 `gf_ara::diag` — DoIP / UDS 子集（不是 Classic DEM）
 
 | 完整 AP | 我们的 ③（`platform/diag.yaml`） |
 |---------|--------------------------------|
-| DM、UDS、DoIP、DID/RID、安全访问… | **DoIP enable + logical_address**；**DID 最小表**；RID 可选 |
-| Classic **DEM** | **明确不做** |
+| DM、UDS、DoIP、DID/RID… | DoIP enable + logical_address；DID/RID 最小表 |
+| Classic DEM 全栈 | **不做**；事件见 §3.9 |
 
-**① 开关：** `runtime_modules: diag`。  
-**gf-config（P2）：** 平台页「诊断」——DoIP 开关 + DID 表；不提供 DTC/防抖编辑器。
+**P3：** 会话级 DoIP（可与 GMT OTA sheet 配合）。  
+**gf-config：** 页 2「诊断」——不提供完整 DTC 防抖策略编辑器。
+
+### 3.7 `gf_ara::ucm`
+
+| 阶段 | 内容 |
+|------|------|
+| P2 | `ucm.yaml` 空壳 + Spike 选型 |
+| P3 | 编排 +（后端 stub→RAUC）；**操作面在 GMT OTA sheet（DoIP 下板）** |
+
+**gf-config：** 页 2 策略字段；**不**在 gf-config 里做刷写进度 UI。
+
+### 3.8 其余（P3 骨架 / P3+）
+
+per、tsync、nm、crypto/iam/idsm/fw、hal — 见模块总表；板级 hal 跟 P3z。
+
+### 3.9 Event Collector（P3 最小集 · 替代「不做 DEM」）
+
+| 场景 | AP（Giraffe）职责 | 谁做状态/防抖/老化 |
+|------|-------------------|-------------------|
+| **有 MCU AUTOSAR CP** | 汇聚 PHM/应用/通信错误 → 规范化事件 → **转交 CP DEM**（跨域 IPC / gateway） | CP DEM |
+| **无 CP / 纯 DoIP** | 同上收集 + **持久化/查询**；经 DoIP/UDS 子集向 tester 报告 | AP **DEM-lite**（事件库，挂在 diag/Collector 子系统） |
+
+**无论有无 CP，都必须有收集机制。** DoIP 换的是总线，不是「可以没有事件管理」。
+
+**配置（③，建议 `platform/collector.yaml` 或并入 `diag.yaml`，实现时冻结一种）：**
+
+- 源：phm entity / 进程 / 通信错误码  
+- 转发：`forward: cp_dem | local_store | both`  
+- 本地：是否落盘、最大条数（DEM-lite）  
+- 映射：内部 event_id → DTC（可选，最小表）
+
+**gf-config：** 页 2「事件收集」子页。  
+**不做：** Classic DEM 全编辑器、完整 FDC 状态机 GUI。
 
 ---
 
-### 3.7 `gf_ara::ucm`（`ara::ucm`）
+## 4. gf-config 目标形态（P3：两页）
 
-| 完整 AP | 我们的规划 |
-|---------|------------|
-| 包传输、激活、回滚、V-UCM | **P2：** `platform/ucm.yaml` **空壳** + Spike 选型；stub 可链 |
-| 真台架 A/B | **P3** |
-
-**① 开关：** `runtime_modules: ucm`。  
-**gf-config（P2）：** 平台页「OTA」只读/极少字段（enabled、allow_rollback）；真策略 P3。
-
----
-
-### 3.8 其余模块（规划占位，不进 P2 主验收）
-
-| 模块 | ① | ③（将来） | 阶段 |
-|------|---|-----------|------|
-| **per** | runtime_modules | 路径/配额 | P3 |
-| **tsync** | runtime_modules | 角色/域 | P3 |
-| **nm** | runtime_modules | 通道 | P3 |
-| **crypto/iam/idsm/fw** | runtime_modules | 策略 | P3+ |
-| **trace** | 可选 | 导出目标 | P2 服务 O/F 轨 |
-| **hal** | 板级 profile | 板级 yaml | P3 |
-| **core / osal** | 常开 / CMake | — | 已有 |
-
----
-
-## 4. gf-config 最终样子（已冻结：P2 做齐三页）
-
-> **平台页放在 P2，不进 P3** — 配置入口不定，后面 SIL/codegen 都难对齐。
+> **P2 曾交付三页（A/B/C）。** 下表为 **P3 两页（已实现）**；文件契约不变。
 
 ### 4.1 窗口骨架
 
@@ -194,127 +172,91 @@ SKU 页可保留极简 `observability.record` / `trace_export`（录制/导出�
 ┌─ gf-config ──────────────────────────────────────────────┐
 │ 文件  视图                                                │
 │ 打开 · 保存(Ctrl+S) · Verify(Ctrl+R) · Generate(Ctrl+G)   │
-│ 导入 hpp/fidl · 退出                                      │
 ├──────────────────────────────────────────────────────────┤
-│ [ A · SKU ]  [ B · 信号链接 ]  [ C · 平台 ]               │
+│ [ 1 · 信号与应用 ]  [ 2 · 平台运行时 ]                      │
 ├──────────────────────────────────────────────────────────┤
-│                                                          │
 │                   （当前页内容）                            │
-│                                                          │
 ├──────────────────────────────────────────────────────────┤
-│ 状态栏：路径 · ✓已保存 / 未保存 · Verify 结果摘要            │
+│ 状态栏：路径 · 已保存/未保存 · Verify 摘要                   │
 └──────────────────────────────────────────────────────────┘
 ```
 
-无独立工具栏按钮堆叠；常用动作在 **文件/视图** 菜单 + 快捷键（与现网一致）。
+**默认打开页 1。**
 
-### 4.2 A · SKU（薄 · ① 开关）
-
-| 区块 | 内容 |
-|------|------|
-| **运行剖面** | 顶层 **`profile: vehicle-debug \| production-release`** |
-| 标识 | variant / topology / product |
-| 能力 | capabilities（自由标签） |
-| 中间件开关 | **runtime_modules** |
-| 通信栈 | **bindings** |
-| **观测** | 见下表（白名单；非全量信号） |
-| 验收 | lineage_required + required_services |
-
-**观测（`observability`）**
-
-| 字段 | 含义 |
-|------|------|
-| `live_tap.enabled` + `live_tap.services[]` | iceoryx 旁路 → Foxglove；**仅白名单** semantic 服务 |
-| `record.mode` + `record.services[]` | 事后 JSONL/MCAP；**必须白名单**（空名单 = Verify 失败 / 不录） |
-
-`production-release`：**强制**关 live_tap、不编 `tools/iox_obs_tap`；record 视为 off。候选服务 = wiring provides∪requires（不直接勾 DBC 逐信号）。
-
-**tap 加入时机：** A 页 `live_tap` 有效（debug + 开 + 非空白名单）时，Verify / `compile_sil` 的 compose 自动把 `tools/iox_obs_tap` 写入 `GF_APPS`；**勿**手写进 `apps`。`run_sil` 读 `generated/observability.json` 决定是否起 Foxglove。
-
-**SKU 脚本政策：** 每个 project 仅四入口 `compile_sil` / `compile_hil` / `run_sil` / `run_hil`（SIL≈HIL，仅工具链）。模块验证 smoke → `scripts/verify/`。
-
-**不出现：** DID 表、Alive 周期、FG 详情、连线、apps 长列表（apps → 高级折叠）。
-
-### 4.3 B · 信号链接（主战场 · ② com）
+### 4.2 页 1 · 信号与应用（主战场 · ② + 薄 ①）
 
 | 区域 | 内容 |
 |------|------|
-| 中央画布 | 进程卡；**颜色=方向**（Out 绿 / In 橙，与是否已连无关）；未连用描边/角标次要提示 |
-| 端口方位 | **单端口**可改边（如只移 EgoMotion）；`canvas.nodes.<proc>.port_sides`；默认 Out 右 / In 左 |
-| 右侧「连线」 | dataflow 列表、搜索 |
-| 右侧「Lineage」 | Verify 报告 |
+| 中央画布 | 进程卡；Out→In；MCU external；右侧连线 / Lineage |
+| **端口拖拽** | **裸拖 Out/In = 连线**（任一侧发起）；**Ctrl+拖拽 = 移动端口到另一边**。禁止再用「裸拖移动」盖住连线 |
+| 顶栏或侧栏（薄 SKU） | `profile`、variant/topology/product、**bindings**、观测天花板（debug 推荐 `wiring_all`）、acceptance |
+| **不出现** | DID/Alive/FG 大表、`runtime_modules` 长勾选（→ 页 2） |
 
-连线规则仍为 **Out → In**。MCU external 金框本轮不挂普通信号点。
+编辑：`wiring.yaml` + `req.yaml` 薄字段。
 
-**不出现：** exec/phm/diag 表单（去 C 页）。
+**观测（与 GMT）：** 合同定天花板（debug 推荐 `live_tap.mode: wiring_all`；production 关）；**codegen** 写 `generated/src/obs_tap_main.cpp`；GMT 做会话焦点过滤。内部量走 debug 轨且 `replayable: false`。
 
-### 4.4 C · 平台（③ 清单 · P2 必做）
+### 4.3 页 2 · 平台运行时（①′ + ③）
 
-左侧子导航（或顶部分段），右侧表单；**进程下拉只读自 B 页 wiring**（external.* 默认不进 exec/phm）。
+| 区域 | 内容 |
+|------|------|
+| 顶部 | **`runtime_modules`** 勾选（过滤下方子页） |
+| 子导航 | 执行/FG · PHM · 诊断 · 日志 · OTA(ucm) · **事件收集** ·（预留 per/tsync） |
+| 进程下拉 | 只读自页 1 wiring（`external.*` 默认不进 exec/phm） |
 
-| 子页 | 编辑文件 | UI |
-|------|----------|-----|
-| 执行 / 功能组 | `platform/exec.yaml` | FG 列表；进程表（name/FG/depends/execution_client） |
-| 健康 PHM | `platform/phm.yaml` | entity 表 |
-| 诊断 diag | `platform/diag.yaml` | DoIP 开关+地址；DID/RID 表（可空） |
-| 日志 | `platform/log.yaml` | default_level；contexts 表 |
-| OTA ucm | `platform/ucm.yaml` | 空壳字段（enabled/source/rollback）；注明 stub |
+编辑：`req.runtime_modules` + `platform/*`。
 
-保存：与 A/B 一样 **Ctrl+S** 写盘；**Verify** 校验 process 引用 + 合并进 SOR。
-
-### 4.5 用户一天路径
+### 4.4 用户一天路径（P3）
 
 ```text
 打开 project.yaml
-  → A：勾本车要哪些模块/栈
-  → B：画 gateway→fcm/uss→planning（+ MCU）
-  → C：补 FG / Alive / DoIP（log 默认即可；ucm 先空壳）
-  → Ctrl+S → Ctrl+R（Verify）→ 看 B 右侧 Lineage
-  → 需要代码时 Ctrl+G（Generate）
+  → 【1】画 gateway → sensing/perception → planning.*（行泊）
+  → 【1】必要时改 bindings / live_tap
+  → 【2】勾 runtime_modules → 填 FG / Alive / DoIP / Collector
+  → Ctrl+S → Ctrl+R → 看页 1 右侧 Lineage
+  → Ctrl+G（需要时）
 ```
 
-### 4.6 P2 落地顺序（配置轨）
+### 4.5 与 P2 三页的映射
 
-1. ✅ 字段冻结 + `platform/*.yaml` 空壳（`afc_with_uss` 已落）。  
-2. compose 读 `project.platform` → 校验 → `platform_manifest`。  
-3. **gf-config C 页** 编辑五文件（与 A 瘦身可并行）。  
-4. SIL / X 消费 exec+phm。
-
----
-
-## 5. A · SKU 页瘦身对照（与现状）
-
-| 现状字段 | 规划 |
-|----------|------|
-| variant / topology / product | **保留** |
-| capabilities | **保留**（产品标签） |
-| runtime_modules | **保留**（① 开关；勾选 = 编进镜像） |
-| bindings | **保留**（通信栈开关；≠ fdepl） |
-| 观测 | **`profile` + live_tap/record 白名单**（与剖面同组）；capabilities **折叠进高级**（不驱动裁剪） |
-| apps | **迁出 GUI**（CMake profile / 手改 yaml）或折叠「高级」 |
-| acceptance | **保留** lineage 门禁；required_services 可逐步「从 wiring 推导」 |
-| （未来）逐模块详细表单 | **禁止进 A** → 进 C / YAML |
+| P2 | P3 |
+|----|-----|
+| A · SKU（含 runtime_modules） | 薄字段 → 页 1；**runtime_modules → 页 2** |
+| B · 信号链接 | **页 1**（默认） |
+| C · 平台 | **页 2**（加深 + Collector） |
 
 ---
 
-## 6. 资产目录约定（项目内）
+## 5. 薄 SKU 字段对照（原 A 页）
+
+| 字段 | 规划 |
+|------|------|
+| variant / topology / product / profile | **页 1** 保留 |
+| capabilities | 高级折叠 |
+| **runtime_modules** | **页 2** |
+| bindings | **页 1** |
+| observability（live_tap/record） | **页 1** |
+| apps | 高级 / 由 wiring 推导为主 |
+| acceptance | **页 1** 保留 |
+
+---
+
+## 6. 资产目录约定
 
 ```text
 projects/<oem>/<sku>/
-  project.yaml                  # 索引：wiring / req / platform/*
-  req.yaml                      # ① SKU
-  integration/wiring.yaml       # ② com 拓扑
+  project.yaml
+  req.yaml                      # ① 薄 SKU + runtime_modules
+  integration/wiring.yaml       # ②
   platform/
-    exec.yaml                   # exec + SM 极简 function_groups（无单独 sm.yaml）
+    exec.yaml                   # + function_groups（SM 极简/加深）
     phm.yaml
-    diag.yaml                   # ara::diag；无 dem.yaml
-    log.yaml                    # 已建；后期再扩字段
-    ucm.yaml                    # P2 空壳
-  generated/                    # compose/generate 产出（勿手改）
+    diag.yaml
+    log.yaml
+    ucm.yaml
+    collector.yaml              # P3：或并入 diag.yaml（二选一冻结）
+  generated/
 ```
-
-**SOR：** compose 合并为 `platform_manifest`；校验 process 引用。  
-**手写 yaml 合计（afc_with_uss）：** project + req + wiring + 3×oem + **5×platform** = **11**（另 + lineage 生成报告）。
 
 ---
 
@@ -322,84 +264,57 @@ projects/<oem>/<sku>/
 
 | 阶段 | 中间件配置相关交付 |
 |------|-------------------|
-| **P2** | platform 五文件；compose 校验；**gf-config A/B/C 三页**；SIL 消费 exec/phm；ucm 空壳+Spike；sm∈exec；**无 DEM** |
-| **P3** | sm 状态机加深；ucm 真后端；per/tsync/nm；板级；diag 台架 |
-| **不做** | DEM；GMT 写配置；A 页变成完整 AP 配置器 |
-
-P2 细则仍以 [P2_PLAN.md](P2_PLAN.md) 的 R/P/X/O/B… 子轨为准；**本文是「配什么」的主规格**，P2_PLAN 的 P 轨实现应对齐 §3 / §6。
-
----
-
-## 8. 字段冻结清单（P2 实现用）
-
-### 8.1 `platform/exec.yaml`
-
-```yaml
-schema_version: "0.1"
-function_groups:          # SM 极简：仅名单 + 默认初始
-  - id: MachineFG
-    initial: Running
-processes:
-  - name: adapter.vehicle_can_gateway   # ∈ wiring，非 external
-    function_group: MachineFG
-    depends_on: []
-    execution_client: true
-```
-
-### 8.2 `platform/phm.yaml`
-
-```yaml
-schema_version: "0.1"
-entities:
-  - id: planning_alive
-    process: planning.driving
-    alive_period_ms: 100
-    alive_timeout_ms: 300
-    deadline_ms: null
-    on_failure: log
-```
-
-### 8.3 `platform/diag.yaml`
-
-```yaml
-schema_version: "0.1"
-doip:
-  enabled: true
-  logical_address: 0x0E00
-dids: []    # { id, name, access, size, map_service?, map_field? }
-rids: []
-```
-
-### 8.4 `platform/log.yaml`
-
-```yaml
-schema_version: "0.1"
-default_level: INFO
-contexts: []   # { id, level }
-```
-
-### 8.5 `platform/ucm.yaml`（空壳）
-
-```yaml
-schema_version: "0.1"
-enabled: false
-package_source: ""
-allow_rollback: true
-```
+| **P2（已交付）** | platform 五文件；compose 校验；**A/B/C 三页**；SIL 消费 exec/phm；**无 Collector** |
+| **P3（当前）** | **两页 UI（已落地）**；Collector 最小编辑；sm/phm 加深；DoIP/OTA·GMT；per/tsync 骨架；cert-ready 文档 |
+| **P3z** | 板级 / 真 CP 台架 |
+| **不做** | Classic DEM 全栈；**GMT 写配置**；页 1 变成完整 Vector 式 AP 配置器 |
 
 ---
 
-## 9. 已拍板（2026-07-20）
+## 8. 字段冻结清单（P2 已用；Collector 为 P3 草案）
 
-- [x] sm：**并入 `exec.yaml`**（`function_groups`）；不建 `sm.yaml`
-- [x] log：**建 `platform/log.yaml`**，后期再扩
-- [x] gf-config「平台」页：**P2 做**（与 A/B 一起定型）
-- [x] ucm：**P2 空壳 `ucm.yaml`**
+### 8.1–8.5
+
+`exec` / `phm` / `diag` / `log` / `ucm` 字段与 P2 相同（略）。见仓库内现网 `projects/**/platform/*.yaml`。
+
+### 8.6 `platform/collector.yaml`（P3 草案 · 实现前可微调）
+
+```yaml
+schema_version: "0.1"
+forward: cp_dem          # cp_dem | local_store | both
+local_store:
+  enabled: false
+  max_events: 256
+sources:
+  - kind: phm            # phm | process | com
+    ref: planning_alive
+map_dtc: []              # { event_id, dtc, severity? }
+```
+
+无 CP 的 SKU：`forward: local_store`（或 `both`），由 diag/DoIP 读出。
+
+---
+
+## 9. 决策记录
+
+### 9.1 已拍板（2026-07-20 · P2）
+
+- [x] sm 极简并入 `exec.yaml`；log 建 `log.yaml`；C 页 P2 做；ucm 空壳
+
+### 9.2 已拍板（2026-07-30 · P3 重规划）
+
+- [x] gf-config **三页 → 两页**；默认 **信号与应用**；`runtime_modules` 进平台页  
+- [x] 废止「不做 DEM」→ **Event Collector 最小集**（CP 转发 / DoIP DEM-lite）  
+- [x] 安全口径：**经得起认证的支持**，不代认证  
+- [x] GMT：**可有 OTA sheet（DoIP）**；仍 **不写** 配置资产  
+- [x] 真板 / 真 MCU：**P3z 冲刺门禁**，非主航道  
+- [x] 画布：**裸拖 Out/In=连线；Ctrl+拖拽=移端口边**（修正移动盖连线）  
+- [x] 观测：粗合同 + codegen tap + GMT 焦点；布局权威见根目录 [STRUCTURE.md](../../../STRUCTURE.md)
 
 ---
 
 ## 10. 一句话备忘
 
-- **com** → 画线（gf-config **B**）。  
-- **exec(+sm) / phm / diag / log / ucm** → 要不要（**A**）+ 小表（**C** ↔ `platform/*`）。  
-- **diag = `ara::diag`**；**DEM 不做**；**GMT 不写配置**。
+- **com** → 页 1 画线。  
+- **exec(+sm) / phm / diag / log / ucm / Collector** → 页 2（要不要 + 小表）。  
+- **收集错误必做**；完整 Classic DEM **不做**；**GMT 不写配置**。

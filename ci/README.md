@@ -8,4 +8,4 @@
 bash ci/scripts/smoke.sh
 ```
 
-P0 收口验收入口。Board jobs must not pull host-only UI/ROS deps — see [deps/README.md](../deps/README.md).
+P0 收口验收入口。Board jobs must not pull host-only UI/ROS deps — see [dep-manifest/README.md](../dep-manifest/README.md).

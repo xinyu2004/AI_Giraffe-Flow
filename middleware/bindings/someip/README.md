@@ -13,4 +13,4 @@
 bash scripts/smoke_bd_stub.sh
 ```
 
-Parent: [bindings/README.md](../README.md) · Deps: [deps/DEPENDENCIES.yaml](../../../deps/DEPENDENCIES.yaml)
+Parent: [bindings/README.md](../README.md) · Deps: [dep-manifest/DEPENDENCIES.yaml](../../../dep-manifest/DEPENDENCIES.yaml)

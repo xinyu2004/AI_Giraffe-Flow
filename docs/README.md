@@ -12,4 +12,4 @@ docs/
   zh/   architecture/  operations/  dependencies/
 ```
 
-Also: [../STRUCTURE.md](../STRUCTURE.md) · [../deps/README.md](../deps/README.md)
+Also: [../STRUCTURE.md](../STRUCTURE.md) · [../dep-manifest/README.md](../dep-manifest/README.md)

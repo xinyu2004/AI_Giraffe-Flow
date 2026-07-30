@@ -2,7 +2,7 @@
 
 > 对应计划：[P2_PLAN.md](P2_PLAN.md) · 路线图：[ROADMAP.md](ROADMAP.md) · 配置规格：[MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)  
 > 用法：按 **R0 → G** 顺序逐项过；每项勾选「通过 / 需改 / 延后」，备注写修改意图。  
-> 前置：仓库根 · `source .venv/bin/activate` · `pip install -e tools/codegen[dev] -e tools/gmt[dev] -e tools/config[dev]`（按需）
+> 前置：仓库根 · `source .venv/bin/activate` · `pip install -e tools/gf-codegen[dev] -e tools/gmt[dev] -e tools/gf-config[dev]`（按需）
 
 **整体判定（review 结束后填）：**
 
@@ -33,7 +33,7 @@
 | Cfg.3 | C · 平台 | 子页编辑 exec/phm/diag/log/ucm；进程候选来自 wiring（无 external） | □ | □ | □ | |
 | Cfg.4 | Save / Verify | Ctrl+S 落盘 A+B+C；Verify 前 flush；错 process 红 | □ | □ | □ | |
 
-**代码：** `tools/config/src/gf_config/gui/{main_window,req_editor,platform_editor}.py`
+**代码：** `tools/gf-config/src/gf_config/gui/{main_window,req_editor,platform_editor}.py`
 
 ---
 
@@ -42,13 +42,13 @@
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
 | P.1 | 读 platform | `project.yaml` → `platform:` 五路径 | □ | □ | □ | |
-| P.2 | 坏 process 失败 | `pytest tools/codegen/tests/test_merge_platform.py -q` | □ | □ | □ | |
+| P.2 | 坏 process 失败 | `pytest tools/gf-codegen/tests/test_merge_platform.py -q` | □ | □ | □ | |
 | P.3 | SOR 含 manifest | compose 后 `platform_manifest` 含 exec/phm/diag/log；**无 dem** | □ | □ | □ | |
-| P.4 | bench golden | `pytest tools/codegen/tests/test_afc_bench_golden.py -q` | □ | □ | □ | |
+| P.4 | bench golden | `pytest tools/gf-codegen/tests/test_afc_bench_golden.py -q` | □ | □ | □ | |
 
 ```bash
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-pytest tools/codegen/tests/test_merge_platform.py tools/codegen/tests/test_afc_bench_golden.py -q
+pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test_afc_bench_golden.py -q
 ```
 
 ---
@@ -89,7 +89,7 @@ pytest tools/codegen/tests/test_merge_platform.py tools/codegen/tests/test_afc_b
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| B.1 | 依赖钉扎 | `deps/versions.lock.md` → cyclonedds **0.10.5**；`bootstrap_deps.sh` 可拉 | □ | □ | □ | |
+| B.1 | 依赖钉扎 | `dep-manifest/versions.lock.md` → cyclonedds **0.10.5**；`bootstrap_deps.sh` 可拉 | □ | □ | □ | |
 | B.2 | 真收发 | `bash scripts/smoke_bd_cyclone.sh` → backend=cyclonedds，≥1 event | □ | □ | □ | |
 | B.3 | 边界文档 | [CYCLONEDDS_BYPASS.md](CYCLONEDDS_BYPASS.md)：主链 iceoryx；vsomeip stub | □ | □ | □ | |
 | B.4 | stub 回归 | `bash scripts/smoke_bd_stub.sh` | □ | □ | □ | |
@@ -126,10 +126,10 @@ pytest tools/codegen/tests/test_merge_platform.py tools/codegen/tests/test_afc_b
 
 ```bash
 source .venv/bin/activate
-pip install -e "tools/codegen[dev]" -e "tools/gmt[dev]"
+pip install -e "tools/gf-codegen[dev]" -e "tools/gmt[dev]"
 
-pytest tools/codegen/tests/test_merge_platform.py \
-       tools/codegen/tests/test_afc_bench_golden.py -q
+pytest tools/gf-codegen/tests/test_merge_platform.py \
+       tools/gf-codegen/tests/test_afc_bench_golden.py -q
 
 bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
 GF_SKIP_COMPILE=1 bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh

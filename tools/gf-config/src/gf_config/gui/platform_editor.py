@@ -1,4 +1,4 @@
-"""C · 平台 — edit platform/{exec,phm,diag,log,ucm}.yaml."""
+"""页 2 · 平台运行时 — runtime_modules + platform/{exec,phm,diag,log,ucm,collector}.yaml."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -27,6 +28,8 @@ from PySide6.QtWidgets import (
 
 from gf_config.core import ProjectSession
 
+KNOWN_MODULES = ["core", "com", "log", "osal", "exec", "phm", "sm", "ucm", "diag", "trace"]
+
 # (platform yaml key, nav title, runtime_modules that unlock this page)
 _NAV = [
     ("exec", "执行 / 功能组", frozenset({"exec", "sm"})),
@@ -34,9 +37,13 @@ _NAV = [
     ("diag", "诊断 diag", frozenset({"diag"})),
     ("log", "日志", frozenset({"log"})),
     ("ucm", "OTA ucm", frozenset({"ucm"})),
+    # Collector 最小集：有 diag 或 phm 即可配（不要求单独 runtime 模块名）
+    ("collector", "事件收集", frozenset({"diag", "phm"})),
 ]
 
 _LOG_LEVELS = ["FATAL", "ERROR", "WARN", "INFO", "DEBUG", "VERBOSE"]
+_FORWARD_MODES = ["local_store", "cp_dem", "both"]
+_COLLECTOR_SOURCES = ["phm", "process", "com"]
 
 
 def _int_or_none(text: str) -> int | None:
@@ -63,17 +70,43 @@ class PlatformEditor(QWidget):
         self._session: ProjectSession | None = None
         self._loading = False
         self._modules: set[str] = set()
+        self._module_boxes: dict[str, QCheckBox] = {}
         self._pages: dict[str, QWidget] = {}
+        self._src_boxes: dict[str, QCheckBox] = {}
 
-        root = QHBoxLayout(self)
+        root = QVBoxLayout(self)
+
+        mods = QGroupBox("runtime_modules（编进镜像 · 勾选后下方出现对应清单）")
+        mods_l = QVBoxLayout(mods)
+        mod_row = QHBoxLayout()
+        for i, name in enumerate(KNOWN_MODULES):
+            cb = QCheckBox(name)
+            cb.toggled.connect(self._on_modules_toggled)
+            self._module_boxes[name] = cb
+            mod_row.addWidget(cb)
+            if (i + 1) % 5 == 0:
+                mods_l.addLayout(mod_row)
+                mod_row = QHBoxLayout()
+        if mod_row.count():
+            mods_l.addLayout(mod_row)
+        mods_note = QLabel(
+            "映射：exec/sm→执行 · phm→健康 · diag→诊断 · log→日志 · ucm→OTA · "
+            "diag/phm→事件收集"
+        )
+        mods_note.setWordWrap(True)
+        mods_note.setStyleSheet("color:#666; font-size:11px;")
+        mods_l.addWidget(mods_note)
+        root.addWidget(mods)
+
+        body = QHBoxLayout()
         self._nav = QListWidget()
         self._nav.setFixedWidth(160)
-        root.addWidget(self._nav)
+        body.addWidget(self._nav)
 
         right = QVBoxLayout()
         self._empty = QLabel(
-            "当前 A · SKU 未勾选任何平台模块（exec / phm / diag / log / ucm / sm）。\n"
-            "请到 A 页勾选 runtime_modules 后，对应清单才会出现在左侧。"
+            "尚未勾选平台相关 runtime_modules（exec / phm / diag / log / ucm / sm）。\n"
+            "勾选后，对应清单会出现在左侧。"
         )
         self._empty.setWordWrap(True)
         self._empty.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -82,13 +115,15 @@ class PlatformEditor(QWidget):
 
         self._stack = QStackedWidget()
         right.addWidget(self._stack, stretch=1)
-        root.addLayout(right, stretch=1)
+        body.addLayout(right, stretch=1)
+        root.addLayout(body, stretch=1)
 
         self._pages["exec"] = self._build_exec_page()
         self._pages["phm"] = self._build_phm_page()
         self._pages["diag"] = self._build_diag_page()
         self._pages["log"] = self._build_log_page()
         self._pages["ucm"] = self._build_ucm_page()
+        self._pages["collector"] = self._build_collector_page()
         for key, _title, _mods in _NAV:
             self._stack.addWidget(self._pages[key])
 
@@ -245,7 +280,7 @@ class PlatformEditor(QWidget):
     def _build_log_page(self) -> QWidget:
         w = QWidget()
         lay = QVBoxLayout(w)
-        hint = QLabel("log.yaml：默认级别与 contexts（细配置在此；A 页仅粗开关）。")
+        hint = QLabel("log.yaml：默认级别与 contexts（细配置在此；页 1 仅粗开关）。")
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#666;")
         lay.addWidget(hint)
@@ -301,6 +336,49 @@ class PlatformEditor(QWidget):
         lay.addStretch(1)
         return w
 
+    def _build_collector_page(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        hint = QLabel(
+            "collector.yaml：Event Collector 最小集。"
+            "有 MCU CP → forward=cp_dem；否则 local_store（DEM-lite）。"
+            "不做 Classic DEM 全编辑器。"
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#666;")
+        lay.addWidget(hint)
+
+        form = QFormLayout()
+        self._col_forward = QComboBox()
+        self._col_forward.addItems(_FORWARD_MODES)
+        self._col_forward.currentTextChanged.connect(self._on_collector_changed)
+        form.addRow("forward", self._col_forward)
+        lay.addLayout(form)
+
+        src_box = QGroupBox("sources")
+        src_l = QHBoxLayout(src_box)
+        for name in _COLLECTOR_SOURCES:
+            cb = QCheckBox(name)
+            cb.toggled.connect(self._on_collector_changed)
+            self._src_boxes[name] = cb
+            src_l.addWidget(cb)
+        src_l.addStretch(1)
+        lay.addWidget(src_box)
+
+        local = QGroupBox("local（DEM-lite 落盘）")
+        local_f = QFormLayout(local)
+        self._col_local_en = QCheckBox("enabled")
+        self._col_local_en.toggled.connect(self._on_collector_changed)
+        self._col_max = QSpinBox()
+        self._col_max.setRange(1, 100000)
+        self._col_max.setValue(256)
+        self._col_max.valueChanged.connect(self._on_collector_changed)
+        local_f.addRow("", self._col_local_en)
+        local_f.addRow("max_entries", self._col_max)
+        lay.addWidget(local)
+        lay.addStretch(1)
+        return w
+
     # ── session ───────────────────────────────────────────
 
     def set_session(self, session: ProjectSession | None) -> None:
@@ -308,18 +386,40 @@ class PlatformEditor(QWidget):
         if session is None:
             return
         self._loading = True
+        selected = set(str(x) for x in (session.req.get("runtime_modules") or []))
+        for name, cb in self._module_boxes.items():
+            cb.setChecked(name in selected)
+        self._modules = set(selected)
         self._load_exec(session.platform.get("exec") or {})
         self._load_phm(session.platform.get("phm") or {})
         self._load_diag(session.platform.get("diag") or {})
         self._load_log(session.platform.get("log") or {})
         self._load_ucm(session.platform.get("ucm") or {})
+        self._load_collector(session.platform.get("collector") or {})
         self._loading = False
-        mods = [str(x) for x in (session.req.get("runtime_modules") or [])]
-        self.set_runtime_modules(mods)
+        self._rebuild_nav()
+
+    def selected_modules(self) -> list[str]:
+        return [n for n, cb in self._module_boxes.items() if cb.isChecked()]
+
+    def _on_modules_toggled(self, *_args: object) -> None:
+        if self._loading or not self._session:
+            return
+        modules = self.selected_modules()
+        self._session.req["runtime_modules"] = modules
+        self._session.dirty_req = True
+        self._modules = set(modules)
+        self._rebuild_nav()
+        self.changed.emit()
 
     def set_runtime_modules(self, modules: list[str]) -> None:
-        """Filter C 子页：仅显示 A 页已勾选的平台模块。"""
-        self._modules = {str(m) for m in modules}
+        """Compatibility: sync checkboxes if external code still calls this."""
+        self._loading = True
+        sel = {str(m) for m in modules}
+        for name, cb in self._module_boxes.items():
+            cb.setChecked(name in sel)
+        self._loading = False
+        self._modules = sel
         self._rebuild_nav()
 
     def _enabled_nav(self) -> list[tuple[str, str]]:
@@ -503,6 +603,28 @@ class PlatformEditor(QWidget):
         self._ucm_source.blockSignals(False)
         self._ucm_rollback.blockSignals(False)
 
+    def _load_collector(self, data: dict[str, Any]) -> None:
+        fwd = str(data.get("forward") or "local_store")
+        idx = self._col_forward.findText(fwd)
+        self._col_forward.blockSignals(True)
+        self._col_forward.setCurrentIndex(idx if idx >= 0 else 0)
+        self._col_forward.blockSignals(False)
+        srcs = {str(x) for x in (data.get("sources") or [])}
+        for name, cb in self._src_boxes.items():
+            cb.blockSignals(True)
+            cb.setChecked(name in srcs if srcs else name in ("phm", "process", "com"))
+            cb.blockSignals(False)
+        local = data.get("local") if isinstance(data.get("local"), dict) else {}
+        self._col_local_en.blockSignals(True)
+        self._col_max.blockSignals(True)
+        self._col_local_en.setChecked(bool(local.get("enabled", True)))
+        try:
+            self._col_max.setValue(int(local.get("max_entries") or 256))
+        except (TypeError, ValueError):
+            self._col_max.setValue(256)
+        self._col_local_en.blockSignals(False)
+        self._col_max.blockSignals(False)
+
     # ── write-back ────────────────────────────────────────
 
     def _mark(self, key: str) -> None:
@@ -641,6 +763,19 @@ class PlatformEditor(QWidget):
         data["package_source"] = self._ucm_source.text().strip()
         data["allow_rollback"] = self._ucm_rollback.isChecked()
         self._mark("ucm")
+
+    def _on_collector_changed(self, *_a: object) -> None:
+        if self._loading or not self._session:
+            return
+        data = self._session.platform.setdefault("collector", {"schema_version": "0.1"})
+        data["schema_version"] = data.get("schema_version") or "0.1"
+        data["forward"] = self._col_forward.currentText().strip() or "local_store"
+        data["sources"] = [n for n, cb in self._src_boxes.items() if cb.isChecked()]
+        data["local"] = {
+            "enabled": self._col_local_en.isChecked(),
+            "max_entries": int(self._col_max.value()),
+        }
+        self._mark("collector")
 
     # ── row helpers ───────────────────────────────────────
 

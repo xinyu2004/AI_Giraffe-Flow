@@ -19,14 +19,14 @@
 # 务必在仓库根目录执行
 cd /path/to/AI_Giraffe-Flow
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e "tools/codegen[dev]"
+pip install -e "tools/gf-codegen[dev]"
 bash scripts/bootstrap_deps.sh
 
 # CI / 无 GUI：compose
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out projects/oem_a/afc_with_uss/generated/
 bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
-pytest tools/codegen/tests -q
+pytest tools/gf-codegen/tests -q
 ```
 
 | 产出 | 路径 | 是否提交 |
@@ -35,7 +35,7 @@ pytest tools/codegen/tests -q
 | lineage | `projects/.../reports/signal_lineage_report.yaml` | 否（gitignore） |
 | generate | `projects/.../generated/include/gf_gen/{types,proxy,skeleton}/` | 否（`**/generated/` ignore） |
 
-**注意：** `pytest tools/codegen/tests` 必须在**仓库根**跑；在 `generated/...` 子目录会报 `file or directory not found`。
+**注意：** `pytest tools/gf-codegen/tests` 必须在**仓库根**跑；在 `generated/...` 子目录会报 `file or directory not found`。
 
 ## 命令一览
 
@@ -59,5 +59,5 @@ bash scripts/run_idlc.sh generated/idl/gf_types.idl   # SKIP if no idlc
 
 ## 相关
 
-- [tools/config](../config/README.md) — 作者 GUI（保存自动 compose + Generate）
+- [tools/gf-config](../gf-config/README.md) — 作者 GUI（保存自动 compose + Generate）
 - [tools/gmt](../gmt/README.md) — 只读 architect + measure

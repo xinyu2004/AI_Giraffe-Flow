@@ -91,7 +91,7 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     )
 
     report = run_lineage(sor, req)
-    obs_err, obs_warn, obs_checks = validate_observability(req)
+    obs_err, obs_warn, obs_checks = validate_observability(req, wiring=wiring)
     report["project_id"] = paths.data.get("project_id") or report.get("project_id")
     report["warnings"] = list(report.get("warnings") or []) + warnings + plat_warnings + obs_warn
     report["errors"] = list(report.get("errors") or []) + plat_errors + obs_err
@@ -108,9 +108,9 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     write_lineage(paths.lineage_report, report)
 
     sku_cmake = paths.project_dir / "generated" / "gf_build.cmake"
-    emit_build_cmake(req, sku_cmake)
+    emit_build_cmake(req, sku_cmake, wiring=wiring)
     obs_json = paths.project_dir / "generated" / "observability.json"
-    emit_observability_json(req, obs_json)
+    emit_observability_json(req, obs_json, wiring=wiring)
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)
     report.setdefault("outputs", {})["observability"] = str(obs_json)
     write_lineage(paths.lineage_report, report)

@@ -12,7 +12,7 @@
 
 | # | 主线 | 角色 | 深入 |
 |---|------|------|------|
-| **1** | **gf-config** | 工具链 · 配置侧 | [tools/config](tools/config/README_zh.md) · [SOR](docs/zh/architecture/sor-authoring.md) |
+| **1** | **gf-config** | 工具链 · 配置侧 | [tools/gf-config](tools/gf-config/README_zh.md) · [SOR](docs/zh/architecture/sor-authoring.md) |
 | **2** | **Giraffe 模块** | **产品主体** · 运行时与进程 | [middleware](middleware/README.md) · [设计](docs/zh/architecture/DESIGN.md) · [示例](projects/oem_a/afc_with_uss/) |
 | **3** | **GMT** | 工具链 · 观测侧 | [tools/gmt](tools/gmt/README_zh.md) · [可观测演示](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
@@ -34,7 +34,7 @@
 gf-config projects/oem_a/afc_with_uss/project.yaml
 ```
 
-细节：[tools/config/README_zh.md](tools/config/README_zh.md) · [WORKFLOW](docs/zh/operations/WORKFLOW.md)
+细节：[tools/gf-config/README_zh.md](tools/gf-config/README_zh.md) · [WORKFLOW](docs/zh/operations/WORKFLOW.md)
 
 ---
 
@@ -158,8 +158,8 @@ GMT gui --project projects/oem_a/afc_with_uss \
 | [middleware/](middleware/) | **Giraffe 运行时（主体）** |
 | [apps/](apps/) | 参考 App / adapter / tap·inject |
 | [projects/](projects/) | OEM 集成工程 |
-| [tools/config/](tools/config/) | gf-config |
-| [tools/codegen/](tools/codegen/) | gf-codegen |
+| [tools/gf-config/](tools/gf-config/) | gf-config |
+| [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |
 | [tools/gmt/](tools/gmt/) | GMT |
 | [docs/zh/](docs/zh/README.md) | 文档索引 |
 
