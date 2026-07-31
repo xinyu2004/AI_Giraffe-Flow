@@ -13,7 +13,7 @@ In multi-process SIL, terminal logs rarely answer “who published what, when.�
 | `GMT measure record\|tag\|export\|import-ndjson` | Record, trim, MCAP/**VCD**, tap NDJSON import |
 | `GMT bridge foxglove` | Studio live / JSONL (8765) |
 | `GMT bridge live` | GMT GUI live WebSocket (8766) |
-| **`GMT gui`** | Live / Tag / animated DAG / **var strip** / **playhead inject** / export |
+| **`GMT gui`** | Live / Tag / animated DAG / **Graphics** / **playhead inject** / export |
 
 ```bash
 pip install -e tools/gmt -e tools/gf-codegen
@@ -34,7 +34,7 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 - With “follow playhead inject”: **Live follow-latest is forced off**; Live can still observe/record  
 - Inject result: top bar **green=published / red=skipped**, reason in status bar  
 - Inject tab: event table; click row to seek; optional loop  
-- Var strip: one row per variable; wheel zoom; orange playhead  
+- Graphics (CANoe-style): one row per signal; wheel / ± zoom; drag name-column edge for width; orange playhead  
 - Wall clock: one `session_meta` anchor + `(t_ns - t0_ns)`  
 - Without `project.yaml`: **inject disabled**; Live still works  
 

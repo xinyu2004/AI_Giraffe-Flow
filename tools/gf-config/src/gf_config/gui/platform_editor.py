@@ -1,4 +1,4 @@
-"""页 2 · 平台运行时 — runtime_modules + platform/{exec,phm,diag,log,ucm,collector}.yaml."""
+"""页 2 · 平台运行时 — runtime_modules + platform/{exec,em_launch,phm,…}.yaml."""
 
 from __future__ import annotations
 
@@ -45,12 +45,13 @@ KNOWN_MODULES = [
 # (platform yaml key, nav title, runtime_modules that unlock this page)
 _NAV = [
     ("exec", "执行 / 功能组", frozenset({"exec", "sm"})),
+    ("em_launch", "EM 启动表", frozenset({"exec"})),
     ("phm", "健康 PHM", frozenset({"phm"})),
     ("diag", "诊断 diag", frozenset({"diag"})),
     ("log", "日志", frozenset({"log"})),
     ("ucm", "OTA ucm", frozenset({"ucm"})),
     # Collector 最小集：有 diag 或 phm 即可配（不要求单独 runtime 模块名）
-    ("collector", "事件收集", frozenset({"diag", "phm"})),
+    ("collector", "事件收集", frozenset({"diag", "phm", "collector"})),
 ]
 
 _LOG_LEVELS = ["FATAL", "ERROR", "WARN", "INFO", "DEBUG", "VERBOSE"]
@@ -102,8 +103,8 @@ class PlatformEditor(QWidget):
         if mod_row.count():
             mods_l.addLayout(mod_row)
         mods_note = QLabel(
-            "映射：exec/sm→执行 · phm→健康 · diag→诊断 · log→日志 · ucm→OTA · "
-            "diag/phm→事件收集"
+            "映射：exec/sm→执行 · exec→EM 启动表 · phm→健康 · diag→诊断 · "
+            "log→日志 · ucm→OTA · diag/phm/collector→事件收集"
         )
         mods_note.setWordWrap(True)
         mods_note.setStyleSheet("color:#666; font-size:11px;")
@@ -131,6 +132,7 @@ class PlatformEditor(QWidget):
         root.addLayout(body, stretch=1)
 
         self._pages["exec"] = self._build_exec_page()
+        self._pages["em_launch"] = self._build_em_launch_page()
         self._pages["phm"] = self._build_phm_page()
         self._pages["diag"] = self._build_diag_page()
         self._pages["log"] = self._build_log_page()
@@ -196,10 +198,47 @@ class PlatformEditor(QWidget):
         lay.addWidget(proc_box, stretch=1)
         return w
 
+    def _build_em_launch_page(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        hint = QLabel(
+            "em_launch.yaml：OS EM（gf_em_daemon）二进制表。"
+            "binary 相对 $GF_BUILD_DIR；与 exec.yaml 进程名对齐。"
+            "PHM on_failure=restart + GF_EM_MANAGED → exit 75 后按 max_restarts relaunch。"
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#666;")
+        lay.addWidget(hint)
+
+        self._em_table = QTableWidget(0, 4)
+        self._em_table.setHorizontalHeaderLabels(
+            ["name", "binary（相对 build_dir）", "args（空格/逗号）", "max_restarts"]
+        )
+        self._em_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._em_table.itemChanged.connect(self._on_em_launch_changed)
+        lay.addWidget(self._em_table, stretch=1)
+        btns = QHBoxLayout()
+        add_e = QPushButton("添加行")
+        add_e.clicked.connect(self._add_em_row)
+        del_e = QPushButton("删除选中")
+        del_e.clicked.connect(lambda: self._del_rows(self._em_table, self._on_em_launch_changed))
+        sync_e = QPushButton("从 exec 同步进程名")
+        sync_e.clicked.connect(self._sync_em_from_exec)
+        btns.addWidget(add_e)
+        btns.addWidget(del_e)
+        btns.addWidget(sync_e)
+        btns.addStretch(1)
+        lay.addLayout(btns)
+        return w
+
     def _build_phm_page(self) -> QWidget:
         w = QWidget()
         lay = QVBoxLayout(w)
-        hint = QLabel("phm.yaml：Alive / 可选 Deadline。process ∈ wiring（非 external）。")
+        hint = QLabel(
+            "phm.yaml：Alive / 可选 Deadline。process ∈ wiring（非 external）。"
+            " on_failure: log | notify_sm | restart"
+            "（restart：托管进程 exit 75 → EM relaunch；未托管 → soft）。"
+        )
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#666;")
         lay.addWidget(hint)
@@ -403,6 +442,7 @@ class PlatformEditor(QWidget):
             cb.setChecked(name in selected)
         self._modules = set(selected)
         self._load_exec(session.platform.get("exec") or {})
+        self._load_em_launch(session.platform.get("em_launch") or {})
         self._load_phm(session.platform.get("phm") or {})
         self._load_diag(session.platform.get("diag") or {})
         self._load_log(session.platform.get("log") or {})
@@ -532,6 +572,26 @@ class PlatformEditor(QWidget):
             )
         self._fg_table.blockSignals(False)
         self._proc_table.blockSignals(False)
+
+    def _load_em_launch(self, data: dict[str, Any]) -> None:
+        self._em_table.blockSignals(True)
+        self._em_table.setRowCount(0)
+        for p in data.get("processes") or []:
+            if not isinstance(p, dict):
+                continue
+            r = self._em_table.rowCount()
+            self._em_table.insertRow(r)
+            args = p.get("args") or []
+            if isinstance(args, list):
+                args_s = ", ".join(str(x) for x in args)
+            else:
+                args_s = str(args)
+            mr = p.get("max_restarts")
+            _set_cell(self._em_table, r, 0, str(p.get("name") or ""))
+            _set_cell(self._em_table, r, 1, str(p.get("binary") or ""))
+            _set_cell(self._em_table, r, 2, args_s)
+            _set_cell(self._em_table, r, 3, "" if mr is None else str(mr))
+        self._em_table.blockSignals(False)
 
     def _load_phm(self, data: dict[str, Any]) -> None:
         self._phm_table.blockSignals(True)
@@ -680,6 +740,32 @@ class PlatformEditor(QWidget):
         data["function_groups"] = fgs
         data["processes"] = procs
         self._mark("exec")
+
+    def _on_em_launch_changed(self, *_a: object) -> None:
+        if self._loading or not self._session:
+            return
+        procs: list[dict[str, Any]] = []
+        for r in range(self._em_table.rowCount()):
+            name = _cell(self._em_table, r, 0)
+            binary = _cell(self._em_table, r, 1)
+            if not name:
+                continue
+            args_raw = _cell(self._em_table, r, 2).replace(",", " ")
+            args = [x for x in args_raw.split() if x]
+            entry: dict[str, Any] = {"name": name, "binary": binary}
+            if args:
+                entry["args"] = args
+            mr_s = _cell(self._em_table, r, 3)
+            if mr_s:
+                try:
+                    entry["max_restarts"] = int(mr_s, 0)
+                except ValueError:
+                    pass
+            procs.append(entry)
+        data = self._session.platform.setdefault("em_launch", {"schema_version": "0.1"})
+        data["schema_version"] = data.get("schema_version") or "0.1"
+        data["processes"] = procs
+        self._mark("em_launch")
 
     def _on_phm_changed(self, *_a: object) -> None:
         if self._loading or not self._session:
@@ -843,6 +929,56 @@ class PlatformEditor(QWidget):
             _set_cell(self._proc_table, r, 3, old[2] if old else "true")
         self._proc_table.blockSignals(False)
         self._on_exec_changed()
+
+    def _add_em_row(self) -> None:
+        names = self._process_names()
+        used = {_cell(self._em_table, r, 0) for r in range(self._em_table.rowCount())}
+        pick = next((n for n in names if n not in used), names[0] if names else "process.name")
+        self._em_table.blockSignals(True)
+        r = self._em_table.rowCount()
+        self._em_table.insertRow(r)
+        _set_cell(self._em_table, r, 0, pick)
+        _set_cell(self._em_table, r, 1, "")
+        _set_cell(self._em_table, r, 2, "")
+        _set_cell(self._em_table, r, 3, "3")
+        self._em_table.blockSignals(False)
+        self._on_em_launch_changed()
+
+    def _sync_em_from_exec(self) -> None:
+        if not self._session:
+            return
+        exec_data = self._session.platform.get("exec") or {}
+        names = [
+            str(p.get("name") or "").strip()
+            for p in (exec_data.get("processes") or [])
+            if isinstance(p, dict) and p.get("name")
+        ]
+        if not names:
+            names = self._process_names()
+        if not names:
+            QMessageBox.information(self, "同步", "exec / wiring 中没有可同步的进程名。")
+            return
+        existing: dict[str, tuple[str, str, str]] = {}
+        for r in range(self._em_table.rowCount()):
+            name = _cell(self._em_table, r, 0)
+            if name:
+                existing[name] = (
+                    _cell(self._em_table, r, 1),
+                    _cell(self._em_table, r, 2),
+                    _cell(self._em_table, r, 3),
+                )
+        self._em_table.blockSignals(True)
+        self._em_table.setRowCount(0)
+        for name in names:
+            r = self._em_table.rowCount()
+            self._em_table.insertRow(r)
+            old = existing.get(name)
+            _set_cell(self._em_table, r, 0, name)
+            _set_cell(self._em_table, r, 1, old[0] if old else "")
+            _set_cell(self._em_table, r, 2, old[1] if old else "")
+            _set_cell(self._em_table, r, 3, old[2] if old else "3")
+        self._em_table.blockSignals(False)
+        self._on_em_launch_changed()
 
     def _add_phm_row(self) -> None:
         names = self._process_names()

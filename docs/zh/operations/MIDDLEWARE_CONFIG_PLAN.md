@@ -1,7 +1,7 @@
 # 中间件模块与 gf-config 配置规划
 
 > 配套：[ROADMAP.md](ROADMAP.md) · [DESIGN.md](../architecture/DESIGN.md) · [P2_PLAN.md](P2_PLAN.md)  
-> **状态（2026-07-30）：** **P3 两页 UI 已落地**（页 1 信号与应用 · 页 2 平台运行时 + Collector 最小编辑）；废止「不做 DEM」旧口径。历史冻结字段见 §8。
+> **状态（2026-07-31）：** **P3 两页 UI 已落地**（页 1 信号与应用 · 页 2 平台运行时：exec / **EM 启动表** / PHM / Collector…）；废止「不做 DEM」旧口径。历史冻结字段见 §8。
 
 本文回答：
 
@@ -59,14 +59,14 @@
 |------|------|----------|--------|--------|--------|----------|------|
 | **core** | `ara::core` | 无 | 常开 | — | — | ✅ P0 | |
 | **com** | `ara::com` | **高** | bindings | **wiring** | QoS 可选后置 | ✅ P0+ | **唯一信号图** |
-| **osal** | （平台） | 低 | CMake | — | — | ✅ P0 | 不进 gf-config |
+| **osal** | （平台） | 低 | CMake | — | — | ✅ clock/thread/**process** | 不进 gf-config；EM 依赖 |
 | **log** | `ara::log` | 低 | runtime_modules | — | 级别/通道 | P0–P3 lite | §3.5 |
-| **exec** | `ara::exec` | 中 | runtime_modules | — | 进程↔FG | ✅ P2 清单 | §3.2 |
-| **sm** | `ara::sm` | 中低 | runtime_modules | — | FG/转移 | P2 名单 → **P3 状态机** | §3.3 |
-| **phm** | `ara::phm` | 中 | runtime_modules | — | entity 表 | ✅ P2 → P3 Logical | §3.4 |
+| **exec** | `ara::exec` | 中 | runtime_modules | — | 进程↔FG + **em_launch** | ✅ P2 清单 · **OS EM** | §3.2 |
+| **sm** | `ara::sm` | 中低 | runtime_modules | — | FG/转移 | ✅ P3 FG Off/Running/Updating | §3.3 |
+| **phm** | `ara::phm` | 中 | runtime_modules | — | entity 表 | ✅ Logical + notify_sm / restart→EM | §3.4 |
+| **collector** | Event Collector | 中 | runtime_modules / 随 phm·diag | — | 源/转发/存储 | ✅ P3 最小集；**非 Classic DEM** | §3.9 |
 | **diag** | `ara::diag` | 中 | runtime_modules | — | DoIP + DID | stub → **P3 会话** | §3.6 |
 | **ucm** | `ara::ucm` | 中 | runtime_modules | — | 包源/回滚 | Spike → **P3+GMT OTA** | §3.7 |
-| **Event Collector** | （AP 侧） | 中 | 常随 phm/diag | — | 源/转发/存储 | **P3 最小集** | §3.9；**非 Classic DEM** |
 | **trace** | （扩展） | 低 | 可选 | — | 导出 | P2+ | |
 | **per** / **tsync** | `ara::*` | 低 | runtime_modules | — | 路径/角色 | **P3 骨架** | |
 | **nm** / 安全簇 | | 高 | runtime_modules | — | 策略 | P3+ | |
@@ -86,14 +86,16 @@
 **gf-config：** 页 1 画布 + 薄 bindings。  
 **不做：** 在 SKU 区重复编辑每一条 dataflow。
 
-### 3.2 `gf_ara::exec`
+### 3.2 `gf_ara::exec`（含 OS EM）
 
-| 完整 AP | 我们的 ③（`platform/exec.yaml`） |
-|---------|----------------------------------|
-| Execution Manifest | **最小集：** `name`、`function_group`、`depends_on[]`、`execution_client` |
-| Machine State / 多机 | P3 再议 |
+| 完整 AP | 我们的 ③ |
+|---------|----------|
+| Execution Manifest | **`exec.yaml`：** `name`、`function_group`、`depends_on[]`、`execution_client` |
+| Process start / restart | **`em_launch.yaml`：** `name`、`binary`、`args[]`、`max_restarts` → `gf_em_daemon`（经 OSAL Spawn） |
+| Machine State / 多机 | 再议 |
 
-进程名只读自 wiring（非 `external.*`）。**gf-config：** 页 2「执行 / 功能组」。
+进程名只读自 wiring（非 `external.*`）。**gf-config：** 页 2「执行 / 功能组」+「**EM 启动表**」。  
+运行期：com 底座 → EM → 按拓扑 Spawn Apps；`phm.on_failure: restart` + `GF_EM_MANAGED` → exit 75 relaunch。
 
 ### 3.3 `gf_ara::sm`
 

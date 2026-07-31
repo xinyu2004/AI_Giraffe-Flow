@@ -21,10 +21,13 @@ def test_compose_afc_writes_platform_manifest(repo_root: Path, tmp_path: Path) -
     pm = sor.get("platform_manifest")
     assert isinstance(pm, dict)
     assert "exec" in pm and "phm" in pm and "log" in pm and "diag" in pm
+    assert "em_launch" in pm
     assert "ucm" not in pm  # not in runtime_modules
     names = {p["name"] for p in pm["exec"]["processes"]}
     assert "adapter.vehicle_can_gateway" in names
     assert "external.vehicle_mcu" not in names
+    em_names = {p["name"] for p in pm["em_launch"]["processes"]}
+    assert "planning.driving" in em_names
 
     report = yaml.safe_load(
         (repo_root / "projects/oem_a/afc_with_uss/reports/signal_lineage_report.yaml").read_text(
@@ -34,6 +37,7 @@ def test_compose_afc_writes_platform_manifest(repo_root: Path, tmp_path: Path) -
     assert report["ok"] is True
     check_ids = {c["id"] for c in report.get("checks") or []}
     assert "platform_exec_processes" in check_ids
+    assert "platform_em_launch" in check_ids
     assert "platform_phm_processes" in check_ids
 
 

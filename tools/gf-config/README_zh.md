@@ -46,7 +46,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | 页签 | 作用 |
 |------|------|
 | **1 · 信号与应用**（默认） | **左侧薄 SKU 默认展开**；中央画布；**右侧连线/Lineage 默认收起**（点 ◀ 展开） |
-| **2 · 平台运行时** | 顶部 `runtime_modules`；子页：执行/FG · PHM · 诊断 · 日志 · OTA · **事件收集** |
+| **2 · 平台运行时** | 顶部 `runtime_modules`；子页：执行/FG · **EM 启动表** · PHM · 诊断 · 日志 · OTA · **事件收集** |
 
 快捷键：Ctrl+1 / Ctrl+2 切页。Verify / Generate 后自动回页 1 右侧 Lineage。
 
@@ -76,5 +76,17 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 - [x] 打开 `afc_with_uss` 可见带端口的连线图  
 - [x] 右键增删节点 / 拖线 / Save 写回 `wiring.yaml`  
 - [x] 页 1 薄 SKU + 页 2 runtime_modules / platform 可写回  
-- [x] Verify 后右侧 Lineage 红绿显示检查项  
+- [x] 页 2「EM 启动表」读写 `platform/em_launch.yaml`（勾选 `exec` 后出现）  
+- [x] Verify 后右侧 Lineage 红绿显示检查项（含 `platform_em_launch`）  
 - [x] CI 不强制跑 Qt  
+
+## 页 2 与板端模块对应（afc_with_uss）
+
+| 勾选 `runtime_modules` | 子页 / YAML | 板端体现 |
+|------------------------|-------------|----------|
+| `exec` (+`sm`) | 执行/FG · `exec.yaml` | FG + 依赖拓扑 |
+| `exec` | EM 启动表 · `em_launch.yaml` | `gf_em_daemon` OSAL Spawn |
+| `phm` | 健康 · `phm.yaml` | Alive；`restart`→EM |
+| `sm` | （与 exec 同页 FG） | StateClient / NotifyHealthFault |
+| `collector` / phm / diag | 事件收集 · `collector.yaml` | ring buffer / cp_dem stub |
+| `diag` / `log` / `ucm` | 各子页 | DoIP / 日志 / OTA stub |

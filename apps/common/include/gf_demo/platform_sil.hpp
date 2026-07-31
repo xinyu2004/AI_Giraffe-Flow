@@ -6,9 +6,13 @@
 //   GF_PHM_FAULT_MS     skip ReportAlive for N ms after first Alive (0=off)
 //   GF_PHM_FAULT_INJECT_MS  alias of GF_PHM_FAULT_MS
 //   GF_SM_ENTER_UPDATING_ON_FAULT  if 1, health_fault enters Updating (+ pause PHM)
+//   GF_EM_SOFT_RESTART  if 1, on_failure=restart uses in-process soft relaunch
+//                       (default: request OS EM exit code 75 when GF_EM_MANAGED=1)
 
 #include "gf_ara/collector/event_collector.hpp"
+#include "gf_ara/exec/em_daemon.hpp"
 #include "gf_ara/exec/execution_client.hpp"
+#include "gf_ara/exec/execution_manager.hpp"
 #include "gf_ara/phm/supervised_entity.hpp"
 #include "gf_ara/sm/state_client.hpp"
 
@@ -31,7 +35,7 @@ struct PhmEntityConfig {
   std::string id;
   std::uint32_t alive_period_ms{100};
   std::uint32_t alive_timeout_ms{300};
-  std::string on_failure{"log"};  // log | notify_sm
+  std::string on_failure{"log"};  // log | notify_sm | restart
 };
 
 [[nodiscard]] std::string PlatformDir();
@@ -52,9 +56,14 @@ class ProcessSupervisor {
   }
   [[nodiscard]] int MissCount() const noexcept { return miss_count_; }
   [[nodiscard]] int RecoverCount() const noexcept { return recover_count_; }
+  [[nodiscard]] int EmRestartCount() const noexcept { return em_restart_count_; }
+  /// When true, main should return gf_ara::exec::kEmRestartExitCode for OS EM relaunch.
+  [[nodiscard]] bool ExitForEmRestart() const noexcept { return exit_for_em_restart_; }
 
  private:
   void OnFault(gf_ara::phm::CheckpointStatus st);
+  void SoftRestartViaEm(const char* reason);
+  void RequestOsEmRestart(const char* reason);
 
   std::string process_;
   std::string function_group_{"MachineFG"};
@@ -69,6 +78,8 @@ class ProcessSupervisor {
   gf_ara::phm::CheckpointStatus last_status_{gf_ara::phm::CheckpointStatus::kOk};
   int miss_count_{0};
   int recover_count_{0};
+  int em_restart_count_{0};
+  bool exit_for_em_restart_{false};
 };
 
 }  // namespace gf::demo::platform_sil

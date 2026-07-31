@@ -1,4 +1,5 @@
 #include "gf_ara/exec/execution_client.hpp"
+#include "gf_ara/exec/execution_manager.hpp"
 
 #include <mutex>
 #include <string>
@@ -16,18 +17,26 @@ gf_ara::core::Result<void> ExecutionClient::Offer(std::string_view process_name)
   if (process_name.empty()) {
     return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kInvalidArgument);
   }
-  std::lock_guard<std::mutex> lock(g_mu);
-  g_name.assign(process_name.begin(), process_name.end());
-  g_state = ExecutionState::kStarting;
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    g_name.assign(process_name.begin(), process_name.end());
+    g_state = ExecutionState::kStarting;
+  }
+  ExecutionManager::OnClientOffer(process_name);
   return gf_ara::core::Result<void>::Ok();
 }
 
 gf_ara::core::Result<void> ExecutionClient::ReportExecutionState(ExecutionState state) {
-  std::lock_guard<std::mutex> lock(g_mu);
-  if (g_name.empty()) {
-    return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kNotAvailable);
+  std::string name;
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    if (g_name.empty()) {
+      return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kNotAvailable);
+    }
+    g_state = state;
+    name = g_name;
   }
-  g_state = state;
+  ExecutionManager::OnClientState(name, state);
   return gf_ara::core::Result<void>::Ok();
 }
 

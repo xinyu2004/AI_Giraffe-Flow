@@ -15,9 +15,9 @@
 | 模块 | Cases | 前缀 | Smoke | 状态 |
 |------|-------|------|-------|------|
 | core | [core_cases.md](core_cases.md) | CORE | `gf_core_smoke` | active |
-| osal | [osal_cases.md](osal_cases.md) | OSAL | `gf_osal_smoke` | active |
+| osal | [osal_cases.md](osal_cases.md) | OSAL | `gf_osal_smoke` · `gf_osal_process_smoke` | active |
 | com | [com_cases.md](com_cases.md) | COM | `gf_com_loopback_smoke` | active |
-| exec | [exec_cases.md](exec_cases.md) | EXEC | `gf_exec_smoke` | active |
+| exec | [exec_cases.md](exec_cases.md) | EXEC / EM / EMD | `gf_exec_smoke` · `gf_exec_em_smoke` · `gf_em_daemon_smoke` | active |
 | sm | [sm_cases.md](sm_cases.md) | SM | `gf_sm_fg_smoke` | active |
 | phm | [phm_cases.md](phm_cases.md) | PHM | `gf_phm_alive_deadline_smoke` | active |
 | collector | [collector_cases.md](collector_cases.md) | COLL | `gf_collector_smoke` | active |

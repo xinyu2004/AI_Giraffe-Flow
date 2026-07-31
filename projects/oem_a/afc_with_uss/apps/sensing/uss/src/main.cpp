@@ -32,6 +32,9 @@ int main() {
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
+    if (supervisor.ExitForEmRestart()) {
+      return gf_ara::exec::kEmRestartExitCode;
+    }
 
     auto taken = ego_sub.Take();
     if (taken && taken.Value().has_value()) {

@@ -1,4 +1,4 @@
-"""GMT 变量轨：用户添加变量；每变量一行；滚轮缩放时间窗。"""
+"""GMT Graphics（对齐 CANoe Graphics Window）：信号曲线轨；滚轮 / 按钮缩放时间窗。"""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from PySide6.QtGui import (
     QPainter,
     QPainterPath,
     QPen,
+    QResizeEvent,
     QWheelEvent,
 )
 from PySide6.QtWidgets import (
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -156,7 +158,7 @@ def _y_range(ys: list[float]) -> tuple[float, float]:
 
 
 class _MultiStripCanvas(QWidget):
-    """Stacked per-variable rows + shared time axis; wheel zooms time window."""
+    """Stacked per-signal rows + shared time axis; wheel / zoom_by zooms time window."""
 
     seek_ns_requested = Signal(object)
     selection_changed = Signal(str)  # key
@@ -164,7 +166,12 @@ class _MultiStripCanvas(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setMinimumHeight(160)
-        self.setFocusPolicy(Qt.FocusPolicy.WheelFocus)
+        self.setMinimumWidth(320)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.MinimumExpanding,
+        )
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
         self._model: SessionModel | None = None
         self._keys: list[str] = []
@@ -178,6 +185,10 @@ class _MultiStripCanvas(QWidget):
         self._resize_key: str | None = None
         self._resize_start_y = 0
         self._resize_start_h = 0
+        self._label_w = _LABEL_W
+        self._label_drag = False
+        self._label_drag_x0 = 0
+        self._label_drag_w0 = _LABEL_W
 
     def row_height(self, key: str) -> int:
         return self._row_heights.get(key, self._default_row_h)
@@ -350,7 +361,7 @@ class _MultiStripCanvas(QWidget):
         return int(self._view_t0), int(self._view_t1), span
 
     def _plot_left(self) -> int:
-        return _LABEL_W + _MARGIN_L
+        return int(self._label_w) + _MARGIN_L
 
     def _plot_right_margin(self) -> int:
         return _VALUE_W + _MARGIN_R
@@ -366,23 +377,22 @@ class _MultiStripCanvas(QWidget):
         frac = max(0.0, min(1.0, (x - left) / max(1.0, float(plot_w))))
         return int(t0 + span * frac)
 
-    def wheelEvent(self, event: QWheelEvent) -> None:
+    def zoom_by(self, factor: float, *, anchor_x: float | None = None) -> bool:
+        """Zoom time window. factor<1 zooms in. Returns True if view changed."""
         if self._model is None or self._model.empty:
-            return
+            return False
         full0, full1 = self._full_span()
         full_span = max(1, full1 - full0)
         _t0, _t1, span = self._view_span()
         plot_w = max(1, self.width() - self._plot_left() - self._plot_right_margin())
-        anchor_t = self._t_of(event.position().x(), plot_w)
-        delta = event.angleDelta().y()
-        if delta == 0:
-            event.accept()
-            return
-        factor = 0.8 if delta > 0 else 1.25
+        left = self._plot_left()
+        ax = float(anchor_x) if anchor_x is not None else (left + plot_w * 0.5)
+        anchor_t = self._t_of(ax, plot_w)
         new_span = int(span * factor)
         new_span = max(1_000_000, min(full_span, new_span))
-        left = self._plot_left()
-        frac = max(0.0, min(1.0, (event.position().x() - left) / plot_w))
+        if new_span == span:
+            return False
+        frac = max(0.0, min(1.0, (ax - left) / float(plot_w)))
         new_t0 = int(anchor_t - frac * new_span)
         new_t1 = new_t0 + new_span
         if new_t0 < full0:
@@ -393,22 +403,84 @@ class _MultiStripCanvas(QWidget):
             new_t0 = max(full0, new_t1 - new_span)
         self._view_t0, self._view_t1 = new_t0, new_t1
         self.update()
+        return True
+
+    def pan_by_frac(self, frac: float) -> bool:
+        """Pan time window by fraction of current span (−1…1)."""
+        if self._model is None or self._model.empty:
+            return False
+        full0, full1 = self._full_span()
+        t0, t1, span = self._view_span()
+        if span >= max(1, full1 - full0):
+            return False
+        shift = int(span * frac)
+        new_t0 = t0 + shift
+        new_t1 = t1 + shift
+        if new_t0 < full0:
+            new_t0 = full0
+            new_t1 = new_t0 + span
+        if new_t1 > full1:
+            new_t1 = full1
+            new_t0 = max(full0, new_t1 - span)
+        if new_t0 == t0 and new_t1 == t1:
+            return False
+        self._view_t0, self._view_t1 = new_t0, new_t1
+        self.update()
+        return True
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        if self._model is None or self._model.empty:
+            event.ignore()
+            return
+        delta = event.angleDelta().y()
+        if delta == 0:
+            delta = event.pixelDelta().y()
+        if delta == 0:
+            # horizontal trackpad → pan
+            hdelta = event.angleDelta().x() or event.pixelDelta().x()
+            if hdelta != 0:
+                self.pan_by_frac(-0.08 if hdelta > 0 else 0.08)
+                event.accept()
+                return
+            event.ignore()
+            return
+        # Shift+wheel → pan; plain wheel → zoom
+        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.pan_by_frac(-0.1 if delta > 0 else 0.1)
+            event.accept()
+            return
+        factor = 0.8 if delta > 0 else 1.25
+        self.zoom_by(factor, anchor_x=float(event.position().x()))
         event.accept()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self.update()
 
     def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if not self._keys:
             return
         y = float(event.position().y())
         x = float(event.position().x())
+        # drag label / plot divider to change name-column width
+        divider = float(self._label_w)
+        if abs(x - divider) <= 5:
+            self._label_drag = True
+            self._label_drag_x0 = int(x)
+            self._label_drag_w0 = int(self._label_w)
+            self.grabMouse()
+            self.setCursor(QCursor(Qt.CursorShape.SizeHorCursor))
+            return
         hit = self._row_at_y(y)
         if hit is None:
             return
         _i, key, top, h = hit
-        # bottom edge → start resize
-        if y >= top + h - 5:
+        # bottom edge → start row-height resize
+        if y >= top + h - 8:
             self._resize_key = key
             self._resize_start_y = int(y)
             self._resize_start_h = h
+            self.grabMouse()
             self.setCursor(QCursor(Qt.CursorShape.SizeVerCursor))
             return
         # select row
@@ -425,243 +497,272 @@ class _MultiStripCanvas(QWidget):
 
     def mouseMoveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         y = float(event.position().y())
+        x = float(event.position().x())
+        if self._label_drag:
+            dx = int(x) - self._label_drag_x0
+            self._label_w = max(80, min(360, self._label_drag_w0 + dx))
+            self.update()
+            return
         if self._resize_key is not None:
             dy = int(y) - self._resize_start_y
             new_h = max(36, min(220, self._resize_start_h + dy))
             self._row_heights[self._resize_key] = new_h
             self._relayout()
             return
+        if abs(x - float(self._label_w)) <= 5:
+            self.setCursor(QCursor(Qt.CursorShape.SizeHorCursor))
+            return
         hit = self._row_at_y(y)
         if hit is not None:
             _i, _key, top, h = hit
-            if y >= top + h - 5:
+            if y >= top + h - 8:
                 self.setCursor(QCursor(Qt.CursorShape.SizeVerCursor))
                 return
         self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self._label_drag or self._resize_key is not None:
+            self.releaseMouse()
+        self._label_drag = False
         self._resize_key = None
         self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def paintEvent(self, _event) -> None:  # type: ignore[no-untyped-def]
         p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        p.fillRect(self.rect(), QColor("#f7f7f7"))
-        if self._model is None or self._model.empty:
-            p.setPen(QColor("#888"))
-            p.drawText(
-                self.rect(),
-                Qt.AlignmentFlag.AlignCenter,
-                t("Open a session, then ▼ to pick variables"),
-            )
-            return
-        if not self._keys:
-            p.setPen(QColor("#888"))
-            p.drawText(
-                self.rect(),
-                Qt.AlignmentFlag.AlignCenter,
-                t("No variables yet — ▼ then Add →"),
-            )
-            return
-
-        left = self._plot_left()
-        right_m = self._plot_right_margin()
-        plot_w = max(1, self.width() - left - right_m)
-        t0, t1, span = self._view_span()
-        clock = self._model.clock
-        play_t: int | None = None
-        if 0 <= self._play_idx < len(self._model.events):
-            play_t = int(self._model.events[self._play_idx].t_ns)
-
-        axis_y = self._total_rows_h() + 4
-        p.setPen(QPen(QColor("#bbb"), 1))
-        p.drawLine(left, axis_y, left + plot_w, axis_y)
-        for frac, align in (
-            (0.0, Qt.AlignmentFlag.AlignLeft),
-            (0.5, Qt.AlignmentFlag.AlignHCenter),
-            (1.0, Qt.AlignmentFlag.AlignRight),
-        ):
-            t = t0 + int(span * frac)
-            x = left + int(plot_w * frac)
-            label = clock.format(t, compact=True) if clock.ready else str(t)
-            p.setPen(QColor("#444"))
-            p.drawText(
-                x - 90 if frac > 0 else x,
-                axis_y + 2,
-                180,
-                22,
-                align | Qt.AlignmentFlag.AlignTop,
-                label,
-            )
-
-        top = 0
-        for i, key in enumerate(self._keys):
-            row_h = self.row_height(key)
-            pad_v = max(3, min(10, row_h // 10))
-            plot_top = top + pad_v
-            plot_h = max(8, row_h - 2 * pad_v)
-            color = _COLORS[i % len(_COLORS)]
-            selected = key == self._selected_key
-
-            if selected:
-                bg = QColor("#fff3e0")  # 浅橙高亮
-            elif i % 2 == 0:
-                bg = QColor("#ffffff")
-            else:
-                bg = QColor("#f0f4f8")
-            p.fillRect(0, top, self.width(), row_h, bg)
-            if selected:
-                p.setPen(QPen(QColor("#ffb74d"), 2))
-                p.drawRect(1, top + 1, self.width() - 2, row_h - 2)
-            p.setPen(QPen(QColor("#c5cdd6"), 1))
-            p.drawLine(0, top + row_h - 1, self.width(), top + row_h - 1)
-            # resize grip hint
-            p.setPen(QColor("#b0bec5"))
-            mid_x = self.width() // 2
-            p.drawLine(mid_x - 12, top + row_h - 3, mid_x + 12, top + row_h - 3)
-
-            val_font = QFont(p.font())
-            val_font.setBold(True)
-            val_font.setPointSize(max(9, min(14, 8 + row_h // 20)))
-
-            # name
-            p.setPen(color)
-            p.drawText(
-                4,
-                top,
-                _LABEL_W - 6,
-                row_h,
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                key,
-            )
-
-            # plot frame
-            p.setPen(QPen(QColor("#c5cdd6"), 1))
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRect(left, plot_top, plot_w, plot_h)
-
-            pts = series_points(self._model, key)
-            in_view = [(t, y) for t, y in pts if t0 <= t <= t1]
-            cur_val = value_at_or_before(pts, play_t) if play_t is not None else None
-
-            # right-side value readout（选中行反色，避免与行高亮同色难辨）
-            vx = left + plot_w + 4
-            vw = _VALUE_W - 4
-            if selected:
-                p.fillRect(vx, plot_top, vw, plot_h, QColor("#bf360c"))
-                p.setPen(QPen(QColor("#ffe0b2"), 1))
-                p.drawRect(vx, plot_top, vw, plot_h)
-                p.setFont(val_font)
-                p.setPen(QColor("#fff8e1"))
-            else:
-                p.fillRect(vx, plot_top, vw, plot_h, QColor("#fff8e1"))
-                p.setPen(QPen(QColor("#e65100"), 1))
-                p.drawRect(vx, plot_top, vw, plot_h)
-                p.setFont(val_font)
-                p.setPen(QColor("#bf360c"))
-            p.drawText(
-                left + plot_w + 6,
-                plot_top,
-                _VALUE_W - 8,
-                plot_h,
-                Qt.AlignmentFlag.AlignCenter,
-                _fmt_val(cur_val),
-            )
-            p.setFont(QFont())
-
-            p.save()
-            p.setClipRect(left, plot_top, plot_w, plot_h)
-
-            if in_view:
-                # Y scale from in-view samples only (tight auto-scale)
-                ys = [y for _, y in in_view]
-                ymin, ymax = _y_range(ys)
-                yspan = max(ymax - ymin, 1e-12)
-
-                def y_of(val: float) -> float:
-                    yn = (val - ymin) / yspan
-                    return float(plot_top + plot_h) - yn * float(plot_h)
-
-                # draw with one neighbor outside for step continuity (not for y-scale)
-                idxs = [j for j, (t, _) in enumerate(pts) if t0 <= t <= t1]
-                j0 = max(0, idxs[0] - 1)
-                j1 = min(len(pts) - 1, idxs[-1] + 1)
-                draw_pts = pts[j0 : j1 + 1]
-
-                path = QPainterPath()
-                markers: list[QPointF] = []
-                prev_x: float | None = None
-                prev_y: float | None = None
-                for t_ns, y in draw_pts:
-                    x = self._x_of_f(t_ns, plot_w)
-                    yy = y_of(y)
-                    if prev_x is None:
-                        path.moveTo(x, yy)
-                    else:
-                        path.lineTo(x, prev_y if prev_y is not None else yy)
-                        path.lineTo(x, yy)
-                    if t0 <= t_ns <= t1:
-                        markers.append(QPointF(x, yy))
-                    prev_x, prev_y = x, yy
-
-                pen = QPen(color, 2.2)
-                pen.setCosmetic(True)
-                p.setPen(pen)
-                p.drawPath(path)
-                p.setBrush(color)
-                for pt in markers:
-                    p.drawEllipse(pt, 3.5, 3.5)
-
-                p.restore()
-
-                # Y ticks (left of plot)
-                p.setPen(QColor("#555"))
-                for yv, align_flag in (
-                    (ymax, Qt.AlignmentFlag.AlignTop),
-                    ((ymin + ymax) / 2, Qt.AlignmentFlag.AlignVCenter),
-                    (ymin, Qt.AlignmentFlag.AlignBottom),
-                ):
-                    yy = int(y_of(yv))
-                    p.drawText(
-                        _LABEL_W + 2,
-                        yy - 8,
-                        _MARGIN_L - 4,
-                        16,
-                        Qt.AlignmentFlag.AlignRight | align_flag,
-                        _fmt_val(yv),
-                    )
-                    p.setPen(QPen(QColor("#cfd8dc"), 1, Qt.PenStyle.DotLine))
-                    p.drawLine(left, yy, left + plot_w, yy)
-                    p.setPen(QColor("#555"))
-            else:
-                p.restore()
-                p.setPen(QColor("#999"))
-                msg = t("no samples") if not pts else t("out of view — fit row")
+        try:
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            p.fillRect(self.rect(), QColor("#f7f7f7"))
+            if self._model is None or self._model.empty:
+                p.setPen(QColor("#888"))
                 p.drawText(
-                    left + 8,
-                    plot_top,
-                    plot_w,
-                    plot_h,
+                    self.rect(),
                     Qt.AlignmentFlag.AlignCenter,
-                    msg,
+                    t("Open a session, then ▼ to pick variables"),
+                )
+                return
+            if not self._keys:
+                p.setPen(QColor("#888"))
+                p.drawText(
+                    self.rect(),
+                    Qt.AlignmentFlag.AlignCenter,
+                    t("No variables yet — ▼ then Add →"),
+                )
+                return
+
+            left = self._plot_left()
+            right_m = self._plot_right_margin()
+            plot_w = max(1, self.width() - left - right_m)
+            t0, t1, span = self._view_span()
+            clock = self._model.clock
+            play_t: int | None = None
+            if 0 <= self._play_idx < len(self._model.events):
+                play_t = int(self._model.events[self._play_idx].t_ns)
+
+            axis_y = self._total_rows_h() + 4
+            p.setPen(QPen(QColor("#bbb"), 1))
+            p.drawLine(left, axis_y, left + plot_w, axis_y)
+            for frac, align in (
+                (0.0, Qt.AlignmentFlag.AlignLeft),
+                (0.5, Qt.AlignmentFlag.AlignHCenter),
+                (1.0, Qt.AlignmentFlag.AlignRight),
+            ):
+                tick_t = t0 + int(span * frac)
+                x = left + int(plot_w * frac)
+                label = clock.format(tick_t, compact=True) if clock.ready else str(tick_t)
+                p.setPen(QColor("#444"))
+                p.drawText(
+                    x - 90 if frac > 0 else x,
+                    axis_y + 2,
+                    180,
+                    22,
+                    align | Qt.AlignmentFlag.AlignTop,
+                    label,
                 )
 
-            for tag in self._tags:
-                at = tag.at_ns()
-                if at is None or at < t0 or at > t1:
-                    continue
-                x = int(self._x_of_f(int(at), plot_w))
-                p.setPen(QPen(QColor("#ad1457"), 1))
-                p.drawLine(x, plot_top, x - 4, plot_top + 8)
-                p.drawLine(x, plot_top, x + 4, plot_top + 8)
-                p.drawLine(x - 4, plot_top + 8, x + 4, plot_top + 8)
+            # name-column resize divider
+            p.setPen(QPen(QColor("#90a4ae"), 1))
+            p.drawLine(int(self._label_w), 0, int(self._label_w), self._total_rows_h())
 
-            if play_t is not None and t0 <= play_t <= t1:
-                x = int(self._x_of_f(play_t, plot_w))
-                p.setPen(QPen(QColor("#e65100"), 2))
-                p.drawLine(x, plot_top, x, plot_top + plot_h)
+            top = 0
+            for i, key in enumerate(self._keys):
+                row_h = self.row_height(key)
+                pad_v = max(3, min(10, row_h // 10))
+                plot_top = top + pad_v
+                plot_h = max(8, row_h - 2 * pad_v)
+                color = _COLORS[i % len(_COLORS)]
+                selected = key == self._selected_key
 
-            top += row_h
+                if selected:
+                    bg = QColor("#fff3e0")  # 浅橙高亮
+                elif i % 2 == 0:
+                    bg = QColor("#ffffff")
+                else:
+                    bg = QColor("#f0f4f8")
+                p.fillRect(0, top, self.width(), row_h, bg)
+                if selected:
+                    p.setPen(QPen(QColor("#ffb74d"), 2))
+                    p.drawRect(1, top + 1, self.width() - 2, row_h - 2)
+                p.setPen(QPen(QColor("#c5cdd6"), 1))
+                p.drawLine(0, top + row_h - 1, self.width(), top + row_h - 1)
+                # resize grip hint
+                p.setPen(QColor("#b0bec5"))
+                mid_x = self.width() // 2
+                p.drawLine(mid_x - 12, top + row_h - 3, mid_x + 12, top + row_h - 3)
+
+                val_font = QFont(p.font())
+                val_font.setBold(True)
+                val_font.setPointSize(max(9, min(14, 8 + row_h // 20)))
+
+                # name
+                p.setPen(color)
+                p.drawText(
+                    4,
+                    top,
+                    int(self._label_w) - 6,
+                    row_h,
+                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                    key,
+                )
+
+                # plot frame
+                p.setPen(QPen(QColor("#c5cdd6"), 1))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawRect(left, plot_top, plot_w, plot_h)
+
+                pts = series_points(self._model, key)
+                in_view = [(t, y) for t, y in pts if t0 <= t <= t1]
+                cur_val = value_at_or_before(pts, play_t) if play_t is not None else None
+
+                # right-side value readout（选中行反色，避免与行高亮同色难辨）
+                vx = left + plot_w + 4
+                vw = _VALUE_W - 4
+                if selected:
+                    p.fillRect(vx, plot_top, vw, plot_h, QColor("#bf360c"))
+                    p.setPen(QPen(QColor("#ffe0b2"), 1))
+                    p.drawRect(vx, plot_top, vw, plot_h)
+                    p.setFont(val_font)
+                    p.setPen(QColor("#fff8e1"))
+                else:
+                    p.fillRect(vx, plot_top, vw, plot_h, QColor("#fff8e1"))
+                    p.setPen(QPen(QColor("#e65100"), 1))
+                    p.drawRect(vx, plot_top, vw, plot_h)
+                    p.setFont(val_font)
+                    p.setPen(QColor("#bf360c"))
+                p.drawText(
+                    left + plot_w + 6,
+                    plot_top,
+                    _VALUE_W - 8,
+                    plot_h,
+                    Qt.AlignmentFlag.AlignCenter,
+                    _fmt_val(cur_val),
+                )
+                p.setFont(QFont())
+
+                p.save()
+                try:
+                    p.setClipRect(left, plot_top, plot_w, plot_h)
+
+                    if in_view:
+                        # Y scale from in-view samples only (tight auto-scale)
+                        ys = [y for _, y in in_view]
+                        ymin, ymax = _y_range(ys)
+                        yspan = max(ymax - ymin, 1e-12)
+
+                        def y_of(val: float) -> float:
+                            yn = (val - ymin) / yspan
+                            return float(plot_top + plot_h) - yn * float(plot_h)
+
+                        # draw with one neighbor outside for step continuity (not for y-scale)
+                        idxs = [j for j, (t, _) in enumerate(pts) if t0 <= t <= t1]
+                        j0 = max(0, idxs[0] - 1)
+                        j1 = min(len(pts) - 1, idxs[-1] + 1)
+                        draw_pts = pts[j0 : j1 + 1]
+
+                        path = QPainterPath()
+                        markers: list[QPointF] = []
+                        prev_x: float | None = None
+                        prev_y: float | None = None
+                        for t_ns, y in draw_pts:
+                            x = self._x_of_f(t_ns, plot_w)
+                            yy = y_of(y)
+                            if prev_x is None:
+                                path.moveTo(x, yy)
+                            else:
+                                path.lineTo(x, prev_y if prev_y is not None else yy)
+                                path.lineTo(x, yy)
+                            if t0 <= t_ns <= t1:
+                                markers.append(QPointF(x, yy))
+                            prev_x, prev_y = x, yy
+
+                        pen = QPen(color, 2.2)
+                        pen.setCosmetic(True)
+                        p.setPen(pen)
+                        p.drawPath(path)
+                        p.setBrush(color)
+                        for pt in markers:
+                            p.drawEllipse(pt, 3.5, 3.5)
+                    else:
+                        p.setPen(QColor("#999"))
+                        msg = t("no samples") if not pts else t("out of view — fit row")
+                        p.drawText(
+                            left + 8,
+                            plot_top,
+                            plot_w,
+                            plot_h,
+                            Qt.AlignmentFlag.AlignCenter,
+                            msg,
+                        )
+                finally:
+                    p.restore()
+
+                if in_view:
+                    ys = [y for _, y in in_view]
+                    ymin, ymax = _y_range(ys)
+                    yspan = max(ymax - ymin, 1e-12)
+
+                    def y_of_tick(val: float) -> float:
+                        yn = (val - ymin) / yspan
+                        return float(plot_top + plot_h) - yn * float(plot_h)
+
+                    # Y ticks (left of plot)
+                    p.setPen(QColor("#555"))
+                    for yv, align_flag in (
+                        (ymax, Qt.AlignmentFlag.AlignTop),
+                        ((ymin + ymax) / 2, Qt.AlignmentFlag.AlignVCenter),
+                        (ymin, Qt.AlignmentFlag.AlignBottom),
+                    ):
+                        yy = int(y_of_tick(yv))
+                        p.drawText(
+                            int(self._label_w) + 2,
+                            yy - 8,
+                            _MARGIN_L - 4,
+                            16,
+                            Qt.AlignmentFlag.AlignRight | align_flag,
+                            _fmt_val(yv),
+                        )
+                        p.setPen(QPen(QColor("#cfd8dc"), 1, Qt.PenStyle.DotLine))
+                        p.drawLine(left, yy, left + plot_w, yy)
+                        p.setPen(QColor("#555"))
+
+                for tag in self._tags:
+                    at = tag.at_ns()
+                    if at is None or at < t0 or at > t1:
+                        continue
+                    x = int(self._x_of_f(int(at), plot_w))
+                    p.setPen(QPen(QColor("#ad1457"), 1))
+                    p.drawLine(x, plot_top, x - 4, plot_top + 8)
+                    p.drawLine(x, plot_top, x + 4, plot_top + 8)
+                    p.drawLine(x - 4, plot_top + 8, x + 4, plot_top + 8)
+
+                if play_t is not None and t0 <= play_t <= t1:
+                    x = int(self._x_of_f(play_t, plot_w))
+                    p.setPen(QPen(QColor("#e65100"), 2))
+                    p.drawLine(x, plot_top, x, plot_top + plot_h)
+
+                top += row_h
+        finally:
+            if p.isActive():
+                p.end()
 
 
 class _ArrowStrip(QWidget):
@@ -682,16 +783,20 @@ class _ArrowStrip(QWidget):
 
     def paintEvent(self, _event) -> None:  # type: ignore[no-untyped-def]
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor("#eceff1"))
-        p.setPen(QPen(QColor("#cfd8dc"), 1))
-        p.drawLine(0, 0, self.width(), 0)
-        p.drawLine(0, self.height() - 1, self.width(), self.height() - 1)
-        p.setPen(QColor("#607d8b"))
-        font = QFont(p.font())
-        font.setPointSize(11)
-        p.setFont(font)
-        glyph = "▲" if self._expanded else "▼"
-        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
+        try:
+            p.fillRect(self.rect(), QColor("#eceff1"))
+            p.setPen(QPen(QColor("#cfd8dc"), 1))
+            p.drawLine(0, 0, self.width(), 0)
+            p.drawLine(0, self.height() - 1, self.width(), self.height() - 1)
+            p.setPen(QColor("#607d8b"))
+            font = QFont(p.font())
+            font.setPointSize(11)
+            p.setFont(font)
+            glyph = "▲" if self._expanded else "▼"
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, glyph)
+        finally:
+            if p.isActive():
+                p.end()
 
     def mousePressEvent(self, _event) -> None:  # type: ignore[no-untyped-def]
         self.clicked.emit()
@@ -701,9 +806,11 @@ class _ZoomScrollArea(QScrollArea):
     def wheelEvent(self, event: QWheelEvent) -> None:
         w = self.widget()
         if isinstance(w, _MultiStripCanvas):
+            # Always route wheel to canvas for time zoom/pan (never scroll-steal).
             w.wheelEvent(event)
             if event.isAccepted():
                 return
+        # Only scroll vertically when canvas ignored (e.g. empty).
         super().wheelEvent(event)
 
 
@@ -712,20 +819,52 @@ class VarStripView(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._model: SessionModel | None = None
         self._play_idx = 0
         self._keys: list[str] = []
         self._catalog: set[str] = set()
         self._picker_open = False
 
+        # Canvas first so toolbar buttons can bind to it.
+        self._canvas = _MultiStripCanvas()
+        self._canvas.seek_ns_requested.connect(self.seek_ns_requested.emit)
+        self._canvas.selection_changed.connect(self._on_canvas_sel)
+
         bar = QHBoxLayout()
         bar.setContentsMargins(0, 0, 0, 0)
         bar.setSpacing(4)
+        _btn = "QPushButton { font-size: 12px; padding: 0; }"
+        self._btn_zoom_out = QPushButton("−")
+        self._btn_zoom_out.setFixedSize(30, 28)
+        self._btn_zoom_out.setStyleSheet(_btn)
+        self._btn_zoom_out.setToolTip(t("时间缩小"))
+        self._btn_zoom_out.clicked.connect(lambda: self._canvas.zoom_by(1.25))
+        bar.addWidget(self._btn_zoom_out)
+        lbl_zoom = QLabel(t("缩放"))
+        lbl_zoom.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_zoom.setFixedHeight(28)
+        fz = lbl_zoom.font()
+        fz.setPointSize(max(fz.pointSize(), 11) + 1)
+        fz.setBold(True)
+        lbl_zoom.setFont(fz)
+        bar.addWidget(lbl_zoom)
+        self._btn_zoom_in = QPushButton("+")
+        self._btn_zoom_in.setFixedSize(30, 28)
+        self._btn_zoom_in.setStyleSheet(_btn)
+        self._btn_zoom_in.setToolTip(t("时间放大"))
+        self._btn_zoom_in.clicked.connect(lambda: self._canvas.zoom_by(0.8))
+        bar.addWidget(self._btn_zoom_in)
+        self._btn_fit = QPushButton(t("适应"))
+        self._btn_fit.setFixedHeight(28)
+        self._btn_fit.setToolTip(t("适应全部信号时窗"))
+        self._btn_fit.clicked.connect(self._on_fit_all)
+        bar.addWidget(self._btn_fit)
+        bar.addSpacing(16)
         bar.addStretch(1)
-        _row_h_btn = "QPushButton { font-size: 12px; padding: 0; }"
         self._btn_row_minus = QPushButton("▼")
         self._btn_row_minus.setFixedSize(30, 28)
-        self._btn_row_minus.setStyleSheet(_row_h_btn)
+        self._btn_row_minus.setStyleSheet(_btn)
         self._btn_row_minus.setToolTip(t("Shrink all rows"))
         self._btn_row_minus.clicked.connect(lambda: self._canvas.nudge_all_row_heights(-8))
         bar.addWidget(self._btn_row_minus)
@@ -739,7 +878,7 @@ class VarStripView(QWidget):
         bar.addWidget(lbl_row_h)
         self._btn_row_plus = QPushButton("▲")
         self._btn_row_plus.setFixedSize(30, 28)
-        self._btn_row_plus.setStyleSheet(_row_h_btn)
+        self._btn_row_plus.setStyleSheet(_btn)
         self._btn_row_plus.setToolTip(t("Grow all rows"))
         self._btn_row_plus.clicked.connect(lambda: self._canvas.nudge_all_row_heights(8))
         bar.addWidget(self._btn_row_plus)
@@ -792,12 +931,13 @@ class VarStripView(QWidget):
         self._arrow = _ArrowStrip()
         self._arrow.clicked.connect(self._toggle_picker)
 
-        self._canvas = _MultiStripCanvas()
-        self._canvas.seek_ns_requested.connect(self.seek_ns_requested.emit)
-        self._canvas.selection_changed.connect(self._on_canvas_sel)
         scroll = _ZoomScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         scroll.setWidget(self._canvas)
+        self._scroll = scroll
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(6, 4, 6, 4)
@@ -806,6 +946,10 @@ class VarStripView(QWidget):
         lay.addWidget(self._picker_panel)
         lay.addWidget(self._arrow)
         lay.addWidget(scroll, stretch=1)
+
+    def _on_fit_all(self) -> None:
+        self._canvas.fit_compatible_keys()
+        self._canvas.update()
 
     def set_model(self, model: SessionModel | None) -> None:
         same = model is self._model

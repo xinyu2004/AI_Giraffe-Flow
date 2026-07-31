@@ -46,7 +46,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | Tab | Role |
 |-----|------|
 | **1 · Signals & apps** (default) | **Left thin SKU open**; canvas; **right Lineage collapsed** (◀ to expand) |
-| **2 · Platform runtime** | Top `runtime_modules`; subpages: exec/FG · PHM · diag · log · OTA · **Event collector** |
+| **2 · Platform runtime** | Top `runtime_modules`; subpages: exec/FG · **EM launch map** · PHM · diag · log · OTA · **Event collector** |
 
 Shortcuts: Ctrl+1 / Ctrl+2. Verify / Generate returns to tab 1 Lineage.
 
@@ -76,5 +76,16 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 - [x] Open `afc_with_uss` shows ported graph  
 - [x] Add/remove nodes / drag edges / Save writes `wiring.yaml`  
 - [x] Tab 1 thin SKU + tab 2 runtime_modules / platform round-trip  
-- [x] Verify shows Lineage pass/fail  
+- [x] Tab 2 **EM launch map** edits `platform/em_launch.yaml` (unlocked by `exec`)  
+- [x] Verify shows Lineage pass/fail (incl. `platform_em_launch`)  
 - [x] CI does not require Qt  
+
+## Tab 2 ↔ board modules (afc_with_uss)
+
+| `runtime_modules` | Subpage / YAML | On board |
+|-------------------|----------------|----------|
+| `exec` (+`sm`) | Exec/FG · `exec.yaml` | FG + dependency topo |
+| `exec` | EM launch · `em_launch.yaml` | `gf_em_daemon` OSAL Spawn |
+| `phm` | Health · `phm.yaml` | Alive; `restart` → EM |
+| `collector` / phm / diag | Event collector · `collector.yaml` | ring / cp_dem stub |
+| `diag` / `log` / `ucm` | respective pages | DoIP / log / OTA stub |

@@ -91,6 +91,9 @@ int main() {
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
+    if (supervisor.ExitForEmRestart()) {
+      return gf_ara::exec::kEmRestartExitCode;
+    }
 
     if (auto t = perc_sub.Take(); t && t.Value().has_value()) {
       last_perc = *t.Value();

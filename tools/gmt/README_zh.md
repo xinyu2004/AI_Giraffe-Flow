@@ -13,7 +13,7 @@
 | `GMT measure record\|tag\|export\|import-ndjson` | 录制、裁剪、MCAP/**VCD**、tap NDJSON 导入 |
 | `GMT bridge foxglove` | Studio live / JSONL（8765） |
 | `GMT bridge live` | GMT GUI live WebSocket（8766） |
-| **`GMT gui`** | Live / Tag / 动画 DAG / **变量轨** / **回灌 playhead** / 导出 |
+| **`GMT gui`** | Live / Tag / 动画 DAG / **Graphics 图形** / **回灌 playhead** / 导出 |
 
 ```bash
 pip install -e tools/gmt -e tools/gf-codegen
@@ -34,7 +34,7 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 - 回灌「跟 playhead 灌」开启时：**自动关 Live「跟随最新」**；Live 仍可旁观/录制  
 - 回灌结果：顶栏 **绿=已灌 / 红=跳过**，原因在状态栏  
 - 「回灌」Tab：事件表；可点行跳 playhead；可选「循环」  
-- 「变量轨」Tab：按变量一行；滚轮缩放；橙线 playhead  
+- 「图形」Tab（对齐 CANoe Graphics）：按信号一行；滚轮 / ± 缩放时窗；拖左边线改名称列宽；橙线 playhead  
 - 墙钟：session 一条 `session_meta` 锚点 + `(t_ns - t0_ns)`  
 - 未加载 `project.yaml`：**回灌禁用**；Live 仍可旁观  
 

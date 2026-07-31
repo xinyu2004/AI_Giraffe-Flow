@@ -22,13 +22,16 @@ Desktop-first, **ARM Linux** embedded primary (OSAL reserved for MIPS / RISC-V).
 
 ### 1. gf-config (configure toolchain)
 
-Defines **what** and **who talks to whom** — not algorithms.
+Defines **what**, **who talks to whom**, and **which board modules to trim** — not algorithms. Two tabs write three asset layers:
 
-- Tab A → `req.yaml` (SKU / trim / live_tap)
-- Tab B → `wiring.yaml` (signal graph)
-- Verify / Generate → SOR + codegen
+| Tab | Writes | Output |
+|-----|--------|--------|
+| **1 · Signals & apps** | Thin SKU (`req.yaml`) + wiring canvas (`wiring.yaml`) | deployments / dataflows / live_tap |
+| **2 · Platform runtime** | `runtime_modules` + `platform/*` (exec · **EM launch** · PHM · collector · diag…) | `platform_manifest` → CMake trim / EM topo |
 
-![gf-config — signal graph (B)](result_pic/gf-config.png)
+- Verify / Generate → SOR + Proxy/Skeleton + lineage (incl. `platform_em_launch`)
+
+![gf-config — signal graph (tab 1)](result_pic/gf-config.png)
 
 ```bash
 gf-config projects/oem_a/afc_with_uss/project.yaml
@@ -48,8 +51,8 @@ What actually runs on the board and in SIL. Production algorithms may live in **
 |-------|------|------|
 | **API / runtime** | `middleware/` | Public `gf_ara::*`; trim via SKU `runtime_modules` |
 | **Transports** | `middleware/bindings/` | iceoryx, SOME/IP, DDS, cross_domain_ipc (MCU) |
-| **Exec / health** | exec / phm / sm | Launch, heartbeat, state groups |
-| **Portability** | `osal/` · `hal/` | Clock/thread; ARM Linux first |
+| **Exec / health** | exec (**EM daemon**) / phm / sm / collector | Topo launch, relaunch, heartbeat, FG, events |
+| **Portability** | `osal/` · `hal/` | Clock / thread / **process Spawn**; ARM Linux first |
 | **Reference apps** | `apps/` | Gateway, sensing/perception/planning stubs, obs tools — **not production algos** |
 | **Integration** | `projects/` | OEM DBC / wiring / hpp / SIL·HIL scripts |
 
@@ -61,8 +64,9 @@ Rule: **apps depend only on semantic service names**; OEM deltas stay in adapter
 |---------|------|
 | [com](middleware/com/) | Unified com (Proxy / Skeleton) |
 | [bindings/iceoryx](middleware/bindings/iceoryx/) … | Transport backends |
-| [exec](middleware/exec/) / [phm](middleware/phm/) / [sm](middleware/sm/) | Execution / health / state |
-| [osal](middleware/osal/) | OS abstraction |
+| [exec](middleware/exec/) | ExecutionClient + **EmDaemon** (OSAL Spawn) |
+| [phm](middleware/phm/) / [sm](middleware/sm/) / [collector](middleware/collector/) | Health / FG / event collect |
+| [osal](middleware/osal/) | OS abstraction (incl. process) |
 | [ucm](middleware/ucm/) / [diag](middleware/diag/) | OTA / DoIP skeletons |
 | [log](middleware/log/) / [trace](middleware/trace/) | Logging & timing |
 

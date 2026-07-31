@@ -45,6 +45,9 @@ int main() {
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
+    if (supervisor.ExitForEmRestart()) {
+      return gf_ara::exec::kEmRestartExitCode;
+    }
 
     bool sent = false;
     auto taken = in_sub.Take();

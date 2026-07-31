@@ -10,3 +10,5 @@ Smoke: `gf_phm_alive_deadline_smoke` · `middleware/phm/testcases/smoke_alive_de
 | PHM-03 | sleep>deadline | Evaluate；再 Alive | DeadlineMissed→Ok | 同上 |
 | PHM-04 | — | ReportLogical false/true | LogicalFault→Ok | 同上 |
 | PHM-05 | SetPaused | sleep>deadline | 仍 Ok | 同上 |
+
+SIL / EM：`on_failure: restart` → [exec_cases.md](exec_cases.md) EM-* + [sil_verify_cases.md](sil_verify_cases.md) SIL-EM-01。

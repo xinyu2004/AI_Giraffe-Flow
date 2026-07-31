@@ -51,6 +51,21 @@
 - 期望: cross_domain_ipc 桌面联调绿
 - 状态: active
 
+### SIL-EM-01 — PHM fault → EM 账本（软重启）
+- 类别: trust
+- 库级复现: `ctest -R gf_exec_em_smoke`（EM-01…04）
+- 说明: 无 `GF_EM_MANAGED` 时 `on_failure: restart` → soft relaunch；`GF_EM_SOFT_RESTART=1` 强制软路径
+- 状态: active
+
+### SIL-EM-02 — OS EM daemon（OSAL Spawn）+ relaunch
+- 类别: trust
+- 库级: `ctest -R gf_em_daemon_smoke`（EMD-01…04）；进程原语 `ctest -R gf_osal_process_smoke`
+- SIL: `scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh`
+- 配置: `platform/em_launch.yaml` + `phm.yaml`（planning → `restart`）
+- 期望: daemon 日志 `relaunch name=planning.driving`；子进程 `em os_restart_exit`；gateway 仍收到 Trajectory
+- 机制: 子进程 exit **75** → `waitpid` → `fork/exec`；relaunch 时清 `GF_PHM_FAULT_MS`
+- 状态: active
+
 可选：`GF_TRUST_EVIDENCE_SIL=1 bash scripts/verify/trust_evidence_modules.sh`（默认只跑 SIL-03 类 trust 场景，见脚本）。
 
 ## Debug-path（不进认证支撑）

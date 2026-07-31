@@ -219,7 +219,9 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
   StateClient::RequestTransition(function_group_, FunctionGroupState::kRunning);
 
   using gf_ara::exec::ExecutionClient;
+  using gf_ara::exec::ExecutionManager;
   using gf_ara::exec::ExecutionState;
+  ExecutionManager::StartProcess(process_);
   if (!ExecutionClient::Offer(process_)) {
     std::cerr << "platform_sil: Offer failed for " << process_ << "\n";
     return false;
@@ -254,6 +256,43 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
   return true;
 }
 
+void ProcessSupervisor::SoftRestartViaEm(const char* reason) {
+  using gf_ara::exec::ExecutionClient;
+  using gf_ara::exec::ExecutionManager;
+  using gf_ara::exec::ExecutionState;
+
+  ExecutionManager::RequestRestart(process_, reason);
+  if (!ExecutionClient::Offer(process_) ||
+      !ExecutionClient::ReportExecutionState(ExecutionState::kRunning)) {
+    std::cerr << "em soft restart Offer/Running failed process=" << process_ << "\n";
+    return;
+  }
+  ExecutionManager::ConsumeRestartPending(process_);
+  if (entity_) {
+    entity_->SetPaused(false);
+    entity_->ReportLogical(true);
+    entity_->ReportAlive();
+  }
+  fault_active_ = false;
+  fault_pending_ = false;
+  last_status_ = gf_ara::phm::CheckpointStatus::kOk;
+  ++em_restart_count_;
+  next_alive_ = std::chrono::steady_clock::now() +
+                std::chrono::milliseconds(alive_period_ms_);
+  std::cout << "em soft_restart process=" << process_
+            << " count=" << ExecutionManager::RestartCount(process_) << std::endl;
+}
+
+void ProcessSupervisor::RequestOsEmRestart(const char* reason) {
+  using gf_ara::exec::ExecutionManager;
+  ExecutionManager::RequestRestart(process_, reason);
+  ++em_restart_count_;
+  exit_for_em_restart_ = true;
+  std::cout << "em os_restart_exit process=" << process_
+            << " code=" << gf_ara::exec::kEmRestartExitCode
+            << " reason=" << reason << std::endl;
+}
+
 void ProcessSupervisor::OnFault(gf_ara::phm::CheckpointStatus st) {
   const char* reason = StatusName(st);
   ++miss_count_;
@@ -262,6 +301,17 @@ void ProcessSupervisor::OnFault(gf_ara::phm::CheckpointStatus st) {
   gf_ara::collector::EventCollector::Instance().ReportEvent(
       "phm", reason, std::string("entity=") + std::string(entity_->Name()),
       gf_ara::collector::EventSeverity::kError);
+
+  if (on_failure_ == "restart") {
+    // Default under EM daemon: exit 75 for OS relaunch. Soft path if forced or unmanaged.
+    const bool soft = EnvFlag("GF_EM_SOFT_RESTART") || !EnvFlag("GF_EM_MANAGED");
+    if (soft) {
+      SoftRestartViaEm(reason);
+    } else {
+      RequestOsEmRestart(reason);
+    }
+    return;
+  }
 
   if (on_failure_ == "notify_sm") {
     const bool enter_upd = EnvFlag("GF_SM_ENTER_UPDATING_ON_FAULT");

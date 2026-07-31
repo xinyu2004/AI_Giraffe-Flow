@@ -125,6 +125,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | M1 | **sm** 状态机可用（超出 exec.yaml 名单） | ✅ FG Off/Running/Updating + `NotifyHealthFault` |
 | M2 | **phm** Logical + `notify_sm` / 与 Collector 联动 | ✅ `ReportLogical` + SIL `on_failure: notify_sm` |
 | M3 | **Event Collector** 运行时：汇聚错误 → CP DEM 或本地事件库 | ✅ 环缓 + `cp_dem` stub 转发 |
+| M3b | **EM** 最小集 + OS daemon（fork/exec + exit75 relaunch） | ✅ `ExecutionManager` + `gf_em_daemon` |
 | M4 | **log** lite（超 skeleton） | |
 | M5 | per / tsync 骨架落地（可裁剪） | |
 | M6 | vsomeip **择一**加深（量产级仍可后置） | |
@@ -189,7 +190,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | core, com, iceoryx | ● | |
 | dds (Cyclone) | 真路径尖刺 ● | |
 | vsomeip | stub | 择一加深 |
-| exec, phm | 挂主链 ● | Logical / 联动 |
+| exec, phm | 挂主链 ● | Logical / 联动；**EM** 最小 + `restart` |
 | sm | ∈exec 名单 | 状态机 ● |
 | diag / ucm | stub / Spike | DoIP 会话 · GMT OTA · UCM 编排 |
 | **Event Collector** | — | **最小集 ●** |

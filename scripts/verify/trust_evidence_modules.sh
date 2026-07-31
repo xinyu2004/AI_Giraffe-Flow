@@ -57,8 +57,11 @@ run_bin() {
 for name in \
   gf_core_smoke \
   gf_osal_smoke \
+  gf_osal_process_smoke \
   gf_com_loopback_smoke \
   gf_exec_smoke \
+  gf_exec_em_smoke \
+  gf_em_daemon_smoke \
   gf_sm_fg_smoke \
   gf_phm_alive_deadline_smoke \
   gf_collector_smoke \

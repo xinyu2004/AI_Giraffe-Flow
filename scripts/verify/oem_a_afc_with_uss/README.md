@@ -9,6 +9,7 @@
 | [smoke_sil_multiproc.sh](smoke_sil_multiproc.sh) | compile → multiproc |
 | [smoke_sil_observability.sh](smoke_sil_observability.sh) | multiproc → Tag → MCAP |
 | [smoke_sil_phm_fault.sh](smoke_sil_phm_fault.sh) | PHM miss→recover |
+| [smoke_sil_em_daemon.sh](smoke_sil_em_daemon.sh) | OS EM fork/exec + PHM restart relaunch |
 | [run_sil_live_foxglove.sh](run_sil_live_foxglove.sh) | 别名 → 产品 `run_sil.sh` |
 | [deploy_hil.sh](deploy_hil.sh) | 板端部署 stub |
 

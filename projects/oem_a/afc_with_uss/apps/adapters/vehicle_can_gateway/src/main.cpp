@@ -52,6 +52,9 @@ int main(int argc, char** argv) {
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
+    if (supervisor.ExitForEmRestart()) {
+      return gf_ara::exec::kEmRestartExitCode;
+    }
 
     gf_gen::EgoMotion ego{};
     ego.timestamp_ns = now_ns();

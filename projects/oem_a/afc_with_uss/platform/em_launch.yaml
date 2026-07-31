@@ -1,0 +1,13 @@
+# OS EM launch map — binaries relative to $GF_BUILD_DIR
+schema_version: "0.1"
+processes:
+  - name: adapter.vehicle_can_gateway
+    binary: apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway
+    args: ["15"]
+  - name: perception.fcm
+    binary: apps/perception/fcm/gf_perception_fcm
+  - name: sensing.uss
+    binary: apps/sensing/uss/gf_sensing_uss
+  - name: planning.driving
+    binary: apps/planning/driving/gf_planning_driving
+    max_restarts: 2

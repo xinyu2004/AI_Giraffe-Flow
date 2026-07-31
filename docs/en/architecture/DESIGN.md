@@ -211,6 +211,8 @@ Manifests may **colocate** light services into one OS process without changing s
 
 Phases: T0 desktop → T1 board+host → T2 HIL → T3 vehicle debug → T4 production trim.
 
+**On-board boot:** bring up com base (e.g. RouDi) → start **`gf_em_daemon`** → EM topo-sorts `exec.yaml` and **`gf::osal::SpawnProcess`** apps. See Chinese DESIGN §8.1 and [`middleware/exec/README.md`](../../../middleware/exec/README.md).
+
 ---
 
 ## 8. Observability
@@ -232,12 +234,13 @@ Apps (perception/planning/…)
     → gf_ara API
     → gf runtime
          ├→ Binding plugins (iceoryx / someip / dds)
-         └→ OSAL → Linux (first) / QNX (later)
+         └→ OSAL (clock / thread / process) → Linux (first) / QNX (later)
 Apps / adapters
     → HAL → concrete SoC / radar SDK / CAN
 ```
 
-When changing platforms: apps and most runtime stay put; touch OSAL (first port), HAL (per vehicle), bindings (library availability), and deployment profiles. **No `#ifdef SOC_X` in perception/planning/control.**
+When changing platforms: apps and most runtime stay put; touch OSAL (first port), HAL (per vehicle), bindings (library availability), and deployment profiles. **No `#ifdef SOC_X` in perception/planning/control.**  
+EM uses OSAL process APIs only — no direct `fork`/`exec` in `EmDaemon`.
 
 ---
 

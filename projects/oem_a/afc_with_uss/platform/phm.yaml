@@ -23,4 +23,5 @@ entities:
   alive_period_ms: 100
   alive_timeout_ms: 300
   deadline_ms: null
-  on_failure: notify_sm
+  # on_failure: restart → GF_EM_MANAGED 时 exit 75 + gf_em_daemon relaunch；否则 soft
+  on_failure: restart

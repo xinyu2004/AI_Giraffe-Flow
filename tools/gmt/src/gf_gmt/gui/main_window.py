@@ -276,7 +276,7 @@ class GmtMainWindow(QMainWindow):
         self._var_strip.seek_ns_requested.connect(self._seek_ns)
         self._tabs.addTab(self._order, t("Order"))
         self._tabs.addTab(self._dag, t("DAG"))
-        self._tabs.addTab(self._var_strip, t("Vars"))
+        self._tabs.addTab(self._var_strip, t("图形"))
         self._tabs.addTab(self._tags, t("Tag"))
         self._tabs.addTab(self._inject_panel, t("Inject"))
         root.addWidget(self._tabs, stretch=1)
@@ -415,7 +415,7 @@ class GmtMainWindow(QMainWindow):
         view_menu = self.menuBar().addMenu(t("视图"))
         view_menu.addAction(t("Order"), lambda: self._tabs.setCurrentWidget(self._order))
         view_menu.addAction(t("DAG"), lambda: self._tabs.setCurrentWidget(self._dag))
-        view_menu.addAction(t("Vars"), lambda: self._tabs.setCurrentWidget(self._var_strip))
+        view_menu.addAction(t("图形"), lambda: self._tabs.setCurrentWidget(self._var_strip))
         view_menu.addAction(t("Tag"), lambda: self._tabs.setCurrentWidget(self._tags))
         view_menu.addAction(t("Inject"), lambda: self._tabs.setCurrentWidget(self._inject_panel))
 

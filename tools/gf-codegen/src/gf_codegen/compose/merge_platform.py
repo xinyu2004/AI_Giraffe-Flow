@@ -12,6 +12,8 @@ from gf_codegen.compose.load_project import PLATFORM_KEYS, ProjectPaths
 # runtime_modules that unlock each platform file
 _MODULE_UNLOCK: dict[str, frozenset[str]] = {
     "exec": frozenset({"exec", "sm"}),
+    # OS EM daemon launch map (binaries); unlocked with exec
+    "em_launch": frozenset({"exec"}),
     "phm": frozenset({"phm"}),
     "diag": frozenset({"diag"}),
     "log": frozenset({"log"}),
@@ -101,6 +103,29 @@ def validate_platform(
             checks.append({"id": "platform_exec_processes", "status": "pass"})
         if unknown_deps:
             warnings.extend(f"platform.exec: {x}" for x in unknown_deps)
+
+    if "em_launch" in loaded:
+        bad_em: list[str] = []
+        for i, proc in enumerate(loaded["em_launch"].get("processes") or []):
+            if not isinstance(proc, dict):
+                bad_em.append(f"processes[{i}] not an object")
+                continue
+            name = str(proc.get("name") or "").strip()
+            binary = str(proc.get("binary") or "").strip()
+            if not name:
+                bad_em.append(f"processes[{i}] missing name")
+                continue
+            if name.startswith("external."):
+                bad_em.append(f"em_launch process must not be external: {name}")
+            elif name not in ap_processes:
+                bad_em.append(f"em_launch process not in wiring (non-external): {name}")
+            if not binary:
+                bad_em.append(f"em_launch process {name}: missing binary")
+        if bad_em:
+            errors.extend(f"platform.em_launch: {x}" for x in bad_em)
+            checks.append({"id": "platform_em_launch", "status": "fail", "detail": bad_em})
+        else:
+            checks.append({"id": "platform_em_launch", "status": "pass"})
 
     if "phm" in loaded:
         bad_phm: list[str] = []

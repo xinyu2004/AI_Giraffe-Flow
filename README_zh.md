@@ -22,13 +22,16 @@
 
 ### 1. gf-config（配置侧工具链）
 
-定 **要什么能力、谁连谁**，不实现算法。
+定 **要什么能力、谁连谁、板端裁哪些模块**，不实现算法。两页写回三层资产：
 
-- **A 页** → `req.yaml`（SKU / 中间件裁剪 / live_tap）
-- **B 页** → `wiring.yaml`（信号图）
-- **Verify / Generate** → SOR + 生成代码
+| 页 | 写什么 | 产物 |
+|----|--------|------|
+| **1 · 信号与应用** | 薄 SKU（`req.yaml`）+ 信号图画布（`wiring.yaml`） | deployments / dataflows / live_tap |
+| **2 · 平台运行时** | `runtime_modules` + `platform/*`（exec · **EM 启动表** · PHM · Collector · diag…） | `platform_manifest` → CMake 裁剪 / EM 拓扑 |
 
-![gf-config — 信号图（B 页）](result_pic/gf-config.png)
+- **Verify / Generate** → SOR + Proxy/Skeleton + lineage（含 `platform_em_launch` 等门禁）
+
+![gf-config — 信号图（页 1）](result_pic/gf-config.png)
 
 ```bash
 gf-config projects/oem_a/afc_with_uss/project.yaml
@@ -48,8 +51,8 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 |----|------|--------|
 | **API / 运行时** | `middleware/` | `gf_ara::*` 对外；`gf::*` 对内；按 SKU `runtime_modules` 裁剪 |
 | **传输插件** | `middleware/bindings/` | iceoryx（机内）、SOME/IP、DDS、cross_domain_ipc（MCU） |
-| **执行与健康** | exec / phm / sm | 拉起、心跳、状态组 |
-| **可移植** | `osal/` · `hal/` | 时钟/线程等；主目标 ARM Linux |
+| **执行与健康** | exec（**EM daemon**）/ phm / sm / collector | 拓扑拉起、relaunch、心跳、FG、事件收集 |
+| **可移植** | `osal/` · `hal/` | 时钟 / 线程 / **进程 Spawn**；主目标 ARM Linux |
 | **参考 App** | `apps/` | gateway、感知/超声/规划 stub、观测工具——**非量产算法** |
 | **集成工程** | `projects/` | OEM 的 DBC / wiring / hpp / SIL·HIL 脚本 |
 
@@ -61,8 +64,9 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 |----|------|
 | [com](middleware/com/) | 统一通信抽象（Proxy / Skeleton） |
 | [bindings/iceoryx](middleware/bindings/iceoryx/) 等 | 传输后端 |
-| [exec](middleware/exec/) / [phm](middleware/phm/) / [sm](middleware/sm/) | 执行 / 健康 / 状态 |
-| [osal](middleware/osal/) | OS 抽象 |
+| [exec](middleware/exec/) | ExecutionClient + **EmDaemon**（OSAL Spawn） |
+| [phm](middleware/phm/) / [sm](middleware/sm/) / [collector](middleware/collector/) | 健康 / FG / 事件收集 |
+| [osal](middleware/osal/) | OS 抽象（含 process） |
 | [ucm](middleware/ucm/) / [diag](middleware/diag/) | OTA / DoIP 骨架 |
 | [log](middleware/log/) / [trace](middleware/trace/) | 日志与时序 |
 

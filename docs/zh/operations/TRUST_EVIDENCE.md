@@ -29,6 +29,8 @@ bash scripts/verify/trust_evidence_modules.sh
 
 量产算法多为 **外部 lib**；本仓证据打在 **middleware / bindings 库**。薄 `main` / SKU stub 靠 **L3 SIL** 证明拼装，不逐个做单元 smoke。
 
+板端启动：com 底座 → **EM（`gf_em_daemon`）** → OSAL Spawn Apps；见 [DESIGN §8.1](../architecture/DESIGN.md#81-板端启动顺序em)。EM / OSAL process 用例见 `exec_cases.md`、`osal_cases.md`。
+
 ## 索引
 
 完整模块表见 [`docs/reports/trust-evidence/README.md`](../reports/trust-evidence/README.md)。

@@ -1,6 +1,7 @@
 add_library(gf_osal STATIC
   src/posix/clock.cpp
   src/posix/thread.cpp
+  src/posix/process.cpp
 )
 add_library(gf::osal ALIAS gf_osal)
 
@@ -13,4 +14,8 @@ if(GF_BUILD_TESTS)
   add_executable(gf_osal_smoke testcases/smoke_osal.cpp)
   target_link_libraries(gf_osal_smoke PRIVATE gf::osal)
   add_test(NAME gf_osal_smoke COMMAND gf_osal_smoke)
+
+  add_executable(gf_osal_process_smoke testcases/smoke_process.cpp)
+  target_link_libraries(gf_osal_process_smoke PRIVATE gf::osal)
+  add_test(NAME gf_osal_process_smoke COMMAND gf_osal_process_smoke)
 endif()

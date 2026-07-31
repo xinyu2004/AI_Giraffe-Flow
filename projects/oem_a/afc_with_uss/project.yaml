@@ -14,9 +14,11 @@ oem:
 integration:
   wiring: integration/wiring.yaml
 
-# ③ 平台清单（exec 含 SM 极简；collector = Event 最小集）— 见 MIDDLEWARE_CONFIG_PLAN
+# ③ 平台清单 — 见 MIDDLEWARE_CONFIG_PLAN
+#   exec = FG/拓扑；em_launch = OS EM 二进制表；phm = Alive/on_failure；collector = Event 最小集
 platform:
   exec: platform/exec.yaml
+  em_launch: platform/em_launch.yaml
   phm: platform/phm.yaml
   diag: platform/diag.yaml
   log: platform/log.yaml
