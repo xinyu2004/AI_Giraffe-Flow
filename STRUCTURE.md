@@ -43,7 +43,8 @@ AI_Giraffe-Flow/
 │
 ├── middleware/                   # board / SIL runtime (product core)
 │   ├── core/ com/ bindings/ osal/
-│   ├── exec/ phm/ sm/ diag/ ucm/ log/ …
+│   ├── exec/ phm/ sm/ collector/ diag/ ucm/ log/ per/ tsync/
+│   ├── trace/                    # timing → VCD / GMT (debug-path adjacent)
 │   ├── hal/
 │   ├── third_party/              # WHERE sources land (gitignore)
 │   └── tests/                    # middleware unit + component tests
@@ -58,7 +59,7 @@ AI_Giraffe-Flow/
 │   ├── project.yaml
 │   ├── req.yaml
 │   ├── integration/wiring.yaml
-│   ├── platform/                 # exec phm diag log ucm collector…
+│   ├── platform/                 # exec · phm · diag · log · ucm · collector（+ 可裁剪 per/tsync）
 │   ├── interfaces/               # SKU io_types
 │   ├── oem/                      # DBC extract / import policy
 │   ├── apps/                     # SKU stubs (gateway, uss, fcm, planning.*)

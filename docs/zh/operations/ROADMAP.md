@@ -126,29 +126,32 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | M2 | **phm** Logical + `notify_sm` / 与 Collector 联动 | ✅ `ReportLogical` + SIL `on_failure: notify_sm` |
 | M3 | **Event Collector** 运行时：汇聚错误 → CP DEM 或本地事件库 | ✅ 环缓 + `cp_dem` stub 转发 |
 | M3b | **EM** 最小集 + OS daemon（fork/exec + exit75 relaunch） | ✅ `ExecutionManager` + `gf_em_daemon` |
-| M4 | **log** lite（超 skeleton） | |
-| M5 | per / tsync 骨架落地（可裁剪） | |
-| M6 | vsomeip **择一**加深（量产级仍可后置） | |
+| M4 | **log** lite（超 skeleton） | ✅ `gf_ara::log` + `gf_log_smoke`；SIL 读 `log.yaml` |
+| M5 | per / tsync 骨架落地（可裁剪） | ✅ `gf_ara::per` / `gf_ara::tsync` + smoke；`req` 可裁剪 |
+| M6 | vsomeip **择一**加深 | **降至 P3z 前**（Z0b；不挡 DoIP/OTA） |
 
 ### P3-3 Cert-ready — 经得起认证的支持
 
 | # | 交付物 | 状态 |
 |---|--------|------|
 | T1 | `fusa/` 入口：政策 + cases + 收集脚本 | ✅ [fusa/](../../../fusa/) · [POLICY.md](../../../fusa/POLICY.md) · [cases/](../../../fusa/cases/) |
-| T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ◐ [isolation.md](../../../fusa/metrics/isolation.md) · [latency.md](../../../fusa/metrics/latency.md) · [`measure_latency.sh`](../../../fusa/scripts/measure_latency.sh)；SIL 数表已有主机快照，目标预算仍 TBD |
+| T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ◐ [isolation.md](../../../fusa/metrics/isolation.md) · [latency.md](../../../fusa/metrics/latency.md)；SIL 参考预算已填；板级限值仍非本仓范围 |
 | T3 | 本机 runs / packs 流程（默认不进仓） | ✅ `fusa/scripts/run_cases.sh` → `fusa/runs/`；SKU `generate_fusa_artifacts.sh` → `fusa/packs/`（互不调用） |
-| T4 | `production` profile：关 Record/ROS/调试路径 | |
+| T3b | Safety Case 追溯（SG → SR → 验证） | ◐ [traceability.md](../../../fusa/safety-case/traceability.md)：SG-01…04 已挂 L1/L3；SG-05 见 T4 |
+| T4 | `production` profile：关 Record/ROS/调试路径 | ◐ [`smoke_production_profile.sh`](../../../scripts/verify/oem_a_afc_with_uss/smoke_production_profile.sh) · `GF_FUSA_T4=1` |
 
 **目标：** 完整 Safety Case（骨架：[fusa/safety-case/](../../../fusa/safety-case/)）。**当前不声称**证书已取得；仓内持续积累可引用证据（不含把 GMT/stub 当板级 ASIL 证据）。
 
 ### P3-4 DoIP / OTA / GMT
 
-| # | 交付物 |
-|---|--------|
-| D1 | DoIP **会话级**互通（可先 SIL/假 board，不绑量产板） |
-| D2 | **GMT OTA sheet**：选包 / 进度 / 结果；经 **DoIP** 下发路径 |
-| D3 | UCM 编排（+ SM Pause）；后端可 stub→RAUC |
-| D4 | OTA/升级失败路径上 Collector 事件可观测 |
+| # | 交付物 | 状态 |
+|---|--------|------|
+| D1 | DoIP **会话级**互通（可先 SIL/假 board，不绑量产板） | ✅ TCP RoutingActivation + DiagnosticMessage；`gf_doip_ota_server` / `gf_doip_session_smoke` |
+| D2 | **GMT OTA sheet**：选包 / 进度 / 结果；经 **DoIP** 下发路径 | ✅ GMT「OTA」页 + `gf_gmt.doip_client` → RoutineControl |
+| D3 | UCM 编排（+ SM Pause）；后端可 stub→RAUC | ✅ `OtaOrchestrator`（SM Updating + pause hook；RAUC 仍 stub） |
+| D4 | OTA/升级失败路径上 Collector 事件可观测 | ✅ `ucm/ota_failed`（`GF_UCM_FORCE_FAIL` / `FORCE_FAIL` path） |
+
+验收：`bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh`
 
 ### P3-5 Sim spike — Vision Pilot / CARLA
 
@@ -165,6 +168,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | # | 交付物 | 说明 |
 |---|--------|------|
 | Z0 | （可选）极薄 smoke：交叉编译 + hello / 单 iceoryx ping | 中段穿插，不挡桌面交付 |
+| Z0b | vsomeip **择一**加深（原 P3-2 M6） | 真板前完成即可；不挡 P3-4 DoIP/OTA |
 | Z1 | `run_hil` / 部署自动化 | everything OK 后冲刺 |
 | Z2 | ARM 24h soak + 板端证据包 | 同上 |
 | Z3 | 真 **ap_mcu_cp** 台架 | Collector→CP 在桌面 peer 验证后再上真 CP |
@@ -189,14 +193,14 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 |------|---------|-----|
 | core, com, iceoryx | ● | |
 | dds (Cyclone) | 真路径尖刺 ● | |
-| vsomeip | stub | 择一加深 |
+| vsomeip | stub | **P3z 前**择一加深（不挡 P3-4） |
 | exec, phm | 挂主链 ● | Logical / 联动；**EM** 最小 + `restart` |
 | sm | ∈exec 名单 | 状态机 ● |
-| diag / ucm | stub / Spike | DoIP 会话 · GMT OTA · UCM 编排 |
+| diag / ucm | stub / Spike | **DoIP 会话 · GMT OTA · UCM 编排 ●**（RAUC 真刷→P3z） |
 | **Event Collector** | — | **最小集 ●** |
-| log / per / tsync | skeleton / 缺 | lite / 骨架 |
+| log / per / tsync | skeleton / 缺 | **lite / 骨架 ●**（vsomeip→P3z） |
 | gf-config | **两页 UI ✅** · wiring_all / codegen tap ✅ | 平台加深 |
-| GMT | GUI + Foxglove | OTA sheet · measure 证据 |
+| GMT | GUI + Foxglove | **OTA sheet ●** · measure 证据 |
 | Sim (CARLA/VP) | — | adapter 尖刺 |
 | 真板 / 真 CP | — | **P3z 冲刺** |
 | 代认证 | — | **不做**（只做 cert-ready 支持） |
@@ -205,6 +209,6 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 ## 下一步
 
-1. 按 [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md) 落地 **gf-config 两页** + Collector 字段冻结。  
-2. 并行：**CARLA adapter 尖刺范围**评估与 **sm/phm/Collector** 运行时加深。  
-3. 真板 / 真 MCU 不排进近期主线；仅保留可选 Z0 smoke。
+1. **P3-5** CARLA / VP 仿真尖刺（弱耦合，可选）。  
+2. **P3-3** 继续补 Safety Case 证据（T2/T3b/T4 ◐）。  
+3. **P3z**：真板 / vsomeip 加深 / RAUC 真刷写（不挡桌面主航道）。

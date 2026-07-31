@@ -39,6 +39,7 @@ from gf_gmt.gui.inject_client import (
     is_injectable_topic,
 )
 from gf_gmt.gui.inject_panel import InjectPanel
+from gf_gmt.gui.ota_panel import OtaPanel
 from gf_gmt.gui.live_client import LiveWsSession
 from gf_gmt.gui.order_view import OrderRaceView
 from gf_gmt.gui.session_model import (
@@ -272,6 +273,7 @@ class GmtMainWindow(QMainWindow):
         self._inject_panel = InjectPanel()
         self._inject_panel.follow_playhead.toggled.connect(self._on_follow_playhead_toggled)
         self._inject_panel.seek_requested.connect(self._seek_index)
+        self._ota_panel = OtaPanel()
         self._var_strip = VarStripView()
         self._var_strip.seek_ns_requested.connect(self._seek_ns)
         self._tabs.addTab(self._order, t("Order"))
@@ -279,6 +281,7 @@ class GmtMainWindow(QMainWindow):
         self._tabs.addTab(self._var_strip, t("图形"))
         self._tabs.addTab(self._tags, t("Tag"))
         self._tabs.addTab(self._inject_panel, t("Inject"))
+        self._tabs.addTab(self._ota_panel, t("OTA"))
         root.addWidget(self._tabs, stretch=1)
 
         status = QStatusBar()

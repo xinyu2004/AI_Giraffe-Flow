@@ -1,7 +1,14 @@
-# log
+# log — log lite (stdout/stderr)
 
-Skeleton only — no implementation yet.
+| API | Role |
+|-----|------|
+| `Logger::Configure` / `ConfigureFromYaml` | `default_level` + per-context levels（对齐 `platform/log.yaml`） |
+| `Logger::Info/Error/...` | 按级别过滤；ERROR+→stderr，其余→stdout |
 
-Parent: [middleware/README.md](../README.md) · Repo: [STRUCTURE.md](../../STRUCTURE.md)
+Not DLT. Env: `GF_LOG_LEVEL` 覆盖默认级别。
 
-FuSa cases: [log_cases.md](../../fusa/cases/log_cases.md).
+Smoke: `gf_log_smoke`（LOG-01…03）.
+
+FuSa: [log_cases.md](../../fusa/cases/log_cases.md).
+
+Parent: [middleware/README.md](../README.md).

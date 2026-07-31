@@ -62,7 +62,9 @@ Giraffe Flow 是一套**轻量跨平台平台软件**，目标用户同时覆盖
 
 **P0（MVP 必须）：** `core`、`exec`（简化）、`phm`（简化）、`com`、`log`、`sm`（简化）
 
-**P1（骨架 + 扩展）：** `per`、`tsync`；**`ucm`（OTA）**、**`diag`（DoIP）** 公共 API + stub 实现；完整 UDS 栈后置
+**P1（骨架 + 扩展）：** **`ucm`（OTA）**、**`diag`（DoIP）** 公共 API + stub；完整 UDS 栈后置
+
+**P3（已落地骨架，可裁剪）：** `per`（进程内 KV）、`tsync`（OSAL Now + status stub）；见 `middleware/per` · `middleware/tsync`
 
 **P2（安全 / 合规深化）：** `crypto`、`iam`、`idsm`、`fw`、`shwa`、完整 `nm`、OTA 后端量产化
 

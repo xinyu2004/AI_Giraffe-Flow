@@ -13,4 +13,8 @@ if(GF_BUILD_TESTS)
   add_executable(gf_collector_smoke testcases/smoke_collector.cpp)
   target_link_libraries(gf_collector_smoke PRIVATE gf_ara::collector)
   add_test(NAME gf_collector_smoke COMMAND gf_collector_smoke)
+
+  add_executable(gf_collector_xproc_smoke testcases/smoke_collector_xproc.cpp)
+  target_link_libraries(gf_collector_xproc_smoke PRIVATE gf_ara::collector)
+  add_test(NAME gf_collector_xproc_smoke COMMAND gf_collector_xproc_smoke)
 endif()

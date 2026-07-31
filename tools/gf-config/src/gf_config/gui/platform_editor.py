@@ -39,6 +39,8 @@ KNOWN_MODULES = [
     "collector",
     "ucm",
     "diag",
+    "per",
+    "tsync",
     "trace",
 ]
 
@@ -104,7 +106,8 @@ class PlatformEditor(QWidget):
             mods_l.addLayout(mod_row)
         mods_note = QLabel(
             "映射：exec/sm→执行 · exec→EM 启动表 · phm→健康 · diag→诊断 · "
-            "log→日志 · ucm→OTA · diag/phm/collector→事件收集"
+            "log→日志 · ucm→OTA · diag/phm/collector→事件收集 · "
+            "per/tsync→仅编入镜像（暂无 platform YAML 子页）"
         )
         mods_note.setWordWrap(True)
         mods_note.setStyleSheet("color:#666; font-size:11px;")

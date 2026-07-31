@@ -1,5 +1,6 @@
-# P2 空壳 — OTA stub；真策略 P3
+# gf_ara::ucm — SIL OTA orchestration (stub backend, not RAUC flash)
 schema_version: "0.1"
-enabled: false
-package_source: ""
+enabled: true
+package_source: "sil://artifact"
 allow_rollback: true
+function_group: MachineFG

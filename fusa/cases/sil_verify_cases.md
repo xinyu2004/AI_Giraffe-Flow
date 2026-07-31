@@ -58,6 +58,22 @@
 - 状态: active
 - 最近: **PASS**（2026-07-31）
 
+### SIL-SM-01 — PHM miss → SM health_fault（notify_sm）+ 共享 Collector
+- 类别: fusa
+- 脚本: `scripts/verify/oem_a_afc_with_uss/smoke_sil_sm_fg.sh`
+- 环境: `GF_PHM_FAULT_TARGET=uss` · `GF_SM_ENTER_UPDATING_ON_FAULT=1` · `GF_COLLECTOR_STORE=…/collector_shared.ndjson`
+- 期望: `uss.log` 含 PHM miss · `sm: health_fault` · `collector: event` ·（可选）Updating/paused；`gateway.log` 仍有 Trajectory；共享 store 含 miss 事件
+- 状态: active
+- SG: SG-03 · SG-04（跨进程 store）
+
+### SIL-T4 — production-release 关闭 debug-path
+- 类别: fusa（SG-05 / ROADMAP T4）
+- 脚本: `scripts/verify/oem_a_afc_with_uss/smoke_production_profile.sh`
+- 环境: 临时 `profile: production-release` → compose；`GF_BUILD_DIR=build-prod`；`GF_FUSA_T4_SKIP_COMPILE=1` 可只跑 compose 断言
+- 期望: `observability.json` live_tap off / record off；无 tap/inject 二进制；SIL-02 multiproc PASS；退出时恢复 `vehicle-debug`
+- 状态: active
+- 门控: `GF_FUSA_T4=1 bash fusa/scripts/run_cases.sh`
+
 ### SIL-06 — MCU desktop peer
 - 类别: fusa
 - 脚本: `scripts/verify/oem_b_adc_full/smoke_mcu_desktop.sh`
@@ -87,6 +103,7 @@
 ```bash
 GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
 # 跳过 MCU 桌面: GF_FUSA_SIL_MCU=0 …
+# T4 production profile（另编 build-prod）: GF_FUSA_T4=1 …
 ```
 
 ## Debug-path（不进 Safety Case 默认证据集）

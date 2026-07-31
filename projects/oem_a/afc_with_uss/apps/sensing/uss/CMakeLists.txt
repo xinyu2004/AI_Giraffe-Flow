@@ -13,6 +13,7 @@ target_link_libraries(gf_sensing_uss PRIVATE
   gf_ara::phm
   gf_ara::sm
   gf_ara::collector
+  gf_ara::log
 )
 add_dependencies(gf_sensing_uss iox-roudi)
 

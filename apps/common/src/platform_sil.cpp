@@ -1,5 +1,8 @@
 #include "gf_demo/platform_sil.hpp"
 
+#include <gf_ara/collector/event_collector.hpp>
+#include <gf_ara/log/logger.hpp>
+
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
@@ -203,9 +206,26 @@ void LoadCollectorConfig() {
             << " max_entries=" << cfg.max_entries << std::endl;
 }
 
+void LoadLogConfig() {
+  const std::string dir = PlatformDir();
+  if (dir.empty()) {
+    return;
+  }
+  const std::string text = ReadFile(dir + "/log.yaml");
+  if (text.empty()) {
+    return;
+  }
+  gf_ara::log::Logger::Instance().ConfigureFromYaml(text);
+  std::cout << "log: configured from log.yaml default_level="
+            << gf_ara::log::Logger::ToString(
+                   gf_ara::log::Logger::Instance().Config().default_level)
+            << std::endl;
+}
+
 bool ProcessSupervisor::Start(std::string_view process_name) {
   process_ = std::string(process_name);
   LoadCollectorConfig();
+  LoadLogConfig();
 
   const auto exec_cfg = LoadExecProcess(process_name);
   if (PlatformDir().empty()) {
@@ -333,7 +353,12 @@ void ProcessSupervisor::OnFault(gf_ara::phm::CheckpointStatus st) {
       entity_->SetPaused(true);
       std::cout << "phm paused (sm Updating) entity=" << entity_->Name() << std::endl;
     }
+    return;
   }
+
+  // on_failure: log (default) — structured log lite + keep stdout line above
+  gf_ara::log::Logger::Instance().Error(
+      "phm", std::string(reason) + " entity=" + std::string(entity_->Name()));
 }
 
 void ProcessSupervisor::Tick() {

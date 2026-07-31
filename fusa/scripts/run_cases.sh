@@ -10,8 +10,9 @@
 # Env:
 #   GF_BUILD_DIR       default <repo>/build
 #   GF_FUSA_CODEGEN    1 = run gf-codegen pytest subset
-#   GF_FUSA_SIL        1 = L3 FuSa SIL suite (SIL-01/02/03/EM-02/06)
+#   GF_FUSA_SIL        1 = L3 FuSa SIL suite (SIL-01/02/03/EM-02/06 + SIL-SM-01)
 #   GF_FUSA_SIL_MCU    0 = skip SIL-06 MCU desktop (default 1)
+#   GF_FUSA_T4         1 = production-release profile smoke (compose+build-prod+SIL-02)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -67,6 +68,10 @@ for name in \
   gf_sm_fg_smoke \
   gf_phm_alive_deadline_smoke \
   gf_collector_smoke \
+  gf_collector_xproc_smoke \
+  gf_log_smoke \
+  gf_per_smoke \
+  gf_tsync_smoke \
   gf_diag_doip_smoke \
   gf_ucm_package_manager_smoke \
   gf_iox_binding_smoke \
@@ -109,6 +114,7 @@ if [[ "${GF_FUSA_SIL:-0}" == "1" ]]; then
   run_sil "SIL-01" scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
   run_sil "SIL-02" scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
   run_sil "SIL-03" scripts/verify/oem_a_afc_with_uss/smoke_sil_phm_fault.sh
+  run_sil "SIL-SM-01" scripts/verify/oem_a_afc_with_uss/smoke_sil_sm_fg.sh
   run_sil "SIL-EM-02" scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh
   if [[ "${GF_FUSA_SIL_MCU:-1}" == "1" ]]; then
     run_sil "SIL-06" scripts/verify/oem_b_adc_full/smoke_mcu_desktop.sh
@@ -116,6 +122,16 @@ if [[ "${GF_FUSA_SIL:-0}" == "1" ]]; then
     echo "${TAG} SKIP SIL-06 (GF_FUSA_SIL_MCU=0)"
     echo "# SKIP SIL-06" >>"${LOG}"
   fi
+fi
+
+if [[ "${GF_FUSA_T4:-0}" == "1" ]]; then
+  echo "${TAG} T4 production-release profile"
+  {
+    echo "===== L3 SIL-T4 / SG-05 ====="
+    bash scripts/verify/oem_a_afc_with_uss/smoke_production_profile.sh
+    echo "# SIL-T4 OK"
+    echo
+  } >>"${LOG}" 2>&1
 fi
 
 echo "${TAG} CASE summary:"

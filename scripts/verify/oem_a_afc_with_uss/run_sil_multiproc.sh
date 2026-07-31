@@ -54,7 +54,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "[run_sil_multiproc] platform=${GF_PLATFORM_DIR} fault_ms=${GF_PHM_FAULT_MS}"
+echo "[run_sil_multiproc] platform=${GF_PLATFORM_DIR} fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET:-planning}"
 echo "[run_sil_multiproc] RouDi ..."
 "${ROUDI}" >"${LOG_DIR}/roudi.log" 2>&1 &
 ROUDI_PID=$!
@@ -65,17 +65,29 @@ if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then
   exit 1
 fi
 
+# Which process gets GF_PHM_FAULT_MS (others get 0). Default: planning (SG-02).
+# uss/fcm/gateway use on_failure: notify_sm (SG-03).
+FAULT_TARGET="${GF_PHM_FAULT_TARGET:-planning}"
+fault_env() {
+  local proc="$1"
+  if [[ "${FAULT_TARGET}" == "${proc}" ]]; then
+    echo "${GF_PHM_FAULT_MS}"
+  else
+    echo "0"
+  fi
+}
+
 echo "[run_sil_multiproc] fcm / uss / planning ..."
-"${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
+GF_PHM_FAULT_MS="$(fault_env fcm)" "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
 FCM_PID=$!
-"${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
+GF_PHM_FAULT_MS="$(fault_env uss)" "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
 USS_PID=$!
-GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS}" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
+GF_PHM_FAULT_MS="$(fault_env planning)" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
 PLAN_PID=$!
 sleep 0.5
 
 echo "[run_sil_multiproc] gateway (expect ${TRAJ_COUNT} Trajectory) ..."
-GF_PHM_FAULT_MS=0 "${GW}" "${TRAJ_COUNT}" >"${LOG_DIR}/gateway.log" 2>&1 &
+GF_PHM_FAULT_MS="$(fault_env gateway)" "${GW}" "${TRAJ_COUNT}" >"${LOG_DIR}/gateway.log" 2>&1 &
 GW_PID=$!
 
 echo "[run_sil_multiproc] waiting (timeout ${TIMEOUT_SEC}s) ..."
@@ -118,8 +130,21 @@ assert_log "${LOG_DIR}/gateway.log" "phm entity=gateway_alive" "X-2 gateway phm"
 assert_log "${LOG_DIR}/planning.log" "phm entity=planning_alive" "X-2 planning phm"
 
 if [[ "${GF_PHM_FAULT_MS}" != "0" ]]; then
-  assert_log "${LOG_DIR}/planning.log" "FAULT inject|AliveMissed|DeadlineMissed" "X-3 fault"
-  assert_log "${LOG_DIR}/planning.log" "recovered|fault window ended" "X-3 recover"
+  case "${FAULT_TARGET}" in
+    planning) FAULT_LOG="${LOG_DIR}/planning.log" ;;
+    gateway) FAULT_LOG="${LOG_DIR}/gateway.log" ;;
+    uss) FAULT_LOG="${LOG_DIR}/uss.log" ;;
+    fcm) FAULT_LOG="${LOG_DIR}/fcm.log" ;;
+    *)
+      echo "[run_sil_multiproc] unknown GF_PHM_FAULT_TARGET=${FAULT_TARGET}" >&2
+      exit 1
+      ;;
+  esac
+  assert_log "${FAULT_LOG}" "FAULT inject|AliveMissed|DeadlineMissed" "X-3 fault (${FAULT_TARGET})"
+  # planning uses restart/soft recover; notify_sm targets may pause without "recovered"
+  if [[ "${FAULT_TARGET}" == "planning" ]]; then
+    assert_log "${FAULT_LOG}" "recovered|fault window ended" "X-3 recover"
+  fi
 fi
 
 echo "[run_sil_multiproc] OK — Trajectory×${TRAJ_COUNT} + exec/phm checks"

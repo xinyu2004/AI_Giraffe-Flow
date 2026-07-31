@@ -27,7 +27,7 @@
 | 页 | 写什么 | 产物 |
 |----|--------|------|
 | **1 · 信号与应用** | 薄 SKU（`req.yaml`）+ 信号图画布（`wiring.yaml`） | deployments / dataflows / live_tap |
-| **2 · 平台运行时** | `runtime_modules` + `platform/*`（exec · **EM 启动表** · PHM · Collector · diag…） | `platform_manifest` → CMake 裁剪 / EM 拓扑 |
+| **2 · 平台运行时** | `runtime_modules` + `platform/*`（exec · **EM 启动表** · PHM · Collector · diag · log · ucm；**per/tsync** 可勾选裁剪） | `platform_manifest` → CMake 裁剪 / EM 拓扑 |
 
 - **Verify / Generate** → SOR + Proxy/Skeleton + lineage（含 `platform_em_launch` 等门禁）
 
@@ -61,15 +61,19 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 
 #### 2.2 中间件包（按需裁剪）
 
+与架构 GIF 中 Giraffe SoC 芯片对齐（`com` · `EM`∈exec · `exec` · `phm` · `sm` · `collector` · `OSAL` · `diag` · `ucm` · `log` · `per` · `tsync`）。
+
 | 包 | 作用 |
 |----|------|
 | [com](middleware/com/) | 统一通信抽象（Proxy / Skeleton） |
 | [bindings/iceoryx](middleware/bindings/iceoryx/) 等 | 传输后端 |
-| [exec](middleware/exec/) | ExecutionClient + **EmDaemon**（OSAL Spawn） |
+| [exec](middleware/exec/) | ExecutionClient + **EmDaemon**（OSAL Spawn；GIF 中 `EM`） |
 | [phm](middleware/phm/) / [sm](middleware/sm/) / [collector](middleware/collector/) | 健康 / FG / 事件收集 |
-| [osal](middleware/osal/) | OS 抽象（含 process） |
-| [ucm](middleware/ucm/) / [diag](middleware/diag/) | OTA / DoIP 骨架 |
-| [log](middleware/log/) / [trace](middleware/trace/) | 日志与时序 |
+| [osal](middleware/osal/) | OS 抽象（含 process；GIF 中 `OSAL`） |
+| [diag](middleware/diag/) / [ucm](middleware/ucm/) | DoIP 会话 / OTA 编排（SIL） |
+| [log](middleware/log/) | 日志 lite |
+| [per](middleware/per/) / [tsync](middleware/tsync/) | 持久化 KV stub / 时间同步骨架（可裁剪） |
+| [trace](middleware/trace/) | 时序 → VCD / GMT（偏 debug-path） |
 
 总览：[middleware/README.md](middleware/README.md)
 

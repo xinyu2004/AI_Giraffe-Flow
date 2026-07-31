@@ -2,9 +2,57 @@
 
 #include <gf/osal/clock.hpp>
 
+#include <cstdlib>
+#include <fcntl.h>
 #include <iostream>
+#include <string>
+#include <unistd.h>
+
+#if defined(__linux__) || defined(__APPLE__)
+#include <sys/file.h>
+#endif
 
 namespace gf_ara::collector {
+namespace {
+
+void AppendSharedStore(const EventRecord& rec) {
+  const char* path = std::getenv("GF_COLLECTOR_STORE");
+  if (path == nullptr || path[0] == '\0') {
+    return;
+  }
+  const int fd = ::open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+  if (fd < 0) {
+    std::cerr << "collector: shared store open failed path=" << path << std::endl;
+    return;
+  }
+#if defined(__linux__) || defined(__APPLE__)
+  if (::flock(fd, LOCK_EX) != 0) {
+    ::close(fd);
+    std::cerr << "collector: shared store flock failed path=" << path << std::endl;
+    return;
+  }
+#endif
+  const auto esc = [](std::string s) {
+    for (char& c : s) {
+      if (c == '"' || c == '\\' || c == '\n') {
+        c = '_';
+      }
+    }
+    return s;
+  };
+  const std::string line = std::string("{\"t_ns\":") + std::to_string(rec.t_ns) +
+                           ",\"source\":\"" + esc(rec.source) + "\",\"id\":\"" + esc(rec.event_id) +
+                           "\",\"detail\":\"" + esc(rec.detail) + "\",\"pid\":" +
+                           std::to_string(static_cast<long>(::getpid())) + "}\n";
+  const auto n = ::write(fd, line.data(), line.size());
+  (void)n;
+#if defined(__linux__) || defined(__APPLE__)
+  ::flock(fd, LOCK_UN);
+#endif
+  ::close(fd);
+}
+
+}  // namespace
 
 EventCollector& EventCollector::Instance() {
   static EventCollector inst;
@@ -44,10 +92,15 @@ void EventCollector::ReportEvent(std::string_view source, std::string_view event
     }
   }
 
+  AppendSharedStore(rec);
+
   std::cout << "collector: event source=" << rec.source << " id=" << rec.event_id
             << " detail=" << rec.detail;
   if (fwd_cp) {
     std::cout << " forward=cp_dem(stub)";
+  }
+  if (std::getenv("GF_COLLECTOR_STORE") != nullptr) {
+    std::cout << " store=shared";
   }
   std::cout << std::endl;
 }

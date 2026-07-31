@@ -1,29 +1,20 @@
 # middleware/ucm
 
-ARA-inspired **Update and Configuration Management** (`gf_ara::ucm`) — P1 PackageManager 状态机 stub。
+ARA-inspired **Update and Configuration Management** (`gf_ara::ucm`).
 
-| 状态 | 转移 |
+| 组件 | 行为 |
 |------|------|
-| `kIdle` | `Initialize` |
-| `kTransferring` | `StartTransfer` |
-| `kProcessing` | `ProcessSwPackage` |
-| `kActivated` | `Activate` |
-| `kRolledBack` | `Rollback` |
+| `PackageManager` | Idle→Transfer→Process→Activate / Rollback 状态机 |
+| `OtaOrchestrator` | SM `Updating` + pause hook → PackageManager → Collector；失败可 Rollback |
 
-## 与 SM / PHM 的钩子（文档约定，P1）
+失败注入：`GF_UCM_FORCE_FAIL=1` 或 `artifact_path` 含 `FORCE_FAIL` → Collector `ucm/ota_failed`。
 
-OTA 期间建议：
+**不做**真 RAUC 刷写（后端仍 stub；真板见 P3z）。
 
-1. **SM**：切 degraded / 限制非必要进程（`middleware/sm` 仍可后置实现）  
-2. **PHM**：对受影响实体调用 `SupervisedEntity::SetPaused(true)`，避免误报 Deadline  
-3. Activate 成功后再 `SetPaused(false)` 并 `ReportAlive`
-
-无真 OTA 后端（RAUC/OSTree 候选见依赖评估）；P1 只保证 **可链接 + 状态机可测**。
+与 PHM：`SetPaused` 由编排 hook / 各进程在 Updating 窗调用（见 [PHM_OTA_PAUSE.md](../../docs/zh/operations/PHM_OTA_PAUSE.md)）。
 
 ```bash
-bash scripts/smoke_eu_stub.sh
+ctest --test-dir build -R 'gf_ucm_' --output-on-failure
 ```
 
-Parent: [middleware/README.md](../README.md)
-
-FuSa cases: [ucm_cases.md](../../fusa/cases/ucm_cases.md).
+Parent: [middleware/README.md](../README.md) · FuSa: [ucm_cases.md](../../fusa/cases/ucm_cases.md).

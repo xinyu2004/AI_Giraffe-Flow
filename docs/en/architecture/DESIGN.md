@@ -66,7 +66,9 @@ We **borrow concepts; we do not clone the full stack**. API semantics stay close
 
 **P0 (MVP must-have):** `core`, `com`, `log`; simplified `exec`, `phm`, `sm`
 
-**P1:** `per`, `tsync`; **`ucm` (OTA)**, **`diag` (DoIP)** skeleton; full bindings
+**P1:** **`ucm` (OTA)**, **`diag` (DoIP)** skeleton; full bindings
+
+**P3 (landed, SKU-trimable):** `per` (in-process KV), `tsync` (OSAL Now + status stub) — `middleware/per` · `middleware/tsync`
 
 **P2 (safety / compliance):** `crypto`, `iam`, `idsm`, `fw`, `shwa`, full `nm`; OTA backends productionized
 

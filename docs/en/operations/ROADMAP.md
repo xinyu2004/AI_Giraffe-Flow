@@ -24,7 +24,7 @@
 | **P3-1 Config** | gf-config as middleware configurator | **Two tabs ✅**: (1) Signal & apps (default) · (2) Platform runtime (+ `runtime_modules`); Collector min editor |
 | **P3-2 Middleware** | AP depth | sm state machine, PHM Logical + SM link, **Event Collector** runtime, log lite, per/tsync skeleton |
 | **P3-3 FuSa** | Functional Safety toward a **full Safety Case** | `fusa/` cases + runs/packs, [isolation](../../../fusa/metrics/isolation.md) / [latency](../../../fusa/metrics/latency.md) (+ `measure_latency.sh`), Safety Case skeleton; later: HARA / FSC / `production` profile |
-| **P3-4 DoIP / OTA / GMT** | Diag & update ops | DoIP session, **GMT OTA sheet** via DoIP download path, UCM orchestration |
+| **P3-4 DoIP / OTA / GMT** | Diag & update ops | ✅ DoIP TCP session · GMT OTA tab · UCM orchestrator · Collector on fail (RAUC real flash → P3z) |
 | **P3-5 Sim spike** | CARLA / Vision Pilot | CARLA→semantic adapter spike; VP feasibility; weak coupling to middleware |
 | **P3z Board / MCU** | Sprint gate (lowest urgency) | Optional thin smoke mid-phase; full `run_hil` / soak / real CP after desktop tracks OK |
 

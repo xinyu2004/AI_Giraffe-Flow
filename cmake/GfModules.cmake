@@ -32,7 +32,7 @@ if(DEFINED GF_RUNTIME_MODULES)
 endif()
 
 # --- SIL helpers (sm / collector / ucm): build if present and not already added ---
-foreach(_gf_extra IN ITEMS sm collector ucm)
+foreach(_gf_extra IN ITEMS sm collector ucm log per tsync diag)
   if(TARGET gf_ara_${_gf_extra})
     continue()
   endif()
@@ -42,6 +42,31 @@ foreach(_gf_extra IN ITEMS sm collector ucm)
     message(STATUS "Giraffe Flow: helper module ${_gf_extra}")
   endif()
 endforeach()
+
+# DoIP OTA server + session / UCM-OTA smokes (diag may be added before ucm in runtime_modules).
+if(TARGET gf_ara_diag AND TARGET gf_ara_ucm AND TARGET gf_ara_sm AND TARGET gf_ara_collector)
+  if(NOT TARGET gf_doip_ota_server)
+    add_executable(gf_doip_ota_server
+      "${CMAKE_SOURCE_DIR}/middleware/diag/src/doip_ota_server_main.cpp")
+    target_link_libraries(gf_doip_ota_server PRIVATE gf_ara::diag gf_ara::ucm gf_ara::sm
+                                                     gf_ara::collector)
+  endif()
+  if(GF_BUILD_TESTS AND NOT TARGET gf_doip_session_smoke)
+    add_executable(gf_doip_session_smoke
+      "${CMAKE_SOURCE_DIR}/middleware/diag/testcases/smoke_doip_session.cpp")
+    target_link_libraries(gf_doip_session_smoke PRIVATE gf_ara::diag gf_ara::ucm gf_ara::sm
+                                                        gf_ara::collector)
+    add_test(NAME gf_doip_session_smoke COMMAND gf_doip_session_smoke)
+  endif()
+endif()
+if(GF_BUILD_TESTS AND TARGET gf_ara_ucm AND TARGET gf_ara_phm AND TARGET gf_ara_sm
+   AND TARGET gf_ara_collector AND NOT TARGET gf_ucm_ota_smoke)
+  add_executable(gf_ucm_ota_smoke
+    "${CMAKE_SOURCE_DIR}/middleware/ucm/testcases/smoke_ota.cpp")
+  target_link_libraries(gf_ucm_ota_smoke PRIVATE gf_ara::ucm gf_ara::phm gf_ara::sm
+                                                 gf_ara::collector)
+  add_test(NAME gf_ucm_ota_smoke COMMAND gf_ucm_ota_smoke)
+endif()
 
 # --- bindings from req.bindings → GF_WITH_* ---
 macro(gf_add_binding _flag _subdir)

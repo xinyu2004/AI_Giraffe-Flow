@@ -16,6 +16,8 @@ runtime_modules:
 - sm
 - collector
 - diag
+- per
+- tsync
 bindings:
 - iceoryx
 - someip

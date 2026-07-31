@@ -46,7 +46,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | 页签 | 作用 |
 |------|------|
 | **1 · 信号与应用**（默认） | **左侧薄 SKU 默认展开**；中央画布；**右侧连线/Lineage 默认收起**（点 ◀ 展开） |
-| **2 · 平台运行时** | 顶部 `runtime_modules`；子页：执行/FG · **EM 启动表** · PHM · 诊断 · 日志 · OTA · **事件收集** |
+| **2 · 平台运行时** | 顶部 `runtime_modules`（含可裁剪 **per / tsync**）；子页：执行/FG · **EM 启动表** · PHM · 诊断 · 日志 · OTA · **事件收集** |
 
 快捷键：Ctrl+1 / Ctrl+2 切页。Verify / Generate 后自动回页 1 右侧 Lineage。
 
@@ -90,3 +90,4 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | `sm` | （与 exec 同页 FG） | StateClient / NotifyHealthFault |
 | `collector` / phm / diag | 事件收集 · `collector.yaml` | ring buffer / cp_dem stub |
 | `diag` / `log` / `ucm` | 各子页 | DoIP / 日志 / OTA stub |
+| `per` / `tsync` | （暂无子页） | 仅 `runtime_modules` 勾选 → 编入镜像（KV / 时间同步骨架） |

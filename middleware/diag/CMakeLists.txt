@@ -1,5 +1,7 @@
 add_library(gf_ara_diag STATIC
   src/doip_stack.cpp
+  src/doip_proto.cpp
+  src/doip_session.cpp
 )
 add_library(gf_ara::diag ALIAS gf_ara_diag)
 
@@ -8,6 +10,8 @@ target_include_directories(gf_ara_diag PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(gf_ara_diag PUBLIC gf_ara::core)
+
+# gf_doip_ota_server + session smoke registered in cmake/GfModules.cmake after ucm/sm/collector.
 
 if(GF_BUILD_TESTS)
   add_executable(gf_diag_doip_smoke testcases/smoke_doip.cpp)

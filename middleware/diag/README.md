@@ -1,20 +1,23 @@
 # middleware/diag
 
-ARA-inspired **Diagnostics** (`gf_ara::diag`) — **DoIP-first** P1 stub（无真台架）。
+ARA-inspired **Diagnostics** (`gf_ara::diag`) — **DoIP session**（SIL / 假 board；非量产 UDS 全栈）。
 
-| API | P1 行为 |
-|-----|---------|
-| `DoipStack::Initialize` / `Shutdown` | 进程内开关；可被诊断探针调用 |
-| `RequestRoutingActivation` | 非 0 目标 → `kSuccess` |
-| `SendDiagnosticMessage` | TesterPresent(`0x3E`) 回 `0x7E`；其它回 NRC |
-| `ReceiveDiagnosticMessage` | 取上次发送的 stub 应答 |
+| API | 行为 |
+|-----|------|
+| `DoipStack::*` | 进程内 stub（TesterPresent 回声）— 保留 DIAG-01…05 |
+| `DoipTcpServer` / `DoipTcpClient` | ISO 13400-2 子集：RoutingActivation + DiagnosticMessage over TCP |
+| `gf_doip_ota_server` | 监听 `GF_DOIP_PORT`（默认 13400）；UDS `0x31` 例程 `0xF100` → UCM OTA |
 
-真 ISO 13400 TCP/UDP 与 UDS 会话属后置；P1 验收为 **stub 可链 + Initialize/Shutdown 探针**。
+RoutineControl（SIL）：
+
+| UDS | 含义 |
+|-----|------|
+| `31 01 F1 00` + `id\|path` | start OTA → `OtaOrchestrator::RunPackage` |
+| `31 03 F1 01` | 进度 percent |
 
 ```bash
-bash scripts/smoke_eu_stub.sh
+ctest --test-dir build -R 'gf_diag_doip_smoke|gf_doip_session_smoke' --output-on-failure
+bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
 ```
 
-Parent: [middleware/README.md](../README.md)
-
-FuSa cases: [diag_cases.md](../../fusa/cases/diag_cases.md).
+Parent: [middleware/README.md](../README.md) · FuSa: [diag_cases.md](../../fusa/cases/diag_cases.md).

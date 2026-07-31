@@ -13,6 +13,7 @@ target_link_libraries(gf_perception_fcm PRIVATE
   gf_ara::phm
   gf_ara::sm
   gf_ara::collector
+  gf_ara::log
 )
 add_dependencies(gf_perception_fcm iox-roudi)
 

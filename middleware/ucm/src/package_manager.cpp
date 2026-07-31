@@ -62,7 +62,7 @@ gf_ara::core::Result<void> PackageManager::Activate() {
 gf_ara::core::Result<void> PackageManager::Rollback() {
   std::lock_guard<std::mutex> lock(g_mu);
   if (g_state != PackageState::kActivated && g_state != PackageState::kProcessing &&
-      g_state != PackageState::kFailed) {
+      g_state != PackageState::kFailed && g_state != PackageState::kTransferring) {
     return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kNotAvailable);
   }
   g_state = PackageState::kRolledBack;

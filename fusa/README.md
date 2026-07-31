@@ -8,7 +8,7 @@
 | 路径 | 含义 | 进仓 |
 |------|------|------|
 | [POLICY.md](POLICY.md) | 边界、分层、怎么跑 | 是 |
-| [safety-case/](safety-case/) | Safety Case 骨架（项定义 / SG / 追溯） | 是 |
+| [safety-case/](safety-case/) | Safety Case：项定义 / SG / **追溯主表** | 是 |
 | [metrics/](metrics/) | **isolation**（行为）· **latency**（参考延时） | 是 |
 | [cases/](cases/) | L1/L2/L3 案例矩阵 | 是 |
 | [scripts/run_cases.sh](scripts/run_cases.sh) | 跑矩阵 → `runs/cases_*.log` | 是 |
@@ -19,10 +19,12 @@
 ## 快速复现
 
 ```bash
-# 默认 L1；可选 L2 / L3
+# 默认 L1；可选 L2 / L3 / T4
 bash fusa/scripts/run_cases.sh
 GF_FUSA_CODEGEN=1 bash fusa/scripts/run_cases.sh
 GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
+# production-release 关 debug-path（另耗编译；可 GF_FUSA_T4_SKIP_COMPILE=1 只验 compose）
+GF_FUSA_T4=1 bash fusa/scripts/run_cases.sh
 
 # 参考延时（独立；不调用 run_cases）
 bash fusa/scripts/measure_latency.sh

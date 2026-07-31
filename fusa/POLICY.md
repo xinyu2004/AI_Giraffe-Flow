@@ -39,7 +39,8 @@ bash fusa/scripts/run_cases.sh
 
 ## Safety Case
 
-论证骨架见 [`safety-case/`](safety-case/)；**行为** isolation / **延时** latency 见 [`metrics/`](metrics/)（`measure_latency` 不并入默认 `run_cases`）。  
+论证与追溯见 [`safety-case/`](safety-case/)（主表 [`traceability.md`](safety-case/traceability.md)：SG → SR → L1/L3）。  
+**行为** isolation / **延时** latency 见 [`metrics/`](metrics/)（`measure_latency` 不并入默认 `run_cases`）。  
 证据层仍是 `cases` + `run_cases` / SKU `generate_fusa_artifacts`。
 
 ## 索引

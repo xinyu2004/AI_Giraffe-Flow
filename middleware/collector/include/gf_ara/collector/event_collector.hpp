@@ -29,6 +29,7 @@ struct CollectorConfig {
 };
 
 /// In-process Event Collector (M3 min-set). Not Classic DEM.
+/// Optional cross-process append: set env `GF_COLLECTOR_STORE` to an NDJSON path.
 class EventCollector {
  public:
   static EventCollector& Instance();

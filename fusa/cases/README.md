@@ -1,6 +1,6 @@
 # FuSa case index
 
-政策说明：[POLICY.md](../POLICY.md) · 入口：[fusa/README.md](../README.md)
+政策说明：[POLICY.md](../POLICY.md) · 入口：[fusa/README.md](../README.md) · **追溯主表：** [../safety-case/traceability.md](../safety-case/traceability.md)
 
 | 层 | 含义 |
 |----|------|
@@ -20,14 +20,16 @@
 | exec | [exec_cases.md](exec_cases.md) | EXEC / EM / EMD | `gf_exec_smoke` · `gf_exec_em_smoke` · `gf_em_daemon_smoke` | active |
 | sm | [sm_cases.md](sm_cases.md) | SM | `gf_sm_fg_smoke` | active |
 | phm | [phm_cases.md](phm_cases.md) | PHM | `gf_phm_alive_deadline_smoke` | active |
-| collector | [collector_cases.md](collector_cases.md) | COLL | `gf_collector_smoke` | active |
+| collector | [collector_cases.md](collector_cases.md) | COLL | `gf_collector_smoke` · `gf_collector_xproc_smoke` | active |
 | diag | [diag_cases.md](diag_cases.md) | DIAG | `gf_diag_doip_smoke` | skeleton |
 | ucm | [ucm_cases.md](ucm_cases.md) | UCM | `gf_ucm_package_manager_smoke` | skeleton |
 | iceoryx | [iceoryx_cases.md](iceoryx_cases.md) | IOX | `gf_iox_binding_smoke` | active（需 iox） |
 | someip | [someip_cases.md](someip_cases.md) | SIP | `gf_someip_binding_smoke` | active |
 | dds | [dds_cases.md](dds_cases.md) | DDS | `gf_dds_binding_smoke` | active |
 | cross_domain_ipc | [cross_domain_ipc_cases.md](cross_domain_ipc_cases.md) | XIPC | `gf_cross_domain_ipc_smoke` | active |
-| log | [log_cases.md](log_cases.md) | LOG | — | later |
+| log | [log_cases.md](log_cases.md) | LOG | `gf_log_smoke` | active |
+| per | [per_cases.md](per_cases.md) | PER | `gf_per_smoke` | active |
+| tsync | [tsync_cases.md](tsync_cases.md) | TSYNC | `gf_tsync_smoke` | active |
 | hal | [hal_cases.md](hal_cases.md) | HAL | — | later |
 | trace | [trace_cases.md](trace_cases.md) | TRACE | — | later |
 

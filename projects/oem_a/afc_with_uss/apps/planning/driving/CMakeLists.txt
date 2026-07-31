@@ -13,6 +13,7 @@ target_link_libraries(gf_planning_driving PRIVATE
   gf_ara::phm
   gf_ara::sm
   gf_ara::collector
+  gf_ara::log
 )
 add_dependencies(gf_planning_driving iox-roudi)
 

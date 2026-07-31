@@ -1,7 +1,14 @@
-# ara::diag / gf_ara::diag — 非 DEM；无 dem.yaml
+# ara::diag / gf_ara::diag — DoIP session (SIL); 非完整 UDS 栈
 schema_version: "0.1"
 doip:
   enabled: true
   logical_address: 0x0E00
+  tcp_port: 13400
 dids: []
-rids: []
+rids:
+  - id: 0xF100
+    name: start_ota
+    note: RoutineControl startRoutine → UCM OtaOrchestrator
+  - id: 0xF101
+    name: ota_progress
+    note: requestResults → progress percent

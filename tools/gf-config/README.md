@@ -46,7 +46,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | Tab | Role |
 |-----|------|
 | **1 · Signals & apps** (default) | **Left thin SKU open**; canvas; **right Lineage collapsed** (◀ to expand) |
-| **2 · Platform runtime** | Top `runtime_modules`; subpages: exec/FG · **EM launch map** · PHM · diag · log · OTA · **Event collector** |
+| **2 · Platform runtime** | Top `runtime_modules` (incl. trimable **per / tsync**); subpages: exec/FG · **EM launch map** · PHM · diag · log · OTA · **Event collector** |
 
 Shortcuts: Ctrl+1 / Ctrl+2. Verify / Generate returns to tab 1 Lineage.
 
@@ -89,3 +89,4 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 | `phm` | Health · `phm.yaml` | Alive; `restart` → EM |
 | `collector` / phm / diag | Event collector · `collector.yaml` | ring / cp_dem stub |
 | `diag` / `log` / `ucm` | respective pages | DoIP / log / OTA stub |
+| `per` / `tsync` | (no subpage yet) | checkbox → compile into image (KV / time-sync skeleton) |

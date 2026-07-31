@@ -27,7 +27,7 @@ Defines **what**, **who talks to whom**, and **which board modules to trim** —
 | Tab | Writes | Output |
 |-----|--------|--------|
 | **1 · Signals & apps** | Thin SKU (`req.yaml`) + wiring canvas (`wiring.yaml`) | deployments / dataflows / live_tap |
-| **2 · Platform runtime** | `runtime_modules` + `platform/*` (exec · **EM launch** · PHM · collector · diag…) | `platform_manifest` → CMake trim / EM topo |
+| **2 · Platform runtime** | `runtime_modules` + `platform/*` (exec · **EM launch** · PHM · collector · diag · log · ucm; **per/tsync** trimable) | `platform_manifest` → CMake trim / EM topo |
 
 - Verify / Generate → SOR + Proxy/Skeleton + lineage (incl. `platform_em_launch`)
 
@@ -61,15 +61,19 @@ Rule: **apps depend only on semantic service names**; OEM deltas stay in adapter
 
 #### 2.2 Middleware packages (SKU-trim)
 
+Aligned with Giraffe SoC chips in the architecture GIF (`com` · `EM`∈exec · `exec` · `phm` · `sm` · `collector` · `OSAL` · `diag` · `ucm` · `log` · `per` · `tsync`).
+
 | Package | Role |
 |---------|------|
 | [com](middleware/com/) | Unified com (Proxy / Skeleton) |
 | [bindings/iceoryx](middleware/bindings/iceoryx/) … | Transport backends |
-| [exec](middleware/exec/) | ExecutionClient + **EmDaemon** (OSAL Spawn) |
+| [exec](middleware/exec/) | ExecutionClient + **EmDaemon** (OSAL Spawn；GIF 中 `EM`) |
 | [phm](middleware/phm/) / [sm](middleware/sm/) / [collector](middleware/collector/) | Health / FG / event collect |
-| [osal](middleware/osal/) | OS abstraction (incl. process) |
-| [ucm](middleware/ucm/) / [diag](middleware/diag/) | OTA / DoIP skeletons |
-| [log](middleware/log/) / [trace](middleware/trace/) | Logging & timing |
+| [osal](middleware/osal/) | OS abstraction (incl. process；GIF 中 `OSAL`) |
+| [diag](middleware/diag/) / [ucm](middleware/ucm/) | DoIP session / OTA orchestrator (SIL) |
+| [log](middleware/log/) | Logging lite |
+| [per](middleware/per/) / [tsync](middleware/tsync/) | Persistency KV stub / time-sync skeleton（可裁剪） |
+| [trace](middleware/trace/) | Timing → VCD / GMT（偏 debug-path） |
 
 Overview: [middleware/README.md](middleware/README.md)
 

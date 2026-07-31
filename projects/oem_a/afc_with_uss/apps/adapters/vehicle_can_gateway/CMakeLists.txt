@@ -14,6 +14,7 @@ target_link_libraries(gf_vehicle_can_gateway PRIVATE
   gf_ara::phm
   gf_ara::sm
   gf_ara::collector
+  gf_ara::log
 )
 add_dependencies(gf_vehicle_can_gateway iox-roudi)
 

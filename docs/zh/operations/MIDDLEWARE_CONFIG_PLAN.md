@@ -203,7 +203,7 @@ per、tsync、nm、crypto/iam/idsm/fw、hal — 见模块总表；板级 hal 跟
 | 区域 | 内容 |
 |------|------|
 | 顶部 | **`runtime_modules`** 勾选（过滤下方子页） |
-| 子导航 | 执行/FG · PHM · 诊断 · 日志 · OTA(ucm) · **事件收集** ·（预留 per/tsync） |
+| 子导航 | 执行/FG · PHM · 诊断 · 日志 · OTA(ucm) · **事件收集** ·（per/tsync：仅 runtime 勾选，暂无 YAML 子页） |
 | 进程下拉 | 只读自页 1 wiring（`external.*` 默认不进 exec/phm） |
 
 编辑：`req.runtime_modules` + `platform/*`。
