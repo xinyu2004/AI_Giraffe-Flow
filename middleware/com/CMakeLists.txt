@@ -9,7 +9,7 @@ target_include_directories(gf_ara_com INTERFACE
 target_link_libraries(gf_ara_com INTERFACE gf_ara::core)
 
 if(GF_BUILD_TESTS)
-  add_executable(gf_com_loopback_smoke tests/smoke_loopback_event.cpp)
+  add_executable(gf_com_loopback_smoke testcases/smoke_loopback_event.cpp)
   target_link_libraries(gf_com_loopback_smoke PRIVATE gf_ara::com)
   add_test(NAME gf_com_loopback_smoke COMMAND gf_com_loopback_smoke)
 endif()

@@ -58,6 +58,8 @@ def emit_build_cmake(
     out_path: Path,
     *,
     wiring: dict[str, Any] | None = None,
+    project_dir: Path | None = None,
+    repo_root: Path | None = None,
 ) -> None:
     """Write generated/gf_build.cmake from a parsed req dict."""
     variant = str(req.get("variant") or req.get("product") or "default")
@@ -81,9 +83,21 @@ def emit_build_cmake(
         on = name in bindings
         lines.append(f'set({cmake_var} {_cmake_bool(on)} CACHE BOOL "" FORCE)')
 
+    project_cmake = ""
+    if project_dir is not None and repo_root is not None:
+        try:
+            rel = project_dir.resolve().relative_to(repo_root.resolve())
+            project_cmake = f'set(GF_PROJECT_DIR "${{CMAKE_SOURCE_DIR}}/{rel.as_posix()}")'
+        except ValueError:
+            project_cmake = f'set(GF_PROJECT_DIR "{project_dir.resolve().as_posix()}")'
+
     lines += [
         "",
         "# --- runtime modules / apps (consumed by cmake/GfModules.cmake) ---",
+    ]
+    if project_cmake:
+        lines.append(project_cmake)
+    lines += [
         f"set(GF_RUNTIME_MODULES {_cmake_list(modules)})",
         f"set(GF_APPS {_cmake_list(apps)})",
         "",

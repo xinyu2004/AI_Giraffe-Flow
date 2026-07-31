@@ -158,6 +158,8 @@ def test_compose_afc_writes_observability(repo_root: Path, tmp_path: Path) -> No
     )
     assert "tools/iox_obs_tap" in cmake
     assert "tools/iox_obs_inject" in cmake
+    assert "GF_PROJECT_DIR" in cmake
+    assert "projects/oem_a/afc_with_uss" in cmake
 
 
 def test_generate_writes_obs_tap_main(repo_root: Path, tmp_path: Path) -> None:

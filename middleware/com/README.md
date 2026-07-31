@@ -14,3 +14,5 @@ cmake --build build --target gf_com_loopback_smoke
 Payload P0 要求 **trivially copyable**（为 iceoryx relocatable 铺路）。
 
 Parent: [middleware/README.md](../README.md)
+
+Trust cases: [com_cases.md](../../docs/reports/trust-evidence/com_cases.md).

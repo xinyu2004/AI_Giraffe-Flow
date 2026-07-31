@@ -10,7 +10,7 @@ target_include_directories(gf_ara_ucm PUBLIC
 target_link_libraries(gf_ara_ucm PUBLIC gf_ara::core)
 
 if(GF_BUILD_TESTS)
-  add_executable(gf_ucm_package_manager_smoke tests/smoke_package_manager.cpp)
+  add_executable(gf_ucm_package_manager_smoke testcases/smoke_package_manager.cpp)
   target_link_libraries(gf_ucm_package_manager_smoke PRIVATE gf_ara::ucm)
   add_test(NAME gf_ucm_package_manager_smoke COMMAND gf_ucm_package_manager_smoke)
 endif()

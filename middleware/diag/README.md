@@ -16,3 +16,5 @@ bash scripts/smoke_eu_stub.sh
 ```
 
 Parent: [middleware/README.md](../README.md)
+
+Trust cases: [diag_cases.md](../../docs/reports/trust-evidence/diag_cases.md).

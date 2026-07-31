@@ -15,6 +15,8 @@ void SupervisedEntity::ReportAlive() noexcept {
   last_alive_ns_ = gf::osal::MonotonicNowNs();
 }
 
+void SupervisedEntity::ReportLogical(bool ok) noexcept { logical_ok_ = ok; }
+
 bool SupervisedEntity::IsWithinDeadline() const noexcept {
   if (paused_ || deadline_ms_ == 0) {
     return true;
@@ -30,6 +32,9 @@ bool SupervisedEntity::IsWithinDeadline() const noexcept {
 CheckpointStatus SupervisedEntity::Evaluate() const noexcept {
   if (paused_) {
     return CheckpointStatus::kOk;
+  }
+  if (!logical_ok_) {
+    return CheckpointStatus::kLogicalFault;
   }
   if (deadline_ms_ == 0) {
     return CheckpointStatus::kOk;

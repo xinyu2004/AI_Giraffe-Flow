@@ -10,7 +10,7 @@ target_include_directories(gf_ara_diag PUBLIC
 target_link_libraries(gf_ara_diag PUBLIC gf_ara::core)
 
 if(GF_BUILD_TESTS)
-  add_executable(gf_diag_doip_smoke tests/smoke_doip.cpp)
+  add_executable(gf_diag_doip_smoke testcases/smoke_doip.cpp)
   target_link_libraries(gf_diag_doip_smoke PRIVATE gf_ara::diag)
   add_test(NAME gf_diag_doip_smoke COMMAND gf_diag_doip_smoke)
 endif()

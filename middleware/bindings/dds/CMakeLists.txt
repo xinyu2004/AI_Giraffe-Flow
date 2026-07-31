@@ -87,7 +87,7 @@ else()
 endif()
 
 if(GF_BUILD_TESTS)
-  add_executable(gf_dds_binding_smoke tests/smoke_binding.cpp)
+  add_executable(gf_dds_binding_smoke testcases/smoke_binding.cpp)
   target_link_libraries(gf_dds_binding_smoke PRIVATE gf_ara::com_dds)
   add_test(NAME gf_dds_binding_smoke COMMAND gf_dds_binding_smoke)
 endif()

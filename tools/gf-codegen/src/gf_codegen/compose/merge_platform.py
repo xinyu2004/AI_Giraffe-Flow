@@ -16,6 +16,7 @@ _MODULE_UNLOCK: dict[str, frozenset[str]] = {
     "diag": frozenset({"diag"}),
     "log": frozenset({"log"}),
     "ucm": frozenset({"ucm"}),
+    "collector": frozenset({"collector", "phm", "diag"}),
 }
 
 

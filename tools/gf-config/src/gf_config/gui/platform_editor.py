@@ -28,7 +28,19 @@ from PySide6.QtWidgets import (
 
 from gf_config.core import ProjectSession
 
-KNOWN_MODULES = ["core", "com", "log", "osal", "exec", "phm", "sm", "ucm", "diag", "trace"]
+KNOWN_MODULES = [
+    "core",
+    "com",
+    "log",
+    "osal",
+    "exec",
+    "phm",
+    "sm",
+    "collector",
+    "ucm",
+    "diag",
+    "trace",
+]
 
 # (platform yaml key, nav title, runtime_modules that unlock this page)
 _NAV = [

@@ -15,7 +15,7 @@ target_link_libraries(gf_ara_com_someip PUBLIC gf_ara::com gf_ara::core)
 message(STATUS "Giraffe Flow: SOME/IP backend=stub (vsomeip staged)")
 
 if(GF_BUILD_TESTS)
-  add_executable(gf_someip_binding_smoke tests/smoke_binding.cpp)
+  add_executable(gf_someip_binding_smoke testcases/smoke_binding.cpp)
   target_link_libraries(gf_someip_binding_smoke PRIVATE gf_ara::com_someip)
   add_test(NAME gf_someip_binding_smoke COMMAND gf_someip_binding_smoke)
 endif()

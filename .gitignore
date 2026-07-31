@@ -76,3 +76,6 @@ evidence_pack/
 
 # Architecture GIF generator (local helper)
 result_pic/_gen_architecture_gif.py
+
+# Local trust-evidence packs (do not commit)
+evidence/

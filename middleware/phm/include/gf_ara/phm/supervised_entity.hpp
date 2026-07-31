@@ -12,15 +12,20 @@ enum class CheckpointStatus : std::uint8_t {
   kOk = 0,
   kAliveMissed,
   kDeadlineMissed,
+  kLogicalFault,
 };
 
-/// Local Alive + Deadline supervision (ara::phm subset, in-process).
+/// Local Alive + Deadline + Logical supervision (ara::phm subset, in-process).
 class SupervisedEntity {
  public:
   explicit SupervisedEntity(std::string_view name);
 
   void Configure(std::uint32_t alive_cycle_ms, std::uint32_t deadline_ms);
   void ReportAlive() noexcept;
+
+  /// Logical health (M2). Default ok=true until ReportLogical(false).
+  void ReportLogical(bool ok) noexcept;
+  [[nodiscard]] bool LogicalOk() const noexcept { return logical_ok_; }
 
   /// True if last Alive is within deadline window (or never configured).
   [[nodiscard]] bool IsWithinDeadline() const noexcept;
@@ -38,6 +43,7 @@ class SupervisedEntity {
   std::uint32_t deadline_ms_{0};
   std::uint64_t last_alive_ns_{0};
   bool paused_{false};
+  bool logical_ok_{true};
 };
 
 }  // namespace gf_ara::phm

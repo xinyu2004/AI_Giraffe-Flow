@@ -28,11 +28,30 @@ std::uint32_t EnvU32(const char* key, std::uint32_t fallback) {
 }
 
 std::uint32_t FaultMs() {
-  // Script uses GF_PHM_FAULT_MS; docs also mention GF_PHM_FAULT_INJECT_MS
   if (const char* a = std::getenv("GF_PHM_FAULT_MS"); a && *a) {
     return EnvU32("GF_PHM_FAULT_MS", 0);
   }
   return EnvU32("GF_PHM_FAULT_INJECT_MS", 0);
+}
+
+bool EnvFlag(const char* key) {
+  const char* v = std::getenv(key);
+  return v && (*v == '1' || *v == 'y' || *v == 'Y' || *v == 't' || *v == 'T');
+}
+
+const char* StatusName(gf_ara::phm::CheckpointStatus st) {
+  using gf_ara::phm::CheckpointStatus;
+  switch (st) {
+    case CheckpointStatus::kOk:
+      return "Ok";
+    case CheckpointStatus::kAliveMissed:
+      return "AliveMissed";
+    case CheckpointStatus::kDeadlineMissed:
+      return "DeadlineMissed";
+    case CheckpointStatus::kLogicalFault:
+      return "LogicalFault";
+  }
+  return "?";
 }
 
 }  // namespace
@@ -43,7 +62,6 @@ std::string PlatformDir() {
     while (!out.empty() && out.back() == '/') {
       out.pop_back();
     }
-    // accept project root that contains platform/
     if (ReadFile(out + "/exec.yaml").empty() &&
         !ReadFile(out + "/platform/exec.yaml").empty()) {
       out += "/platform";
@@ -59,6 +77,7 @@ ExecProcessConfig LoadExecProcess(std::string_view process_name) {
   if (dir.empty()) {
     cfg.found = true;
     cfg.execution_client = true;
+    cfg.function_group = "MachineFG";
     return cfg;
   }
   const std::string text = ReadFile(dir + "/exec.yaml");
@@ -115,7 +134,6 @@ PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
       text.substr(proc_pos, std::min<std::size_t>(300, text.size() - proc_pos));
 
   cfg.found = true;
-  // last id: before this process line
   std::smatch id_m;
   std::string id_region = before;
   std::string last_id;
@@ -134,11 +152,52 @@ PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
   if (std::regex_search(after, p_m, std::regex(R"(alive_timeout_ms:\s*(\d+))"))) {
     cfg.alive_timeout_ms = static_cast<std::uint32_t>(std::stoul(p_m[1].str()));
   }
+  if (std::regex_search(after, p_m, std::regex(R"(on_failure:\s*(\S+))"))) {
+    cfg.on_failure = p_m[1].str();
+  }
   return cfg;
+}
+
+void LoadCollectorConfig() {
+  const std::string dir = PlatformDir();
+  if (dir.empty()) {
+    return;
+  }
+  const std::string text = ReadFile(dir + "/collector.yaml");
+  gf_ara::collector::CollectorConfig cfg;
+  if (text.empty()) {
+    gf_ara::collector::EventCollector::Instance().Configure(cfg);
+    return;
+  }
+  std::smatch m;
+  if (std::regex_search(text, m, std::regex(R"(forward:\s*(\S+))"))) {
+    cfg.forward = m[1].str();
+    // strip inline comments
+    const auto sp = cfg.forward.find('#');
+    if (sp != std::string::npos) {
+      cfg.forward = cfg.forward.substr(0, sp);
+    }
+    while (!cfg.forward.empty() &&
+           (cfg.forward.back() == ' ' || cfg.forward.back() == '\t')) {
+      cfg.forward.pop_back();
+    }
+  }
+  if (std::regex_search(text, m, std::regex(R"(enabled:\s*(true|false))",
+                                            std::regex::icase))) {
+    cfg.local_enabled = (m[1].str() != "false" && m[1].str() != "False");
+  }
+  if (std::regex_search(text, m, std::regex(R"(max_entries:\s*(\d+))"))) {
+    cfg.max_entries = static_cast<std::uint32_t>(std::stoul(m[1].str()));
+  }
+  gf_ara::collector::EventCollector::Instance().Configure(cfg);
+  std::cout << "collector: configured forward=" << cfg.forward
+            << " max_entries=" << cfg.max_entries << std::endl;
 }
 
 bool ProcessSupervisor::Start(std::string_view process_name) {
   process_ = std::string(process_name);
+  LoadCollectorConfig();
+
   const auto exec_cfg = LoadExecProcess(process_name);
   if (PlatformDir().empty()) {
     std::cerr << "platform_sil: GF_PLATFORM_DIR unset — using Offer defaults for "
@@ -151,6 +210,14 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
     return false;
   }
 
+  function_group_ =
+      exec_cfg.function_group.empty() ? "MachineFG" : exec_cfg.function_group;
+
+  using gf_ara::sm::FunctionGroupState;
+  using gf_ara::sm::StateClient;
+  StateClient::EnsureGroup(function_group_, FunctionGroupState::kRunning);
+  StateClient::RequestTransition(function_group_, FunctionGroupState::kRunning);
+
   using gf_ara::exec::ExecutionClient;
   using gf_ara::exec::ExecutionState;
   if (!ExecutionClient::Offer(process_)) {
@@ -161,21 +228,20 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
     std::cerr << "platform_sil: Report Running failed for " << process_ << "\n";
     return false;
   }
-  // Stable assert token for smoke scripts
-  std::cout << "Offer→Running process=" << process_;
-  if (!exec_cfg.function_group.empty()) {
-    std::cout << " fg=" << exec_cfg.function_group;
-  }
-  std::cout << std::endl;
+  std::cout << "Offer→Running process=" << process_ << " fg=" << function_group_
+            << " sm=" << gf_ara::sm::ToString(StateClient::GetState(function_group_))
+            << std::endl;
 
   const auto phm_cfg = LoadPhmEntity(process_name);
   if (phm_cfg.found) {
     entity_.emplace(phm_cfg.id);
     alive_period_ms_ = phm_cfg.alive_period_ms;
+    on_failure_ = phm_cfg.on_failure.empty() ? "log" : phm_cfg.on_failure;
     entity_->Configure(phm_cfg.alive_period_ms, phm_cfg.alive_timeout_ms);
     next_alive_ = std::chrono::steady_clock::now();
     std::cout << "phm entity=" << phm_cfg.id << " period_ms=" << phm_cfg.alive_period_ms
-              << " timeout_ms=" << phm_cfg.alive_timeout_ms << std::endl;
+              << " timeout_ms=" << phm_cfg.alive_timeout_ms
+              << " on_failure=" << on_failure_ << std::endl;
 
     const auto fault_ms = FaultMs();
     if (fault_ms > 0) {
@@ -188,10 +254,41 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
   return true;
 }
 
+void ProcessSupervisor::OnFault(gf_ara::phm::CheckpointStatus st) {
+  const char* reason = StatusName(st);
+  ++miss_count_;
+  std::cout << reason << " entity=" << entity_->Name() << std::endl;
+
+  gf_ara::collector::EventCollector::Instance().ReportEvent(
+      "phm", reason, std::string("entity=") + std::string(entity_->Name()),
+      gf_ara::collector::EventSeverity::kError);
+
+  if (on_failure_ == "notify_sm") {
+    const bool enter_upd = EnvFlag("GF_SM_ENTER_UPDATING_ON_FAULT");
+    gf_ara::sm::StateClient::NotifyHealthFault(function_group_, entity_->Name(), reason,
+                                               enter_upd);
+    if (enter_upd && entity_) {
+      entity_->SetPaused(true);
+      std::cout << "phm paused (sm Updating) entity=" << entity_->Name() << std::endl;
+    }
+  }
+}
+
 void ProcessSupervisor::Tick() {
   if (!entity_) {
     return;
   }
+
+  // Resume Alive when SM left Updating
+  if (entity_->Paused()) {
+    using gf_ara::sm::FunctionGroupState;
+    using gf_ara::sm::StateClient;
+    if (StateClient::GetState(function_group_) != FunctionGroupState::kUpdating) {
+      entity_->SetPaused(false);
+      std::cout << "phm resume entity=" << entity_->Name() << std::endl;
+    }
+  }
+
   const auto now = std::chrono::steady_clock::now();
 
   if (fault_pending_ && ever_alive_) {
@@ -207,7 +304,7 @@ void ProcessSupervisor::Tick() {
     fault_active_ = false;
   }
 
-  if (!fault_active_ && now >= next_alive_) {
+  if (!fault_active_ && !entity_->Paused() && now >= next_alive_) {
     entity_->ReportAlive();
     ever_alive_ = true;
     next_alive_ = now + std::chrono::milliseconds(alive_period_ms_);
@@ -215,17 +312,17 @@ void ProcessSupervisor::Tick() {
 
   const auto st = entity_->Evaluate();
   if (st != last_status_) {
-    if (st == gf_ara::phm::CheckpointStatus::kOk &&
-        (last_status_ == gf_ara::phm::CheckpointStatus::kAliveMissed ||
-         last_status_ == gf_ara::phm::CheckpointStatus::kDeadlineMissed)) {
+    using gf_ara::phm::CheckpointStatus;
+    if (st == CheckpointStatus::kOk &&
+        (last_status_ == CheckpointStatus::kAliveMissed ||
+         last_status_ == CheckpointStatus::kDeadlineMissed ||
+         last_status_ == CheckpointStatus::kLogicalFault)) {
       ++recover_count_;
       std::cout << "phm recovered entity=" << entity_->Name() << std::endl;
-    } else if (st == gf_ara::phm::CheckpointStatus::kAliveMissed) {
-      ++miss_count_;
-      std::cout << "AliveMissed entity=" << entity_->Name() << std::endl;
-    } else if (st == gf_ara::phm::CheckpointStatus::kDeadlineMissed) {
-      ++miss_count_;
-      std::cout << "DeadlineMissed entity=" << entity_->Name() << std::endl;
+    } else if (st == CheckpointStatus::kAliveMissed ||
+               st == CheckpointStatus::kDeadlineMissed ||
+               st == CheckpointStatus::kLogicalFault) {
+      OnFault(st);
     }
     last_status_ = st;
   }

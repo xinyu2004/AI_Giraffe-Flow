@@ -1,18 +1,16 @@
-# phm
+# phm — Platform Health Management
 
-ARA-inspired **Platform Health Management** (`gf_ara::phm`) — P1 Alive / Deadline 本地监督。
+ARA-inspired **Platform Health Management** (`gf_ara::phm`) — Alive / Deadline / Logical.
 
-| API | 说明 |
+| API | Role |
 |-----|------|
-| `SupervisedEntity::Configure` | alive_cycle_ms / deadline_ms |
 | `ReportAlive` | 喂狗 |
-| `Evaluate` | `kOk` / `kAliveMissed` / `kDeadlineMissed` |
-| `SetPaused` | OTA/降级时暂停监督（UCM/SM 钩子）— 见 [PHM_OTA_PAUSE.md](../../docs/zh/operations/PHM_OTA_PAUSE.md) |
+| `ReportLogical` | Logical health (M2) |
+| `Evaluate` | `kOk` / `kAliveMissed` / `kDeadlineMissed` / `kLogicalFault` |
+| `SetPaused` | OTA / SM Updating |
 
-闭环 smoke：`gf_phm_alive_deadline_smoke`（先 `exec` Offer/Running，再 Alive→超时→恢复→Pause）。
+`platform/phm.yaml` `on_failure`: `log` \| `notify_sm`（→ `gf_ara::sm::NotifyHealthFault` + Collector）。
 
-```bash
-bash scripts/smoke_eu_stub.sh
-```
+Smoke: `gf_phm_alive_deadline_smoke`（`testcases/smoke_alive_deadline.cpp`）。Trust cases: [phm_cases.md](../../docs/reports/trust-evidence/phm_cases.md)。
 
 Parent: [middleware/README.md](../README.md)

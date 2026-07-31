@@ -12,6 +12,7 @@
 | [P2_PLAN.md](P2_PLAN.md) / [P2_5_PLAN.md](P2_5_PLAN.md) | 已交付阶段的实施记录 |
 | [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md) | P2 形式收口 |
 | [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md) | gf-config 两页目标 + Event Collector 口径 |
+| [TRUST_EVIDENCE.md](TRUST_EVIDENCE.md) | 认证前期支持：L1 库 / L2 codegen / L3 SIL（不代做认证） |
 | [OTA_SPIKE.md](OTA_SPIKE.md) | OTA 选型尖刺（非真刷写） |
 
 ---
@@ -119,23 +120,23 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 ### P3-2 Middleware — AP 味加深
 
-| # | 交付物 |
-|---|--------|
-| M1 | **sm** 状态机可用（超出 exec.yaml 名单） |
-| M2 | **phm** Logical + `notify_sm` / 与 Collector 联动 |
-| M3 | **Event Collector** 运行时：汇聚错误 → CP DEM 或本地事件库 |
-| M4 | **log** lite（超 skeleton） |
-| M5 | per / tsync 骨架落地（可裁剪） |
-| M6 | vsomeip **择一**加深（量产级仍可后置） |
+| # | 交付物 | 状态 |
+|---|--------|------|
+| M1 | **sm** 状态机可用（超出 exec.yaml 名单） | ✅ FG Off/Running/Updating + `NotifyHealthFault` |
+| M2 | **phm** Logical + `notify_sm` / 与 Collector 联动 | ✅ `ReportLogical` + SIL `on_failure: notify_sm` |
+| M3 | **Event Collector** 运行时：汇聚错误 → CP DEM 或本地事件库 | ✅ 环缓 + `cp_dem` stub 转发 |
+| M4 | **log** lite（超 skeleton） | |
+| M5 | per / tsync 骨架落地（可裁剪） | |
+| M6 | vsomeip **择一**加深（量产级仍可后置） | |
 
 ### P3-3 Cert-ready — 经得起认证的支持
 
-| # | 交付物 |
-|---|--------|
-| T1 | `trust-evidence` 文档：我们提供什么 / **不代做认证** |
-| T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 |
-| T3 | 发版 evidence_pack 流程（可本地生成，默认不进仓） |
-| T4 | `production` profile：关 Record/ROS/调试路径 |
+| # | 交付物 | 状态 |
+|---|--------|------|
+| T1 | `trust-evidence` 文档：我们提供什么 / **不代做认证** | ✅ [TRUST_EVIDENCE.md](TRUST_EVIDENCE.md) + [reports/trust-evidence](../reports/trust-evidence/) |
+| T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ◐ L1 库矩阵 + L3 SIL 索引起步；隔离/延时表仍后置 |
+| T3 | 发版 evidence_pack 流程（可本地生成，默认不进仓） | ◐ `scripts/verify/trust_evidence_modules.sh` → `evidence/sil/` |
+| T4 | `production` profile：关 Record/ROS/调试路径 | |
 
 **不是：** ASIL-B 证书、完整 Safety Case、工具鉴定代办。
 

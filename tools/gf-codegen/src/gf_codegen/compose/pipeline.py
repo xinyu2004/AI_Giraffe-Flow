@@ -108,7 +108,13 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     write_lineage(paths.lineage_report, report)
 
     sku_cmake = paths.project_dir / "generated" / "gf_build.cmake"
-    emit_build_cmake(req, sku_cmake, wiring=wiring)
+    emit_build_cmake(
+        req,
+        sku_cmake,
+        wiring=wiring,
+        project_dir=paths.project_dir,
+        repo_root=paths.repo_root,
+    )
     obs_json = paths.project_dir / "generated" / "observability.json"
     emit_observability_json(req, obs_json, wiring=wiring)
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)

@@ -15,3 +15,5 @@ cmake --build build --target gf_osal_smoke
 ```
 
 Parent: [../README.md](../README.md)
+
+Trust cases: [osal_cases.md](../../docs/reports/trust-evidence/osal_cases.md).

@@ -7,7 +7,7 @@ target_include_directories(gf_ara_core INTERFACE
 )
 
 if(GF_BUILD_TESTS)
-  add_executable(gf_core_smoke tests/smoke_result.cpp)
+  add_executable(gf_core_smoke testcases/smoke_result.cpp)
   target_link_libraries(gf_core_smoke PRIVATE gf_ara::core)
   add_test(NAME gf_core_smoke COMMAND gf_core_smoke)
 endif()

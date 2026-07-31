@@ -9,7 +9,7 @@ target_include_directories(gf_ara_cross_domain_ipc PUBLIC
 )
 
 if(GF_BUILD_TESTS)
-  add_executable(gf_cross_domain_ipc_smoke tests/smoke_transport.cpp)
+  add_executable(gf_cross_domain_ipc_smoke testcases/smoke_transport.cpp)
   target_link_libraries(gf_cross_domain_ipc_smoke PRIVATE gf_ara::cross_domain_ipc)
   add_test(NAME gf_cross_domain_ipc_smoke COMMAND gf_cross_domain_ipc_smoke)
 endif()

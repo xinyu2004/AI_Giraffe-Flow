@@ -126,10 +126,10 @@ AI_Giraffe-Flow/
 
 | Kind | Location | Examples |
 |------|----------|----------|
-| **Unit** | `middleware/<mod>/` next to code *or* `middleware/tests/unit/<mod>/` | Result, PHM timer math |
+| **Unit** | `middleware/<mod>/testcases/` next to code *or* `middleware/tests/unit/<mod>/` | Result, PHM timer math；trust `CASE` 行 |
 | **Middleware component** | `middleware/tests/component/` | com+iceoryx in-proc |
-| **Tool unit** | `tools/gf-codegen/tests/`, `tools/gf-config/…`, `tools/gmt/…` | compose, observability |
-| **SKU integration / smoke** | `projects/.../tests/` + `scripts/verify/...` | multiproc SIL, lineage |
+| **Tool unit** | `tools/gf-codegen/tests/`、`tools/gf-config/…`（主机；codegen 见 trust L2） | compose, observability |
+| **SKU integration / smoke** | `projects/.../tests/` + `scripts/verify/...` | multiproc SIL（trust L3） |
 | **Bench / golden** | `projects/.../golden/` + codegen tests | SOR golden |
 | **Manual / evidence** | `evidence/` (local) | MCAP, soak logs |
 
@@ -141,9 +141,9 @@ Naming: prefer `test_*.py` / `*_test.cpp` already used; don’t invent a second 
 
 | Artifact | Path |
 |----------|------|
-| Policy + how to produce evidence | `docs/zh/operations/` (e.g. trust-evidence note) + ROADMAP P3-3 |
-| Templates / checklists | `docs/reports/trust-evidence/` |
-| Generated packs (latency, soak, MCAP index) | `evidence/sil/` or `evidence/board/` (**not** committed by default) |
+| Policy + how to produce evidence | [docs/zh/operations/TRUST_EVIDENCE.md](docs/zh/operations/TRUST_EVIDENCE.md) + ROADMAP P3-3 |
+| Per-module / SIL / codegen matrices | [docs/reports/trust-evidence/](docs/reports/trust-evidence/) |
+| Generated packs (CASE logs, latency, soak) | `evidence/sil/` or `evidence/board/` (**not** committed by default) |
 | ISO 26262 certificate | **out of repo** (we only provide cert-ready support) |
 
 ---
@@ -174,7 +174,7 @@ Naming: prefer `test_*.py` / `*_test.cpp` already used; don’t invent a second 
 
 1. STRUCTURE target (doc) — done.  
 2. Layout: `dep-manifest` + tool renames + script wrapper — **done**.  
-3. Apps split PR: stubs → `projects/.../apps/` (per SKU).  
+3. Apps split: stubs → `projects/.../apps/` (per SKU) — **done** for `oem_a/afc_with_uss` (gateway / fcm / uss / planning).  
 4. gf-config **two-tab UI** + port UX + **wiring_all / codegen tap** — **done**.
 
 ---

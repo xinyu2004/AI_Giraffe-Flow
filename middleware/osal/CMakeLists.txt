@@ -10,7 +10,7 @@ target_include_directories(gf_osal PUBLIC
 )
 
 if(GF_BUILD_TESTS)
-  add_executable(gf_osal_smoke tests/smoke_osal.cpp)
+  add_executable(gf_osal_smoke testcases/smoke_osal.cpp)
   target_link_libraries(gf_osal_smoke PRIVATE gf::osal)
   add_test(NAME gf_osal_smoke COMMAND gf_osal_smoke)
 endif()

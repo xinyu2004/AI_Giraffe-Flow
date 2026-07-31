@@ -27,7 +27,8 @@ req.yaml  ──compose──►  projects/<sku>/generated/gf_build.cmake
 | `bindings: [someip]` | `GF_WITH_SOMEIP` | 有 CMakeLists 才加；否则 STATUS 跳过 |
 | `bindings: [dds]` | `GF_WITH_DDS` | 同上 |
 | `runtime_modules` | `GF_RUNTIME_MODULES` | 除 always-on 外按名 `add_subdirectory`；无 CMakeLists 则跳过 |
-| `apps` | `GF_APPS` | `apps/<path>`；iceoryx demo 需 iceoryx；MCU apps 需 cross_domain_ipc |
+| `apps` | `GF_APPS` | 优先 `${GF_PROJECT_DIR}/apps/<path>`，否则 `apps/<path>`；产物仍在 `build/apps/<path>`；iceoryx demo 需 iceoryx；MCU apps 需 cross_domain_ipc |
+| （compose） | `GF_PROJECT_DIR` | SKU 根目录，用于解析项目内 stubs |
 
 **Always-on（不论 req）：** `core` · `com` · `osal`
 

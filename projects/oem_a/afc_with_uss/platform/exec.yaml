@@ -1,8 +1,9 @@
-# exec + SM 极简（function_groups）；进程名 ∈ wiring，非 external
+# exec + SM（function_groups → middleware/sm StateClient）
 schema_version: "0.1"
 function_groups:
   - id: MachineFG
     initial: Running
+    # implied states: Off | Running | Updating (M1)
 processes:
   - name: adapter.vehicle_can_gateway
     function_group: MachineFG

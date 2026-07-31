@@ -16,7 +16,7 @@ target_link_libraries(gf_ara_com_iceoryx
 )
 
 if(GF_BUILD_TESTS)
-  add_executable(gf_iox_binding_smoke tests/smoke_binding.cpp)
+  add_executable(gf_iox_binding_smoke testcases/smoke_binding.cpp)
   target_link_libraries(gf_iox_binding_smoke PRIVATE gf_ara::com_iceoryx)
   add_test(NAME gf_iox_binding_smoke COMMAND gf_iox_binding_smoke)
 endif()

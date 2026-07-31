@@ -5,22 +5,22 @@ entities:
   alive_period_ms: 100
   alive_timeout_ms: 300
   deadline_ms: null
-  on_failure: log
+  on_failure: notify_sm
 - id: fcm_alive
   process: perception.fcm
   alive_period_ms: 100
   alive_timeout_ms: 300
   deadline_ms: null
-  on_failure: log
+  on_failure: notify_sm
 - id: uss_alive
   process: sensing.uss
   alive_period_ms: 100
   alive_timeout_ms: 300
   deadline_ms: null
-  on_failure: log
+  on_failure: notify_sm
 - id: planning_alive
   process: planning.driving
   alive_period_ms: 100
   alive_timeout_ms: 300
   deadline_ms: null
-  on_failure: log
+  on_failure: notify_sm
