@@ -135,11 +135,11 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | # | 交付物 | 状态 |
 |---|--------|------|
 | T1 | `fusa/` 入口：政策 + cases + 收集脚本 | ✅ [fusa/](../../../fusa/) · [POLICY.md](../../../fusa/POLICY.md) · [cases/](../../../fusa/cases/) |
-| T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ◐ L1 库矩阵 + L3 SIL 索引起步；隔离/延时表仍后置 |
-| T3 | 本机 runs / packs 流程（默认不进仓） | ◐ `fusa/scripts/run_cases.sh` → `fusa/runs/`；SKU `generate_fusa_artifacts.sh` → `fusa/packs/` |
+| T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ◐ [isolation.md](../../../fusa/metrics/isolation.md) · [latency.md](../../../fusa/metrics/latency.md) · [`measure_latency.sh`](../../../fusa/scripts/measure_latency.sh)；SIL 数表已有主机快照，目标预算仍 TBD |
+| T3 | 本机 runs / packs 流程（默认不进仓） | ✅ `fusa/scripts/run_cases.sh` → `fusa/runs/`；SKU `generate_fusa_artifacts.sh` → `fusa/packs/`（互不调用） |
 | T4 | `production` profile：关 Record/ROS/调试路径 | |
 
-**目标：** 完整 Safety Case。**当前不声称**证书已取得；仓内持续积累可引用证据（不含把 GMT/stub 当板级 ASIL 证据）。
+**目标：** 完整 Safety Case（骨架：[fusa/safety-case/](../../../fusa/safety-case/)）。**当前不声称**证书已取得；仓内持续积累可引用证据（不含把 GMT/stub 当板级 ASIL 证据）。
 
 ### P3-4 DoIP / OTA / GMT
 

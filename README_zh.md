@@ -13,10 +13,10 @@
 | # | 主线 | 角色 | 深入 |
 |---|------|------|------|
 | **1** | **gf-config** | 工具链 · 配置侧 | [tools/gf-config](tools/gf-config/README_zh.md) · [SOR](docs/zh/architecture/sor-authoring.md) |
-| **2** | **Giraffe 模块** | **产品主体** · 运行时与进程 | [middleware](middleware/README.md) · [设计](docs/zh/architecture/DESIGN.md) · [示例](projects/oem_a/afc_with_uss/) |
+| **2** | **Giraffe 模块** | **产品主体** · 运行时、进程、**FuSa 证据** | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [设计](docs/zh/architecture/DESIGN.md) |
 | **3** | **GMT** | 工具链 · 观测侧 | [tools/gmt](tools/gmt/README_zh.md) · [可观测演示](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
-![架构：gf-config → 板端 → GMT（tap / inject 动画）](result_pic/architecture_flow_zh.gif)
+![架构：gf-config → Giraffe 模块（含 FuSa）→ GMT](result_pic/architecture_flow_zh.gif)
 
 ---
 
@@ -55,6 +55,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | **可移植** | `osal/` · `hal/` | 时钟 / 线程 / **进程 Spawn**；主目标 ARM Linux |
 | **参考 App** | `apps/` | gateway、感知/超声/规划 stub、观测工具——**非量产算法** |
 | **集成工程** | `projects/` | OEM 的 DBC / wiring / hpp / SIL·HIL 脚本 |
+| **FuSa 证据** | `fusa/` | cases / metrics / Safety Case 骨架（通向完整 Safety Case，**非证书**） |
 
 公开约定：**业务只依赖 semantic 服务名**；OEM 差异收在 adapter/gateway。详见 [DESIGN](docs/zh/architecture/DESIGN.md)。
 
@@ -130,6 +131,17 @@ GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
 | 进程内算法与 I/O、iceoryx 上真发真收 | 画 wiring / 裁 SKU → gf-config |
 | SIL 拉起 RouDi + App + tap/inject | Studio 布局、Tag、MCAP 分析 → GMT / Foxglove |
 | semantic 契约在板上成立 | 离线改 DBC / lineage 会议替代 → compose |
+| FuSa 证据（`fusa/`） | GMT 仍属 **debug-path**（不作板级 ASIL 证据） |
+
+#### 2.6 FuSa（属于 Giraffe 模块）
+
+通向 **完整 Safety Case** 的证据入口：L1/L2/L3、隔离、参考延时、Safety Case 骨架。入口：[fusa/](fusa/README.md)。
+
+```bash
+bash fusa/scripts/run_cases.sh
+GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
+bash fusa/scripts/measure_latency.sh   # 可选：延时快照
+```
 
 ---
 
@@ -162,6 +174,7 @@ GMT gui --project projects/oem_a/afc_with_uss \
 | [middleware/](middleware/) | **Giraffe 运行时（主体）** |
 | [apps/](apps/) | 参考 App / adapter / tap·inject |
 | [projects/](projects/) | OEM 集成工程 |
+| [fusa/](fusa/) | FuSa 证据（归属 Giraffe 模块） |
 | [tools/gf-config/](tools/gf-config/) | gf-config |
 | [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |
 | [tools/gmt/](tools/gmt/) | GMT |

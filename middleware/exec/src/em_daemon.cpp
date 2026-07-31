@@ -1,6 +1,7 @@
 #include "gf_ara/exec/em_daemon.hpp"
 
 #include "gf/osal/process.hpp"
+#include "gf/osal/clock.hpp"
 
 #include <sys/stat.h>
 
@@ -17,6 +18,10 @@
 
 namespace gf_ara::exec {
 namespace {
+
+std::uint64_t MonoMs() {
+  return gf::osal::MonotonicNowNs() / 1000000ULL;
+}
 
 std::string ReadFile(const std::string& path) {
   std::ifstream in(path);
@@ -366,8 +371,8 @@ bool EmDaemon::Spawn(Runtime& rt, bool is_relaunch) {
   }
   rt.ever_started = true;
   rt.terminal_exit = false;
-  std::cout << "em_daemon: spawned name=" << rt.spec.name << " pid=" << pid
-            << " relaunch=" << (is_relaunch ? "yes" : "no")
+  std::cout << "t_ms=" << MonoMs() << " em_daemon: spawned name=" << rt.spec.name
+            << " pid=" << pid << " relaunch=" << (is_relaunch ? "yes" : "no")
             << " launches=" << rt.launches << std::endl;
   return true;
 }
@@ -404,9 +409,9 @@ bool EmDaemon::PollOnce() {
     const int exit_code =
         (wr.status == gf::osal::ProcessWaitStatus::kExited) ? wr.exit_code : -1;
     const bool signaled = (wr.status == gf::osal::ProcessWaitStatus::kSignaled);
-    std::cout << "em_daemon: child exit name=" << rt.spec.name << " pid=" << rt.pid
-              << " code=" << exit_code << " signaled=" << (signaled ? "yes" : "no")
-              << std::endl;
+    std::cout << "t_ms=" << MonoMs() << " em_daemon: child exit name=" << rt.spec.name
+              << " pid=" << rt.pid << " code=" << exit_code
+              << " signaled=" << (signaled ? "yes" : "no") << std::endl;
     rt.pid = gf::osal::kInvalidProcessId;
 
     const bool do_restart =
@@ -415,8 +420,8 @@ bool EmDaemon::PollOnce() {
         (exit_code == kEmRestartExitCode || signaled);
 
     if (do_restart) {
-      std::cout << "em_daemon: relaunch name=" << rt.spec.name << " restart#"
-                << (rt.restarts + 1) << std::endl;
+      std::cout << "t_ms=" << MonoMs() << " em_daemon: relaunch name=" << rt.spec.name
+                << " restart#" << (rt.restarts + 1) << std::endl;
       if (!Spawn(rt, true)) {
         rt.terminal_exit = true;
         return false;

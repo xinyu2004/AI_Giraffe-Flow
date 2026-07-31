@@ -1,5 +1,6 @@
 #include "gf_demo/platform_sil.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -37,6 +38,14 @@ std::uint32_t FaultMs() {
 bool EnvFlag(const char* key) {
   const char* v = std::getenv(key);
   return v && (*v == '1' || *v == 'y' || *v == 'Y' || *v == 't' || *v == 'T');
+}
+
+/** Process-local monotonic ms for FuSa latency parsing (t_ms=…). */
+std::uint64_t MonoMs() {
+  using clock = std::chrono::steady_clock;
+  static const auto t0 = clock::now();
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t0).count());
 }
 
 const char* StatusName(gf_ara::phm::CheckpointStatus st) {
@@ -230,7 +239,8 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
     std::cerr << "platform_sil: Report Running failed for " << process_ << "\n";
     return false;
   }
-  std::cout << "Offer→Running process=" << process_ << " fg=" << function_group_
+  std::cout << "t_ms=" << MonoMs() << " Offer→Running process=" << process_
+            << " fg=" << function_group_
             << " sm=" << gf_ara::sm::ToString(StateClient::GetState(function_group_))
             << std::endl;
 
@@ -248,7 +258,8 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
     const auto fault_ms = FaultMs();
     if (fault_ms > 0) {
       fault_pending_ = true;
-      std::cout << "FAULT inject armed for " << fault_ms << " ms after first Alive\n";
+      std::cout << "t_ms=" << MonoMs() << " FAULT inject armed for " << fault_ms
+                << " ms after first Alive\n";
     }
   } else if (!PlatformDir().empty()) {
     std::cout << "platform_sil: no phm entity for " << process_ << " (ok)\n";
@@ -279,7 +290,7 @@ void ProcessSupervisor::SoftRestartViaEm(const char* reason) {
   ++em_restart_count_;
   next_alive_ = std::chrono::steady_clock::now() +
                 std::chrono::milliseconds(alive_period_ms_);
-  std::cout << "em soft_restart process=" << process_
+  std::cout << "t_ms=" << MonoMs() << " em soft_restart process=" << process_
             << " count=" << ExecutionManager::RestartCount(process_) << std::endl;
 }
 
@@ -288,7 +299,7 @@ void ProcessSupervisor::RequestOsEmRestart(const char* reason) {
   ExecutionManager::RequestRestart(process_, reason);
   ++em_restart_count_;
   exit_for_em_restart_ = true;
-  std::cout << "em os_restart_exit process=" << process_
+  std::cout << "t_ms=" << MonoMs() << " em os_restart_exit process=" << process_
             << " code=" << gf_ara::exec::kEmRestartExitCode
             << " reason=" << reason << std::endl;
 }
@@ -296,7 +307,8 @@ void ProcessSupervisor::RequestOsEmRestart(const char* reason) {
 void ProcessSupervisor::OnFault(gf_ara::phm::CheckpointStatus st) {
   const char* reason = StatusName(st);
   ++miss_count_;
-  std::cout << reason << " entity=" << entity_->Name() << std::endl;
+  std::cout << "t_ms=" << MonoMs() << " " << reason << " entity=" << entity_->Name()
+            << std::endl;
 
   gf_ara::collector::EventCollector::Instance().ReportEvent(
       "phm", reason, std::string("entity=") + std::string(entity_->Name()),
@@ -346,11 +358,13 @@ void ProcessSupervisor::Tick() {
     fault_until_ = now + std::chrono::milliseconds(fault_ms);
     fault_pending_ = false;
     fault_active_ = true;
-    std::cout << "FAULT inject begin entity=" << entity_->Name() << std::endl;
+    std::cout << "t_ms=" << MonoMs() << " FAULT inject begin entity=" << entity_->Name()
+              << std::endl;
   }
 
   if (fault_active_ && now >= fault_until_) {
-    std::cout << "fault window ended entity=" << entity_->Name() << std::endl;
+    std::cout << "t_ms=" << MonoMs() << " fault window ended entity=" << entity_->Name()
+              << std::endl;
     fault_active_ = false;
   }
 
@@ -368,7 +382,8 @@ void ProcessSupervisor::Tick() {
          last_status_ == CheckpointStatus::kDeadlineMissed ||
          last_status_ == CheckpointStatus::kLogicalFault)) {
       ++recover_count_;
-      std::cout << "phm recovered entity=" << entity_->Name() << std::endl;
+      std::cout << "t_ms=" << MonoMs() << " phm recovered entity=" << entity_->Name()
+                << std::endl;
     } else if (st == CheckpointStatus::kAliveMissed ||
                st == CheckpointStatus::kDeadlineMissed ||
                st == CheckpointStatus::kLogicalFault) {

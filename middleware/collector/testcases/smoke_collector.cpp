@@ -46,6 +46,13 @@ int main() {
   }
   Pass("COLL-03", "Snapshot last=LogicalFault");
 
+  // FuSa latency sample: stamp span across ring (in-proc ReportEvent path)
+  if (snap.front().t_ns > 0 && snap.back().t_ns >= snap.front().t_ns) {
+    const auto span_us = (snap.back().t_ns - snap.front().t_ns) / 1000ULL;
+    std::cout << "t_us_span=" << span_us << " collector ring first→last (n=" << snap.size()
+              << ")\n";
+  }
+
   std::cout << "gf_collector_smoke OK entries=" << col.Size() << "\n";
   return 0;
 }

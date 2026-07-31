@@ -37,6 +37,11 @@ bash fusa/scripts/run_cases.sh
 
 板端启动：com 底座 → **EM（`gf_em_daemon`）** → OSAL Spawn Apps；见 [DESIGN §8.1](../docs/zh/architecture/DESIGN.md#81-板端启动顺序em)。EM / OSAL process 用例见 `cases/exec_cases.md`、`cases/osal_cases.md`。
 
+## Safety Case
+
+论证骨架见 [`safety-case/`](safety-case/)；**行为** isolation / **延时** latency 见 [`metrics/`](metrics/)（`measure_latency` 不并入默认 `run_cases`）。  
+证据层仍是 `cases` + `run_cases` / SKU `generate_fusa_artifacts`。
+
 ## 索引
 
 完整模块表见 [`cases/README.md`](cases/README.md)。

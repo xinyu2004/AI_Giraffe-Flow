@@ -13,10 +13,10 @@ Desktop-first, **ARM Linux** embedded primary (OSAL reserved for MIPS / RISC-V).
 | # | Pillar | Role | Dig in |
 |---|--------|------|--------|
 | **1** | **gf-config** | Toolchain · configure | [tools/gf-config](tools/gf-config/README.md) · [SOR](docs/en/architecture/sor-authoring.md) |
-| **2** | **Giraffe modules** | **Product core** · runtime & processes | [middleware](middleware/README.md) · [Design](docs/en/architecture/DESIGN.md) · [Sample](projects/oem_a/afc_with_uss/) |
+| **2** | **Giraffe modules** | **Product core** · runtime, processes, **FuSa evidence** | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [Design](docs/en/architecture/DESIGN.md) |
 | **3** | **GMT** | Toolchain · observe / inject | [tools/gmt](tools/gmt/README.md) · [Observability demo](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
-![Architecture: gf-config → board → GMT (animated tap / inject)](result_pic/architecture_flow.gif)
+![Architecture: gf-config → Giraffe modules (incl. FuSa) → GMT](result_pic/architecture_flow.gif)
 
 ---
 
@@ -55,6 +55,7 @@ What actually runs on the board and in SIL. Production algorithms may live in **
 | **Portability** | `osal/` · `hal/` | Clock / thread / **process Spawn**; ARM Linux first |
 | **Reference apps** | `apps/` | Gateway, sensing/perception/planning stubs, obs tools — **not production algos** |
 | **Integration** | `projects/` | OEM DBC / wiring / hpp / SIL·HIL scripts |
+| **FuSa evidence** | `fusa/` | Cases / metrics / Safety Case drafts toward a full Safety Case (**not** a certificate) |
 
 Rule: **apps depend only on semantic service names**; OEM deltas stay in adapter/gateway. See [DESIGN](docs/en/architecture/DESIGN.md).
 
@@ -126,6 +127,17 @@ Scenarios: [scenarios/README.md](projects/oem_a/afc_with_uss/scenarios/README.md
 | In-process I/O, real pub/sub on iceoryx | wiring / SKU trim → gf-config |
 | SIL: RouDi + apps + tap/inject | Studio layout, Tag, MCAP → GMT / Foxglove |
 | Semantic contract on target | DBC / lineage gates → compose |
+| FuSa evidence (`fusa/`) | GMT remains **debug-path** (not board ASIL evidence) |
+
+#### 2.6 FuSa (inside Giraffe modules)
+
+Evidence toward a **full Safety Case** — L1/L2/L3 cases, isolation, reference latency, Safety Case skeletons. Entry: [fusa/](fusa/README.md).
+
+```bash
+bash fusa/scripts/run_cases.sh
+GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
+bash fusa/scripts/measure_latency.sh   # optional timing snapshot
+```
 
 ---
 
@@ -158,6 +170,7 @@ Details: [tools/gmt/README.md](tools/gmt/README.md) · [OBSERVABILITY_DEMO](docs
 | [middleware/](middleware/) | **Giraffe runtime (core)** |
 | [apps/](apps/) | Reference apps / adapters / tap·inject |
 | [projects/](projects/) | OEM integration |
+| [fusa/](fusa/) | FuSa evidence (under Giraffe modules) |
 | [tools/gf-config/](tools/gf-config/) | gf-config |
 | [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |
 | [tools/gmt/](tools/gmt/) | GMT |

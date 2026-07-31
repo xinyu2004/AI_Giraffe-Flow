@@ -91,6 +91,7 @@ AI_Giraffe-Flow/
 │
 ├── fusa/                         # Functional Safety (goal: full Safety Case)
 │   ├── POLICY.md · cases/ · scripts/run_cases.sh
+│   ├── safety-case/ · metrics/   # Safety Case skeleton + latency/isolation
 │   ├── runs/                     # local CASE logs (gitignore)
 │   └── packs/                    # SKU packs via projects/.../generate_fusa_artifacts.sh
 │
@@ -144,7 +145,10 @@ Naming: prefer `test_*.py` / `*_test.cpp` already used; don’t invent a second 
 |----------|------|
 | Entry + policy（目标：完整 Safety Case） | [fusa/README.md](fusa/README.md) · [fusa/POLICY.md](fusa/POLICY.md) |
 | Per-module / SIL / codegen matrices | [fusa/cases/](fusa/cases/) |
+| Isolation · reference latency | [fusa/metrics/](fusa/metrics/) |
+| Safety Case drafts | [fusa/safety-case/](fusa/safety-case/) |
 | Run matrix | [fusa/scripts/run_cases.sh](fusa/scripts/run_cases.sh) |
+| Latency snapshot | [fusa/scripts/measure_latency.sh](fusa/scripts/measure_latency.sh) |
 | SKU artifacts | `projects/<oem>/<sku>/scripts/generate_fusa_artifacts.sh` → `fusa/packs/` |
 | Generated runs / packs | `fusa/runs/` · `fusa/packs/` (**not** committed by default) |
 | ISO 26262 certificate | **out of repo**（仓内积累证据，不存放证书本身） |
