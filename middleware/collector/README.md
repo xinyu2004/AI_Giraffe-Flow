@@ -12,4 +12,4 @@ Smoke: `gf_collector_smoke`.
 
 Parent: [middleware/README.md](../README.md)
 
-Trust cases: [collector_cases.md](../../docs/reports/trust-evidence/collector_cases.md).
+FuSa cases: [collector_cases.md](../../fusa/cases/collector_cases.md).

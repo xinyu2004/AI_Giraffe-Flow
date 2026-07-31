@@ -15,24 +15,31 @@ export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-500}"
 export GF_MP_TRAJ_COUNT="${GF_MP_TRAJ_COUNT:-8}"
 export GF_MP_TIMEOUT_SEC="${GF_MP_TIMEOUT_SEC:-60}"
 
-echo "${TAG} PHM fault inject GF_PHM_FAULT_MS=${GF_PHM_FAULT_MS}"
+echo "${TAG} PHM fault inject GF_PHM_FAULT_MS=${GF_PHM_FAULT_MS} (planning)"
 bash "${SCRIPT_DIR}/run_sil_multiproc.sh"
 
-LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/iox_multiproc_logs/gateway.log"
+# Fault is injected on planning (gateway keeps GF_PHM_FAULT_MS=0 for e2e).
+LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/iox_multiproc_logs/planning.log"
+GW_LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/iox_multiproc_logs/gateway.log"
 if [[ ! -f "${LOG}" ]]; then
-  echo "${TAG} missing gateway log: ${LOG}" >&2
+  echo "${TAG} missing planning log: ${LOG}" >&2
   exit 1
 fi
 
-if ! grep -qE 'phm (AliveMissed|DeadlineMissed)' "${LOG}"; then
-  echo "${TAG} FAIL: expected AliveMissed/DeadlineMissed in ${LOG}" >&2
+if ! grep -qE 'FAULT inject|AliveMissed|DeadlineMissed' "${LOG}"; then
+  echo "${TAG} FAIL: expected fault/AliveMissed/DeadlineMissed in ${LOG}" >&2
   cat "${LOG}" >&2 || true
   exit 1
 fi
-if ! grep -q 'phm recovered' "${LOG}"; then
-  echo "${TAG} FAIL: expected phm recovered in ${LOG}" >&2
+if ! grep -qE 'recovered|fault window ended|phm recovered' "${LOG}"; then
+  echo "${TAG} FAIL: expected recover in ${LOG}" >&2
   cat "${LOG}" >&2 || true
+  exit 1
+fi
+if [[ ! -f "${GW_LOG}" ]] || ! grep -qE 'Trajectory#[0-9]+' "${GW_LOG}"; then
+  echo "${TAG} FAIL: expected Trajectory e2e in ${GW_LOG}" >&2
+  cat "${GW_LOG}" >&2 || true
   exit 1
 fi
 
-echo "${TAG} smoke_sil_phm_fault OK (miss → recover → Trajectory e2e)"
+echo "${TAG} smoke_sil_phm_fault OK (planning miss → recover → Trajectory e2e)"

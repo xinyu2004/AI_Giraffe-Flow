@@ -18,4 +18,4 @@ cmake --build build --target gf_core_smoke
 
 Parent: [middleware/README.md](../README.md)
 
-Trust cases: [core_cases.md](../../docs/reports/trust-evidence/core_cases.md).
+FuSa cases: [core_cases.md](../../fusa/cases/core_cases.md).

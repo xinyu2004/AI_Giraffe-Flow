@@ -1,6 +1,8 @@
-# Project scripts — oem_a / afc_with_uss（产品主路径，仅四入口）
+# Project scripts — oem_a / afc_with_uss
 
 SIL ≈ HIL（仅工具链不同）。配置真相 = gf-config → compose 生成物。
+
+**产品主路径（四入口）**
 
 | Script | Purpose |
 |--------|---------|
@@ -9,6 +11,12 @@ SIL ≈ HIL（仅工具链不同）。配置真相 = gf-config → compose 生�
 | [run_sil.sh](run_sil.sh) | 主链 bring-up；`live_tap` 有效时自动 Foxglove WS |
 | [run_hil.sh](run_hil.sh) | 板端对等（部署后续） |
 | [_common.sh](_common.sh) | 共享路径 / compose |
+
+**FuSa 产物（非主路径，与 `fusa/scripts/run_cases.sh` 独立）**
+
+| Script | Purpose |
+|--------|---------|
+| [generate_fusa_artifacts.sh](generate_fusa_artifacts.sh) | compose/SOR/lineage（+可选 smoke）→ `fusa/packs/oem_a_afc_with_uss/` |
 
 ```bash
 # 主路径（默认主机 GCC）

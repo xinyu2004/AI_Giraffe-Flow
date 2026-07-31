@@ -1,6 +1,6 @@
-# Trust-evidence case index
+# FuSa case index
 
-政策说明：[TRUST_EVIDENCE.md](../../zh/operations/TRUST_EVIDENCE.md)
+政策说明：[POLICY.md](../POLICY.md) · 入口：[fusa/README.md](../README.md)
 
 | 层 | 含义 |
 |----|------|
@@ -43,12 +43,17 @@
 
 | 文档 | 说明 |
 |------|------|
-| [sil_verify_cases.md](sil_verify_cases.md) | **trust** 场景进 pack；Tag→MCAP / Inject 标为 **debug-path**（不进认证支撑） |
+| [sil_verify_cases.md](sil_verify_cases.md) | **FuSa** 场景进 Safety Case 证据集；Tag→MCAP / Inject 标为 **debug-path** |
 
 ## 复现
 
 ```bash
 cmake -B build -DGF_BUILD_TESTS=ON   # + SKU / iceoryx 按需
 cmake --build build -j"$(nproc)"
-bash scripts/verify/trust_evidence_modules.sh
+# L1 only:
+bash fusa/scripts/run_cases.sh
+# L1 + L3 FuSa（SIL-01/02/03/EM-02/06）→ fusa/runs/cases_*.log
+GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
 ```
+
+最近一次本机 L3 全绿见 [sil_verify_cases.md](sil_verify_cases.md)「最近复现」。

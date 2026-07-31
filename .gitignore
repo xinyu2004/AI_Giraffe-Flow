@@ -71,11 +71,11 @@ observability/
 session*.jsonl
 !tools/**/fixtures/session*.jsonl
 
-# Local demo captures (do not ship)
-evidence_pack/
-
 # Architecture GIF generator (local helper)
 result_pic/_gen_architecture_gif.py
 
-# Local trust-evidence packs (do not commit)
-evidence/
+# FuSa local artifacts (do not commit)
+fusa/runs/*
+!fusa/runs/.gitkeep
+fusa/packs/*
+!fusa/packs/.gitkeep

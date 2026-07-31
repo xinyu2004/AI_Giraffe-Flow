@@ -11,7 +11,7 @@ Host-side / repo-wide helpers. **SKU 产品主路径**在各 `projects/.../scrip
 | [run_ab_loop.sh](run_ab_loop.sh) | Deprecated → `verify/.../smoke_sil.sh` |
 | [smoke_bd_stub.sh](smoke_bd_stub.sh) | DDS/SOMEIP stub smoke |
 | [smoke_bd_cyclone.sh](smoke_bd_cyclone.sh) | CycloneDDS 真收发 |
-| [collect_p2_evidence.sh](collect_p2_evidence.sh) | P2-G 证据包 |
+| FuSa | [fusa/scripts/run_cases.sh](../fusa/scripts/run_cases.sh)；SKU pack → `projects/.../generate_fusa_artifacts.sh` |
 
 ```bash
 # 产品主路径

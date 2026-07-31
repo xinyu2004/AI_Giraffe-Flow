@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Collect L1 (and optional L2/L3) trust-evidence logs under evidence/sil/.
+# Run FuSa case matrix (L1, optional L2/L3) → fusa/runs/.
+# Does not call project pack scripts; pack separately if needed.
 #
 # Usage:
-#   bash scripts/verify/trust_evidence_modules.sh
-#   GF_TRUST_EVIDENCE_CODEGEN=1 bash scripts/verify/trust_evidence_modules.sh
-#   GF_TRUST_EVIDENCE_SIL=1 bash scripts/verify/trust_evidence_modules.sh
+#   bash fusa/scripts/run_cases.sh
+#   GF_FUSA_CODEGEN=1 bash fusa/scripts/run_cases.sh
+#   GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
 #
 # Env:
-#   GF_BUILD_DIR                 default <repo>/build
-#   GF_TRUST_EVIDENCE_CODEGEN    1 = run gf-codegen pytest subset
-#   GF_TRUST_EVIDENCE_SIL        1 = run selected SIL verify (heavy)
+#   GF_BUILD_DIR       default <repo>/build
+#   GF_FUSA_CODEGEN    1 = run gf-codegen pytest subset
+#   GF_FUSA_SIL        1 = L3 FuSa SIL suite (SIL-01/02/03/EM-02/06)
+#   GF_FUSA_SIL_MCU    0 = skip SIL-06 MCU desktop (default 1)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -17,17 +19,17 @@ cd "${ROOT}"
 export PATH="${ROOT}/.venv/bin:${PATH}"
 
 BUILD="${GF_BUILD_DIR:-${ROOT}/build}"
-OUT_DIR="${ROOT}/evidence/sil"
+OUT_DIR="${ROOT}/fusa/runs"
 mkdir -p "${OUT_DIR}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-LOG="${OUT_DIR}/modules_${STAMP}.log"
-TAG="[trust_evidence]"
+LOG="${OUT_DIR}/cases_${STAMP}.log"
+TAG="[fusa]"
 
 echo "${TAG} log → ${LOG}"
 {
-  echo "# Giraffe Flow trust-evidence run ${STAMP}"
-  echo "# matrix: docs/reports/trust-evidence/README.md"
-  echo "# policy: docs/zh/operations/TRUST_EVIDENCE.md"
+  echo "# Giraffe Flow FuSa run ${STAMP}"
+  echo "# matrix: fusa/cases/README.md"
+  echo "# policy: fusa/POLICY.md"
   echo
 } >"${LOG}"
 
@@ -75,7 +77,7 @@ do
   run_bin "${name}"
 done
 
-if [[ "${GF_TRUST_EVIDENCE_CODEGEN:-0}" == "1" ]]; then
+if [[ "${GF_FUSA_CODEGEN:-0}" == "1" ]]; then
   echo "${TAG} L2 codegen pytest"
   {
     echo "===== L2 gf-codegen ====="
@@ -89,16 +91,34 @@ if [[ "${GF_TRUST_EVIDENCE_CODEGEN:-0}" == "1" ]]; then
   } >>"${LOG}" 2>&1
 fi
 
-if [[ "${GF_TRUST_EVIDENCE_SIL:-0}" == "1" ]]; then
-  echo "${TAG} L3 SIL (phm_fault only by default set)"
-  {
-    echo "===== L3 SIL-03 phm_fault ====="
-    bash scripts/verify/oem_a_afc_with_uss/smoke_sil_phm_fault.sh
-    echo
-  } >>"${LOG}" 2>&1
+if [[ "${GF_FUSA_SIL:-0}" == "1" ]]; then
+  # L3 FuSa matrix: fusa/cases/sil_verify_cases.md (not debug-path)
+  echo "${TAG} L3 SIL FuSa suite"
+  run_sil() {
+    local id="$1"
+    local script="$2"
+    echo "${TAG} RUN ${id} → ${script}"
+    {
+      echo "===== L3 ${id} ====="
+      echo "# script: ${script}"
+      bash "${script}"
+      echo "# ${id} OK"
+      echo
+    } >>"${LOG}" 2>&1
+  }
+  run_sil "SIL-01" scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
+  run_sil "SIL-02" scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
+  run_sil "SIL-03" scripts/verify/oem_a_afc_with_uss/smoke_sil_phm_fault.sh
+  run_sil "SIL-EM-02" scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh
+  if [[ "${GF_FUSA_SIL_MCU:-1}" == "1" ]]; then
+    run_sil "SIL-06" scripts/verify/oem_b_adc_full/smoke_mcu_desktop.sh
+  else
+    echo "${TAG} SKIP SIL-06 (GF_FUSA_SIL_MCU=0)"
+    echo "# SKIP SIL-06" >>"${LOG}"
+  fi
 fi
 
 echo "${TAG} CASE summary:"
 grep -E '^CASE ' "${LOG}" | tee /dev/stderr | wc -l | xargs -I{} echo "${TAG} {} CASE lines"
-echo "${TAG} matrix: docs/reports/trust-evidence/README.md"
+echo "${TAG} matrix: fusa/cases/README.md"
 echo "${TAG} OK → ${LOG}"

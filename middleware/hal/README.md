@@ -8,4 +8,4 @@ Skeleton only — no implementation yet.
 
 Parent: [../README.md](../README.md) · [STRUCTURE.md](../../STRUCTURE.md) · [portability](../../docs/en/architecture/portability-hal.md)
 
-Trust cases: [hal_cases.md](../../docs/reports/trust-evidence/hal_cases.md).
+FuSa cases: [hal_cases.md](../../fusa/cases/hal_cases.md).

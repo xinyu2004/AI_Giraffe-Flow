@@ -9,6 +9,6 @@
 
 In-process only (SIL). Not a full AUTOSAR SM daemon.
 
-Smoke: `gf_sm_fg_smoke`（`testcases/smoke_fg.cpp`）。Trust cases: [sm_cases.md](../../docs/reports/trust-evidence/sm_cases.md)。
+Smoke: `gf_sm_fg_smoke`（`testcases/smoke_fg.cpp`）。FuSa cases: [sm_cases.md](../../fusa/cases/sm_cases.md)。
 
 Parent: [middleware/README.md](../README.md)

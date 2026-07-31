@@ -9,4 +9,4 @@
 | CG-03 | golden / lint 契约 | `pytest tools/gf-codegen/tests/test_afc_bench_golden.py tools/gf-codegen/tests/test_lint_golden.py -q` | active |
 | CG-04 | 生成代码进 SIL 可链接 | `bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh`（与 L3 交叉） | active |
 
-可选：`GF_TRUST_EVIDENCE_CODEGEN=1 bash scripts/verify/trust_evidence_modules.sh`
+可选：`GF_FUSA_CODEGEN=1 bash fusa/scripts/run_cases.sh`

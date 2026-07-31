@@ -18,4 +18,4 @@ ctest -R 'gf_osal' --output-on-failure
 
 Parent: [../README.md](../README.md)
 
-Trust cases: [osal_cases.md](../../docs/reports/trust-evidence/osal_cases.md).
+FuSa cases: [osal_cases.md](../../fusa/cases/osal_cases.md).

@@ -12,7 +12,7 @@
 | [P2_PLAN.md](P2_PLAN.md) / [P2_5_PLAN.md](P2_5_PLAN.md) | 已交付阶段的实施记录 |
 | [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md) | P2 形式收口 |
 | [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md) | gf-config 两页目标 + Event Collector 口径 |
-| [TRUST_EVIDENCE.md](TRUST_EVIDENCE.md) | 认证前期支持：L1 库 / L2 codegen / L3 SIL（不代做认证） |
+| [fusa/POLICY.md](../../../fusa/POLICY.md) | 功能安全：L1/L2/L3 证据 → **目标完整 Safety Case** |
 | [OTA_SPIKE.md](OTA_SPIKE.md) | OTA 选型尖刺（非真刷写） |
 
 ---
@@ -134,12 +134,12 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 | # | 交付物 | 状态 |
 |---|--------|------|
-| T1 | `trust-evidence` 文档：我们提供什么 / **不代做认证** | ✅ [TRUST_EVIDENCE.md](TRUST_EVIDENCE.md) + [reports/trust-evidence](../reports/trust-evidence/) |
+| T1 | `fusa/` 入口：政策 + cases + 收集脚本 | ✅ [fusa/](../../../fusa/) · [POLICY.md](../../../fusa/POLICY.md) · [cases/](../../../fusa/cases/) |
 | T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ◐ L1 库矩阵 + L3 SIL 索引起步；隔离/延时表仍后置 |
-| T3 | 发版 evidence_pack 流程（可本地生成，默认不进仓） | ◐ `scripts/verify/trust_evidence_modules.sh` → `evidence/sil/` |
+| T3 | 本机 runs / packs 流程（默认不进仓） | ◐ `fusa/scripts/run_cases.sh` → `fusa/runs/`；SKU `generate_fusa_artifacts.sh` → `fusa/packs/` |
 | T4 | `production` profile：关 Record/ROS/调试路径 | |
 
-**不是：** ASIL-B 证书、完整 Safety Case、工具鉴定代办。
+**目标：** 完整 Safety Case。**当前不声称**证书已取得；仓内持续积累可引用证据（不含把 GMT/stub 当板级 ASIL 证据）。
 
 ### P3-4 DoIP / OTA / GMT
 

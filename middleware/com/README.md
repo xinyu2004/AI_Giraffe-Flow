@@ -15,4 +15,4 @@ Payload P0 要求 **trivially copyable**（为 iceoryx relocatable 铺路）。
 
 Parent: [middleware/README.md](../README.md)
 
-Trust cases: [com_cases.md](../../docs/reports/trust-evidence/com_cases.md).
+FuSa cases: [com_cases.md](../../fusa/cases/com_cases.md).

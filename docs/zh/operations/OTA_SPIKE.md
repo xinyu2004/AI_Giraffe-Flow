@@ -31,7 +31,7 @@ OTA Pause：策略豁免 Evaluate —— P2 只文档 + API；无 UCM→Pause �
 1. 选一块 ARM 板 + A/B slot  
 2. UCM Activate 前 SM 通知各 supervised entity Pause  
 3. RAUC 刷写 → 成功 Unpause / 失败 Rollback  
-4. 证据进发版 `evidence_pack`（P3-5）
+4. 证据进发版 `fusa/packs/`（P3-5）
 
 ## 验收（本 Spike）
 

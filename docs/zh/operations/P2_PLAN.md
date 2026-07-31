@@ -4,7 +4,7 @@
 > **中间件 / gf-config 配什么（主规格）：** [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)  
 > 集成基线：[afc_with_uss/INTEGRATOR_WALKTHROUGH.md](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md)
 
-**状态（2026-07-20）：** **G 收口交付已齐** — Review：[P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md)；证据包：`evidence_pack/p2_afc_with_uss/`；bench：`test_afc_bench_golden.py`；OTA Spike：[OTA_SPIKE.md](OTA_SPIKE.md)。  
+**状态（2026-07-20）：** **G 收口交付已齐** — Review：[P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md)；证据包：`fusa/packs/oem_a_afc_with_uss/`；bench：`test_afc_bench_golden.py`；OTA Spike：[OTA_SPIKE.md](OTA_SPIKE.md)。  
 **P2 主题：** **先定型 gf-config（A/B/C）** → 再多进程真跑 + 可观测 + CycloneDDS（已落地，按清单验收）。  
 **排期原则：Cfg 轨优先** — 入口不定，后面 SIL/codegen 都难对齐。
 
@@ -244,7 +244,7 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 | Review 清单 | [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md) |
 | 版本锁 | [dep-manifest/versions.lock.md](../../../dep-manifest/versions.lock.md)（cyclonedds **0.10.5**） |
 | bench golden | `tools/gf-codegen/tests/test_afc_bench_golden.py`；（可选快照）`projects/oem_a/afc_with_uss/golden/gf.sor.json` |
-| 证据包 | `evidence_pack/p2_afc_with_uss/` · `scripts/collect_p2_evidence.sh` |
+| 证据包 | `fusa/packs/oem_a_afc_with_uss/` · `projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh` |
 | U · OTA Spike | [OTA_SPIKE.md](OTA_SPIKE.md)（可选） |
 
 ---

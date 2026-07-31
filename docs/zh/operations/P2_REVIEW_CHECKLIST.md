@@ -102,7 +102,7 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 |---|--------|--------|:----:|:----:|:----:|------|
 | G.1 | 版本锁 | iceoryx v2.0.8；cyclonedds 0.10.5；与 DEPENDENCIES 一致 | □ | □ | □ | |
 | G.2 | bench golden | `test_afc_bench_golden.py` 绿；（可选）本地 `golden/gf.sor.json` 深比对 | □ | □ | □ | |
-| G.3 | 证据包 | `bash scripts/collect_p2_evidence.sh`；`evidence_pack/p2_afc_with_uss/` 有样例 | □ | □ | □ | |
+| G.3 | 证据包 | `bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh`；`fusa/packs/oem_a_afc_with_uss/` 有样例 | □ | □ | □ | |
 | G.4 | Review 本清单 | 本文件填完整体判定 | □ | □ | □ | |
 | G.5 | （可选）OTA Spike | [OTA_SPIKE.md](OTA_SPIKE.md) | □ | □ | □ | |
 
@@ -135,7 +135,7 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
 GF_SKIP_COMPILE=1 bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
 bash scripts/smoke_bd_cyclone.sh
 
-GF_EVIDENCE_UPDATE_GOLDEN=1 bash scripts/collect_p2_evidence.sh
+GF_FUSA_PACK_UPDATE_GOLDEN=1 bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
 ```
 
 ---

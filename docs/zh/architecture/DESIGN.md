@@ -252,7 +252,7 @@ sequenceDiagram
 | 3 | EM | 按拓扑 `gf::osal::SpawnProcess` 拉起进程；设 `GF_EM_MANAGED=1` |
 | 4 | EM | `PollOnce`：子进程 exit **75** / 信号 → 策略允许则 relaunch |
 
-细节与 SIL：[middleware/exec/README.md](../../../middleware/exec/README.md) · [exec_cases.md](../../reports/trust-evidence/exec_cases.md)。
+细节与 SIL：[middleware/exec/README.md](../../../middleware/exec/README.md) · [exec_cases.md](../../../fusa/cases/exec_cases.md)。
 
 ---
 
@@ -260,7 +260,7 @@ sequenceDiagram
 
 设计态：GMT `architect` + SOR。运行态：trace、MCAP Session、Tag。发布态：`qos_budgets` + bench 证据包。
 
-详见 [observability-toolchain.md](observability-toolchain.md)、[trust-evidence-metrics.md](trust-evidence-metrics.md)。
+详见 [observability-toolchain.md](observability-toolchain.md)、[fusa/](../../../fusa/)。
 
 ---
 

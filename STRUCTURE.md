@@ -13,6 +13,7 @@ AI_Giraffe-Flow/
   middleware/         # board runtime + third_party/ checkouts
   apps/               # reference processes (mixed shared + SKU-ish stubs)
   tools/              # gf-config, gf-codegen, gmt, bridge, …
+  fusa/               # Functional Safety → Safety Case evidence
   schemas/
   dep-manifest/       # dependency pins + bootstrap.sh (checkouts → middleware/third_party/)
   cmake/ scripts/ ci/ docs/
@@ -87,11 +88,11 @@ AI_Giraffe-Flow/
 │   │   ├── operations/           # ROADMAP, WORKFLOW, MIDDLEWARE_CONFIG, …
 │   │   └── dependencies/
 │   └── reports/                  # long-form engineering reports (optional)
-│       └── trust-evidence/       # cert-ready materials (not certificates)
 │
-├── evidence/                     # generated / local packs (default gitignore)
-│   ├── sil/                      # session clips, MCAP, latency tables
-│   └── board/                    # P3z soak packs
+├── fusa/                         # Functional Safety (goal: full Safety Case)
+│   ├── POLICY.md · cases/ · scripts/run_cases.sh
+│   ├── runs/                     # local CASE logs (gitignore)
+│   └── packs/                    # SKU packs via projects/.../generate_fusa_artifacts.sh
 │
 ├── result_pic/                   # README screenshots / architecture GIFs
 └── STRUCTURE.md                  # this file
@@ -105,8 +106,8 @@ AI_Giraffe-Flow/
 | Root `third_party/` | `middleware/third_party/` |
 | Mixing pins with checkouts | `dep-manifest/` vs `middleware/third_party/` |
 | SKU stubs under shared `apps/` | `projects/<oem>/<sku>/apps/` |
-| Safety certificates in-repo | `docs/**/trust-evidence/` = **support materials only** |
-| Committing large `evidence/` | local / release artifact; gitignore by default |
+| Claiming ASIL certificate in-repo | `fusa/` = evidence toward Safety Case; certificate out of repo |
+| Committing large `fusa/runs/` / `fusa/packs/` | local / release artifact; gitignore by default |
 
 ---
 
@@ -126,25 +127,27 @@ AI_Giraffe-Flow/
 
 | Kind | Location | Examples |
 |------|----------|----------|
-| **Unit** | `middleware/<mod>/testcases/` next to code *or* `middleware/tests/unit/<mod>/` | Result, PHM timer math；trust `CASE` 行 |
+| **Unit** | `middleware/<mod>/testcases/` next to code *or* `middleware/tests/unit/<mod>/` | Result, PHM timer math；FuSa `CASE` 行 |
 | **Middleware component** | `middleware/tests/component/` | com+iceoryx in-proc |
-| **Tool unit** | `tools/gf-codegen/tests/`、`tools/gf-config/…`（主机；codegen 见 trust L2） | compose, observability |
-| **SKU integration / smoke** | `projects/.../tests/` + `scripts/verify/...` | multiproc SIL（trust L3） |
+| **Tool unit** | `tools/gf-codegen/tests/`、`tools/gf-config/…`（主机；codegen 见 FuSa L2） | compose, observability |
+| **SKU integration / smoke** | `projects/.../tests/` + `scripts/verify/...` | multiproc SIL（FuSa L3） |
 | **Bench / golden** | `projects/.../golden/` + codegen tests | SOR golden |
-| **Manual / evidence** | `evidence/` (local) | MCAP, soak logs |
+| **Manual / FuSa runs** | `fusa/runs/` (local) | CASE logs, soak |
 
 Naming: prefer `test_*.py` / `*_test.cpp` already used; don’t invent a second parallel tree at repo root.
 
 ---
 
-## Trust / safety reports — where
+## FuSa / Functional Safety — where
 
 | Artifact | Path |
 |----------|------|
-| Policy + how to produce evidence | [docs/zh/operations/TRUST_EVIDENCE.md](docs/zh/operations/TRUST_EVIDENCE.md) + ROADMAP P3-3 |
-| Per-module / SIL / codegen matrices | [docs/reports/trust-evidence/](docs/reports/trust-evidence/) |
-| Generated packs (CASE logs, latency, soak) | `evidence/sil/` or `evidence/board/` (**not** committed by default) |
-| ISO 26262 certificate | **out of repo** (we only provide cert-ready support) |
+| Entry + policy（目标：完整 Safety Case） | [fusa/README.md](fusa/README.md) · [fusa/POLICY.md](fusa/POLICY.md) |
+| Per-module / SIL / codegen matrices | [fusa/cases/](fusa/cases/) |
+| Run matrix | [fusa/scripts/run_cases.sh](fusa/scripts/run_cases.sh) |
+| SKU artifacts | `projects/<oem>/<sku>/scripts/generate_fusa_artifacts.sh` → `fusa/packs/` |
+| Generated runs / packs | `fusa/runs/` · `fusa/packs/` (**not** committed by default) |
+| ISO 26262 certificate | **out of repo**（仓内积累证据，不存放证书本身） |
 
 ---
 

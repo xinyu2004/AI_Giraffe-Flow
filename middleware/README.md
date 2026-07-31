@@ -28,10 +28,10 @@ bash scripts/bootstrap_deps.sh
 cmake -B build -DGF_BUILD_TESTS=ON
 cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
-# trust-evidence (L1 CASE lines → evidence/sil/):
-bash scripts/verify/trust_evidence_modules.sh
+# fusa (L1 CASE lines → fusa/runs/):
+bash fusa/scripts/run_cases.sh
 ```
 
-Trust matrices: [docs/reports/trust-evidence/](../docs/reports/trust-evidence/) · policy: [TRUST_EVIDENCE.md](../docs/zh/operations/TRUST_EVIDENCE.md).
+FuSa matrices: [fusa/cases/](../fusa/cases/) · policy: [fusa/POLICY.md](../fusa/POLICY.md).
 
 Unit / component smokes live under each module’s **`testcases/`** directory.

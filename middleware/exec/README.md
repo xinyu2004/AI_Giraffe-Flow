@@ -44,4 +44,4 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh
 
 Parent: [middleware/README.md](../README.md)
 
-Trust cases: [exec_cases.md](../../docs/reports/trust-evidence/exec_cases.md).
+FuSa cases: [exec_cases.md](../../fusa/cases/exec_cases.md).
