@@ -292,14 +292,52 @@ _ZH: dict[str, str] = {
     "只读：gf-config → diag.yaml → ota_transfer.mode": (
         "Read-only: gf-config → diag.yaml → ota_transfer.mode"
     ),
+    "只读：gf-config → diag.yaml → ota_transfer.mode\n"
+    "• request_file_transfer = 0x38→0x36→0x37（推荐）\n"
+    "• request_download = 0x34→0x36→0x37\n"
+    "• routine_sil = 0x31 F100 捷径（无字节管道）": (
+        "Read-only: gf-config → diag.yaml → ota_transfer.mode\n"
+        "• request_file_transfer = 0x38→0x36→0x37 (recommended)\n"
+        "• request_download = 0x34→0x36→0x37\n"
+        "• routine_sil = 0x31 F100 shortcut (no byte pipe)"
+    ),
     "只读：diag.yaml timing；0x3E 周期须小于 S3Server": (
         "Read-only: diag.yaml timing; 0x3E period must be < S3Server"
+    ),
+    "只读：diag.yaml timing。\n"
+    "连接后 GMT 按 tester_present_period_ms 发 0x3E keep-alive；"
+    "周期须小于 s3_server_ms。P2* 用作收包超时。": (
+        "Read-only: diag.yaml timing.\n"
+        "After connect, GMT sends 0x3E keep-alive at tester_present_period_ms; "
+        "period must be < s3_server_ms. P2* is the receive timeout."
     ),
     "按 diag.yaml 传输模式发 UDS（过程写在下方日志）": (
         "Send UDS per diag.yaml transfer mode (steps in the log below)"
     ),
+    "按 diag.yaml 传输模式发 UDS（过程写在下方日志）：\n"
+    "默认 0x10 → 0x27 → 0x38/0x34 → 0x36… → 0x37 → Activate": (
+        "Send UDS per diag.yaml transfer mode (steps in the log below):\n"
+        "default 0x10 → 0x27 → 0x38/0x34 → 0x36… → 0x37 → Activate"
+    ),
     "DoIP / UDS 过程日志（0x10 → 0x27 → 0x38/0x34 → 0x36 → 0x37）": (
         "DoIP / UDS step log (0x10 → 0x27 → 0x38/0x34 → 0x36 → 0x37)"
+    ),
+    "断开 DoIP TCP；停止 0x3E keep-alive": (
+        "Disconnect DoIP TCP; stop 0x3E keep-alive"
+    ),
+    "主机侧产物路径。0x38/0x34 模式会按块经 DoIP 下发；"
+    "SIL 可用 bash scripts/make_sil_swu.sh 生成假包（magic GFSW）。"
+    "真 RAUC 刷写 → P3z。": (
+        "Host-side artifact path. 0x38/0x34 modes stream blocks over DoIP; "
+        "SIL: bash scripts/make_sil_swu.sh makes a fake package (magic GFSW). "
+        "Real RAUC flash → P3z."
+    ),
+    "配置在 gf-config（diag.yaml）；本页只读跟从传输模式与时序。"
+    "流程：run_sil（起 DoIP）→ 加载项目 → 连接 → Start OTA。"
+    "非真刷写；失败进 Collector ota_failed。": (
+        "Configure in gf-config (diag.yaml); this page follows mode & timing read-only. "
+        "Flow: run_sil (starts DoIP) → Load project → Connect → Start OTA. "
+        "No real flash; failures → Collector ota_failed."
     ),
     "require ProgrammingSession": "require ProgrammingSession",
     "require SecurityAccess": "require SecurityAccess",
@@ -351,12 +389,6 @@ _ZH: dict[str, str] = {
     "项目未启用 ISO 13400 DoIP（请在 gf-config 诊断页打开）": (
         "ISO 13400 DoIP is off in the project (enable in gf-config Diagnostics)"
     ),
-    "ISO 14229 UDS（父）": "ISO 14229 UDS (parent)",
-    "ISO 13400 DoIP（依赖 14229）": "ISO 13400 DoIP (requires 14229)",
-    "请先勾选 ISO 14229 UDS": "Enable ISO 14229 UDS first",
-    "仅 14229：无 DoIP 远端路径。请用进程内 UDS smoke，或同时勾选 13400。": (
-        "UDS-only: no DoIP remote path. Use in-process UDS smoke, or also enable 13400."
-    ),
     "ISO 14229 为基础；勾选 ISO 13400 才走 DoIP TCP→UCM（gf_doip_ota_server）。13400 依赖 14229。非真刷写；失败进 Collector。": (
         "ISO 14229 is the base; enable ISO 13400 for DoIP TCP→UCM (gf_doip_ota_server). "
         "13400 requires 14229. No real flash; failures → Collector."
@@ -372,6 +404,13 @@ _ZH: dict[str, str] = {
     "UCM 包逻辑名（PackageInfo.id），随 Routine 发给板端；与磁盘上的 Artifact 文件路径分开，便于同一文件换不同包名做 SIL。": (
         "UCM logical package id (PackageInfo.id), sent with the routine; "
         "separate from the on-disk Artifact path."
+    ),
+    "UCM 包逻辑名（PackageInfo.id）。"
+    "0x38/0x34 路径随传输元数据下发；routine_sil 随 0x31 发给板端。"
+    "与磁盘 Artifact 路径分开，便于同一文件换不同包名做 SIL。": (
+        "UCM logical package id (PackageInfo.id). "
+        "Sent with transfer metadata on 0x38/0x34; with 0x31 on routine_sil. "
+        "Separate from the on-disk Artifact path for SIL renaming."
     ),
     "选择 OTA 产物文件": "Select OTA artifact file",
     "软件包 (*.swu *.zip *.bin);;所有文件 (*)": "Packages (*.swu *.zip *.bin);;All (*)",

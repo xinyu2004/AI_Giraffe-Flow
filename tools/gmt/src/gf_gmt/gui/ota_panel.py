@@ -41,6 +41,12 @@ _STYLE_IDLE = "color:#555; min-width: 4.5em;"
 _STYLE_OK = "color:#1b5e20; font-weight:600; min-width: 4.5em;"
 _STYLE_ERR = "color:#b71c1c; font-weight:600; min-width: 4.5em;"
 
+# Display labels for diag.yaml ota_transfer.mode (must match gf-config).
+_MODE_LABELS: dict[str, str] = {
+    "request_file_transfer": "0x38 · RequestFileTransfer",
+    "request_download": "0x34 · RequestDownload",
+    "routine_sil": "0x31 · RoutineControl (SIL)",
+}
 
 def _load_diag_bundle(project_dir: Path | None) -> dict[str, Any]:
     """iso flags + timing + ota_transfer + doip port from project diag.yaml."""
@@ -271,6 +277,7 @@ class OtaPanel(QWidget):
         self.btn_disconnect = QPushButton(t("断开"))
         self.btn_disconnect.setEnabled(False)
         self.btn_disconnect.clicked.connect(self._on_disconnect)
+        self.btn_disconnect.setToolTip(t("断开 DoIP TCP；停止 0x3E keep-alive"))
         self.conn_status = QLabel(t("空闲"))
         self.conn_status.setStyleSheet(_STYLE_IDLE)
         hp.addWidget(self.btn_connect)
@@ -283,8 +290,9 @@ class OtaPanel(QWidget):
         )
         self.pkg_id.setToolTip(
             t(
-                "UCM 包逻辑名（PackageInfo.id），随 Routine 发给板端；"
-                "与磁盘上的 Artifact 文件路径分开，便于同一文件换不同包名做 SIL。"
+                "UCM 包逻辑名（PackageInfo.id）。"
+                "0x38/0x34 路径随传输元数据下发；routine_sil 随 0x31 发给板端。"
+                "与磁盘 Artifact 路径分开，便于同一文件换不同包名做 SIL。"
             )
         )
 
@@ -297,8 +305,16 @@ class OtaPanel(QWidget):
                 or "/tmp/gf_demo.swu"
             )
         )
+        self.artifact.setToolTip(
+            t(
+                "主机侧产物路径。0x38/0x34 模式会按块经 DoIP 下发；"
+                "SIL 可用 bash scripts/make_sil_swu.sh 生成假包（magic GFSW）。"
+                "真 RAUC 刷写 → P3z。"
+            )
+        )
         art_browse = QPushButton(t("浏览…"))
         art_browse.clicked.connect(self._browse_artifact)
+        art_browse.setToolTip(t("选择 OTA 产物文件"))
         art_l.addWidget(self.artifact, stretch=1)
         art_l.addWidget(art_browse)
 
@@ -349,7 +365,18 @@ class OtaPanel(QWidget):
             t("DoIP / UDS 过程日志（0x10 → 0x27 → 0x38/0x34 → 0x36 → 0x37）")
         )
 
+        hint = QLabel(
+            t(
+                "配置在 gf-config（diag.yaml）；本页只读跟从传输模式与时序。"
+                "流程：run_sil（起 DoIP）→ 加载项目 → 连接 → Start OTA。"
+                "非真刷写；失败进 Collector ota_failed。"
+            )
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#666; font-size:11px;")
+
         root = QVBoxLayout(self)
+        root.addWidget(hint)
         root.addLayout(form)
         root.addLayout(row)
         root.addWidget(self.log, stretch=1)
@@ -373,18 +400,31 @@ class OtaPanel(QWidget):
 
     def _apply_cfg_labels(self) -> None:
         mode = str(self._cfg.get("ota_mode") or OTA_MODE_FILE)
-        self.mode_label.setText(mode)
+        label = _MODE_LABELS.get(mode, mode)
+        self.mode_label.setText(label)
         self.mode_label.setToolTip(
-            t("只读：gf-config → diag.yaml → ota_transfer.mode")
+            t(
+                "只读：gf-config → diag.yaml → ota_transfer.mode\n"
+                "• request_file_transfer = 0x38→0x36→0x37（推荐）\n"
+                "• request_download = 0x34→0x36→0x37\n"
+                "• routine_sil = 0x31 F100 捷径（无字节管道）"
+            )
         )
         s3 = int(self._cfg.get("s3_ms") or 5000)
         tp = int(self._cfg.get("tp_period_ms") or 2000)
+        p2s = int(self._cfg.get("p2_star_ms") or 5000)
         warn = ""
         if tp >= s3:
             warn = " ⚠ TP≥S3"
-        self.timing_label.setText(f"S3={s3} ms · 0x3E period={tp} ms{warn}")
+        self.timing_label.setText(
+            f"S3={s3} ms · 0x3E={tp} ms · P2*={p2s} ms{warn}"
+        )
         self.timing_label.setToolTip(
-            t("只读：diag.yaml timing；0x3E 周期须小于 S3Server")
+            t(
+                "只读：diag.yaml timing。\n"
+                "连接后 GMT 按 tester_present_period_ms 发 0x3E keep-alive；"
+                "周期须小于 s3_server_ms。P2* 用作收包超时。"
+            )
         )
 
     def _has_project(self) -> bool:
@@ -420,7 +460,10 @@ class OtaPanel(QWidget):
         else:
             self.btn_connect.setToolTip(t("连 SIL gf_doip_ota_server（需先 run_sil）"))
             self.btn_start.setToolTip(
-                t("按 diag.yaml 传输模式发 UDS（过程写在下方日志）")
+                t(
+                    "按 diag.yaml 传输模式发 UDS（过程写在下方日志）：\n"
+                    "默认 0x10 → 0x27 → 0x38/0x34 → 0x36… → 0x37 → Activate"
+                )
             )
 
     def _persist_settings(self) -> None:

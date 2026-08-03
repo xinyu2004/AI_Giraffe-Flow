@@ -18,6 +18,9 @@ P2 **不做**真台架 OTA；`ucm.yaml` 仍是空壳。Pause API 已在 `Supervi
 - `GF_PHM_FAULT_INJECT_MS`：planning 故意停 Alive 一段时间，验证 miss → recover（**不是** OTA Pause）。
 - OTA Pause 与 fault inject 正交：Pause 是策略豁免；fault inject 是测试缺狗。
 
-## 后续（P3）
+## 后续（P3 / P3z）
 
-UCM 真后端激活包时：SM 切状态 → 各 supervised entity Pause → 更新 → Unpause + Alive。
+| 阶段 | 内容 |
+|------|------|
+| **P3-4（已落地）** | DoIP → UCM 编排；Updating FG / Pause hook；桌面 SIL 非真刷写 → [DOIP_OTA.md](DOIP_OTA.md) |
+| **P3z** | 真 RAUC：SM 切状态 → 各 supervised entity Pause → 刷写 → Unpause + Alive |

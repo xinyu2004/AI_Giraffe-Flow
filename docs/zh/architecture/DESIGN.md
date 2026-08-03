@@ -293,10 +293,12 @@ simulators / adapters / 外部组件
 
 ### 10.3 OTA 与 DoIP
 
-- **`gf_ara::ucm`** — [`middleware/ucm/`](../../../middleware/ucm/)：包传输、激活、回滚钩子（P1 骨架）
-- **`gf_ara::diag`** — [`middleware/diag/`](../../../middleware/diag/)：DoIP 优先（P1 骨架）
+- **`gf_ara::ucm`** — [`middleware/ucm/`](../../../middleware/ucm/)：包传输、激活、回滚钩子；SIL stub Activate
+- **`gf_ara::diag`** — [`middleware/diag/`](../../../middleware/diag/)：ISO 14229 UDS + ISO 13400 DoIP；默认下载 **0x38→0x36→0x37**（可配 0x34）
 
-OTA 后端候选：RAUC、OSTree；**不含 SWUpdate**。
+配置：`platform/diag.yaml` / `ucm.yaml`（gf-config）。操作：GMT OTA 页（不写配置）。说明：[DOIP_OTA.md](../../operations/DOIP_OTA.md)。
+
+OTA 后端候选：RAUC、OSTree；**不含 SWUpdate**。真刷写 → P3z。
 
 ---
 

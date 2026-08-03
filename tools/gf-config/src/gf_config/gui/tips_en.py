@@ -205,6 +205,77 @@ TIP_EN: dict[str, str] = {
         "This ECU's DoIP logical address (hex, e.g. 0x0E00). "
         "Testers route diagnostic requests to it."
     ),
+    "期望的测试仪逻辑地址（如 0x0E80）。"
+    "RoutingActivation 时与诊断仪对齐。": (
+        "Expected tester logical address (e.g. 0x0E80). "
+        "Align with the tool at RoutingActivation."
+    ),
+    "DoIP TCP 监听端口（默认 13400；GMT OTA / run_sil 须一致）。": (
+        "DoIP TCP listen port (default 13400; must match GMT OTA / run_sil)."
+    ),
+    "ISO 14229 S3Server（ms）：非默认会话下若超过此时长无测试仪活动，"
+    "会话回落 Default 并清除安全解锁。须大于诊断仪 0x3E 周期。": (
+        "ISO 14229 S3Server (ms): in a non-default session, idle longer than this "
+        "falls back to Default and clears security unlock. Must be > tester 0x3E period."
+    ),
+    "测试仪 0x3E TesterPresent 发送周期（ms）。"
+    "须小于 S3Server（建议 ≤ S3/2），与其它诊断仪维持时间对齐。": (
+        "Tester 0x3E TesterPresent period (ms). Must be < S3Server "
+        "(recommend ≤ S3/2); align with other diagnostic tools."
+    ),
+    "P2Server（ms）：服务端最大响应时间（文档/对齐用；SIL 暂不强制掐断）。": (
+        "P2Server (ms): max server response time (docs/alignment; SIL does not hard-cut)."
+    ),
+    "P2*Server（ms）：增强/刷写会话下的扩展响应窗口；GMT 用它作收包超时。": (
+        "P2*Server (ms): extended response window in programming sessions; "
+        "GMT uses it as receive timeout."
+    ),
+    "0x27 密钥错误后的强制等待（ms）。期间再请求返回 NRC 0x37 "
+    "RequiredTimeDelayNotExpired，与其它诊断仪对齐。": (
+        "Forced wait (ms) after invalid 0x27 key. Further requests return NRC 0x37 "
+        "RequiredTimeDelayNotExpired until the delay elapses."
+    ),
+    "选择 OTA 下载 SID（写入 diag.yaml → ota_transfer.mode；GMT 只读跟从）：\n"
+    "• 0x38 RequestFileTransfer：0x38→0x36→0x37（DoIP/以太网推荐）\n"
+    "• 0x34 RequestDownload：0x34→0x36→0x37（经典内存下载）\n"
+    "• 0x31 RoutineControl (SIL)：仅 F100 捷径，无字节管道": (
+        "Select OTA download SID (diag.yaml → ota_transfer.mode; GMT follows read-only):\n"
+        "• 0x38 RequestFileTransfer: 0x38→0x36→0x37 (DoIP/Ethernet default)\n"
+        "• 0x34 RequestDownload: 0x34→0x36→0x37 (classic memory download)\n"
+        "• 0x31 RoutineControl (SIL): F100 shortcut only, no byte pipe"
+    ),
+    "0x38 RequestFileTransfer → 0x36 TransferData → 0x37 RequestTransferExit。"
+    "DoIP / 以太网默认路径；yaml 键 request_file_transfer。": (
+        "0x38 RequestFileTransfer → 0x36 TransferData → 0x37 RequestTransferExit. "
+        "Default DoIP/Ethernet path; yaml key request_file_transfer."
+    ),
+    "0x34 RequestDownload → 0x36 → 0x37。经典按内存地址下载；"
+    "yaml 键 request_download。": (
+        "0x34 RequestDownload → 0x36 → 0x37. Classic memory-address download; "
+        "yaml key request_download."
+    ),
+    "0x31 RoutineControl（RID F100）SIL 捷径：直接点 UCM，不传文件块。"
+    "仅仿真；yaml 键 routine_sil。": (
+        "0x31 RoutineControl (RID F100) SIL shortcut: poke UCM with no file blocks. "
+        "Simulation only; yaml key routine_sil."
+    ),
+    "传输前是否先发 DiagnosticSessionControl（0x10 02 Programming）。"
+    "量产刷写通常必开；关掉仅便于 SIL 捷径调试。": (
+        "Whether to send DiagnosticSessionControl (0x10 02 Programming) first. "
+        "Usually required for production flash; off only for SIL shortcut debug."
+    ),
+    "传输前是否走 SecurityAccess（0x27 seed/key）。"
+    "密钥算法在 GMT→OTA 记本地插件路径，或板端 GF_DIAG_SEC_PLUGIN；本页不存路径。": (
+        "Whether to run SecurityAccess (0x27 seed/key) before transfer. "
+        "Plugin path is remembered in GMT→OTA or board GF_DIAG_SEC_PLUGIN; "
+        "this page does not store the path."
+    ),
+    "0x36 TransferData 单块最大字节数（maxNumberOfBlockLength）。"
+    "过大占 RAM，过小拖慢；须与服务端协商值一致（SIL 默认 1024）。": (
+        "Max bytes per 0x36 TransferData block (maxNumberOfBlockLength). "
+        "Too large uses RAM; too small is slow; must match server negotiation "
+        "(SIL default 1024)."
+    ),
     "数据标识符 DID（UDS 读/写用的 id，常用十六进制）。": (
         "Data Identifier (DID) for UDS read/write — usually hex."
     ),

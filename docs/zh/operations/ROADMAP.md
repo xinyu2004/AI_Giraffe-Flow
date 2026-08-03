@@ -147,11 +147,11 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | # | 交付物 | 状态 |
 |---|--------|------|
 | D1 | DoIP **会话级**互通（可先 SIL/假 board，不绑量产板） | ✅ TCP；**依赖** ISO 14229；`UdsDispatcher` + NRC |
-| D2 | **GMT OTA sheet**：选包 / 进度 / 结果；经 **DoIP** 下发路径 | ✅ GMT「OTA」页：14229 父 / 13400 子；DoIP→UCM |
+| D2 | **GMT OTA sheet**：选包 / 进度 / 结果；经 **DoIP** 下发路径 | ✅ 只读跟从 `diag.yaml`；默认 **0x38→0x36→0x37**（可选 0x34 / 0x31） |
 | D3 | UCM 编排（+ SM Pause）；后端可 stub→RAUC | ✅ `OtaOrchestrator`；0x27/0x29 插件 ABI（`.so/.dll`） |
 | D4 | OTA/升级失败路径上 Collector 事件可观测 | ✅ `ucm/ota_failed` |
 
-验收：`bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh`
+操作说明：[DOIP_OTA.md](DOIP_OTA.md) · 验收：`bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh`
 
 ### P3-5 Sim spike — 场景演示（未开工；弃 VP）
 
@@ -213,3 +213,5 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 1. **P3-5** YOLO→semantic 演示尖刺（弃 VP；CARLA 可选）。  
 2. **P3z**：真板 / vsomeip / RAUC 真刷写 / 板端 soak。  
 3. 云 CI 启用 `devops/ci` + 发版跑 T4。
+
+P3-4 桌面 DoIP/OTA 已收口 → [DOIP_OTA.md](DOIP_OTA.md)。

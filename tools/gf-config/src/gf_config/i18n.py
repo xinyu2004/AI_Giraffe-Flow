@@ -348,6 +348,7 @@ _EN: dict[str, str] = {
     "选择安全访问插件（.so / .dll）": "Select security-access plugin (.so / .dll)",
     "动态库 (*.so *.dll);;所有文件 (*)": "Shared library (*.so *.dll);;All files (*)",
     "enabled（与 iso_13400 同步）": "enabled (synced with iso_13400)",
+    "下载 SID": "Download SID",
     "添加 DID": "Add DID",
     "添加 RID": "Add RID",
     "log.yaml：默认级别与 contexts（细配置在此；页 1 仅粗开关）。": (

@@ -1,0 +1,102 @@
+# DoIP / OTA（P3-4）
+
+> **状态：** 桌面 SIL 会话级路径已收口。真 RAUC 刷写 / 真板 → **P3z**。  
+> 相关：[PHM_OTA_PAUSE.md](PHM_OTA_PAUSE.md) · [OTA_SPIKE.md](OTA_SPIKE.md)（P2 选型史）· [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md) §3.6–3.7 · `middleware/diag` · `middleware/ucm` · GMT OTA 页
+
+## 结论（先读）
+
+| 项 | 口径 |
+|----|------|
+| 配置真源 | **gf-config** → `platform/diag.yaml` / `ucm.yaml`（GMT **不写**配置） |
+| 操作面 | **GMT → OTA**：连接 DoIP → 按 yaml 模式发 UDS → UCM 编排 |
+| 下载 SID | 默认 **0x38** `request_file_transfer`；可选 **0x34** / SIL **0x31** 捷径 |
+| 传输 | ISO **14229** 父能力；ISO **13400** DoIP 为子传输（不可单独开） |
+| 刷写后端 | SIL stub（写 `.activated` / magic 校验）；**真 RAUC → P3z** |
+| 失败可观测 | Collector 事件 `ucm/ota_failed` |
+
+## 数据流
+
+```text
+gf-config 写 diag.yaml（standards / doip / timing / ota_transfer）
+        │
+run_sil ──► gf_doip_ota_server（ISO 13400 开时自动拉起）
+        │         ▲
+        │         │ DoIP TCP + UDS
+GMT OTA 连接 ──────┘
+        │
+        ▼
+UdsDispatcher → UCM OtaOrchestrator → PackageManager →（stub）落盘/Activate
+                     │
+                     └─ 失败 → Collector ota_failed
+```
+
+## `diag.yaml` 关键字段
+
+| 块 | 作用 |
+|----|------|
+| `standards.iso_14229_uds` | UDS 父能力（含 NRC） |
+| `standards.iso_13400_doip` | DoIP 传输；依赖 14229 |
+| `doip.*` | `logical_address` / `tester_address` / `tcp_port`（与 GMT Host:Port 对齐） |
+| `timing` | `s3_server_ms`、`tester_present_period_ms`（须 **&lt; S3**）、`p2_*`、`security_delay_ms` |
+| `ota_transfer.mode` | `request_file_transfer` \| `request_download` \| `routine_sil` |
+| `ota_transfer.require_*` | 是否强制 ProgrammingSession / SecurityAccess |
+| `ota_transfer.max_block_length` | 0x36 单块上限 |
+
+示例见 `projects/oem_a/afc_with_uss/platform/diag.yaml`。
+
+### 传输模式对照
+
+| `mode` | SID 序列 | 用途 |
+|--------|----------|------|
+| `request_file_transfer` | 0x38 → 0x36… → 0x37 | DoIP / 以太网默认 |
+| `request_download` | 0x34 → 0x36… → 0x37 | 经典内存下载 |
+| `routine_sil` | 0x31 F100 | SIL 捷径，无字节管道 |
+
+## gf-config（页 2 · 诊断）
+
+- **doip / timing / ota_transfer** 可折叠；下载 SID 下拉显式显示 `0x38` / `0x34` / `0x31`。
+- **0x27 插件路径不写进 yaml**：在 **GMT → OTA** 本地记住；板端用 `GF_DIAG_SEC_PLUGIN`。
+- **ucm** 子页：编排开关、目标 FG、失败是否 Rollback（不是刷写进度 UI）。
+
+## GMT（OTA 页）
+
+| 控件 | 行为 |
+|------|------|
+| Standards / 传输模式 / 会话时序 | **只读**，跟从已加载项目的 `diag.yaml` |
+| Host:Port · 连接 | DoIP TCP + RoutingActivation；连接后按 yaml 周期发 **0x3E** |
+| Package id / Artifact | 包逻辑名 vs 主机产物路径（可 `scripts/make_sil_swu.sh` 造假包） |
+| Start OTA | 按 mode 跑完整序列；日志打出每步 UDS |
+
+**须先「加载项目」**（与回灌相同）；未开 ISO 13400 时连接禁用。
+
+## SIL 一键路径
+
+```bash
+# 1) 假包（可选）
+bash scripts/make_sil_swu.sh /tmp/gf_demo.swu
+
+# 2) 编译 + 跑 SIL（diag 开 13400 时会起 gf_doip_ota_server）
+#    见 projects/.../scripts/run_sil.sh
+
+# 3) 自动化冒烟
+bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
+
+# 4) 或开 GMT → 加载 project.yaml → OTA → 连接 → Start OTA
+```
+
+环境变量覆盖（服务端 / smoke，可选）：`GF_DOIP_PORT`、`GF_OTA_TRANSFER_MODE`、`GF_DIAG_S3_SERVER_MS`、`GF_DIAG_TP_PERIOD_MS`、`GF_DIAG_SEC_PLUGIN`。
+
+## 边界（明确不做）
+
+- 真 A/B 分区 / RAUC 实刷 → **P3z**
+- Classic DEM 全栈 / 完整 DTC 策略编辑器
+- GMT 写回 `diag.yaml` / `ucm.yaml`
+- 把主机 SIL 延时表当成 ECU ASIL 证据
+
+## 验收
+
+- [x] DoIP TCP 会话 + NRC（`smoke_doip_ota.sh` / ctest doip|uds）
+- [x] GMT OTA sheet：选包 / 进度日志 / 结果
+- [x] 0x38（默认）与 0x34 可经 `ota_transfer.mode` 切换
+- [x] UCM 编排 + 失败 Collector
+- [ ] 真板 RAUC（P3z）

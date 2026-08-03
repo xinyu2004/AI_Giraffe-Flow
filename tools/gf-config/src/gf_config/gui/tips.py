@@ -177,19 +177,37 @@ DIAG_SEC_DELAY = (
     "RequiredTimeDelayNotExpired，与其它诊断仪对齐。"
 )
 DIAG_OTA_MODE = (
-    "选择 OTA 下载 SID（写入 diag.yaml → ota_transfer.mode）：\n"
+    "选择 OTA 下载 SID（写入 diag.yaml → ota_transfer.mode；GMT 只读跟从）：\n"
     "• 0x38 RequestFileTransfer：0x38→0x36→0x37（DoIP/以太网推荐）\n"
     "• 0x34 RequestDownload：0x34→0x36→0x37（经典内存下载）\n"
     "• 0x31 RoutineControl (SIL)：仅 F100 捷径，无字节管道"
 )
 DIAG_OTA_MODE_ITEMS: dict[str, str] = {
-    "request_file_transfer": "ISO 14229 RequestFileTransfer（0x38）再 TransferData/Exit。",
-    "request_download": "RequestDownload（0x34）再 TransferData/Exit。",
-    "routine_sil": "SIL 捷径：RoutineControl 直接点 UCM，不真传文件块。",
+    "request_file_transfer": (
+        "0x38 RequestFileTransfer → 0x36 TransferData → 0x37 RequestTransferExit。"
+        "DoIP / 以太网默认路径；yaml 键 request_file_transfer。"
+    ),
+    "request_download": (
+        "0x34 RequestDownload → 0x36 → 0x37。经典按内存地址下载；"
+        "yaml 键 request_download。"
+    ),
+    "routine_sil": (
+        "0x31 RoutineControl（RID F100）SIL 捷径：直接点 UCM，不传文件块。"
+        "仅仿真；yaml 键 routine_sil。"
+    ),
 }
-DIAG_OTA_PROG = "传输前必须进入 ProgrammingSession（0x10 02）。"
-DIAG_OTA_SEC = "传输前必须通过 SecurityAccess（0x27）解锁。"
-DIAG_OTA_BLOCK = "0x36 单块最大字节数（maxNumberOfBlockLength）；过大占 RAM，过小拖慢。"
+DIAG_OTA_PROG = (
+    "传输前是否先发 DiagnosticSessionControl（0x10 02 Programming）。"
+    "量产刷写通常必开；关掉仅便于 SIL 捷径调试。"
+)
+DIAG_OTA_SEC = (
+    "传输前是否走 SecurityAccess（0x27 seed/key）。"
+    "密钥算法在 GMT→OTA 记本地插件路径，或板端 GF_DIAG_SEC_PLUGIN；本页不存路径。"
+)
+DIAG_OTA_BLOCK = (
+    "0x36 TransferData 单块最大字节数（maxNumberOfBlockLength）。"
+    "过大占 RAM，过小拖慢；须与服务端协商值一致（SIL 默认 1024）。"
+)
 DID_ID = "数据标识符 DID（UDS 读/写用的 id，常用十六进制）。"
 DID_NAME = "给人看的 DID 名称，便于在工具里辨认。"
 DID_ACCESS = (

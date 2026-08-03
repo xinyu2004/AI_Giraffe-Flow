@@ -124,20 +124,45 @@
 
 | 完整 AP | 我们的 ③（`platform/diag.yaml`） |
 |---------|--------------------------------|
-| DM、UDS、DoIP、DID/RID… | DoIP enable + logical_address；DID/RID 最小表 |
+| DM、UDS、DoIP、DID/RID… | `standards`（14229 父 / 13400 子）+ `doip` + **`timing`** + **`ota_transfer`** + DID/RID 最小表 |
 | Classic DEM 全栈 | **不做**；事件见 §3.9 |
 
-**P3：** 会话级 DoIP（可与 GMT OTA sheet 配合）。  
-**gf-config：** 页 2「诊断」——不提供完整 DTC 防抖策略编辑器。
+**P3-4（已落地）：** 会话级 DoIP + GMT OTA sheet。字段与操作面见 [DOIP_OTA.md](DOIP_OTA.md)。  
+**gf-config：** 页 2「诊断」——可折叠 doip / timing / ota_transfer；下载 SID 显式 `0x38`/`0x34`/`0x31`。不提供完整 DTC 防抖策略编辑器。  
+**0x27 插件路径：** 不进 yaml；GMT 本地设置 + 板端 `GF_DIAG_SEC_PLUGIN`。
+
+```yaml
+# platform/diag.yaml（节选）
+standards:
+  iso_14229_uds: true
+  iso_13400_doip: true
+doip:
+  enabled: true
+  logical_address: 0x0E00
+  tester_address: 0x0E80
+  tcp_port: 13400
+timing:
+  s3_server_ms: 5000
+  tester_present_period_ms: 2000   # 须 < s3_server_ms
+  p2_server_ms: 50
+  p2_star_server_ms: 5000
+  security_delay_ms: 10000
+ota_transfer:
+  mode: request_file_transfer     # | request_download | routine_sil
+  require_programming_session: true
+  require_security: true
+  max_block_length: 1024
+```
 
 ### 3.7 `gf_ara::ucm`
 
 | 阶段 | 内容 |
 |------|------|
 | P2 | `ucm.yaml` 空壳 + Spike 选型 |
-| P3 | 编排 +（后端 stub→RAUC）；**操作面在 GMT OTA sheet（DoIP 下板）** |
+| P3-4 | 编排 + SIL stub Activate；**操作面在 GMT OTA（DoIP）**；真 RAUC → P3z |
 
-**gf-config：** 页 2 策略字段；**不**在 gf-config 里做刷写进度 UI。
+**gf-config：** 页 2 策略字段；**不**在 gf-config 里做刷写进度 UI。  
+详见 [DOIP_OTA.md](DOIP_OTA.md) · [OTA_SPIKE.md](OTA_SPIKE.md)。
 
 ### 3.8 其余（P3 骨架 / P3+）
 
@@ -277,7 +302,8 @@ projects/<oem>/<sku>/
 
 ### 8.1–8.5
 
-`exec` / `phm` / `diag` / `log` / `ucm` 字段与 P2 相同（略）。见仓库内现网 `projects/**/platform/*.yaml`。
+`exec` / `phm` / `log` / `ucm` 字段与现网 `projects/**/platform/*.yaml` 对齐。  
+**`diag`：** 除 DoIP/DID/RID 外，P3-4 冻结 `timing` + `ota_transfer`（见 §3.6 与 [DOIP_OTA.md](DOIP_OTA.md)）。
 
 ### 8.6 `platform/collector.yaml`（P3 草案 · 实现前可微调）
 
