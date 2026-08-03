@@ -38,8 +38,11 @@
 #   GF_INJECT_APPS     B2 override: comma list uss,fcm,planning (skip SOR lookup)
 #   GF_INJECT_MAX_EVENTS  continuous: hard max events (default ~20000); ignore for playhead stream
 #   GF_INJECT_LOOP     continuous: 1 = replay from start until signal; playhead uses GMT UI loop
-#   GF_SIL_KILL_STALE  default 1 — 启动前释放被旧 SIL/GMT 占用的 8765/8766/8767
+#   GF_SIL_KILL_STALE  default 1 — 启动前释放被旧 SIL/GMT 占用的 8765/8766/8767/13400
 #                      设 0 则端口忙时直接失败并提示如何手动停
+#   GF_DOIP            default auto — 1/0 强制开/关 DoIP OTA（gf_doip_ota_server）
+#                      auto = diag.yaml iso_13400_doip / doip.enabled
+#   GF_DOIP_PORT       default from diag.yaml tcp_port（通常 13400）；GMT OTA 连此端口
 #   # playhead (GMT stream; session file optional):
 #   GF_INJECT_MODE=playhead bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #   # then GMT gui → open session → 回灌 tab → connect 127.0.0.1:8767
@@ -111,6 +114,67 @@ PY
 else
   echo "${TAG} WARN: missing ${OBS_JSON} — run compile_sil first; live Foxglove off" >&2
 fi
+
+# DoIP OTA server for GMT「OTA」Tab (TCP → UDS → UCM). Independent of iceoryx chain.
+DOIP_ON=0
+DOIP_PORT="${GF_DOIP_PORT:-}"
+export GF_PROJECT_DIR_FOR_DOIP="${PROJECT_DIR}"
+export GF_DOIP_HINT="${GF_DOIP:-auto}"
+eval "$(python - <<'PY'
+import os
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+proj = Path(os.environ["GF_PROJECT_DIR_FOR_DOIP"])
+hint = (os.environ.get("GF_DOIP_HINT") or "auto").strip().lower()
+port_env = (os.environ.get("GF_DOIP_PORT") or "").strip()
+diag_path = proj / "platform" / "diag.yaml"
+# project.yaml may remap platform.diag
+pyaml = proj / "project.yaml"
+if yaml and pyaml.is_file():
+    try:
+        raw = yaml.safe_load(pyaml.read_text(encoding="utf-8")) or {}
+        plat = raw.get("platform") if isinstance(raw, dict) else None
+        if isinstance(plat, dict) and plat.get("diag"):
+            diag_path = proj / str(plat["diag"]).strip()
+    except Exception:
+        pass
+
+enabled = False
+port = 13400
+if yaml and diag_path.is_file():
+    try:
+        data = yaml.safe_load(diag_path.read_text(encoding="utf-8")) or {}
+        standards = data.get("standards") if isinstance(data.get("standards"), dict) else {}
+        doip = data.get("doip") if isinstance(data.get("doip"), dict) else {}
+        iso14229 = bool(standards.get("iso_14229_uds", True))
+        iso13400 = bool(standards.get("iso_13400_doip", doip.get("enabled", False)))
+        enabled = bool(iso13400 and iso14229 and doip.get("enabled", iso13400))
+        if doip.get("tcp_port") is not None:
+            port = int(doip["tcp_port"])
+    except Exception:
+        enabled = False
+
+if hint in ("0", "off", "false", "no"):
+    enabled = False
+elif hint in ("1", "on", "true", "yes"):
+    enabled = True
+
+if port_env:
+    try:
+        port = int(port_env)
+    except ValueError:
+        pass
+
+print("DOIP_ON=%s" % ("1" if enabled else "0"))
+print("DOIP_PORT=%s" % port)
+PY
+)"
+export GF_DOIP_PORT="${DOIP_PORT}"
 
 # Inject replaces gateway. Live tap may stay on.
 if [[ "${INJECT_ON}" == "1" ]]; then
@@ -284,6 +348,7 @@ USS="${BUILD}/apps/sensing/uss/gf_sensing_uss"
 PLAN="${BUILD}/apps/planning/driving/gf_planning_driving"
 TAP="${BUILD}/apps/tools/iox_obs_tap/gf_iox_obs_tap"
 INJ="${BUILD}/apps/tools/iox_obs_inject/gf_iox_obs_inject"
+DOIP="${BUILD}/gf_doip_ota_server"
 
 NEED_BINS=("${ROUDI}")
 if [[ "${INJECT_ON}" == "1" ]]; then
@@ -314,6 +379,9 @@ fi
 if [[ "${LIVE_ON}" == "1" ]]; then
   NEED_BINS+=("${TAP}")
 fi
+if [[ "${DOIP_ON}" == "1" ]]; then
+  NEED_BINS+=("${DOIP}")
+fi
 for bin in "${NEED_BINS[@]}"; do
   if [[ ! -x "${bin}" ]]; then
     echo "Missing executable: ${bin}" >&2
@@ -323,6 +391,9 @@ for bin in "${NEED_BINS[@]}"; do
     fi
     if [[ "${bin}" == "${INJ}" ]]; then
       echo "inject binary missing — vehicle-debug compose should add tools/iox_obs_inject; re-run compile_sil." >&2
+    fi
+    if [[ "${bin}" == "${DOIP}" ]]; then
+      echo "DoIP OTA server missing — rebuild (target gf_doip_ota_server) or set GF_DOIP=0." >&2
     fi
     exit 1
   fi
@@ -339,14 +410,16 @@ mkdir -p "${LOG_DIR}"
 LIVE_PORT="${GF_LIVE_PORT:-8766}"
 INJ_PORT="${GF_INJECT_PORT:-8767}"
 
-# 释放上次 Ctrl+C 未清干净 / 重复开跑 留下的 bridge / inject（EADDRINUSE / iceoryx same-name）
+# 释放上次 Ctrl+C 未清干净 / 重复开跑 留下的 bridge / inject / DoIP（EADDRINUSE / iceoryx same-name）
 gf_sil_preflight_ports() {
   export GF_SIL_PORT_WS="${PORT}"
   export GF_SIL_PORT_LIVE="${LIVE_PORT}"
   export GF_SIL_PORT_INJ="${INJ_PORT}"
+  export GF_SIL_PORT_DOIP="${DOIP_PORT}"
   export GF_SIL_KILL_STALE="${GF_SIL_KILL_STALE:-1}"
   export GF_SIL_INJECT_ON="${INJECT_ON}"
   export GF_SIL_LIVE_ON="${LIVE_ON}"
+  export GF_SIL_DOIP_ON="${DOIP_ON}"
   python - <<'PY'
 import os, re, signal, subprocess, time
 
@@ -389,6 +462,8 @@ if os.environ.get("GF_SIL_LIVE_ON") == "1":
     wanted.add(int(os.environ["GF_SIL_PORT_LIVE"]))
 if os.environ.get("GF_SIL_INJECT_ON") == "1":
     wanted.add(int(os.environ["GF_SIL_PORT_INJ"]))
+if os.environ.get("GF_SIL_DOIP_ON") == "1":
+    wanted.add(int(os.environ["GF_SIL_PORT_DOIP"]))
 
 kill_stale = os.environ.get("GF_SIL_KILL_STALE", "1") == "1"
 listeners = [(p, n, pid) for p, n, pid in ss_listeners() if p in wanted]
@@ -398,6 +473,13 @@ if not listeners and not other_run_sil:
     if os.environ.get("GF_SIL_INJECT_ON") == "1" and kill_stale:
         subprocess.run(
             ["pkill", "-f", "gf_iox_obs_inject"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    if os.environ.get("GF_SIL_DOIP_ON") == "1" and kill_stale:
+        subprocess.run(
+            ["pkill", "-f", "gf_doip_ota_server"],
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -420,7 +502,9 @@ for p, n, pid in listeners:
         or "bridge" in cmd
         or "gf_iox_obs_inject" in cmd
         or "iox_obs_inject" in cmd
+        or "gf_doip_ota_server" in cmd
         or n.startswith("gf_iox_obs")
+        or n.startswith("gf_doip")
     ):
         ours.append((p, n, pid, cmd))
     else:
@@ -442,6 +526,12 @@ for pid in sorted(targets):
         pass
 subprocess.run(
     ["pkill", "-f", "gf_iox_obs_inject"],
+    check=False,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+)
+subprocess.run(
+    ["pkill", "-f", "gf_doip_ota_server"],
     check=False,
     stdout=subprocess.DEVNULL,
     stderr=subprocess.DEVNULL,
@@ -473,7 +563,7 @@ gf_sil_preflight_ports
 
 cleanup() {
   set +e
-  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}"; do
+  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}"; do
     [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null
   done
   # process-substitution GMT bridges may outlive the fan pipeline
@@ -485,11 +575,15 @@ cleanup() {
     fuser -k "${INJ_PORT}/tcp" >/dev/null 2>&1 || true
     pkill -f gf_iox_obs_inject >/dev/null 2>&1 || true
   fi
+  if [[ "${DOIP_ON}" == "1" ]]; then
+    fuser -k "${DOIP_PORT}/tcp" >/dev/null 2>&1 || true
+    pkill -f gf_doip_ota_server >/dev/null 2>&1 || true
+  fi
   wait 2>/dev/null
 }
 trap cleanup EXIT INT TERM
 
-echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} apps=${RUN_APPS:-full}"
+echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} apps=${RUN_APPS:-full}"
 echo "${TAG} RouDi ..."
 "${ROUDI}" >"${LOG_DIR}/roudi.log" 2>&1 &
 ROUDI_PID=$!
@@ -498,6 +592,75 @@ if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then
   echo "${TAG} RouDi failed; see ${LOG_DIR}/roudi.log" >&2
   cat "${LOG_DIR}/roudi.log" >&2 || true
   exit 1
+fi
+
+if [[ "${DOIP_ON}" == "1" ]]; then
+  echo "${TAG} DoIP OTA server → TCP ${DOIP_PORT} (GMT OTA: 127.0.0.1:${DOIP_PORT})"
+  : >"${LOG_DIR}/doip_ota.log"
+  # Export diag.yaml timing / ota_transfer into env for gf_doip_ota_server
+  export GF_PROJECT_DIR_FOR_DOIP="${PROJECT_DIR}"
+  eval "$(python - <<'PY'
+import os
+from pathlib import Path
+try:
+    import yaml
+except ImportError:
+    raise SystemExit(0)
+proj = Path(os.environ["GF_PROJECT_DIR_FOR_DOIP"])
+diag = proj / "platform" / "diag.yaml"
+pyaml = proj / "project.yaml"
+if pyaml.is_file():
+    raw = yaml.safe_load(pyaml.read_text(encoding="utf-8")) or {}
+    plat = raw.get("platform") if isinstance(raw, dict) else None
+    if isinstance(plat, dict) and plat.get("diag"):
+        diag = proj / str(plat["diag"]).strip()
+if not diag.is_file():
+    raise SystemExit(0)
+data = yaml.safe_load(diag.read_text(encoding="utf-8")) or {}
+doip = data.get("doip") if isinstance(data.get("doip"), dict) else {}
+timing = data.get("timing") if isinstance(data.get("timing"), dict) else {}
+xfer = data.get("ota_transfer") if isinstance(data.get("ota_transfer"), dict) else {}
+
+def u(v, d):
+    try:
+        return int(str(v), 0) if v is not None else d
+    except Exception:
+        return d
+
+def emit(k, v):
+    print(f"export {k}={v}")
+
+emit("GF_DIAG_S3_SERVER_MS", u(timing.get("s3_server_ms"), 5000))
+emit("GF_DIAG_TP_PERIOD_MS", u(timing.get("tester_present_period_ms"), 2000))
+emit("GF_DIAG_P2_SERVER_MS", u(timing.get("p2_server_ms"), 50))
+emit("GF_DIAG_P2STAR_SERVER_MS", u(timing.get("p2_star_server_ms"), 5000))
+emit("GF_DIAG_SECURITY_DELAY_MS", u(timing.get("security_delay_ms"), 10000))
+mode = str(xfer.get("mode") or "request_file_transfer")
+print(f"export GF_OTA_TRANSFER_MODE={mode}")
+req_p = 1 if bool(xfer.get("require_programming_session", True)) else 0
+req_s = 1 if bool(xfer.get("require_security", True)) else 0
+emit("GF_OTA_REQUIRE_PROG_SESSION", req_p)
+emit("GF_OTA_REQUIRE_SECURITY", req_s)
+emit("GF_OTA_MAX_BLOCK", u(xfer.get("max_block_length"), 1024))
+emit("GF_DOIP_LOGICAL_ADDR", u(doip.get("logical_address"), 0x0E00))
+emit("GF_DOIP_TESTER_ADDR", u(doip.get("tester_address"), 0x0E80))
+PY
+)" || true
+  # Mirror UDS steps to terminal (same lines as GMT OTA log) + keep file
+  (
+    if command -v stdbuf >/dev/null 2>&1; then
+      stdbuf -oL -eL env GF_DOIP_PORT="${DOIP_PORT}" "${DOIP}"
+    else
+      env GF_DOIP_PORT="${DOIP_PORT}" "${DOIP}"
+    fi
+  ) > >(tee -a "${LOG_DIR}/doip_ota.log" >&2) 2>&1 &
+  DOIP_PID=$!
+  sleep 0.3
+  if ! kill -0 "${DOIP_PID}" 2>/dev/null; then
+    echo "${TAG} DoIP server failed; see ${LOG_DIR}/doip_ota.log" >&2
+    cat "${LOG_DIR}/doip_ota.log" >&2 || true
+    exit 1
+  fi
 fi
 
 start_consumers() {

@@ -1,27 +1,28 @@
+# deadline_ms: 0 = no separate deadline (explicit; do not use null)
 schema_version: '0.1'
 entities:
 - id: gateway_alive
   process: adapter.vehicle_can_gateway
   alive_period_ms: 100
   alive_timeout_ms: 300
-  deadline_ms: null
+  deadline_ms: 0
   on_failure: notify_sm
 - id: fcm_alive
   process: perception.fcm
   alive_period_ms: 100
   alive_timeout_ms: 300
-  deadline_ms: null
+  deadline_ms: 0
   on_failure: notify_sm
 - id: uss_alive
   process: sensing.uss
   alive_period_ms: 100
   alive_timeout_ms: 300
-  deadline_ms: null
+  deadline_ms: 0
   on_failure: notify_sm
 - id: planning_alive
   process: planning.driving
   alive_period_ms: 100
   alive_timeout_ms: 300
-  deadline_ms: null
+  deadline_ms: 0
   # on_failure: restart → GF_EM_MANAGED 时 exit 75 + gf_em_daemon relaunch；否则 soft
   on_failure: restart

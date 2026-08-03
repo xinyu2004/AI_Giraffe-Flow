@@ -16,7 +16,7 @@ AI_Giraffe-Flow/
   fusa/               # Functional Safety → Safety Case evidence
   schemas/
   dep-manifest/       # dependency pins + bootstrap.sh (checkouts → middleware/third_party/)
-  cmake/ scripts/ ci/ docs/
+  cmake/ scripts/ devops/ docs/
   result_pic/         # README assets
 ```
 
@@ -81,7 +81,9 @@ AI_Giraffe-Flow/
 ├── scripts/                      # thin wrappers + verify orchestration
 │   ├── bootstrap_deps.sh         # → dep-manifest/bootstrap.sh
 │   └── verify/<oem>/<sku>/       # CI/smoke entrypoints
-├── ci/
+├── devops/
+│   ├── ci/                       # smoke 门禁 · 云 CI 样例
+│   └── cd/                       # 交付占位（package stub）
 │
 ├── docs/
 │   ├── zh/ en/

@@ -123,7 +123,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 | R7.3 | architect dag | `GMT architect dag --project …` 输出 nodes/edges JSON | □ | □ | □ | |
 | R7.4 | measure export | `GMT measure export --in tools/gmt/fixtures/session_stub.jsonl --out /tmp/x.mcap`；文件以 `\x89MCAP0` 开头 | □ | □ | □ | |
 | R7.5 | ARXML import | `gf-codegen import arxml schemas/examples/oem/demo_faracon_subset.arxml` → candidates 含 EgoMotion | □ | □ | □ | |
-| R7.6 | CI 挂钩 | `ci/scripts/smoke.sh` 含 GMT architect + pytest | □ | □ | □ | |
+| R7.6 | CI 挂钩 | `devops/ci/scripts/smoke.sh` 含 GMT architect + pytest | □ | □ | □ | |
 | R7.7 | 边界 | 无 Foxglove 桥；无内嵌 FARACON；ARXML 仅为子集 | □ | □ | □ | |
 
 ---
@@ -138,7 +138,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 | 4 | R4 | smoke 脚本 | 10–15 min |
 | 5 | R5 + R6 | smoke 脚本 | 15–20 min |
 | 6 | R7 | smoke_ta | 10–15 min |
-| 7 | （可选）`bash ci/scripts/smoke.sh` | 全量 CI，需 bootstrap/iceoryx | 较长 |
+| 7 | （可选）`bash devops/ci/scripts/smoke.sh` | 全量 CI，需 bootstrap/iceoryx | 较长 |
 
 ---
 

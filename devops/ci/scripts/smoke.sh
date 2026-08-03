@@ -2,7 +2,7 @@
 # CI / local smoke: bootstrap → unit tests → compose both SKUs → SIL demo → optional aarch64 link.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "${ROOT}"
 export PATH="${ROOT}/.venv/bin:${PATH}"
 

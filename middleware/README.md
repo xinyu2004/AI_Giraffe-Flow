@@ -40,7 +40,7 @@ Enable subsets per SKU via SOR / `req.yaml` `runtime_modules[]`.
 | [tsync](tsync/) | Time sync skeleton（可裁剪） | P3 |
 | [trace](trace/) | Trace → VCD / GMT | P2 |
 | [ucm](ucm/) | OTA / packages + orchestrator | P3 ●（RAUC stub） |
-| [diag](diag/) | DoIP TCP session + UDS subset | P3 ● |
+| [diag](diag/) | ISO 14229 UDS+NRC · 13400 DoIP（依赖）· 插件 0x27/0x29 | P3 ● |
 
 Staging (gitignored): `middleware/.deps-prefix/` after `bash scripts/bootstrap_deps.sh`.
 

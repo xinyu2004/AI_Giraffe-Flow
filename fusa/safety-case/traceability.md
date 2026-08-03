@@ -156,7 +156,19 @@
 | SR-05.1 | production-release 下 live_tap 关闭、record=off、无 tap/inject 应用 | SIL-T4 compose 断言 · L2 |
 | SR-05.2 | 同 profile 下 SIL-02（multiproc 主链）仍可通过 | SIL-T4（`build-prod`） |
 
-门控：`GF_FUSA_T4=1 bash fusa/scripts/run_cases.sh`（另编 `build-prod`，退出恢复 vehicle-debug）。
+门控：**发版必跑** `GF_FUSA_T4=1 bash fusa/scripts/run_cases.sh`（另编 `build-prod`，退出恢复 vehicle-debug；见 `devops/ci/README.md`）。
+
+---
+
+## 诊断 / OTA 支撑（非独立 SG）
+
+| 主题 | 证据 |
+|------|------|
+| ISO 14229 UDS + NRC | `gf_uds_nrc_smoke` · [diag_cases.md](../cases/diag_cases.md) |
+| ISO 13400 DoIP（依赖 14229） | `gf_doip_session_smoke` · `smoke_doip_ota.sh` |
+| OTA 失败 → Collector | DOIP-S05 · UCM-OTA-02 · `ota_failed` |
+| 0x27/0x29 插件 | SIL stub / `.so` ABI `security_plugin.h` |
+| MCU PDU（无 ISO-TP on AP） | UDS-MCU · assumptions A-08 |
 
 ---
 

@@ -1,14 +1,20 @@
 #include "gf_ara/diag/doip_session.hpp"
 
 #include "gf_ara/diag/doip_proto.hpp"
+#include "gf_ara/diag/uds_dispatcher.hpp"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <cerrno>
 #include <cstring>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
 
 namespace gf_ara::diag {
 namespace {
@@ -18,6 +24,55 @@ constexpr std::uint8_t kRoutingOk = 0x10;
 bool SetReuseAddr(int fd) {
   int yes = 1;
   return ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == 0;
+}
+
+const char* UdsSidName(std::uint8_t sid) {
+  switch (sid) {
+    case 0x10:
+      return "DiagnosticSessionControl";
+    case 0x11:
+      return "ECUReset";
+    case 0x27:
+      return "SecurityAccess";
+    case 0x29:
+      return "Authentication";
+    case 0x31:
+      return "RoutineControl";
+    case 0x34:
+      return "RequestDownload";
+    case 0x36:
+      return "TransferData";
+    case 0x37:
+      return "RequestTransferExit";
+    case 0x38:
+      return "RequestFileTransfer";
+    case 0x3E:
+      return "TesterPresent";
+    default:
+      return "SID";
+  }
+}
+
+std::string HexBytes(const std::vector<std::uint8_t>& v) {
+  std::ostringstream oss;
+  oss << std::hex << std::setfill('0');
+  for (auto b : v) {
+    oss << std::setw(2) << static_cast<unsigned>(b);
+  }
+  return oss.str();
+}
+
+void LogUdsStep(const std::vector<std::uint8_t>& req,
+                const std::vector<std::uint8_t>& resp) {
+  if (req.empty()) {
+    return;
+  }
+  const bool ok = !resp.empty() && resp[0] != 0x7F;
+  std::cout << "[DoIP] UDS 0x" << std::hex << std::setfill('0') << std::setw(2)
+            << static_cast<unsigned>(req[0]) << std::dec << ' ' << UdsSidName(req[0])
+            << "  req=" << HexBytes(req) << "  resp=" << HexBytes(resp) << "  ["
+            << (ok ? "OK" : "NRC") << "]\n"
+            << std::flush;
 }
 
 }  // namespace
@@ -108,8 +163,16 @@ void DoipTcpServer::ThreadMain() {
       }
       continue;
     }
+    bool expected = false;
+    if (!client_busy_.compare_exchange_strong(expected, true)) {
+      std::cout << "[DoIP] reject second TCP client (single-session entity)\n"
+                << std::flush;
+      ::close(cfd);
+      continue;
+    }
     ServeClient(cfd);
     ::close(cfd);
+    client_busy_ = false;
   }
   running_ = false;
 }
@@ -122,6 +185,24 @@ void DoipTcpServer::ServeClient(int client_fd) {
   std::uint16_t tester = cfg_.expected_tester;
 
   while (!stop_.load()) {
+    // Poll so S3Server can fire without waiting forever on recv
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    FD_SET(client_fd, &rfds);
+    timeval tv{};
+    tv.tv_sec = 0;
+    tv.tv_usec = 200 * 1000;
+    const int sel = ::select(client_fd + 1, &rfds, nullptr, nullptr, &tv);
+    gf_ara::diag::UdsDispatcher::Instance().TickTimeouts();
+    if (sel == 0) {
+      continue;
+    }
+    if (sel < 0) {
+      if (stop_.load()) {
+        break;
+      }
+      continue;
+    }
     const ssize_t n = ::recv(client_fd, tmp, sizeof(tmp), 0);
     if (n <= 0) {
       break;
@@ -147,6 +228,18 @@ void DoipTcpServer::ServeClient(int client_fd) {
             MakeRoutingActivationResponse(tester, cfg_.entity_address, kRoutingOk);
         (void)::send(client_fd, resp.data(), resp.size(), MSG_NOSIGNAL);
         activated = true;
+        std::cout << "[DoIP] RoutingActivation tester=0x" << std::hex << std::setfill('0')
+                  << std::setw(4) << tester << std::dec << "  [OK]\n"
+                  << std::flush;
+        continue;
+      }
+
+      if (frame->payload_type == DoipPayloadType::kAliveCheckRequest) {
+        auto resp = MakeAliveCheckResponse(cfg_.entity_address);
+        (void)::send(client_fd, resp.data(), resp.size(), MSG_NOSIGNAL);
+        std::cout << "[DoIP] AliveCheck → response entity=0x" << std::hex << std::setfill('0')
+                  << std::setw(4) << cfg_.entity_address << std::dec << "\n"
+                  << std::flush;
         continue;
       }
 
@@ -158,6 +251,15 @@ void DoipTcpServer::ServeClient(int client_fd) {
                                                     frame->payload[1]);
         const auto tgt = static_cast<std::uint16_t>((frame->payload[2] << 8) |
                                                     frame->payload[3]);
+        if (tgt != cfg_.entity_address) {
+          // 0x02 = unknown target address (ISO 13400-2)
+          auto nack = MakeDiagnosticMessageNack(cfg_.entity_address, src, 0x02);
+          (void)::send(client_fd, nack.data(), nack.size(), MSG_NOSIGNAL);
+          std::cout << "[DoIP] NACK unknown target=0x" << std::hex << tgt
+                    << " (entity=0x" << cfg_.entity_address << ")\n"
+                    << std::dec << std::flush;
+          continue;
+        }
         std::vector<std::uint8_t> uds(frame->payload.begin() + 4, frame->payload.end());
         auto ack = MakeDiagnosticMessageAck(cfg_.entity_address, src, 0x00);
         (void)::send(client_fd, ack.data(), ack.size(), MSG_NOSIGNAL);
@@ -168,9 +270,13 @@ void DoipTcpServer::ServeClient(int client_fd) {
         } else {
           uds_resp = DefaultUdsDispatch(uds);
         }
-        auto msg = MakeDiagnosticMessage(cfg_.entity_address, src, uds_resp);
-        (void)::send(client_fd, msg.data(), msg.size(), MSG_NOSIGNAL);
-        (void)tgt;
+        if (!uds.empty() && !(uds[0] == 0x3E && uds_resp.empty())) {
+          LogUdsStep(uds, uds_resp);
+        }
+        if (!uds_resp.empty()) {
+          auto msg = MakeDiagnosticMessage(cfg_.entity_address, src, uds_resp);
+          (void)::send(client_fd, msg.data(), msg.size(), MSG_NOSIGNAL);
+        }
         continue;
       }
     }

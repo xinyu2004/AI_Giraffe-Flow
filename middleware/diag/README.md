@@ -1,23 +1,18 @@
 # middleware/diag
 
-ARA-inspired **Diagnostics** (`gf_ara::diag`) — **DoIP session**（SIL / 假 board；非量产 UDS 全栈）。
+ARA-inspired **Diagnostics** (`gf_ara::diag`).
 
-| API | 行为 |
-|-----|------|
-| `DoipStack::*` | 进程内 stub（TesterPresent 回声）— 保留 DIAG-01…05 |
-| `DoipTcpServer` / `DoipTcpClient` | ISO 13400-2 子集：RoutingActivation + DiagnosticMessage over TCP |
-| `gf_doip_ota_server` | 监听 `GF_DOIP_PORT`（默认 13400）；UDS `0x31` 例程 `0xF100` → UCM OTA |
-
-RoutineControl（SIL）：
-
-| UDS | 含义 |
-|-----|------|
-| `31 01 F1 00` + `id\|path` | start OTA → `OtaOrchestrator::RunPackage` |
-| `31 03 F1 01` | 进度 percent |
+| 层 | 标准 | 本仓行为 |
+|----|------|----------|
+| 应用 | **ISO 14229** UDS + NRC | `UdsDispatcher`（完整核心 SID）；0x27/0x29 → `.so/.dll` 插件 |
+| 传输 | **ISO 13400** DoIP（依赖 14229） | `DoipTcpServer` / Client；不可单独启用 |
+| CAN | （无 DoIP 时） | AP **不做 ISO-TP**；完整 UDS PDU 交 MCU（`0xFE` 前缀 handoff / 跨域契约） |
 
 ```bash
-ctest --test-dir build -R 'gf_diag_doip_smoke|gf_doip_session_smoke' --output-on-failure
+ctest --test-dir build -R 'gf_diag_doip_smoke|gf_uds_nrc_smoke|gf_doip_session_smoke' --output-on-failure
 bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
 ```
+
+配置：`platform/diag.yaml` → `standards.iso_14229_uds` / `standards.iso_13400_doip`（父/子）。
 
 Parent: [middleware/README.md](../README.md) · FuSa: [diag_cases.md](../../fusa/cases/diag_cases.md).

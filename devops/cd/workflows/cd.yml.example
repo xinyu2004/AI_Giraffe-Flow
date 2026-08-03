@@ -1,0 +1,12 @@
+# Example CD workflow — copy to .github/workflows/cd.yml when ready.
+# No cloud credentials in-repo.
+name: cd-example
+on:
+  workflow_dispatch:
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package SIL (stub)
+        run: bash devops/cd/scripts/package_sil.sh

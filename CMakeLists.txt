@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(AI_Giraffe_Flow VERSION 0.1.0 LANGUAGES CXX)
+# C required for SIL diag security stub (middleware/diag/plugins/sil_sec_stub.c)
+# and DDS C bindings; without it CMAKE_C_COMPILE_OBJECT / CREATE_SHARED_LIBRARY stay unset.
+project(AI_Giraffe_Flow VERSION 0.1.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

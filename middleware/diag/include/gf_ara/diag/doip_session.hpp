@@ -49,6 +49,7 @@ class DoipTcpServer {
   UdsHandler uds_;
   std::atomic<bool> running_{false};
   std::atomic<bool> stop_{false};
+  std::atomic<bool> client_busy_{false};
   int listen_fd_{-1};
   std::uint16_t port_{0};
   std::thread thr_;

@@ -11,6 +11,8 @@
 | A-04 | SIL 证据在「同配置 compose 产物」下复现；配置漂移需重新跑 `run_cases` / pack | 全部 | **演示中** | 见 `sil_verify_cases`「最近复现」与 `measure_latency` revision |
 | A-05 | debug-path（GMT / Inject / Tag→MCAP）在 production-release 可关闭且不参与默认证据集 | SG-05 | **演示中** | SIL-T4 / `smoke_production_profile.sh`；SIL-DBG-* 仅证「开得了」 |
 | A-06 | 证书、工具鉴定、HARA 由项目安全流程另册完成；本仓只提供可引用技术证据 | 全部 | open | 政策硬边界 |
+| A-07 | 板端 soak、多故障叠加、hop e2e、跨进程 SM daemon、Collector 掉电持久化 **out of scope → P3z**（桌面 SIL 不外推为 ECU 限值） | SG-01…04 | open | 见 latency/isolation 口径 |
+| A-08 | 无 DoIP 时 CAN 诊断由 MCU 做 ISO-TP；AP 只交接完整 UDS PDU（不做 15765-2） | 诊断支撑 | **演示中** | `UdsDispatcher` MCU handoff |
 
 ## 操作含义
 

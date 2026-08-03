@@ -33,6 +33,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(t("gf-config — Giraffe Flow（信号与应用 / 平台）"))
         self.resize(1400, 860)
         self._session: ProjectSession | None = None
+        self._skip_close_prompt = False
 
         self._tabs = QTabWidget()
         self._req = ReqEditor()
@@ -45,8 +46,8 @@ class MainWindow(QMainWindow):
         sku_l.setContentsMargins(0, 0, 0, 0)
         sku_l.setSpacing(0)
         sku_l.addWidget(self._req)
-        # 定宽：避免 Preferred 留白像「可左右拉」的空框
-        self._sku_panel.setFixedWidth(312)
+        # 定宽：英文标签更长（Live scope / Record services），按语言留足列宽
+        self._sku_panel.setFixedWidth(420 if get_language() == "en" else 320)
         self._sku_panel.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
         )
@@ -78,7 +79,7 @@ class MainWindow(QMainWindow):
         status.addWidget(self._path_label, stretch=1)
         self.setStatusBar(status)
 
-        self._req.changed.connect(self._mark_dirty)
+        self._req.changed.connect(self._on_req_changed)
         self._graph.changed.connect(self._mark_dirty)
         self._platform.changed.connect(self._mark_dirty)
 
@@ -238,7 +239,29 @@ class MainWindow(QMainWindow):
     def _on_language(self, lang: str) -> None:
         if lang == get_language():
             return
-        switch_language_and_restart(lang)
+        project_path: str | None = None
+        if self._session is not None:
+            self._graph.flush_canvas()
+            project_path = str(self._session.paths.project_file.resolve())
+            if self._session.is_dirty():
+                reply = QMessageBox.question(
+                    self,
+                    t("语言"),
+                    t("切换语言将重启应用。有未保存的更改，是否保存？"),
+                    QMessageBox.StandardButton.Save
+                    | QMessageBox.StandardButton.Discard
+                    | QMessageBox.StandardButton.Cancel,
+                )
+                if reply == QMessageBox.StandardButton.Cancel:
+                    return
+                if reply == QMessageBox.StandardButton.Save:
+                    try:
+                        self._session.save_all()
+                    except Exception as exc:  # noqa: BLE001
+                        QMessageBox.critical(self, t("保存失败"), str(exc))
+                        return
+        self._skip_close_prompt = True
+        switch_language_and_restart(lang, project_path=project_path)
 
     def _toggle_sku_panel(self) -> None:
         self._sku_collapsed = not self._sku_collapsed
@@ -306,12 +329,22 @@ class MainWindow(QMainWindow):
                 "尚无 lineage。菜单：文件 → Verify（Ctrl+R）"
             )
         self._tabs.setCurrentWidget(self._signals_page)
-        self.statusBar().showMessage("已打开", 3000)
+        self.statusBar().showMessage(t("已打开"), 3000)
+
+    def _on_req_changed(self) -> None:
+        self._mark_dirty()
+        # 拓扑 ap_only / ap_mcu_cp 切换时刷新 MCU 可见性
+        self._graph.sync_topology_visibility()
 
     def _mark_dirty(self) -> None:
-        self.statusBar().showMessage("有未保存更改 — Ctrl+S 只保存；Verify 另点", 5000)
+        self.statusBar().showMessage(
+            t("有未保存更改 — Ctrl+S 只保存；Verify 另点"), 5000
+        )
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self._skip_close_prompt:
+            event.accept()
+            return
         if self._session is not None:
             self._graph.flush_canvas()
             if self._session.is_dirty():
@@ -353,25 +386,28 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "保存失败", str(exc))
             return
         if had_dirty:
-            self._path_label.setText(f"{self._session.paths.project_file}  ·  ✓ 已保存")
-            self.statusBar().showMessage("✓ 已保存（未 Verify）", 8000)
+            self._path_label.setText(
+                f"{self._session.paths.project_file}  ·  {t('✓ 已保存')}"
+            )
+            self.statusBar().showMessage(t("✓ 已保存（未 Verify）"), 8000)
             QMessageBox.information(
                 self,
-                "保存",
-                f"已写入磁盘：\n{self._saved_paths_summary()}\n\n"
-                "（未跑 Verify；需要检查时再按 Ctrl+R）",
+                t("保存"),
+                t("已写入磁盘：")
+                + f"\n{self._saved_paths_summary()}\n\n"
+                + t("（未跑 Verify；需要检查时再按 Ctrl+R）"),
             )
         else:
-            self.statusBar().showMessage("没有未保存更改", 4000)
-            QMessageBox.information(self, "保存", "没有未保存的更改。")
+            self.statusBar().showMessage(t("没有未保存更改"), 4000)
+            QMessageBox.information(self, t("保存"), t("没有未保存的更改。"))
 
     def _save_and_verify(self) -> None:
         if not self._session:
-            QMessageBox.information(self, "保存", "请先打开项目")
+            QMessageBox.information(self, t("保存"), t("请先打开项目"))
             return
         self._graph.flush_canvas()
         self._session.save_all()
-        self.statusBar().showMessage("已保存，正在 Verify…", 2000)
+        self.statusBar().showMessage(t("已保存，正在 Verify…"), 2000)
         self._verify(show_dialog=False)
 
     def _verify(self, *, show_dialog: bool = False) -> bool:
@@ -390,7 +426,7 @@ class MainWindow(QMainWindow):
         self._graph.focus_lineage()
         if rc == 0:
             self.statusBar().showMessage(
-                "Verify OK — 右侧 Lineage。需要 C++ API 时点 Generate (Ctrl+G)",
+                t("Verify OK — 右侧 Lineage。需要 C++ API 时点 Generate (Ctrl+G)"),
                 8000,
             )
             if show_dialog:
@@ -403,7 +439,9 @@ class MainWindow(QMainWindow):
                     "若要生成 Proxy/Skeleton：文件 → Generate 或 Ctrl+G。",
                 )
             return True
-        self.statusBar().showMessage(f"Verify 退出码 {rc} — 见右侧 Lineage 红项", 8000)
+        self.statusBar().showMessage(
+            t("Verify 退出码 {rc} — 见右侧 Lineage 红项").format(rc=rc), 8000
+        )
         QMessageBox.warning(self, "Verify", f"退出码 {rc}。请查看右侧 Lineage 红项。")
         return False
 
@@ -428,7 +466,9 @@ class MainWindow(QMainWindow):
                 f"Verify/Generate 失败（码 {rc}）。请先修好右侧 Lineage。",
             )
             return
-        self.statusBar().showMessage(f"Generate OK → {out}/include/gf_gen/", 8000)
+        self.statusBar().showMessage(
+            t("Generate OK → {out}/include/gf_gen/").format(out=out), 8000
+        )
         QMessageBox.information(
             self,
             "Generate",

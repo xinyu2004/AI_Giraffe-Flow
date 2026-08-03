@@ -11,6 +11,8 @@ namespace gf_ara::diag {
 enum class DoipPayloadType : std::uint16_t {
   kRoutingActivationRequest = 0x0005,
   kRoutingActivationResponse = 0x0006,
+  kAliveCheckRequest = 0x0007,
+  kAliveCheckResponse = 0x0008,
   kDiagnosticMessage = 0x8001,
   kDiagnosticMessagePositiveAck = 0x8002,
   kDiagnosticMessageNegativeAck = 0x8003,
@@ -43,6 +45,13 @@ struct DoipFrame {
 [[nodiscard]] std::vector<std::uint8_t> MakeDiagnosticMessageAck(
     std::uint16_t source_address, std::uint16_t target_address,
     std::uint8_t ack_code = 0x00);
+
+[[nodiscard]] std::vector<std::uint8_t> MakeDiagnosticMessageNack(
+    std::uint16_t source_address, std::uint16_t target_address,
+    std::uint8_t nack_code);
+
+[[nodiscard]] std::vector<std::uint8_t> MakeAliveCheckResponse(
+    std::uint16_t source_address);
 
 }  // namespace gf_ara::diag
 

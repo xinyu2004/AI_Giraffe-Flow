@@ -44,7 +44,7 @@
 | P0-5 | 两进程 demo | `apps/simulators/`, `apps/demo_pipeline/` + `smoke_sil.sh` | ✅ |
 | P0-6 | OSAL POSIX | `middleware/osal/` | ✅ |
 | P0-7 | CMake + `req.yaml` | `cmake/`，`projects/**/req.yaml` | ✅ |
-| P0-8 | CI smoke | `ci/scripts/smoke.sh` | ✅ |
+| P0-8 | CI smoke | `devops/ci/scripts/smoke.sh` | ✅ |
 | P0-9 | `adc_full` compose / generate | `projects/oem_b/adc_full/` | ✅ |
 
 ### 明确不在 P0
@@ -135,10 +135,10 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | # | 交付物 | 状态 |
 |---|--------|------|
 | T1 | `fusa/` 入口：政策 + cases + 收集脚本 | ✅ [fusa/](../../../fusa/) · [POLICY.md](../../../fusa/POLICY.md) · [cases/](../../../fusa/cases/) |
-| T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ◐ [isolation.md](../../../fusa/metrics/isolation.md) · [latency.md](../../../fusa/metrics/latency.md)；SIL 参考预算已填；板级限值仍非本仓范围 |
+| T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ✅ SIL 预算已填；文档标明主机 SIL ≠ ECU ASIL；板端 soak → P3z |
 | T3 | 本机 runs / packs 流程（默认不进仓） | ✅ `fusa/scripts/run_cases.sh` → `fusa/runs/`；SKU `generate_fusa_artifacts.sh` → `fusa/packs/`（互不调用） |
-| T3b | Safety Case 追溯（SG → SR → 验证） | ◐ [traceability.md](../../../fusa/safety-case/traceability.md)：SG-01…04 已挂 L1/L3；SG-05 见 T4 |
-| T4 | `production` profile：关 Record/ROS/调试路径 | ◐ [`smoke_production_profile.sh`](../../../scripts/verify/oem_a_afc_with_uss/smoke_production_profile.sh) · `GF_FUSA_T4=1` |
+| T3b | Safety Case 追溯（SG → SR → 验证） | ✅ [traceability.md](../../../fusa/safety-case/traceability.md)：SG-01…05 + OTA/DoIP/UDS；缺口 → P3z / assumptions |
+| T4 | `production` profile：关 Record/ROS/调试路径 | ✅ [`smoke_production_profile.sh`](../../../scripts/verify/oem_a_afc_with_uss/smoke_production_profile.sh)；**发版必跑** `GF_FUSA_T4=1`（`devops/ci/README.md`） |
 
 **目标：** 完整 Safety Case（骨架：[fusa/safety-case/](../../../fusa/safety-case/)）。**当前不声称**证书已取得；仓内持续积累可引用证据（不含把 GMT/stub 当板级 ASIL 证据）。
 
@@ -146,22 +146,23 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 | # | 交付物 | 状态 |
 |---|--------|------|
-| D1 | DoIP **会话级**互通（可先 SIL/假 board，不绑量产板） | ✅ TCP RoutingActivation + DiagnosticMessage；`gf_doip_ota_server` / `gf_doip_session_smoke` |
-| D2 | **GMT OTA sheet**：选包 / 进度 / 结果；经 **DoIP** 下发路径 | ✅ GMT「OTA」页 + `gf_gmt.doip_client` → RoutineControl |
-| D3 | UCM 编排（+ SM Pause）；后端可 stub→RAUC | ✅ `OtaOrchestrator`（SM Updating + pause hook；RAUC 仍 stub） |
-| D4 | OTA/升级失败路径上 Collector 事件可观测 | ✅ `ucm/ota_failed`（`GF_UCM_FORCE_FAIL` / `FORCE_FAIL` path） |
+| D1 | DoIP **会话级**互通（可先 SIL/假 board，不绑量产板） | ✅ TCP；**依赖** ISO 14229；`UdsDispatcher` + NRC |
+| D2 | **GMT OTA sheet**：选包 / 进度 / 结果；经 **DoIP** 下发路径 | ✅ GMT「OTA」页：14229 父 / 13400 子；DoIP→UCM |
+| D3 | UCM 编排（+ SM Pause）；后端可 stub→RAUC | ✅ `OtaOrchestrator`；0x27/0x29 插件 ABI（`.so/.dll`） |
+| D4 | OTA/升级失败路径上 Collector 事件可观测 | ✅ `ucm/ota_failed` |
 
 验收：`bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh`
 
-### P3-5 Sim spike — Vision Pilot / CARLA
+### P3-5 Sim spike — 场景演示（未开工；弃 VP）
 
-| # | 交付物 |
-|---|--------|
-| S1 | **CARLA → semantic adapter** 尖刺（EgoMotion / Perception_*） |
-| S2 | Vision Pilot：**接口可行性评估**（有授权再复用 adapter） |
-| S3 | 与 GMT live/inject 并存的联调说明 |
+| # | 交付物 | 状态 |
+|---|--------|------|
+| S1' | **YOLO → semantic** feed 尖刺（主推荐） | ⏳ 下一轮 |
+| S1 | CARLA → 同一 semantic 出口（可选） | ⏳ |
+| S2 | Vision Pilot | **放弃**（授权） |
+| S3 | 与 GMT live/inject 联调说明 | ⏳ |
 
-与中间件加深 **弱耦合**，可与 P3-2 **并行尖刺**，不替代主航道。
+弱耦合；不替代主航道。
 
 ### P3z Board / MCU — 冲刺门禁（最不急）
 
@@ -209,6 +210,6 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 ## 下一步
 
-1. **P3-5** CARLA / VP 仿真尖刺（弱耦合，可选）。  
-2. **P3-3** 继续补 Safety Case 证据（T2/T3b/T4 ◐）。  
-3. **P3z**：真板 / vsomeip 加深 / RAUC 真刷写（不挡桌面主航道）。
+1. **P3-5** YOLO→semantic 演示尖刺（弃 VP；CARLA 可选）。  
+2. **P3z**：真板 / vsomeip / RAUC 真刷写 / 板端 soak。  
+3. 云 CI 启用 `devops/ci` + 发版跑 T4。

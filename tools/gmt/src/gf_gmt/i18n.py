@@ -53,6 +53,25 @@ _EN: dict[str, str] = {
     'Tag 编辑': 'Tag',
     '回灌': 'Inject',
     '请先加载项目 → 填 Host → Live(ws:8766) 或 回灌(tcp:8767) 点「连接」': 'Load project → set Host → Connect Live (ws:8766) or Inject (tcp:8767)',
+    '请先加载项目 → 填 Host → Live(ws:8766) / 回灌(tcp:8767) / OTA(DoIP)「连接」': (
+        'Load project → Host → Connect Live(ws:8766) / Inject(tcp:8767) / OTA(DoIP)'
+    ),
+    '项目={name} · OTA：DoIP Host:Port →「连接」→ Start OTA': (
+        'project={name} · OTA: DoIP Host:Port → Connect → Start OTA'
+    ),
+    'OTA：请先加载项目，再填 DoIP Host:Port「连接」': (
+        'OTA: load a project first, then DoIP Host:Port → Connect'
+    ),
+    '项目={name} · 回灌：Host + tcp 端口 →「连接」': (
+        'project={name} · Inject: Host + tcp port → Connect'
+    ),
+    '项目={name} · Live ws / 回灌 tcp →「连接」': (
+        'project={name} · Live ws / Inject tcp → Connect'
+    ),
+    '请先加载项目（与 Live/回灌相同）': 'Load a project first (same as Live/Inject)',
+    '请先加载项目，再连接 DoIP': 'Load a project, then connect DoIP',
+    '请先连接 DoIP': 'Connect DoIP first',
+    '需加载项目': 'Need project',
     '文件': 'File',
     '加载项目目录…': 'Load project folder…',
     '备选：直接选 SKU 目录（等价于该目录下的 project.yaml）': "Alt: pick SKU folder (same as that folder's project.yaml)",
@@ -84,6 +103,9 @@ _EN: dict[str, str] = {
     '片段 to ← playhead 并保存': 'Range to ← playhead & save',
     '视图': 'View',
     '⚠ 请先「加载项目…」选择 project.yaml（回灌已禁用；Live 仍可旁观）': '⚠ Load project… (project.yaml) first — Inject disabled; Live still works',
+    '⚠ 请先「加载项目…」选择 project.yaml（回灌 / OTA 已禁用；Live 仍可旁观）': (
+        '⚠ Load project… (project.yaml) first — Inject / OTA disabled; Live still works'
+    ),
     '项目': 'Project',
     'Wall': 'Wall',
     'Height': 'Height',
@@ -263,7 +285,99 @@ _ZH: dict[str, str] = {
     "OTA 进行中": "OTA in progress",
     "运行中…": "Running…",
     "OTA Activate 成功": "OTA Activate OK",
+    "OTA 序列完成（Activate OK）": "OTA sequence done (Activate OK)",
+    "OTA 序列完成（传输/Activate OK）": "OTA sequence done (transfer/Activate OK)",
+    "传输模式": "Transfer mode",
+    "会话时序": "Session timing",
+    "只读：gf-config → diag.yaml → ota_transfer.mode": (
+        "Read-only: gf-config → diag.yaml → ota_transfer.mode"
+    ),
+    "只读：diag.yaml timing；0x3E 周期须小于 S3Server": (
+        "Read-only: diag.yaml timing; 0x3E period must be < S3Server"
+    ),
+    "按 diag.yaml 传输模式发 UDS（过程写在下方日志）": (
+        "Send UDS per diag.yaml transfer mode (steps in the log below)"
+    ),
+    "DoIP / UDS 过程日志（0x10 → 0x27 → 0x38/0x34 → 0x36 → 0x37）": (
+        "DoIP / UDS step log (0x10 → 0x27 → 0x38/0x34 → 0x36 → 0x37)"
+    ),
+    "require ProgrammingSession": "require ProgrammingSession",
+    "require SecurityAccess": "require SecurityAccess",
     "OTA 失败（见板端 Collector ota_failed）": "OTA failed (see board Collector ota_failed)",
+    "空闲": "Idle",
+    "已连接": "Connected",
+    "SIL / 板端 DoIP 地址（本机 127.0.0.1；远端填局域网 IP）": (
+        "SIL / board DoIP host (127.0.0.1 locally; LAN IP remotely)"
+    ),
+    "DoIP TCP 端口（默认 13400，与 diag.yaml / GF_DOIP_PORT 一致）": (
+        "DoIP TCP port (default 13400; match diag.yaml / GF_DOIP_PORT)"
+    ),
+    "连 SIL gf_doip_ota_server（需先 run_sil）": (
+        "Connect to SIL gf_doip_ota_server (start run_sil first)"
+    ),
+    "依次发 0x10 → 0x27 → 0x31（过程写在下方日志）": (
+        "Send 0x10 → 0x27 → 0x31 (steps appear in the log below)"
+    ),
+    "DoIP / UDS 过程日志（0x10 → 0x27 → 0x31）": (
+        "DoIP / UDS step log (0x10 → 0x27 → 0x31)"
+    ),
+    "ISO 14229 UDS（父）": "ISO 14229 UDS (parent)",
+    "ISO 13400 DoIP（依赖 14229）": "ISO 13400 DoIP (requires 14229)",
+    "请先勾选 ISO 14229 UDS": "Enable ISO 14229 UDS first",
+    "仅 14229：无 DoIP 远端路径。请用进程内 UDS smoke，或同时勾选 13400。": (
+        "UDS-only: no DoIP remote path. Use in-process UDS smoke, or also enable 13400."
+    ),
+    "DoIP → UCM（SIL，非真刷写）。ISO 能力只读，来自 gf-config / diag.yaml。": (
+        "DoIP → UCM (SIL, no real flash). ISO flags are read-only from gf-config / diag.yaml."
+    ),
+    "ISO 14229": "ISO 14229",
+    "ISO 13400 DoIP": "ISO 13400 DoIP",
+    "只读：在 gf-config 诊断页配置": "Read-only: configure in gf-config Diagnostics",
+    "Standards": "Standards",
+    "Host:Port": "Host:Port",
+    "连接": "Connect",
+    "断开": "Disconnect",
+    "未连接": "Disconnected",
+    "连接中…": "Connecting…",
+    "连接失败": "Connect failed",
+    "连接丢失": "Connection lost",
+    "已连接 {host}:{port}": "Connected {host}:{port}",
+    "请先连接 DoIP（Host:Port 旁「连接」）": (
+        "Connect DoIP first (Connect next to Host:Port)"
+    ),
+    "项目未启用 ISO 14229（请在 gf-config 诊断页打开）": (
+        "ISO 14229 is off in the project (enable in gf-config Diagnostics)"
+    ),
+    "项目未启用 ISO 13400 DoIP（请在 gf-config 诊断页打开）": (
+        "ISO 13400 DoIP is off in the project (enable in gf-config Diagnostics)"
+    ),
+    "ISO 14229 UDS（父）": "ISO 14229 UDS (parent)",
+    "ISO 13400 DoIP（依赖 14229）": "ISO 13400 DoIP (requires 14229)",
+    "请先勾选 ISO 14229 UDS": "Enable ISO 14229 UDS first",
+    "仅 14229：无 DoIP 远端路径。请用进程内 UDS smoke，或同时勾选 13400。": (
+        "UDS-only: no DoIP remote path. Use in-process UDS smoke, or also enable 13400."
+    ),
+    "ISO 14229 为基础；勾选 ISO 13400 才走 DoIP TCP→UCM（gf_doip_ota_server）。13400 依赖 14229。非真刷写；失败进 Collector。": (
+        "ISO 14229 is the base; enable ISO 13400 for DoIP TCP→UCM (gf_doip_ota_server). "
+        "13400 requires 14229. No real flash; failures → Collector."
+    ),
+    "0x27/0x29 插件": "0x27/0x29 plugin",
+    "空=板端用内置 SIL stub；按 OEM 记本地路径": (
+        "empty = board SIL stub; remember OEM path locally"
+    ),
+    "只保存在 GMT 本地设置，不写 diag.yaml。板端/SIL 启动时可用环境变量 GF_DIAG_SEC_PLUGIN 指向同一路径。": (
+        "Stored in GMT settings only (not diag.yaml). "
+        "Board/SIL can use env GF_DIAG_SEC_PLUGIN for the same path."
+    ),
+    "UCM 包逻辑名（PackageInfo.id），随 Routine 发给板端；与磁盘上的 Artifact 文件路径分开，便于同一文件换不同包名做 SIL。": (
+        "UCM logical package id (PackageInfo.id), sent with the routine; "
+        "separate from the on-disk Artifact path."
+    ),
+    "选择 OTA 产物文件": "Select OTA artifact file",
+    "软件包 (*.swu *.zip *.bin);;所有文件 (*)": "Packages (*.swu *.zip *.bin);;All (*)",
+    "浏览…": "Browse…",
+    "选择 0x27/0x29 安全插件（.so / .dll）": "Select 0x27/0x29 security plugin (.so / .dll)",
+    "动态库 (*.so *.dll);;所有文件 (*)": "Libraries (*.so *.dll);;All (*)",
     "Available": "可选",
     "Added": "已选",
     "Add →": "添加 →",

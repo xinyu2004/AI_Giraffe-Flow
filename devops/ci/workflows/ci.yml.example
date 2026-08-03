@@ -14,7 +14,7 @@
 #     steps:
 #       - uses: actions/checkout@v4
 #       - name: PR / daily gate
-#         run: bash ci/scripts/smoke.sh
+#         run: bash devops/ci/scripts/smoke.sh
 #
 #   fusa-nightly:
 #     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -23,6 +23,8 @@
 #       - uses: actions/checkout@v4
 #       - name: FuSa case matrix
 #         run: GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
+#       - name: T4 production profile (release gate)
+#         run: GF_FUSA_T4=1 bash fusa/scripts/run_cases.sh
 #       - name: SKU FuSa artifacts (afc_with_uss)
 #         run: bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
 #       - uses: actions/upload-artifact@v4

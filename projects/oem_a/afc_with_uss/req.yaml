@@ -10,11 +10,13 @@ capabilities:
 runtime_modules:
 - core
 - com
+- osal
 - log
 - exec
 - phm
 - sm
 - collector
+- ucm
 - diag
 - per
 - tsync
@@ -27,7 +29,6 @@ observability:
   live_tap:
     enabled: true
     mode: wiring_all
-    # mode=wiring_all → ceiling = wiring.dataflows（本列表忽略；GMT 可再过滤）
   record:
     mode: minimal
     services:

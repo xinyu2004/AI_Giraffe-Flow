@@ -83,10 +83,11 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 ## Tab 2 ↔ board modules (afc_with_uss)
 
 | `runtime_modules` | Subpage / YAML | On board |
+| `core` / `com` / `osal` | (greyed, required) | CMake always-on, not trimable |
 |-------------------|----------------|----------|
 | `exec` (+`sm`) | Exec/FG · `exec.yaml` | FG + dependency topo |
 | `exec` | EM launch · `em_launch.yaml` | `gf_em_daemon` OSAL Spawn |
 | `phm` | Health · `phm.yaml` | Alive; `restart` → EM |
 | `collector` / phm / diag | Event collector · `collector.yaml` | ring / cp_dem stub |
-| `diag` / `log` / `ucm` | respective pages | DoIP / log / OTA stub |
+| `diag` / `log` / `ucm` | respective pages | DoIP·UDS / log / OTA orchestrator (SIL; flash still stub) |
 | `per` / `tsync` | (no subpage yet) | checkbox → compile into image (KV / time-sync skeleton) |

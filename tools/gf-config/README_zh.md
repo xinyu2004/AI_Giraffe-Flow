@@ -84,10 +84,11 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 
 | 勾选 `runtime_modules` | 子页 / YAML | 板端体现 |
 |------------------------|-------------|----------|
+| `core` / `com` / `osal` | （灰显必选） | CMake always-on，不可裁剪 |
 | `exec` (+`sm`) | 执行/FG · `exec.yaml` | FG + 依赖拓扑 |
 | `exec` | EM 启动表 · `em_launch.yaml` | `gf_em_daemon` OSAL Spawn |
 | `phm` | 健康 · `phm.yaml` | Alive；`restart`→EM |
 | `sm` | （与 exec 同页 FG） | StateClient / NotifyHealthFault |
 | `collector` / phm / diag | 事件收集 · `collector.yaml` | ring buffer / cp_dem stub |
-| `diag` / `log` / `ucm` | 各子页 | DoIP / 日志 / OTA stub |
+| `diag` / `log` / `ucm` | 各子页 | DoIP·UDS / 日志 / OTA 编排（SIL；真刷写仍 stub） |
 | `per` / `tsync` | （暂无子页） | 仅 `runtime_modules` 勾选 → 编入镜像（KV / 时间同步骨架） |

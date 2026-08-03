@@ -1,14 +1,42 @@
-# ara::diag / gf_ara::diag — DoIP session (SIL); 非完整 UDS 栈
+# gf_ara::diag — ISO 14229 UDS (+ optional ISO 13400 DoIP)
+# Product notes:
+#   - 13400 = transport only; download SID is ota_transfer.mode (default 0x38 for DoIP).
+#   - S3Server + TesterPresent period must stay aligned with OEM testers (period < S3).
+#   - 0x31 RIDs are orchestration/helpers, not the primary flash pipe.
 schema_version: "0.1"
+standards:
+  iso_14229_uds: true   # parent capability
+  iso_13400_doip: true  # requires iso_14229_uds
+security:
+  plugin: ""            # optional; board prefers GF_DIAG_SEC_PLUGIN; GMT remembers path locally
 doip:
-  enabled: true
+  enabled: true         # synced with iso_13400_doip
   logical_address: 0x0E00
+  tester_address: 0x0E80
   tcp_port: 13400
+timing:
+  # ISO 14229 S3Server: non-default session → default if no tester activity
+  s3_server_ms: 5000
+  # Client 0x3E period (GMT / other testers). MUST be < s3_server_ms (recommend ≤ S3/2).
+  tester_present_period_ms: 2000
+  # Informative P2 (server max response); SIL observes overrun, does not rewrite positives
+  p2_server_ms: 50
+  p2_star_server_ms: 5000
+  # After invalid 0x27 key → NRC 0x37 until this delay elapses
+  security_delay_ms: 10000
+ota_transfer:
+  # request_file_transfer = 0x38→0x36→0x37 (DoIP / Ethernet default)
+  # request_download      = 0x34→0x36→0x37 (classic memory download)
+  # routine_sil           = 0x31 F100 shortcut (no byte pipe; SIL only)
+  mode: request_file_transfer
+  require_programming_session: true
+  require_security: true
+  max_block_length: 1024
 dids: []
 rids:
   - id: 0xF100
     name: start_ota
-    note: RoutineControl startRoutine → UCM OtaOrchestrator
+    note: RoutineControl — SIL shortcut / optional activate helper (not primary download)
   - id: 0xF101
     name: ota_progress
     note: requestResults → progress percent

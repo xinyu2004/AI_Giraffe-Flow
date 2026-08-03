@@ -3,7 +3,7 @@
 用途：Safety Case / 架构评审的**可复现测量入口**，不是量产 ECU 合格判据。  
 与 [isolation.md](isolation.md) 的关系：isolation 管「对不对」；本表管「多快」。说明见 [README.md](README.md)。
 
-**预算口径：**「目标」列为 **SIL 主机参考预算**（engineering gate）。超出则查配置/回归；**不得**直接标为板级 ASIL 限值。
+**预算口径：**「目标」列为 **SIL 主机参考预算**（engineering gate）。超出则查配置/回归；**不得**直接标为板级 ASIL 限值。板端 soak / ECU 限值 → **P3z**（假设 A-07）。
 
 ## 测量约定
 

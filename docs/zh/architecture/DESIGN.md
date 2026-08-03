@@ -319,7 +319,7 @@ AI_Giraffe-Flow/
   projects/                # OEM 集成输入（req.yaml 含契约与部署裁剪）
   dep-manifest/                    # 第三方依赖清单与版本锁
   docs/en/  docs/zh/
-  ci/
+  devops/
 ```
 
 仓库内已落地的骨架说明见根目录 [STRUCTURE.md](../../../STRUCTURE.md) 与 [dep-manifest/README.md](../../../dep-manifest/README.md)。

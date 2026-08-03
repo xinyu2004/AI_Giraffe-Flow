@@ -263,7 +263,7 @@ AI_Giraffe-Flow/
   projects/                # OEM inputs + per-SKU req.yaml
   dep-manifest/                    # third-party manifests + version lock
   docs/en/  docs/zh/
-  ci/
+  devops/
 ```
 
 Skeleton already in-tree: [STRUCTURE.md](../../../STRUCTURE.md) · [dep-manifest/README.md](../../../dep-manifest/README.md).

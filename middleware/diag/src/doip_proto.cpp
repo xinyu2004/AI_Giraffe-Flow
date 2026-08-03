@@ -114,4 +114,22 @@ std::vector<std::uint8_t> MakeDiagnosticMessageAck(std::uint16_t source_address,
   return EncodeDoipFrame(f);
 }
 
+std::vector<std::uint8_t> MakeDiagnosticMessageNack(std::uint16_t source_address,
+                                                    std::uint16_t target_address,
+                                                    std::uint8_t nack_code) {
+  DoipFrame f;
+  f.payload_type = DoipPayloadType::kDiagnosticMessageNegativeAck;
+  PutBe16(f.payload, source_address);
+  PutBe16(f.payload, target_address);
+  f.payload.push_back(nack_code);
+  return EncodeDoipFrame(f);
+}
+
+std::vector<std::uint8_t> MakeAliveCheckResponse(std::uint16_t source_address) {
+  DoipFrame f;
+  f.payload_type = DoipPayloadType::kAliveCheckResponse;
+  PutBe16(f.payload, source_address);
+  return EncodeDoipFrame(f);
+}
+
 }  // namespace gf_ara::diag

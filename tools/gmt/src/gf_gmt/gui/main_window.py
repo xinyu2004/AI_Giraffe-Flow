@@ -282,17 +282,19 @@ class GmtMainWindow(QMainWindow):
         self._tabs.addTab(self._tags, t("Tag"))
         self._tabs.addTab(self._inject_panel, t("Inject"))
         self._tabs.addTab(self._ota_panel, t("OTA"))
+        self._tabs.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self._tabs, stretch=1)
 
         status = QStatusBar()
         self._path_label = QLabel(
-            t("请先加载项目 → 填 Host → Live(ws:8766) 或 回灌(tcp:8767) 点「连接」")
+            t("请先加载项目 → 填 Host → Live(ws:8766) / 回灌(tcp:8767) / OTA(DoIP)「连接」")
         )
         status.addWidget(self._path_label, stretch=1)
         self.setStatusBar(status)
 
         self._build_menus()
         self._refresh_project_gate()
+        self._on_tab_changed(self._tabs.currentIndex())
 
     def _build_menus(self) -> None:
         file_menu = self.menuBar().addMenu(t("文件"))
@@ -421,6 +423,7 @@ class GmtMainWindow(QMainWindow):
         view_menu.addAction(t("图形"), lambda: self._tabs.setCurrentWidget(self._var_strip))
         view_menu.addAction(t("Tag"), lambda: self._tabs.setCurrentWidget(self._tags))
         view_menu.addAction(t("Inject"), lambda: self._tabs.setCurrentWidget(self._inject_panel))
+        view_menu.addAction(t("OTA"), lambda: self._tabs.setCurrentWidget(self._ota_panel))
 
         lang_menu = self.menuBar().addMenu(t("语言"))
         act_zh = QAction(t("中文"), self)
@@ -440,7 +443,7 @@ class GmtMainWindow(QMainWindow):
         switch_language_and_restart(lang)
 
     def _refresh_project_gate(self) -> None:
-        """未加载项目：醒目提示；回灌连接由 _refresh_conn_bar_ui 按项目态禁用。"""
+        """未加载项目：醒目提示；回灌 / OTA 连接由项目态禁用。"""
         has = self._project_dir is not None and self._sor is not None
         self._proj_banner.setVisible(not has)
         if has:
@@ -448,11 +451,62 @@ class GmtMainWindow(QMainWindow):
             self._btn_proj.setStyleSheet("font-weight:700;")
         else:
             self._proj_banner.setText(
-                t("⚠ 请先「加载项目…」选择 project.yaml（回灌已禁用；Live 仍可旁观）")
+                t("⚠ 请先「加载项目…」选择 project.yaml（回灌 / OTA 已禁用；Live 仍可旁观）")
             )
             self._btn_proj.setText(t("加载项目…"))
             self._btn_proj.setStyleSheet("")
+        # OTA only needs project dir (diag.yaml); keep in sync even if SOR missing
+        self._ota_panel.set_project_dir(self._project_dir if has else None)
         self._refresh_conn_bar_ui()
+        self._refresh_status_for_tab()
+
+    def _on_tab_changed(self, _index: int) -> None:
+        self._refresh_status_for_tab()
+
+    def _refresh_status_for_tab(self) -> None:
+        """Status bar hint depends on active tab (OTA ≠ Live/回灌)."""
+        w = self._tabs.currentWidget()
+        proj = self._project_dir.name if self._project_dir else None
+        if w is self._ota_panel:
+            if proj and self._sor is not None:
+                self._path_label.setText(
+                    t("项目={name} · OTA：DoIP Host:Port →「连接」→ Start OTA").format(
+                        name=proj
+                    )
+                )
+            else:
+                self._path_label.setText(
+                    t("OTA：请先加载项目，再填 DoIP Host:Port「连接」")
+                )
+            return
+        # Restore observability status when leaving OTA
+        if self._session_path is not None:
+            n = len(self._model.events)
+            prefix = f"{proj} · " if proj else ""
+            self._path_label.setText(f"{prefix}{self._session_path} · {n} events")
+            return
+        if self._live_active:
+            n = len(self._model.events)
+            prefix = f"{proj} · " if proj else ""
+            self._path_label.setText(
+                f"{prefix}Live 旁观（未录制） · {n} events"
+                if not self._btn_live_rec.isChecked()
+                else f"{prefix}Live 录制中 · {n} events"
+            )
+            return
+        if proj and self._sor is not None:
+            if w is self._inject_panel:
+                self._path_label.setText(
+                    t("项目={name} · 回灌：Host + tcp 端口 →「连接」").format(name=proj)
+                )
+            else:
+                self._path_label.setText(
+                    t("项目={name} · Live ws / 回灌 tcp →「连接」").format(name=proj)
+                )
+            return
+        self._path_label.setText(
+            t("请先加载项目 → 填 Host → Live(ws:8766) / 回灌(tcp:8767) / OTA(DoIP)「连接」")
+        )
 
     def _default_live_session(self) -> Path:
         return self._default_obs_dir() / "session_live.jsonl"
@@ -1375,9 +1429,6 @@ class GmtMainWindow(QMainWindow):
             self._var_strip.set_model(self._model)
             self._seek_index(self._slider.value())
         self._refresh_project_gate()
-        self._path_label.setText(
-            f"项目={proj_dir.name} · project.yaml · SOR={sor.name} — 填 host:port 后「连接」"
-        )
         # offer latest session if present (skip when CLI already passes --session)
         cand = Path.cwd() / "build" / "observability" / "session.jsonl"
         if (

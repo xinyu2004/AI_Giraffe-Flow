@@ -4,6 +4,7 @@
 #include "gf_ara/phm/supervised_entity.hpp"
 
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 
 namespace {
@@ -31,6 +32,11 @@ int main() {
   ok.id = "pkg.ok";
   ok.version = "1";
   ok.artifact_path = "/tmp/ok.swu";
+  {
+    std::ofstream f(ok.artifact_path, std::ios::binary | std::ios::trunc);
+    f.write("GFSW", 4);
+    f.write("\x01\x00sil-ok", 8);
+  }
 
   if (!gf_ara::ucm::OtaOrchestrator::RunPackage(ok)) {
     return Fail("UCM-OTA-01", "RunPackage success");

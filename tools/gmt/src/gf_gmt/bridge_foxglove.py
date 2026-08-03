@@ -571,12 +571,8 @@ def live_stdin_ws(
     def _publish_row(topic: str, t_ns: int, data: Any) -> None:
         nonlocal published, dropped, conn, state
         if conn is None or state is None:
+            # Drain quietly so tap never blocks; Studio may connect anytime.
             dropped += 1
-            if dropped == 1 or dropped % 200 == 0:
-                _status(
-                    "listen",
-                    f"no client — drained {dropped} msgs (connect anytime)",
-                )
             return
         try:
             n = state.publish(conn, topic, t_ns, data)

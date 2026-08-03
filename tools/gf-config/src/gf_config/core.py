@@ -111,6 +111,24 @@ class ProjectSession:
         if self.dirty_platform:
             self.save_platform()
 
+    def wiring_service_names(self) -> list[str]:
+        """Canonical service names from deployments + dataflows (SKU pickers)."""
+        out: set[str] = set()
+        for d in self.deployments():
+            if not isinstance(d, dict):
+                continue
+            for s in list(d.get("provides") or []) + list(d.get("requires") or []):
+                name = str(s).strip()
+                if name:
+                    out.add(canon_service(name))
+        for f in self.dataflows():
+            if not isinstance(f, dict):
+                continue
+            name = str(f.get("service") or "").strip()
+            if name:
+                out.add(canon_service(name))
+        return sorted(out)
+
     def wiring_process_names(self, *, include_external: bool = False) -> list[str]:
         """Process names from wiring.deployments for platform dropdowns."""
         names: list[str] = []
@@ -246,25 +264,36 @@ class ProjectSession:
         if changed:
             self.dirty_wiring = True
 
-    def set_ports(self, process: str, provides: list[str], requires: list[str]) -> None:
+    def set_ports(
+        self,
+        process: str,
+        provides: list[str],
+        requires: list[str],
+        *,
+        prune_flows: bool = True,
+    ) -> None:
         self.upsert_deployment(
             process,
             provides=[canon_service(x) for x in provides],
             requires=[canon_service(x) for x in requires],
         )
-        # drop dataflows that no longer match ports
-        provides_set = {short_service(canon_service(x)) for x in provides}
-        requires_by = {process: {short_service(canon_service(x)) for x in requires}}
-        # also keep map for other processes unchanged — only filter flows involving this process
-        new_flows: list[dict[str, Any]] = []
-        for f in self.dataflows():
-            frm, to, svc = str(f.get("from") or ""), str(f.get("to") or ""), short_service(str(f.get("service") or ""))
-            if frm == process and svc not in provides_set:
-                continue
-            if to == process and svc not in requires_by[process]:
-                continue
-            new_flows.append(f)
-        self.wiring["dataflows"] = new_flows
+        if prune_flows:
+            # drop dataflows that no longer match ports
+            provides_set = {short_service(canon_service(x)) for x in provides}
+            requires_by = {
+                process: {short_service(canon_service(x)) for x in requires}
+            }
+            new_flows: list[dict[str, Any]] = []
+            for f in self.dataflows():
+                frm = str(f.get("from") or "")
+                to = str(f.get("to") or "")
+                svc = short_service(str(f.get("service") or ""))
+                if frm == process and svc not in provides_set:
+                    continue
+                if to == process and svc not in requires_by[process]:
+                    continue
+                new_flows.append(f)
+            self.wiring["dataflows"] = new_flows
         self.dirty_wiring = True
 
     def add_dataflow(self, frm: str, service: str, to: str) -> bool:

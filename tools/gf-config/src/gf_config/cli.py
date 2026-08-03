@@ -30,18 +30,26 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    from gf_config.gui.main_window import MainWindow
-    from gf_config.i18n import load_language, t
-
+    # QApplication before any GUI import (QCursor/QPixmap need a QGuiApplication).
     app = QApplication(sys.argv)
     app.setApplicationName("gf-config")
     app.setOrganizationName("GiraffeFlow")
+
+    from gf_config.gui.main_window import MainWindow
+    from gf_config.i18n import load_language, t, take_pending_reopen_project
+
     load_language()
 
     win = MainWindow()
-    if args.project:
+    reopen = take_pending_reopen_project()
+    project = args.project.resolve() if args.project else None
+    if project is None and reopen:
+        cand = Path(reopen)
+        if cand.is_file():
+            project = cand.resolve()
+    if project is not None:
         try:
-            win.open_project(args.project.resolve())
+            win.open_project(project)
         except Exception as exc:  # noqa: BLE001 — show in UI
             from PySide6.QtWidgets import QMessageBox
 

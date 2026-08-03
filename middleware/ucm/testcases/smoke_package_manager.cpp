@@ -1,6 +1,7 @@
 #include "gf_ara/ucm/package_manager.hpp"
 
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 
 namespace {
@@ -35,6 +36,11 @@ int main() {
   info.id = "pkg.demo";
   info.version = "1.0.0";
   info.artifact_path = "/tmp/gf_demo.swu";
+  {
+    std::ofstream f(info.artifact_path, std::ios::binary | std::ios::trunc);
+    f.write("GFSW", 4);
+    f.write("\x01\x00demo", 7);
+  }
 
   if (!PackageManager::StartTransfer(info) ||
       PackageManager::GetState() != PackageState::kTransferring) {

@@ -10,7 +10,7 @@
 |----|------|------|
 | **A** 主机工具 | ✅ | compose / lint / suggest / types+Proxy/Skeleton generate |
 | **B** 运行时 | ✅ | bootstrap、core/com、iceoryx 双进程、generate 接入 demo、OSAL |
-| **C** 构建/CI | ✅ | CMake、ctest、`ci/scripts/smoke.sh`、可选 aarch64 link（无交叉工具链则 SKIP） |
+| **C** 构建/CI | ✅ | CMake、ctest、`devops/ci/scripts/smoke.sh`、可选 aarch64 link（无交叉工具链则 SKIP） |
 | **末刀** | ✅ | `adc_full` compose + lineage + lint + generate（测试已覆盖） |
 
 联调入口：
@@ -20,7 +20,7 @@ pip install -e "tools/gf-codegen[dev]"
 bash scripts/bootstrap_deps.sh
 bash scripts/verify/oem_a_afc_with_uss/smoke_sil.sh   # SIL 双进程
 gf-codegen compose --project projects/oem_b/adc_full/project.yaml
-bash ci/scripts/smoke.sh                               # 全量冒烟（含 adc compose）
+bash devops/ci/scripts/smoke.sh                        # 全量冒烟（含 adc compose）
 ```
 
 详细规格：[tools/gf-codegen/IMPLEMENTATION.md](../../../tools/gf-codegen/IMPLEMENTATION.md) · 上传清单：[UPLOAD_CHECKLIST.md](../../../projects/UPLOAD_CHECKLIST.md)
@@ -147,7 +147,7 @@ flowchart TD
 |----|------|------|
 | C1 | 根 CMake + desktop | ✅ |
 | C2 | OSAL POSIX | ✅ |
-| C3 | CI smoke：pytest + compose(afc+adc) + ctest + SIL | ✅ `ci/scripts/smoke.sh` |
+| C3 | CI smoke：pytest + compose(afc+adc) + ctest + SIL | ✅ `devops/ci/scripts/smoke.sh` |
 | C4 | aarch64 交叉 link | ✅ 脚本就绪；无工具链则 SKIP |
 
 HIL：`compile_hil.sh` 需 `aarch64-linux-gnu-g++`；`run_hil` / `deploy_hil` 仍为 P0 stub。
@@ -175,7 +175,7 @@ HIL：`compile_hil.sh` 需 `aarch64-linux-gnu-g++`；`run_hil` / `deploy_hil` �
 
 ## 7. 你现在可以做什么
 
-1. 本地跑 `bash ci/scripts/smoke.sh` 或分步验证（见文首命令）  
+1. 本地跑 `bash devops/ci/scripts/smoke.sh` 或分步验证（见文首命令）  
 2. 审 `adc_full` / `afc_with_uss` 的 wiring 与 lineage 报告  
 3. 进入 **P1** 前先选主线：通信 binding / GMT CLI / MCU 桌面联调  
 

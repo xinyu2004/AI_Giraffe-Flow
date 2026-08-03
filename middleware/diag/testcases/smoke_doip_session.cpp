@@ -1,10 +1,12 @@
 #include "gf_ara/diag/doip_session.hpp"
+#include "gf_ara/diag/uds_dispatcher.hpp"
 #include "gf_ara/ucm/ota_orchestrator.hpp"
 #include "gf_ara/collector/event_collector.hpp"
 #include "gf_ara/sm/state_client.hpp"
 
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -21,7 +23,7 @@ void Pass(const char* id, const char* detail) {
   std::cout << "CASE " << id << " PASS " << detail << '\n';
 }
 
-std::vector<std::uint8_t> HandleRoutine(const std::vector<std::uint8_t>& uds) {
+std::vector<std::uint8_t> OtaRoutine(const std::vector<std::uint8_t>& uds) {
   if (uds.size() >= 4 && uds[0] == 0x31 && uds[1] == 0x01 && uds[2] == 0xF1 &&
       uds[3] == 0x00) {
     std::string spec(uds.begin() + 4, uds.end());
@@ -53,13 +55,19 @@ int main() {
 
   gf_ara::ucm::OtaOrchestrator::Configure(gf_ara::ucm::OtaConfig{});
 
+  gf_ara::diag::UdsConfig ucfg;
+  ucfg.iso_14229_uds = true;
+  ucfg.iso_13400_doip = true;
+  gf_ara::diag::UdsDispatcher::Instance().Configure(ucfg);
+  gf_ara::diag::UdsDispatcher::Instance().SetRoutineHook(OtaRoutine);
+
   gf_ara::diag::DoipTcpServer server;
   server.SetUdsHandler([](const std::vector<std::uint8_t>& uds) {
-    return gf_ara::diag::DefaultUdsDispatch(uds, HandleRoutine);
+    return gf_ara::diag::UdsDispatcher::Instance().Handle(uds);
   });
 
   gf_ara::diag::DoipSessionConfig scfg;
-  scfg.listen_port = 0;  // ephemeral
+  scfg.listen_port = 0;
   auto port = server.Start(scfg);
   if (!port) {
     return Fail("DOIP-S01", "server Start");
@@ -83,8 +91,12 @@ int main() {
   }
   Pass("DOIP-S03", "TesterPresent over TCP");
 
-  // Happy path OTA via RoutineControl
   std::string payload = "pkg.demo|/tmp/gf_ok.swu";
+  {
+    std::ofstream f("/tmp/gf_ok.swu", std::ios::binary | std::ios::trunc);
+    f.write("GFSW", 4);
+    f.write("\x01\x00ok", 5);
+  }
   std::vector<std::uint8_t> uds = {0x31, 0x01, 0xF1, 0x00};
   uds.insert(uds.end(), payload.begin(), payload.end());
   auto ota = client.Transceive(uds);
@@ -97,7 +109,6 @@ int main() {
   }
   Pass("DOIP-S04", "OTA success + SM Running");
 
-  // Failure path → Collector
   gf_ara::collector::EventCollector::Instance().Clear();
   setenv("GF_UCM_FORCE_FAIL", "1", 1);
   std::string bad = "pkg.bad|/tmp/FORCE_FAIL.swu";

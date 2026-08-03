@@ -1,7 +1,7 @@
 # Safety Case 工作产品
 
 **目标：** 完整 ISO 26262 Safety Case。  
-**现状：** SG-01…04 已建立 **SG → SR → 设计 → L1/L3 / isolation / latency** 追溯；SG-05（production profile）与 ASIL/HARA 仍开。  
+**现状：** SG-01…05 已挂追溯与验证入口；T4 为**发版必跑**门禁。ASIL/HARA 仍 TBD。板端 soak 等见 assumptions A-07 → P3z。  
 **不声称**证书或 ASIL 已认证；不把 GMT/stub 当板级 ASIL 证据。
 
 | 文档 | ISO 26262 相关 | 状态 |
@@ -29,10 +29,10 @@ Item definition + Assumptions
    runs/ · packs/（本机；默认不进仓）
 ```
 
-## 优先缺口（下一轮）
+## 优先缺口（下一轮 / P3z）
 
-1. SIL-T4 全量纳入默认 CI（目前 `GF_FUSA_T4=1` 可选，因另编 `build-prod`）  
-2. Collector 掉电持久化 / Classic DEM（若项内需要）  
-3. 板端 soak 复测 latency 预算（主机 SIL ≠ ECU）  
+1. 云 CI 默认跑 T4（样例已写 `devops/ci/workflows/ci.yml.example`；本地发版必跑）  
+2. Collector 掉电持久化 / Classic DEM（若项内需要）→ P3z  
+3. 板端 soak 复测 latency（主机 SIL ≠ ECU）→ P3z  
 
 政策边界见 [../POLICY.md](../POLICY.md)。证据层入口 [../cases/README.md](../cases/README.md)。

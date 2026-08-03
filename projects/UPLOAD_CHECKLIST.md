@@ -25,7 +25,7 @@
 | `tools/gf-codegen/`、`tools/bridge/` | gf-codegen；可选 ROS2 桥（主机侧） |
 | `projects/` | 集成输入 + 项目脚本；契约在 `req.yaml`；`adc_full` / `afc_with_uss` 均可 compose |
 | `apps/` | 参考 App 源码 |
-| `schemas/`、`cmake/`、`scripts/`、`dep-manifest/`、`docs/`、`ci/` | 契约、构建、文档 |
+| `schemas/`、`cmake/`、`scripts/`、`dep-manifest/`、`docs/`、`devops/` | 契约、构建、文档 |
 | 根 `README*`、`STRUCTURE.md`、`.gitignore` | |
 
 ## 他人拿到后怎么跑
