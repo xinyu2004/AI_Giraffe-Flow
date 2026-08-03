@@ -1,86 +1,82 @@
-"""gf-config cursors — 系统小手 + 配套黑色四向（Ctrl）。
+"""gf-config canvas cursors — frozen UX (do not reinvent).
 
-热点与系统 SizeAll 一样在正中，只换图形、不挪落点。
+| Scene              | Cursor                                      |
+|--------------------|---------------------------------------------|
+| Wire / hover port  | System PointingHand                         |
+| Ctrl+drag port     | Custom black 4-way; hotspot at cross center |
+| Illegal wire drop  | Keep hand; wiring_graph shows red line + ✕  |
+                     | (ForbiddenCursor becomes a white dot on     |
+                     |  some compositors — do not use it.)         |
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import (
-    QColor,
-    QCursor,
-    QPainter,
-    QPen,
-    QPixmap,
-    QPolygonF,
-)
+from PySide6.QtGui import QColor, QCursor, QPainter, QPen, QPixmap, QPolygonF
 
 _move: QCursor | None = None
-# 略大于系统小手，仍保持热点居中
-_SIZE = 28
+_SIZE = 28  # slightly larger than system SizeAll; hotspot stays centered
 
 
 def wire_link_cursor() -> QCursor:
-    """连线：系统黑色小手。"""
+    """Wire link / port hover: system pointing hand."""
     return QCursor(Qt.CursorShape.PointingHandCursor)
 
 
 def port_move_cursor() -> QCursor:
-    """Ctrl 调序：黑色四向；热点在十字中心（与系统 SizeAll 同落点）。"""
+    """Ctrl relocate/reorder: black 4-way; hotspot = cross center (like SizeAll)."""
     global _move
     if _move is not None:
         return _move
-    # 不用 devicePixelRatio：HiDPI 下热点容易偏；固定逻辑像素更稳
+    # Fixed logical pixels (no DPR): hotspot stays stable on HiDPI.
     s = _SIZE
     pm = QPixmap(s, s)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    cx = cy = s / 2.0  # 热点 = 十字中心
-    arm = 7.0
-    ah = 3.2
-    al = 4.5
-
-    def draw_cross(color: QColor, width: float) -> None:
-        pen = QPen(color, width)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        p.setPen(pen)
-        p.setBrush(color)
-        p.drawLine(QPointF(cx, cy - arm), QPointF(cx, cy + arm))
-        p.drawLine(QPointF(cx - arm, cy), QPointF(cx + arm, cy))
-        for tx, ty, ux, uy in (
-            (cx, cy - arm, 0, -1),
-            (cx, cy + arm, 0, 1),
-            (cx - arm, cy, -1, 0),
-            (cx + arm, cy, 1, 0),
-        ):
-            tip = QPointF(tx + ux * al * 0.35, ty + uy * al * 0.35)
-            base = QPointF(tx - ux * al * 0.15, ty - uy * al * 0.15)
-            px_, py_ = -uy, ux
-            p.drawPolygon(
-                QPolygonF(
-                    [
-                        tip,
-                        QPointF(base.x() + px_ * ah, base.y() + py_ * ah),
-                        QPointF(base.x() - px_ * ah, base.y() - py_ * ah),
-                    ]
-                )
-            )
-
-    draw_cross(QColor("#ffffff"), 3.2)
-    draw_cross(QColor("#111111"), 1.8)
+    _paint_four_way(p, s / 2.0, arm=7.0, tip_len=4.5, tip_w=3.2)
     p.end()
     hot = s // 2
     _move = QCursor(pm, hot, hot)
     return _move
 
 
-def wire_forbidden_cursor() -> QCursor:
-    """非法连线不换光标（画布红线 + ✕）。"""
-    return wire_link_cursor()
+def _paint_four_way(
+    p: QPainter,
+    c: float,
+    *,
+    arm: float,
+    tip_len: float,
+    tip_w: float,
+) -> None:
+    """White halo then black core so the cross stays visible on light/dark chrome."""
 
+    def stroke(color: QColor, width: float) -> None:
+        pen = QPen(color, width)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(color)
+        p.drawLine(QPointF(c, c - arm), QPointF(c, c + arm))
+        p.drawLine(QPointF(c - arm, c), QPointF(c + arm, c))
+        for tx, ty, ux, uy in (
+            (c, c - arm, 0.0, -1.0),
+            (c, c + arm, 0.0, 1.0),
+            (c - arm, c, -1.0, 0.0),
+            (c + arm, c, 1.0, 0.0),
+        ):
+            tip = QPointF(tx + ux * tip_len * 0.35, ty + uy * tip_len * 0.35)
+            base = QPointF(tx - ux * tip_len * 0.15, ty - uy * tip_len * 0.15)
+            px_, py_ = -uy, ux
+            p.drawPolygon(
+                QPolygonF(
+                    [
+                        tip,
+                        QPointF(base.x() + px_ * tip_w, base.y() + py_ * tip_w),
+                        QPointF(base.x() - px_ * tip_w, base.y() - py_ * tip_w),
+                    ]
+                )
+            )
 
-def clear_cursor_cache() -> None:
-    global _move
-    _move = None
+    stroke(QColor("#ffffff"), 3.2)
+    stroke(QColor("#111111"), 1.8)

@@ -1,11 +1,13 @@
 # gf-codegen plugins
 
-| Plugin | Legacy dir | Role |
-|--------|------------|------|
-| import/ | tools/importer | OEM ARXML/DBC/YAML → gf.sor.json |
-| lint/ | tools/lint | SOR validation gate before generate |
-| generate/ | tools/gf-codegen | SOR → gf_ara Proxy/Skeleton, manifests, bindings |
+文档槽位（实现在 `src/gf_codegen/`，非独立可装包）：
+
+| 能力 | CLI | Role |
+|------|-----|------|
+| import | `gf-codegen import` | OEM ARXML/FIDL/hpp → 进 compose |
+| lint | `gf-codegen lint` | SOR validation gate before generate |
+| generate | `gf-codegen generate` | SOR → Proxy/Skeleton、manifests、bindings |
 
 Single binary: `gf-codegen`.
 
-Parent: [codegen/README.md](../README.md)
+Parent: [../README.md](../README.md)

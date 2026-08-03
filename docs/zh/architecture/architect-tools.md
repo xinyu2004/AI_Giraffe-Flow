@@ -36,5 +36,3 @@ Tag 持久化：`session.tags.json`（可改名/改窗/topics/备注）。
 - **拓扑 B1/B2**：`run_sil` 决定起哪些进程  
 - **灌法 continuous / playhead**：playhead 时 inject 等 GMT seek（tcp:8767）  
 - **旁观**：回灌时可同时连 Live（ws:8766）；默认只订下游；「跟 playhead」时 GUI 关 Live 跟随  
-
-旧路径：[tools/architect/README.md](../../../tools/architect/README.md)。

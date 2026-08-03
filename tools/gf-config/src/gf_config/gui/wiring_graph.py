@@ -180,9 +180,9 @@ class PortItem(QGraphicsEllipseItem):
 
     def _hover_cursor_for(self) -> QCursor:
         g = self.card.graph if self.card is not None else None
-        # 连线拖拽中：由 graph 决定合法/禁止，避免 hover 把禁止符盖回小手
+        # During wire drag, override cursor owns the look; keep hand here.
         if g is not None and g._wire_src is not None:
-            return g.wire_cursor_for_port(self)
+            return wire_link_cursor()
         mods = QApplication.queryKeyboardModifiers()
         if mods & Qt.KeyboardModifier.ControlModifier:
             return port_move_cursor()
@@ -1891,6 +1891,8 @@ class WiringGraphView(QWidget):
             self.changed.emit()
         self._refresh_scene_rect()
         self._drag_undo_armed = False
+        # Drop ScrollHandDrag "closed hand" residual after item drag.
+        self._view.viewport().unsetCursor()
 
     def remember_card_pos(self, card: ProcessCard) -> None:
         """兼容旧调用：等价于松开时落盘。"""
@@ -2078,12 +2080,8 @@ class WiringGraphView(QWidget):
                 return
             cur = cur.parentItem()
 
-    def wire_cursor_for_port(self, port: PortItem) -> QCursor:
-        """During wire drag: always hand — illegal state uses red line + ✕ mark."""
-        return wire_link_cursor()
-
     def _set_wire_forbid_mark(self, scene_pos: QPointF | None) -> None:
-        """Show a large red ✕ near the cursor when drop target is illegal."""
+        """Illegal drop: red ✕ near tip (keep hand cursor — no ForbiddenCursor)."""
         mark = self._wire_forbid_mark
         if scene_pos is None:
             if mark is not None and _qt_alive(mark):
@@ -2139,8 +2137,8 @@ class WiringGraphView(QWidget):
         self.cancel_wire()
         self._wire_src = src_port
         self._view.setDragMode(QGraphicsView.DragMode.NoDrag)
+        # Override beats PortItem hover cursors for the whole drag.
         self._push_app_cursor(wire_link_cursor())
-        self._view.viewport().setCursor(wire_link_cursor())
         line = QGraphicsLineItem()
         line.setPen(QPen(QColor("#f7dc6f"), 2.0, Qt.PenStyle.DashLine))
         line.setZValue(100)
@@ -2149,11 +2147,6 @@ class WiringGraphView(QWidget):
         line.setLine(c.x(), c.y(), c.x(), c.y())
         self._scene.addItem(line)
         self._wire_line = line
-        # 预标各端口光标，进入非法端口立刻显示禁止符
-        for card in self._nodes.values():
-            for p in card._out_ports + card._in_ports:
-                if _qt_alive(p):
-                    p.setCursor(self.wire_cursor_for_port(p))
 
     def update_wire_preview(self, scene_pos: QPointF) -> None:
         if self._wire_src is None or self._wire_line is None:
@@ -2170,9 +2163,7 @@ class WiringGraphView(QWidget):
                 and target.direction != src.direction
                 and target.card is not src.card
             )
-        # 合法 → 小手；非法 → 仍用小手（自定义禁止光标在部分合成器上会变成小白点）
-        # 非法态靠红线 + 画布 ✕ 提示
-        cur = wire_link_cursor()
+        # Legal → green; illegal → red dash + ✕; searching → yellow dash. Cursor stays hand.
         if ok is True:
             pen = QPen(QColor("#2ecc71"), 2.5, Qt.PenStyle.SolidLine)
         elif ok is False:
@@ -2180,11 +2171,7 @@ class WiringGraphView(QWidget):
         else:
             pen = QPen(QColor("#f7dc6f"), 2.0, Qt.PenStyle.DashLine)
         self._wire_line.setPen(pen)
-        self._change_app_cursor(cur)
-        self._view.viewport().setCursor(cur)
         self._set_wire_forbid_mark(scene_pos if ok is False else None)
-        if target is not None and _qt_alive(target):
-            target.setCursor(cur)
 
     def finish_wire(self, scene_pos: QPointF) -> None:
         src = self._wire_src
@@ -2239,8 +2226,6 @@ class WiringGraphView(QWidget):
             self._wire_line = None
         self._clear_wire_forbid_mark()
         self._pop_app_cursor()
-        self._view.viewport().unsetCursor()
-        # 恢复端口默认光标
         for card in self._nodes.values():
             for p in card._out_ports + card._in_ports:
                 if _qt_alive(p):
@@ -2252,12 +2237,6 @@ class WiringGraphView(QWidget):
         self._pop_app_cursor()
         QApplication.setOverrideCursor(cursor)
         self._app_cursor_pushed = True
-
-    def _change_app_cursor(self, cursor: QCursor) -> None:
-        if self._app_cursor_pushed:
-            QApplication.changeOverrideCursor(cursor)
-        else:
-            self._push_app_cursor(cursor)
 
     def _pop_app_cursor(self) -> None:
         if self._app_cursor_pushed:
@@ -2286,6 +2265,10 @@ class WiringGraphView(QWidget):
         )
         port.card.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
         self._view.setDragMode(QGraphicsView.DragMode.NoDrag)
+        # Snapshot once at gesture start (finish must stay cheap for cursor restore).
+        if not self._drag_undo_armed:
+            self._push_undo()
+            self._drag_undo_armed = True
         self._push_app_cursor(port_move_cursor())
 
     def _services_list(self, card: ProcessCard, direction: str) -> list[str]:
@@ -2422,51 +2405,59 @@ class WiringGraphView(QWidget):
         origin = port._origin_side
         origin_idx = port._origin_index
         card = port.card
-        # Clear drag state first so UI 不卡在 reloc 模式
+        # Clear reloc mode first so mouse/view stop treating this as a drag.
         self._reloc_port = None
-        self._pop_app_cursor()
-        self._view.viewport().unsetCursor()
-        self._view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         if self._reloc_card_was_movable and _qt_alive(card):
             card.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-        if not _qt_alive(port) or not _qt_alive(card):
-            return
-        side_changed = bool(pending and pending != origin)
-        order_changed = (
-            pending_idx is not None and int(pending_idx) != int(origin_idx)
-        )
-        if pending and (side_changed or order_changed):
-            # 先按预览落盘（与提供/需求列表顺序一致），再轻量重建端口
-            self.apply_port_side_and_order(
-                port, pending, int(pending_idx or 0), card=card
+        # Keep override until persist/rebuild finishes — otherwise PortItem's
+        # Ctrl move cursor flashes during deepcopy and feels "stuck".
+        try:
+            if not _qt_alive(port) or not _qt_alive(card):
+                return
+            side_changed = bool(pending and pending != origin)
+            order_changed = (
+                pending_idx is not None and int(pending_idx) != int(origin_idx)
             )
-        else:
-            # 无变化：按 canonical 布局收回，避免半预览残留
-            port._pending_side = None
-            port._pending_index = None
-            card._rebuild_ports()
-            for e in list(card._edges):
-                if hasattr(e, "update_path"):
-                    e.update_path()
+            if pending and (side_changed or order_changed):
+                self.apply_port_side_and_order(
+                    port, pending, int(pending_idx or 0), card=card
+                )
+            else:
+                port._pending_side = None
+                port._pending_index = None
+                card._rebuild_ports()
+                for e in list(card._edges):
+                    if hasattr(e, "update_path"):
+                        e.update_path()
+        finally:
+            self._pop_app_cursor()
+            self._view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+            self._drag_undo_armed = False
+            self.refresh_port_hover_cursor()
 
     def cancel_port_relocate(self) -> None:
         port = self._reloc_port
         self._reloc_port = None
         card = port.card if port is not None and _qt_alive(port) else None
-        if port is not None and _qt_alive(port):
-            port._pending_side = None
-            port._pending_index = None
-            if self._reloc_card_was_movable and card is not None and _qt_alive(card):
-                card.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-            if card is not None and _qt_alive(card):
-                card._rebuild_ports()
-                for e in list(card._edges):
-                    if hasattr(e, "update_path"):
-                        e.update_path()
-        self._view.viewport().unsetCursor()
-        self._pop_app_cursor()
-        if self._wire_src is None:
-            self._view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        try:
+            if port is not None and _qt_alive(port):
+                port._pending_side = None
+                port._pending_index = None
+                if self._reloc_card_was_movable and card is not None and _qt_alive(card):
+                    card.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+                if card is not None and _qt_alive(card):
+                    card._rebuild_ports()
+                    for e in list(card._edges):
+                        if hasattr(e, "update_path"):
+                            e.update_path()
+        finally:
+            self._pop_app_cursor()
+            if self._wire_src is None:
+                self._view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+            # Cancelled gesture: drop the armed undo snapshot usability by
+            # keeping stack as-is (snapshot == current). Clear armed flag.
+            self._drag_undo_armed = False
+            self.refresh_port_hover_cursor()
 
     def apply_port_side_and_order(
         self,
@@ -2485,7 +2476,6 @@ class WiringGraphView(QWidget):
         # Capture identity before any rebuild destroys PortItem
         direction = port.direction
         moved_svc = port.service
-        self._push_undo()
         key = short_service(moved_svc)
         side_n = _norm_side(new_side, "right" if direction == "out" else "left")
         dir_key = ProcessCard.port_side_key(direction, moved_svc)
@@ -2521,6 +2511,7 @@ class WiringGraphView(QWidget):
         for e in list(card._edges):
             if hasattr(e, "update_path"):
                 e.update_path()
+        self._drag_undo_armed = False
         self.changed.emit()
 
     # --- context menus / edit ---
