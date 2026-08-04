@@ -46,15 +46,23 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | 页签 | 作用 |
 |------|------|
 | **1 · 信号与应用**（默认） | **左侧薄 SKU 默认展开**；中央画布；**右侧连线/Lineage 默认收起**（点 ◀ 展开） |
-| **2 · 平台运行时** | 顶部 `runtime_modules`（含可裁剪 **per / tsync**）；子页：执行/FG · **EM 启动表** · PHM · 诊断 · 日志 · OTA · **事件收集** |
+| **2 · 平台运行时** | 顶部 `runtime_modules`（含可裁剪 **per / tsync**）；子页：执行/FG · **EM 启动表** · PHM · 诊断 · **日志** · OTA · **事件收集** |
 
-快捷键：Ctrl+1 / Ctrl+2 切页。Verify / Generate 后自动回页 1 右侧 Lineage。
+快捷键：Ctrl+1 / Ctrl+2 切页。Verify / Generate 后自动回页 1 右侧 Lineage。  
+**编辑菜单：** 撤销 / 重做（Ctrl+Z / Ctrl+Y）— 跳到变更所在页（含平台子页），底栏提示中英 i18n。
 
 **文件菜单：** 打开 · 保存（Ctrl+S）· 保存并 Verify · Verify（Ctrl+R）· Generate（Ctrl+G）· 导入 hpp/fidl  
 
 **视图菜单：** 适应窗口（Ctrl+0）· 默认大小（Ctrl+H）· 重载（F5）· 右侧连线/Lineage（Ctrl+L）· 删边（Delete）
 
 日常：页 1 画线 / 薄 SKU → 页 2 勾模块填表 → **保存** → **Verify** → 需要编 APP 时再 **Generate**。
+
+### 页 2 · 日志（`log.yaml`）
+
+- **默认级别** + **按模块覆盖**表（`contexts[]`：模块 / 级别）。
+- 新增行：模块默认可空；级别默认 `INFO`（枚举着色保留）。
+- **选中：** 点左侧行号；行号与「模块」同色浅蓝，**级别颜色不变**。
+- Verify：同一 `context id` 重复则失败（勿在 `log.yaml` 写两条同名模块）。
 
 ## 页 1 画布日常四步
 
@@ -78,6 +86,8 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 - [x] 页 1 薄 SKU + 页 2 runtime_modules / platform 可写回  
 - [x] 页 2「EM 启动表」读写 `platform/em_launch.yaml`（勾选 `exec` 后出现）  
 - [x] Verify 后右侧 Lineage 红绿显示检查项（含 `platform_em_launch`）  
+- [x] 日志表：行号选中 + 重复 context id Verify 失败  
+- [x] 撤销/重做跳转到对应页（含平台子页）  
 - [x] CI 不强制跑 Qt  
 
 ## 页 2 与板端模块对应（afc_with_uss）

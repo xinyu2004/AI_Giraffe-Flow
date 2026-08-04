@@ -1,21 +1,14 @@
-# collector — Event Collector min-set (M3)
+# collector — Event Collector + DEM-lite
+
+Not Classic DEM. PHM/UCM/process events → debounce → FDC-lite → confirmed DTC → `gf_ara::per` (instance `dtc`).
 
 | API | Role |
 |-----|------|
-| `EventCollector::Configure` | `forward` / local ring (`max_entries`) |
-| `ReportEvent` | phm / process / com → ring + log；可选 `GF_COLLECTOR_STORE` 跨进程 NDJSON；`cp_dem` stub |
-| `Snapshot` / `Clear` | Query / reset |
+| `ReportEvent` | 环缓 + DEM 路径（需 `dtc_map`） |
+| `NotifyOperationCycle` | 老化 tick |
+| `ListDtcs` / `ClearDtc` / `SetDtcControlEnabled` | 供 UDS 0x19 / 0x14 / 0x85 |
+| `GetFreezeFrame` | 冻结帧（confirmed 时采样） |
 
-Not Classic DEM. Config: `platform/collector.yaml`.
+Config: `platform/collector.yaml`. Persist: `GF_PER_DIR` + module `per`.
 
-Env:
-
-| 变量 | 含义 |
-|------|------|
-| `GF_COLLECTOR_STORE` | 若设置路径，每次 `ReportEvent` flock 追加一行 NDJSON（跨进程证据） |
-
-Smokes: `gf_collector_smoke` · `gf_collector_xproc_smoke`.
-
-Parent: [middleware/README.md](../README.md)
-
-FuSa cases: [collector_cases.md](../../fusa/cases/collector_cases.md).
+Smoke: `gf_collector_smoke` · `gf_dem_lite_smoke`.

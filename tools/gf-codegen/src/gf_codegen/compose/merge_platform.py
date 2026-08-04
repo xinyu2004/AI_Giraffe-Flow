@@ -129,11 +129,20 @@ def validate_platform(
 
     if "phm" in loaded:
         bad_phm: list[str] = []
+        seen_ids: set[str] = set()
+        seen_procs: set[str] = set()
         for i, ent in enumerate(loaded["phm"].get("entities") or []):
             if not isinstance(ent, dict):
                 bad_phm.append(f"entities[{i}] not an object")
                 continue
-            eid = str(ent.get("id") or "").strip() or f"[{i}]"
+            eid = str(ent.get("id") or "").strip()
+            if not eid:
+                bad_phm.append(f"entities[{i}]: missing id")
+                continue
+            if eid in seen_ids:
+                bad_phm.append(f"duplicate entity id: {eid}")
+            else:
+                seen_ids.add(eid)
             name = str(ent.get("process") or "").strip()
             if not name:
                 bad_phm.append(f"entity {eid}: missing process")
@@ -142,11 +151,36 @@ def validate_platform(
                 bad_phm.append(f"entity {eid}: process must not be external: {name}")
             elif name not in ap_processes:
                 bad_phm.append(f"entity {eid}: process not in wiring (non-external): {name}")
+            elif name in seen_procs:
+                bad_phm.append(f"duplicate process: {name}")
+            else:
+                seen_procs.add(name)
         if bad_phm:
             errors.extend(f"platform.phm: {x}" for x in bad_phm)
             checks.append({"id": "platform_phm_processes", "status": "fail", "detail": bad_phm})
         else:
             checks.append({"id": "platform_phm_processes", "status": "pass"})
+
+    if "log" in loaded:
+        bad_log: list[str] = []
+        seen_ctx: set[str] = set()
+        for i, ctx in enumerate(loaded["log"].get("contexts") or []):
+            if not isinstance(ctx, dict):
+                bad_log.append(f"contexts[{i}] not an object")
+                continue
+            cid = str(ctx.get("id") or "").strip()
+            if not cid:
+                bad_log.append(f"contexts[{i}]: missing id")
+                continue
+            if cid in seen_ctx:
+                bad_log.append(f"duplicate context id: {cid}")
+            else:
+                seen_ctx.add(cid)
+        if bad_log:
+            errors.extend(f"platform.log: {x}" for x in bad_log)
+            checks.append({"id": "platform_log_contexts", "status": "fail", "detail": bad_log})
+        else:
+            checks.append({"id": "platform_log_contexts", "status": "pass"})
 
     return errors, warnings, checks
 

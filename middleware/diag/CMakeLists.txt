@@ -10,7 +10,7 @@ target_include_directories(gf_ara_diag PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(gf_ara_diag PUBLIC gf_ara::core ${CMAKE_DL_LIBS})
+target_link_libraries(gf_ara_diag PUBLIC gf_ara::core gf_ara::collector ${CMAKE_DL_LIBS})
 
 # SIL security plugin (.so) — OEM replaces via diag.yaml path
 add_library(gf_diag_sec_sil_stub SHARED plugins/sil_sec_stub.c)

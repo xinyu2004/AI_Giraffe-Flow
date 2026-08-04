@@ -6,6 +6,7 @@ import copy
 from typing import Any, Callable
 
 from gf_config.core import ProjectSession
+from gf_config.i18n import t
 
 _Snapshot = dict[str, Any]
 
@@ -97,7 +98,7 @@ class DocHistory:
         return snap
 
 
-def _capture(sess: ProjectSession) -> _Snapshot:
+def capture_snapshot(sess: ProjectSession) -> _Snapshot:
     dirty_plat = set(sess.dirty_platform or set())
     return {
         "req": copy.deepcopy(sess.req),
@@ -109,6 +110,10 @@ def _capture(sess: ProjectSession) -> _Snapshot:
     }
 
 
+def _capture(sess: ProjectSession) -> _Snapshot:
+    return capture_snapshot(sess)
+
+
 def apply_snapshot(sess: ProjectSession, snap: _Snapshot) -> None:
     sess.req = copy.deepcopy(snap["req"])
     sess.wiring = copy.deepcopy(snap["wiring"])
@@ -116,3 +121,48 @@ def apply_snapshot(sess: ProjectSession, snap: _Snapshot) -> None:
     sess.dirty_req = bool(snap.get("dirty_req"))
     sess.dirty_wiring = bool(snap.get("dirty_wiring"))
     sess.dirty_platform = set(snap.get("dirty_platform") or set())
+
+
+# platform yaml key → nav title (same strings as platform_editor._NAV; i18n via t())
+_PLATFORM_LABELS = {
+    "exec": "执行 / 功能组",
+    "em_launch": "EM 启动表",
+    "phm": "健康 PHM",
+    "diag": "诊断 diag",
+    "log": "日志",
+    "ucm": "OTA ucm",
+    "collector": "事件收集",
+}
+
+
+def locate_doc_change(
+    before: _Snapshot, after: _Snapshot
+) -> tuple[str, str | None, str]:
+    """Where *after* differs from *before* (the edit being undone/redone).
+
+    Returns (area, platform_key|None, hint).
+    area: 'platform' | 'wiring' | 'req' | 'signals'
+    """
+    plat_a = before.get("platform") or {}
+    plat_b = after.get("platform") or {}
+    if plat_a != plat_b:
+        keys = sorted(set(plat_a) | set(plat_b))
+        changed = [k for k in keys if plat_a.get(k) != plat_b.get(k)]
+        if len(changed) == 1:
+            key = changed[0]
+            label = t(_PLATFORM_LABELS.get(key, key))
+            return "platform", key, f"{t('平台')} · {label}"
+        if changed:
+            labels = "、".join(t(_PLATFORM_LABELS.get(k, k)) for k in changed[:3])
+            return "platform", changed[0], f"{t('平台')} · {labels}"
+        return "platform", None, t("平台运行时")
+
+    req_diff = (before.get("req") or {}) != (after.get("req") or {})
+    wir_diff = (before.get("wiring") or {}) != (after.get("wiring") or {})
+    if wir_diff and not req_diff:
+        return "wiring", None, t("信号连线 / 部署")
+    if req_diff and not wir_diff:
+        return "req", None, t("SKU / 需求")
+    if wir_diff or req_diff:
+        return "signals", None, t("信号与应用")
+    return "signals", None, t("文档")

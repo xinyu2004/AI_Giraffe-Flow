@@ -1,4 +1,4 @@
-"""GMT OTA sheet — select package, drive DoIP → board UCM (SIL)."""
+"""GMT OTA/UDS sheet — DoIP hub: OTA / DEM / Collector modules + shared UDS log."""
 
 from __future__ import annotations
 
@@ -8,15 +8,23 @@ from typing import Any
 import yaml
 from PySide6.QtCore import QSettings, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QButtonGroup,
     QCheckBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QRadioButton,
+    QSizePolicy,
     QSpinBox,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -27,6 +35,7 @@ from gf_gmt.doip_client import (
     DoipClient,
     format_uds_step,
 )
+from gf_gmt.gui.collector_panel import CollectorPanel
 from gf_gmt.i18n import t
 
 _SETTINGS_ORG = "GiraffeFlow"
@@ -47,6 +56,19 @@ _MODE_LABELS: dict[str, str] = {
     "request_download": "0x34 · RequestDownload",
     "routine_sil": "0x31 · RoutineControl (SIL)",
 }
+
+
+class _CurrentPageStack(QStackedWidget):
+    """Size to the visible page only — OTA form must not inherit DEM table height."""
+
+    def minimumSizeHint(self):  # noqa: N802 — Qt API
+        w = self.currentWidget()
+        return w.minimumSizeHint() if w is not None else super().minimumSizeHint()
+
+    def sizeHint(self):  # noqa: N802 — Qt API
+        w = self.currentWidget()
+        return w.sizeHint() if w is not None else super().sizeHint()
+
 
 def _load_diag_bundle(project_dir: Path | None) -> dict[str, Any]:
     """iso flags + timing + ota_transfer + doip port from project diag.yaml."""
@@ -219,7 +241,14 @@ class _OtaWorker(QThread):
 
 
 class OtaPanel(QWidget):
-    """Host DoIP OTA: compact controls; ISO / transfer mode from project diag.yaml."""
+    """Host DoIP OTA + shared UDS log: compact controls; ISO from project diag.yaml."""
+
+    def doip_client(self) -> DoipClient | None:
+        return self._client
+
+    def append_uds_log(self, line: str) -> None:
+        """Shared sink for Collector / other UDS callers (same log pane)."""
+        self.log.append(line)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -229,6 +258,17 @@ class OtaPanel(QWidget):
         self._cfg = _load_diag_bundle(None)
         self._settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
 
+        hint = QLabel(
+            t(
+                "OTA/UDS：共用 DoIP 连接与下方 UDS 日志。"
+                "上方单选切换 OTA / DEM / Collector 模块。"
+                "先加载项目 → 连接 → 再操作对应模块。"
+            )
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#666; font-size:11px;")
+
+        # ── shared connection bar ─────────────────────────
         iso_row = QWidget()
         iso_l = QHBoxLayout(iso_row)
         iso_l.setContentsMargins(0, 0, 0, 0)
@@ -246,9 +286,6 @@ class OtaPanel(QWidget):
         self.mode_label.setStyleSheet("color:#555;")
         self.timing_label = QLabel("—")
         self.timing_label.setStyleSheet("color:#555; font-size:11px;")
-
-        form = QFormLayout()
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         host_port = QWidget()
         hp = QHBoxLayout(host_port)
@@ -284,6 +321,91 @@ class OtaPanel(QWidget):
         hp.addWidget(self.btn_disconnect)
         hp.addWidget(self.conn_status)
         hp.addStretch(1)
+
+        shared = QFormLayout()
+        shared.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        shared.addRow(t("Standards"), iso_row)
+        shared.addRow(t("传输模式"), self.mode_label)
+        shared.addRow(t("会话时序"), self.timing_label)
+        shared.addRow(t("连接"), host_port)
+        self.host.editingFinished.connect(self._persist_settings)
+        self.port.editingFinished.connect(self._persist_settings)
+
+        # ── module radios ─────────────────────────────────
+        mode_row = QHBoxLayout()
+        self._radio_ota = QRadioButton(t("OTA"))
+        self._radio_dem = QRadioButton(t("DEM"))
+        self._radio_coll = QRadioButton(t("Collector"))
+        self._radio_ota.setChecked(True)
+        self._mode_group = QButtonGroup(self)
+        for rb in (self._radio_ota, self._radio_dem, self._radio_coll):
+            self._mode_group.addButton(rb)
+            mode_row.addWidget(rb)
+        mode_row.addStretch(1)
+        self._radio_ota.toggled.connect(self._on_module_radio)
+        self._radio_dem.toggled.connect(self._on_module_radio)
+        self._radio_coll.toggled.connect(self._on_module_radio)
+
+        self._stack = _CurrentPageStack()
+        self._stack.addWidget(self._build_ota_page())
+        self._stack.addWidget(self._build_dem_page())
+        self._collector = CollectorPanel()
+        self._collector.bind_doip(self.doip_client, self.append_uds_log)
+        self._stack.addWidget(self._collector)
+
+        self.log = QTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setPlaceholderText(
+            t("DoIP / UDS 过程日志（各模块操作细节都写在这里）")
+        )
+        self.log.setMinimumHeight(120)
+
+        root = QVBoxLayout(self)
+        root.addWidget(hint)
+        root.addLayout(shared)
+        root.addLayout(mode_row)
+        # stretch adjusted in _on_module_radio (OTA compact / DEM·Collector expand).
+        root.addWidget(self._stack, stretch=0)
+        root.addWidget(QLabel(t("UDS 交互")))
+        root.addWidget(self.log, stretch=1)
+        self._root = root
+        self._stack_idx = root.indexOf(self._stack)
+        self._log_idx = root.indexOf(self.log)
+
+        self._tp_timer = QTimer(self)
+        self._tp_timer.timeout.connect(self._on_tester_present_tick)
+
+        self._apply_cfg_labels()
+        self._refresh_actions()
+        self._on_module_radio()
+
+    def _on_module_radio(self, *_a: object) -> None:
+        if self._radio_ota.isChecked():
+            idx, compact = 0, True
+        elif self._radio_dem.isChecked():
+            idx, compact = 1, False
+        else:
+            idx, compact = 2, False
+        self._stack.setCurrentIndex(idx)
+        if compact:
+            self._stack.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
+            )
+            self._stack.setMaximumHeight(self._stack.sizeHint().height() + 4)
+            self._root.setStretch(self._stack_idx, 0)
+        else:
+            self._stack.setMaximumHeight(16777215)
+            self._stack.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+            )
+            self._root.setStretch(self._stack_idx, 2)
+        self._root.setStretch(self._log_idx, 1)
+        self._stack.updateGeometry()
+
+    def _build_ota_page(self) -> QWidget:
+        w = QWidget()
+        form = QFormLayout(w)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self.pkg_id = QLineEdit(
             str(self._settings.value(_KEY_PKG_ID, "pkg.demo") or "pkg.demo")
@@ -337,16 +459,10 @@ class OtaPanel(QWidget):
         plugin_l.addWidget(self.sec_plugin, stretch=1)
         plugin_l.addWidget(plug_browse)
 
-        form.addRow(t("Standards"), iso_row)
-        form.addRow(t("传输模式"), self.mode_label)
-        form.addRow(t("会话时序"), self.timing_label)
-        form.addRow(t("连接"), host_port)
         form.addRow(t("Package id"), self.pkg_id)
         form.addRow(t("Artifact path"), art_row)
         form.addRow(t("0x27/0x29 插件"), plugin_row)
 
-        self.host.editingFinished.connect(self._persist_settings)
-        self.port.editingFinished.connect(self._persist_settings)
         self.pkg_id.editingFinished.connect(self._persist_settings)
         self.artifact.editingFinished.connect(self._persist_settings)
 
@@ -358,34 +474,97 @@ class OtaPanel(QWidget):
         self.status = QLabel("—")
         row.addWidget(self.btn_start)
         row.addWidget(self.status, 1)
+        form.addRow("", row)
+        return w
 
-        self.log = QTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setPlaceholderText(
-            t("DoIP / UDS 过程日志（0x10 → 0x27 → 0x38/0x34 → 0x36 → 0x37）")
-        )
-
-        hint = QLabel(
+    def _build_dem_page(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        tip = QLabel(
             t(
-                "配置在 gf-config（diag.yaml）；本页只读跟从传输模式与时序。"
-                "流程：run_sil（起 DoIP）→ 加载项目 → 连接 → Start OTA。"
-                "非真刷写；失败进 Collector ota_failed。"
+                "DEM-lite：经 DoIP 读/清 DTC（0x19 / 0x14）。"
+                "事件环缓请切到 Collector。"
             )
         )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#666; font-size:11px;")
+        tip.setWordWrap(True)
+        tip.setStyleSheet("color:#666;")
+        lay.addWidget(tip)
 
-        root = QVBoxLayout(self)
-        root.addWidget(hint)
-        root.addLayout(form)
-        root.addLayout(row)
-        root.addWidget(self.log, stretch=1)
+        bar = QHBoxLayout()
+        bar.addWidget(QLabel(t("status_mask")))
+        self._dem_mask = QSpinBox()
+        self._dem_mask.setRange(0, 255)
+        self._dem_mask.setDisplayIntegerBase(16)
+        self._dem_mask.setPrefix("0x")
+        self._dem_mask.setValue(0xFF)
+        bar.addWidget(self._dem_mask)
+        self._btn_dem_read = QPushButton(t("读取 DTC（0x19）"))
+        self._btn_dem_read.clicked.connect(self._on_dem_read)
+        self._btn_dem_clear = QPushButton(t("清除全部（0x14）"))
+        self._btn_dem_clear.clicked.connect(self._on_dem_clear)
+        bar.addWidget(self._btn_dem_read)
+        bar.addWidget(self._btn_dem_clear)
+        bar.addStretch(1)
+        lay.addLayout(bar)
 
-        self._tp_timer = QTimer(self)
-        self._tp_timer.timeout.connect(self._on_tester_present_tick)
+        self._dem_status = QLabel("")
+        self._dem_status.setStyleSheet("color:#555;")
+        lay.addWidget(self._dem_status)
 
-        self._apply_cfg_labels()
-        self._refresh_actions()
+        self._dem_table = QTableWidget(0, 2)
+        self._dem_table.setHorizontalHeaderLabels(["DTC", "status"])
+        self._dem_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        self._dem_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self._dem_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        lay.addWidget(self._dem_table, stretch=1)
+        return w
+
+    def _on_dem_read(self) -> None:
+        if self._client is None:
+            QMessageBox.information(self, t("DEM"), t("请先连接 DoIP"))
+            return
+        try:
+            rows = self._client.read_dtc_list(
+                status_mask=int(self._dem_mask.value()),
+                on_step=self.append_uds_log,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.append_uds_log(f"DEM ERR: {exc}")
+            self._dem_status.setText(str(exc))
+            return
+        self._dem_table.setRowCount(len(rows))
+        for i, rec in enumerate(rows):
+            code = int(rec.get("code") or 0)
+            st = int(rec.get("status") or 0)
+            self._dem_table.setItem(i, 0, QTableWidgetItem(f"0x{code:06X}"))
+            self._dem_table.setItem(i, 1, QTableWidgetItem(f"0x{st:02X}"))
+        self._dem_status.setText(t("已读取 {n} 条 DTC").format(n=len(rows)))
+
+    def _on_dem_clear(self) -> None:
+        if self._client is None:
+            QMessageBox.information(self, t("DEM"), t("请先连接 DoIP"))
+            return
+        if (
+            QMessageBox.question(
+                self,
+                t("DEM"),
+                t("确认清除全部 DTC（0x14 0xFFFFFF）？"),
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+        try:
+            self._client.clear_dtcs(on_step=self.append_uds_log)
+        except Exception as exc:  # noqa: BLE001
+            self.append_uds_log(f"DEM clear ERR: {exc}")
+            self._dem_status.setText(str(exc))
+            return
+        self._dem_table.setRowCount(0)
+        self._dem_status.setText(t("已清除"))
 
     def set_project_dir(self, project_dir: Path | None) -> None:
         self._project_dir = project_dir
@@ -397,6 +576,7 @@ class OtaPanel(QWidget):
             self.port.setValue(int(self._cfg["tcp_port"]))
         self._apply_cfg_labels()
         self._refresh_actions()
+        self._collector.set_project_dir(project_dir)
 
     def _apply_cfg_labels(self) -> None:
         mode = str(self._cfg.get("ota_mode") or OTA_MODE_FILE)

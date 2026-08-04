@@ -4,19 +4,20 @@
 
 | 能力 | 落点 |
 |------|------|
-| 设计期拓扑真图 | **gf-config B 画布**（无独立 DAG 页） |
+| 设计期拓扑真图 | **gf-config 页 1 画布**（无独立 DAG 页） |
 | Graphviz `.dot`/SVG | gf-config 导出；或 `GMT architect dag --format dot` |
-| Lineage | gf-config B 右侧 + `GMT architect lineage` |
+| Lineage | gf-config 页 1 右侧 + `GMT architect lineage` |
 | 录制 / 可编辑 Tag / 主机回放 | **`GMT gui`** + `GMT measure …` |
 | 动画 DAG / 先后竞态 | GMT GUI（同一时间轴） |
 | Foxglove | `GMT bridge foxglove`（live 或 JSONL） |
+| DoIP / UDS 操作 | GMT **OTA/UDS**（OTA · DEM-lite · Collector；配置在 gf-config） |
 | 中间件回灌（G3） | **`gf_iox_obs_inject`** + GMT「回灌」页（playhead）；禁止双发布 |
 
 ## 产品顺序
 
 ```text
 gf-config → Verify/Generate/compile → run_sil
-  → GMT gui（录制 / Tag / scrub / Live）
+  → GMT gui（录制 / Tag / scrub / Live / OTA·UDS）
   →（可选闭环）GF_INJECT_MODE=playhead → GMT 回灌页连 :8767
 ```
 

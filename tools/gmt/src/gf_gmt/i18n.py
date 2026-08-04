@@ -274,6 +274,93 @@ _ZH: dict[str, str] = {
     "Fit all signals in view": "适应全部信号时窗",
     "Inject": "回灌",
     "OTA": "OTA",
+    "OTA/UDS": "OTA/UDS",
+    "DEM": "DEM",
+    "Collector": "Collector",
+    "UDS 交互": "UDS traffic",
+    "DoIP / UDS 过程日志（各模块操作细节都写在这里）": (
+        "DoIP / UDS log (all module steps appear here)"
+    ),
+    "OTA/UDS：共用 DoIP 连接与下方 UDS 日志。"
+    "上方单选切换 OTA / DEM / Collector 模块。"
+    "先加载项目 → 连接 → 再操作对应模块。": (
+        "OTA/UDS: shared DoIP + UDS log below. "
+        "Radio switches OTA / DEM / Collector. "
+        "Load project → Connect → use the module."
+    ),
+    "DEM-lite：经 DoIP 读/清 DTC（0x19 / 0x14）。"
+    "事件环缓请切到 Collector。": (
+        "DEM-lite: read/clear DTCs over DoIP (0x19 / 0x14). "
+        "Event ring → Collector."
+    ),
+    "读取 DTC（0x19）": "Read DTCs (0x19)",
+    "清除全部（0x14）": "Clear all (0x14)",
+    "已读取 {n} 条 DTC": "Read {n} DTCs",
+    "确认清除全部 DTC（0x14 0xFFFFFF）？": (
+        "Clear all DTCs (0x14 0xFFFFFF)?"
+    ),
+    "已清除": "Cleared",
+    "请先连接 DoIP": "Connect DoIP first",
+    "请先连接 DoIP，再读取。": "Connect DoIP first, then read.",
+    "需先连接 DoIP；步骤见下方 UDS 日志": (
+        "Connect DoIP first; steps go to the UDS log below"
+    ),
+    "切换到 UDS：点「从 UDS 读取」（先连 DoIP）": (
+        "UDS mode: click Read via UDS (connect DoIP first)"
+    ),
+    "使用已连接的 DoIP：0x31 01 F201 拉取环缓事件": (
+        "Uses connected DoIP: 0x31 01 F201 dumps the event ring"
+    ),
+    "Event Collector：本机 NDJSON（同机 SIL）或 UDS RID F201（板端）。"
+    "DoIP 在上方连接；UDS 步骤写入下方日志。DTC 请切 DEM。": (
+        "Event Collector: local NDJSON (co-located SIL) or UDS RID F201 (board). "
+        "Connect DoIP above; UDS steps go to the log below. DTCs → DEM."
+    ),
+    "项目={name} · OTA/UDS：DoIP 连接后选 OTA / DEM / Collector": (
+        "project={name} · OTA/UDS: connect DoIP, then OTA / DEM / Collector"
+    ),
+    "status_mask": "status_mask",
+    "Store": "Store",
+    "刷新": "Refresh",
+    "自动刷新": "Auto-refresh",
+    "本机文件": "Local file",
+    "UDS（板端）": "UDS (board)",
+    "从 UDS 读取": "Read via UDS",
+    "使用 OTA/UDS 页已连接的 DoIP：0x31 01 F201 拉取环缓事件": (
+        "Uses DoIP from OTA/UDS tab: 0x31 01 F201 dumps the event ring"
+    ),
+    "需先在 OTA/UDS 连接 DoIP；步骤见该页日志": (
+        "Connect DoIP on OTA/UDS first; steps appear in that log"
+    ),
+    "切换到 UDS：点「从 UDS 读取」（先连 OTA/UDS）": (
+        "UDS mode: click Read via UDS (connect OTA/UDS first)"
+    ),
+    "请先在「OTA/UDS」页连接 DoIP，再回来读取。": (
+        "Connect DoIP on the OTA/UDS tab, then read here."
+    ),
+    "未连接 DoIP": "DoIP not connected",
+    "UDS 已加载 {n} 条（RID F201）": "UDS loaded {n} rows (RID F201)",
+    "打开 Collector NDJSON": "Open Collector NDJSON",
+    "文件不存在（先跑 SIL / 设置 GF_COLLECTOR_STORE）": (
+        "File missing (run SIL first / set GF_COLLECTOR_STORE)"
+    ),
+    "已加载 {n} 条 · {path}": "Loaded {n} rows · {path}",
+    "Collector：本机 NDJSON 或 UDS RID F201（先连 OTA/UDS）": (
+        "Collector: local NDJSON or UDS RID F201 (connect OTA/UDS first)"
+    ),
+    "项目={name} · OTA/UDS：DoIP Host:Port →「连接」→ Start OTA / 供 Collector 读": (
+        "project={name} · OTA/UDS: DoIP Host:Port → Connect → Start OTA / Collector read"
+    ),
+    "OTA/UDS：请先加载项目，再填 DoIP Host:Port「连接」": (
+        "OTA/UDS: load a project, then DoIP Host:Port → Connect"
+    ),
+    "Event Collector：本机文件（同机 SIL）或经 DoIP/UDS RID F201 从板端拉取。"
+    "远程时请先在「OTA/UDS」页连接 DoIP；UDS 步骤会写到该页日志。"
+    "表格列与 NDJSON 一致。DTC 仍用 0x19。": (
+        "Event Collector: local file (co-located SIL) or DoIP/UDS RID F201 from board. "
+        "Remote: connect DoIP on OTA/UDS first; UDS steps go to that log. "
+        "Same columns as NDJSON. DTC still uses 0x19."
+    ),
     "经 DoIP TCP 驱动板端/SIL 的 UCM（gf_doip_ota_server）。非真刷写；失败事件进 Collector。": (
         "Drive board/SIL UCM over DoIP TCP (gf_doip_ota_server). No real flash; failures → Collector."
     ),

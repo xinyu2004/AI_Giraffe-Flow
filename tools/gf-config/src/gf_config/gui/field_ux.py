@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QPainter, QPaintEvent, QPolygon
 from PySide6.QtWidgets import (
     QAbstractButton,
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -84,6 +86,12 @@ COLORS_TOPOLOGY: dict[str, ColorPair] = {
     "ap_mcu_cp": ("#ffe082", "#6d4c00"),
 }
 _DEFAULT_PAIR: ColorPair = ("#f5f5f5", "#333333")
+
+# Same blue for row-number header and selected-row combos.
+_SEL_BG = "#90caf9"
+_SEL_FG = "#0d47a1"
+_SEL_HEADER = QColor(_SEL_BG)
+_HDR_IDLE = QColor("#eeeeee")
 
 
 class TintedComboBox(QComboBox):
@@ -278,7 +286,10 @@ def make_combo(
     # Colored combos need painted chevron; plain ones keep the native arrow.
     cb: QComboBox = TintedComboBox() if colors else QComboBox()
     opts = list(options)
-    if value and value not in opts:
+    # Explicit empty value: keep a blank first item so the user can fill later.
+    if value == "" and "" not in opts:
+        opts = [""] + opts
+    elif value and value not in opts:
         opts = [value] + opts
     cb.addItems(opts)
     if value in opts:
@@ -294,6 +305,93 @@ def make_combo(
     return cb
 
 
+def _apply_combo_row_selected(cb: QComboBox, on: bool) -> None:
+    """Blue-wash module combos only; skip enum-tinted ones (log level)."""
+    if getattr(cb, "_gf_tint_apply", None) is not None:
+        return
+    cb.setStyleSheet(_combo_stylesheet(_SEL_BG, _SEL_FG) if on else "")
+
+
+def _refresh_row_select_chrome(table: QTableWidget) -> None:
+    selected = {idx.row() for idx in table.selectedIndexes()}
+    cur = table.currentRow()
+    if cur >= 0:
+        selected.add(cur)
+    for r in range(table.rowCount()):
+        on = r in selected
+        item = table.verticalHeaderItem(r)
+        if item is None:
+            item = QTableWidgetItem(str(r + 1))
+            table.setVerticalHeaderItem(r, item)
+        else:
+            item.setText(str(r + 1))
+        item.setBackground(_SEL_HEADER if on else _HDR_IDLE)
+        item.setForeground(QColor(_SEL_FG) if on else QColor("#333333"))
+        font = item.font()
+        font.setBold(on)
+        item.setFont(font)
+        for c in range(table.columnCount()):
+            w = table.cellWidget(r, c)
+            if isinstance(w, QComboBox):
+                _apply_combo_row_selected(w, on)
+    table.verticalHeader().viewport().update()
+
+
+def enable_table_row_selection(table: QTableWidget) -> None:
+    """Row-number select; module washes blue; level keeps enum tint."""
+    table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+    table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+    table.setStyleSheet(
+        """
+QTableWidget {
+  selection-background-color: transparent;
+  selection-color: palette(text);
+}
+QTableWidget::item:selected {
+  background: transparent;
+  color: palette(text);
+}
+"""
+    )
+    vh = table.verticalHeader()
+    vh.setVisible(True)
+    vh.setSectionsClickable(True)
+    vh.setHighlightSections(True)
+    vh.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+    vh.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
+    vh.setMinimumWidth(28)
+    vh.setStyleSheet(
+        f"""
+QHeaderView::section {{
+  background-color: {_HDR_IDLE.name()};
+  color: #333333;
+  padding: 2px 4px;
+  border: none;
+  border-right: 1px solid #bdbdbd;
+}}
+QHeaderView::section:checked,
+QHeaderView::section:selected {{
+  background-color: {_SEL_BG};
+  color: {_SEL_FG};
+  font-weight: 600;
+}}
+"""
+    )
+    table.setProperty("_gf_row_select", True)
+    table.itemSelectionChanged.connect(lambda: _refresh_row_select_chrome(table))
+    vh.sectionClicked.connect(lambda idx: table.selectRow(idx))
+
+
+def ensure_selectable_row(table: QTableWidget, row: int) -> None:
+    """Placeholder items so SelectRows / selectedIndexes work under cell widgets."""
+    for c in range(table.columnCount()):
+        if table.item(row, c) is not None:
+            continue
+        it = QTableWidgetItem("")
+        it.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+        table.setItem(row, c, it)
+
+
 def set_combo(
     table: QTableWidget,
     row: int,
@@ -307,17 +405,53 @@ def set_combo(
     enum_colors: dict[str, ColorPair] | None = None,
     item_tips: dict[str, str] | None = None,
 ) -> QComboBox:
+    cb_box: list[QComboBox] = []
+
+    def _wrapped(*_a: object) -> None:
+        on_change()
+        if (
+            table.property("_gf_row_select")
+            and table.currentRow() == row
+            and cb_box
+            and getattr(cb_box[0], "_gf_tint_apply", None) is None
+        ):
+            _apply_combo_row_selected(cb_box[0], True)
+
     cb = make_combo(
         options,
         value,
-        on_change,
+        _wrapped,
         tip=tip,
         bool_style=bool_style,
         enum_colors=enum_colors,
         item_tips=item_tips,
     )
+    cb_box.append(cb)
+    ensure_selectable_row(table, row)
     table.setCellWidget(row, col, cb)
+    if table.property("_gf_row_select"):
+        def _sync_row(*_a: object, _t: QTableWidget = table, _r: int = row) -> None:
+            if _t.currentRow() != _r:
+                _t.selectRow(_r)
+
+        cb.activated.connect(_sync_row)
+        cb.installEventFilter(_ComboSelectFilter(table, row, cb))
     return cb
+
+
+class _ComboSelectFilter(QObject):
+    """FocusIn on a combo → select its table row."""
+
+    def __init__(self, table: QTableWidget, row: int, cb: QComboBox) -> None:
+        super().__init__(cb)
+        self._table = table
+        self._row = row
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
+        if event.type() == QEvent.Type.FocusIn:
+            if self._table.currentRow() != self._row:
+                self._table.selectRow(self._row)
+        return False
 
 
 def combo_text(table: QTableWidget, row: int, col: int) -> str:

@@ -2,6 +2,7 @@
 #define GF_ARA_PER_KEY_VALUE_STORAGE_HPP
 
 #include <gf_ara/core/result.hpp>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -9,24 +10,38 @@
 
 namespace gf_ara::per {
 
-/// In-process KV stub (ara::per subset). Not SQLite yet — SKU-trimmable skeleton.
+/// File-backed KV (gf_ara::per lite). Dual-slot under GF_PER_DIR (default: .).
+/// Not SQLite. Format: `#gen=N` then `key=value` lines.
 class KeyValueStorage {
  public:
   static KeyValueStorage& Instance();
 
+  /// Open instance; loads newest valid slot from disk (if present).
   gf_ara::core::Result<void> Open(std::string_view instance);
   [[nodiscard]] bool IsOpen() const noexcept;
 
   gf_ara::core::Result<void> SetValue(std::string_view key, std::string_view value);
   gf_ara::core::Result<std::string> GetValue(std::string_view key) const;
-  void Clear();
+  /// Remove all keys and persist empty store (instance stays open).
+  gf_ara::core::Result<void> ClearValues();
+  void Close();
 
   [[nodiscard]] const std::string& InstanceName() const noexcept { return instance_; }
 
+  /// Test helper: wipe in-memory + close (does not delete files).
+  void ResetForTest();
+
  private:
   KeyValueStorage() = default;
+  [[nodiscard]] std::string DirPath() const;
+  [[nodiscard]] std::string SlotPath(char slot) const;
+  bool LoadBestSlotLocked();
+  bool PersistLocked();
+
   std::string instance_;
   bool open_{false};
+  std::uint64_t generation_{0};
+  char active_slot_{'a'};
   mutable std::mutex mu_;
   std::unordered_map<std::string, std::string> store_;
 };

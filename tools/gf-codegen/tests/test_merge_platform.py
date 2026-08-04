@@ -75,6 +75,84 @@ def test_bad_exec_process_fails_compose(repo_root: Path, tmp_path: Path) -> None
     assert "does.not.exist" in err_text
 
 
+def test_validate_rejects_duplicate_log_context() -> None:
+    errors, _warnings, checks = validate_platform(
+        {
+            "log": {
+                "default_level": "INFO",
+                "contexts": [
+                    {"id": "phm", "level": "INFO"},
+                    {"id": "ucm", "level": "INFO"},
+                    {"id": "phm", "level": "DEBUG"},
+                ],
+            }
+        },
+        ap_processes=set(),
+    )
+    assert any("duplicate context id: phm" in e for e in errors)
+    assert any(
+        c.get("id") == "platform_log_contexts" and c.get("status") == "fail" for c in checks
+    )
+
+
+def test_validate_rejects_duplicate_phm() -> None:
+    errors, _warnings, checks = validate_platform(
+        {
+            "phm": {
+                "entities": [
+                    {
+                        "id": "a_alive",
+                        "process": "adapter.vehicle_can_gateway",
+                        "alive_period_ms": 100,
+                        "alive_timeout_ms": 300,
+                        "deadline_ms": 0,
+                        "on_failure": "log",
+                    },
+                    {
+                        "id": "a_alive",
+                        "process": "perception.fcm",
+                        "alive_period_ms": 100,
+                        "alive_timeout_ms": 300,
+                        "deadline_ms": 0,
+                        "on_failure": "log",
+                    },
+                ]
+            }
+        },
+        ap_processes={"adapter.vehicle_can_gateway", "perception.fcm"},
+    )
+    assert errors
+    assert any("duplicate entity id" in e for e in errors)
+    assert any(c.get("id") == "platform_phm_processes" and c.get("status") == "fail" for c in checks)
+
+    errors2, _, _ = validate_platform(
+        {
+            "phm": {
+                "entities": [
+                    {
+                        "id": "a_alive",
+                        "process": "adapter.vehicle_can_gateway",
+                        "alive_period_ms": 100,
+                        "alive_timeout_ms": 300,
+                        "deadline_ms": 0,
+                        "on_failure": "log",
+                    },
+                    {
+                        "id": "b_alive",
+                        "process": "adapter.vehicle_can_gateway",
+                        "alive_period_ms": 100,
+                        "alive_timeout_ms": 300,
+                        "deadline_ms": 0,
+                        "on_failure": "log",
+                    },
+                ]
+            }
+        },
+        ap_processes={"adapter.vehicle_can_gateway"},
+    )
+    assert any("duplicate process" in e for e in errors2)
+
+
 def test_validate_rejects_external_process() -> None:
     errors, _warnings, checks = validate_platform(
         {

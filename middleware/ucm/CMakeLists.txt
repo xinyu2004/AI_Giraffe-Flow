@@ -10,7 +10,7 @@ target_include_directories(gf_ara_ucm PUBLIC
 )
 
 if(TARGET gf_ara_sm AND TARGET gf_ara_collector)
-  target_link_libraries(gf_ara_ucm PUBLIC gf_ara::core gf_ara::sm gf_ara::collector)
+  target_link_libraries(gf_ara_ucm PUBLIC gf_ara::core gf_ara::sm gf_ara::collector gf_ara::per)
 else()
   message(FATAL_ERROR "Giraffe Flow: ucm requires sm + collector (SIL helpers)")
 endif()

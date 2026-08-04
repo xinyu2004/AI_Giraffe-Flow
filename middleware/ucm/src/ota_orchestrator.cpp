@@ -140,6 +140,32 @@ gf_ara::core::Result<void> OtaOrchestrator::RunPackage(const PackageInfo& info) 
     return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kNotAvailable);
   }
   SetProgress(0.70f);
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    g_last = PackageManager::GetState();  // Present/Processing
+  }
+
+  // SoftwareCluster path: target "cluster:<name>" — EM stop/replace/start hook point (lite).
+  if (info.target.rfind("cluster:", 0) == 0) {
+    const auto& clusters = PackageManager::RuntimeConfig().clusters;
+    const std::string cname = info.target.substr(8);
+    bool found = false;
+    for (const auto& c : clusters) {
+      if (c.name == cname) {
+        found = true;
+        // Lite: record intent; real EM stop/start wired when exec exposes API.
+        gf_ara::collector::EventCollector::Instance().ReportEvent(
+            "ucm", "cluster_update", c.name + " procs=" + std::to_string(c.processes.size()),
+            gf_ara::collector::EventSeverity::kInfo);
+        break;
+      }
+    }
+    if (!found && !cname.empty()) {
+      gf_ara::collector::EventCollector::Instance().ReportEvent(
+          "ucm", "cluster_update", "unknown cluster=" + cname,
+          gf_ara::collector::EventSeverity::kWarn);
+    }
+  }
 
   if (!PackageManager::Activate()) {
     Fail("Activate failed");

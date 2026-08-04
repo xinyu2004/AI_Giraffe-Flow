@@ -162,11 +162,14 @@ CI 在合入 / 发版前执行 compose + lint + golden diff；**不**把 codegen
 - 运行态：开环形缓冲 trace；需要时导出 GTKWave  
 - 复杂复现：开 Record（可先全量于 desktop）  
 
-### 5.4 DoIP / OTA（P3-4）
+### 5.4 DoIP / OTA/UDS（P3-4）
 
 1. gf-config 页 2 · 诊断：开 14229+13400，选下载 SID（默认 **0x38**），保存 `diag.yaml`  
 2. `run_sil`（开 DoIP 时自动起 `gf_doip_ota_server`）  
-3. GMT → 加载 `project.yaml` → **OTA** → Host:Port「连接」→ Start OTA  
+3. GMT → 加载 `project.yaml` → **OTA/UDS** → Host:Port「连接」  
+   - **OTA**：Start OTA（UDS 日志在按钮下方）  
+   - **DEM**：读/清 DTC（0x19 / 0x14）  
+   - **Collector**：本机 NDJSON 或板端环缓（0x31 F201）  
 4. 假包：`bash scripts/make_sil_swu.sh`；冒烟：`scripts/verify/.../smoke_doip_ota.sh`  
 
 细则：[DOIP_OTA.md](DOIP_OTA.md)。真刷写 → P3z。

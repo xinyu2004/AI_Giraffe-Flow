@@ -46,15 +46,23 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | Tab | Role |
 |-----|------|
 | **1 · Signals & apps** (default) | **Left thin SKU open**; canvas; **right Lineage collapsed** (◀ to expand) |
-| **2 · Platform runtime** | Top `runtime_modules` (incl. trimable **per / tsync**); subpages: exec/FG · **EM launch map** · PHM · diag · log · OTA · **Event collector** |
+| **2 · Platform runtime** | Top `runtime_modules` (incl. trimable **per / tsync**); subpages: exec/FG · **EM launch map** · PHM · diag · **log** · OTA · **Event collector** |
 
-Shortcuts: Ctrl+1 / Ctrl+2. Verify / Generate returns to tab 1 Lineage.
+Shortcuts: Ctrl+1 / Ctrl+2. Verify / Generate returns to tab 1 Lineage.  
+**Edit menu:** Undo / Redo (Ctrl+Z / Ctrl+Y) — jumps to the changed page (incl. platform subpages); status-bar tip is i18n’d.
 
 **File menu:** Open · Save (Ctrl+S) · Save & Verify · Verify (Ctrl+R) · Generate (Ctrl+G) · Import hpp/fidl  
 
 **View menu:** Fit (Ctrl+0) · Default zoom (Ctrl+H) · Reload (F5) · Lineage pane (Ctrl+L) · Delete edge (Delete)
 
 Daily: tab 1 graph / thin SKU → tab 2 modules → **Save** → **Verify** → **Generate** when needed.
+
+### Tab 2 · Logging (`log.yaml`)
+
+- **Default level** + per-module **contexts[]** table (module / level).
+- New row: module may be empty; level defaults to `INFO` (enum tint kept).
+- **Selection:** click the row number; row number + module share light blue; **level tint unchanged**.
+- Verify fails on duplicate `context id` in `log.yaml`.
 
 ## Tab 1 canvas — four steps
 
@@ -78,6 +86,8 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 - [x] Tab 1 thin SKU + tab 2 runtime_modules / platform round-trip  
 - [x] Tab 2 **EM launch map** edits `platform/em_launch.yaml` (unlocked by `exec`)  
 - [x] Verify shows Lineage pass/fail (incl. `platform_em_launch`)  
+- [x] Log table: row-number select + duplicate context id fails Verify  
+- [x] Undo/Redo navigates to the changed page (incl. platform subpages)  
 - [x] CI does not require Qt  
 
 ## Tab 2 ↔ board modules (afc_with_uss)

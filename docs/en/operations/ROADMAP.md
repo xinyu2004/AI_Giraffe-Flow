@@ -24,7 +24,7 @@
 | **P3-1 Config** | gf-config as middleware configurator | **Two tabs ✅**: (1) Signal & apps (default) · (2) Platform runtime (+ `runtime_modules`); Collector min editor |
 | **P3-2 Middleware** | AP depth | sm state machine, PHM Logical + SM link, **Event Collector** runtime, log lite, per/tsync skeleton |
 | **P3-3 FuSa** | Functional Safety toward a **full Safety Case** | `fusa/` cases + runs/packs, [isolation](../../../fusa/metrics/isolation.md) / [latency](../../../fusa/metrics/latency.md) (+ `measure_latency.sh`), Safety Case skeleton; later: HARA / FSC / `production` profile |
-| **P3-4 DoIP / OTA / GMT** | Diag & update ops | ✅ DoIP TCP · GMT OTA · UCM · default **0x38** transfer ([DOIP_OTA](../../zh/operations/DOIP_OTA.md); real RAUC → P3z) |
+| **P3-4 DoIP / OTA / GMT** | Diag & update ops | ✅ DoIP TCP · GMT **OTA/UDS** (OTA · DEM-lite · Collector on one sheet) · UCM · default **0x38** ([DOIP_OTA](../../zh/operations/DOIP_OTA.md); real RAUC → P3z) |
 | **P3-5 Sim spike** | CARLA / Vision Pilot | CARLA→semantic adapter spike; VP feasibility; weak coupling to middleware |
 | **P3z Board / MCU** | Sprint gate (lowest urgency) | Optional thin smoke mid-phase; full `run_hil` / soak / real CP after desktop tracks OK |
 
@@ -48,4 +48,5 @@ We do **not** sell / perform ISO 26262 certification or hold ASIL certificates f
 2. **P3z** board / vsomeip / real RAUC / soak.  
 3. Cloud CI + release T4.
 
-P3-4 desktop DoIP/OTA is closed — see Chinese [DOIP_OTA.md](../../zh/operations/DOIP_OTA.md).
+P3-4 desktop DoIP/OTA is closed — see Chinese [DOIP_OTA.md](../../zh/operations/DOIP_OTA.md).  
+**2026-08-04:** gf-config log-table UX + duplicate-context Verify; GMT Collector/DEM merged into the OTA/UDS tab.

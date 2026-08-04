@@ -3,12 +3,15 @@
 #include "gf_ara/diag/security_plugin.h"
 #include "gf_ara/diag/uds_nrc.hpp"
 
+#include <gf_ara/collector/event_collector.hpp>
+
 #include <dlfcn.h>
 
 #include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <mutex>
+#include <sstream>
 
 namespace gf_ara::diag {
 namespace {
@@ -534,16 +537,84 @@ std::vector<std::uint8_t> UdsDispatcher::Handle(const std::vector<std::uint8_t>&
       }
       return finish({0x51, request[1]});
     }
-    case 0x14:
+    case 0x14: {
+      // ClearDiagnosticInformation: 0x14 + 3-byte group (0xFFFFFF = all)
+      if (request.size() < 4) {
+        return finish(MakeNrc(0x14, UdsNrc::kIncorrectMessageLength));
+      }
+      const std::uint32_t group = (static_cast<std::uint32_t>(request[1]) << 16) |
+                                  (static_cast<std::uint32_t>(request[2]) << 8) | request[3];
+      (void)gf_ara::collector::EventCollector::Instance().ClearDtc(group);
       return finish({0x54});
+    }
     case 0x19: {
       if (request.size() < 2) {
         return finish(MakeNrc(0x19, UdsNrc::kIncorrectMessageLength));
       }
-      if ((request[1] & 0x7F) == 0x01) {
-        return finish({0x59, 0x01, 0x00, 0x00, 0x00, 0x00});
+      auto& col = gf_ara::collector::EventCollector::Instance();
+      const auto sf = static_cast<std::uint8_t>(request[1] & 0x7F);
+      if (sf == 0x01) {
+        if (request.size() < 3) {
+          return finish(MakeNrc(0x19, UdsNrc::kIncorrectMessageLength));
+        }
+        const auto mask = request[2];
+        const auto n = col.CountDtcs(mask);
+        return finish({0x59, 0x01, 0xFF, 0x00, static_cast<std::uint8_t>((n >> 8) & 0xFF),
+                       static_cast<std::uint8_t>(n & 0xFF)});
+      }
+      if (sf == 0x02) {
+        if (request.size() < 3) {
+          return finish(MakeNrc(0x19, UdsNrc::kIncorrectMessageLength));
+        }
+        const auto mask = request[2];
+        std::vector<std::uint8_t> body = {0x59, 0x02, mask};
+        for (const auto& d : col.ListDtcs(mask)) {
+          body.push_back(static_cast<std::uint8_t>((d.code >> 16) & 0xFF));
+          body.push_back(static_cast<std::uint8_t>((d.code >> 8) & 0xFF));
+          body.push_back(static_cast<std::uint8_t>(d.code & 0xFF));
+          body.push_back(d.status);
+        }
+        return finish(std::move(body));
+      }
+      if (sf == 0x04) {
+        // lite: report freeze frame for DTC (req: 0x19 0x04 dtc[3] record#)
+        if (request.size() < 6) {
+          return finish(MakeNrc(0x19, UdsNrc::kIncorrectMessageLength));
+        }
+        const std::uint32_t dtc = (static_cast<std::uint32_t>(request[2]) << 16) |
+                                  (static_cast<std::uint32_t>(request[3]) << 8) | request[4];
+        std::string blob;
+        std::uint64_t t_ns = 0;
+        if (!col.GetFreezeFrame(dtc, blob, t_ns)) {
+          return finish(MakeNrc(0x19, UdsNrc::kRequestOutOfRange));
+        }
+        std::vector<std::uint8_t> body = {0x59, 0x04, request[2], request[3], request[4],
+                                          request[5]};
+        body.push_back(static_cast<std::uint8_t>((t_ns >> 56) & 0xFF));
+        body.push_back(static_cast<std::uint8_t>((t_ns >> 48) & 0xFF));
+        body.push_back(static_cast<std::uint8_t>((t_ns >> 40) & 0xFF));
+        body.push_back(static_cast<std::uint8_t>((t_ns >> 32) & 0xFF));
+        body.insert(body.end(), blob.begin(), blob.end());
+        return finish(std::move(body));
       }
       return finish(MakeNrc(0x19, UdsNrc::kSubFunctionNotSupported));
+    }
+    case 0x85: {
+      if (request.size() < 2) {
+        return finish(MakeNrc(0x85, UdsNrc::kIncorrectMessageLength));
+      }
+      const auto sf = static_cast<std::uint8_t>(request[1] & 0x7F);
+      if (sf == 0x01) {
+        gf_ara::collector::EventCollector::Instance().SetDtcControlEnabled(true);
+      } else if (sf == 0x02) {
+        gf_ara::collector::EventCollector::Instance().SetDtcControlEnabled(false);
+      } else {
+        return finish(MakeNrc(0x85, UdsNrc::kSubFunctionNotSupported));
+      }
+      if (request[1] & 0x80) {
+        return finish({});
+      }
+      return finish({0xC5, request[1]});
     }
     case 0x22: {
       if (request.size() < 3) {
@@ -577,6 +648,61 @@ std::vector<std::uint8_t> UdsDispatcher::Handle(const std::vector<std::uint8_t>&
     case 0x31: {
       if (request.size() < 4) {
         return finish(MakeNrc(0x31, UdsNrc::kIncorrectMessageLength));
+      }
+      // RID F201: dump EventCollector ring as NDJSON (GMT remote read over DoIP).
+      // req: 0x31 0x01 0xF2 0x01 [offset_be16] [max_be16]
+      // resp: 0x71 0x01 0xF2 0x01 total_be16 offset_be16 count_be16 + utf8 NDJSON
+      if (request[1] == 0x01 && request[2] == 0xF2 && request[3] == 0x01) {
+        std::uint16_t offset = 0;
+        std::uint16_t max_n = 200;
+        if (request.size() >= 6) {
+          offset = Be16(request.data() + 4);
+        }
+        if (request.size() >= 8) {
+          max_n = Be16(request.data() + 6);
+        }
+        if (max_n == 0) {
+          max_n = 200;
+        }
+        if (max_n > 500) {
+          max_n = 500;
+        }
+        const auto snap = gf_ara::collector::EventCollector::Instance().Snapshot();
+        const auto total = static_cast<std::uint16_t>(
+            snap.size() > 0xFFFF ? 0xFFFF : snap.size());
+        if (offset > total) {
+          offset = total;
+        }
+        std::ostringstream nd;
+        std::uint16_t count = 0;
+        for (std::size_t i = offset; i < snap.size() && count < max_n; ++i) {
+          const auto& e = snap[i];
+          auto esc = [](std::string s) {
+            for (char& c : s) {
+              if (c == '"' || c == '\\' || c == '\n' || c == '\r') {
+                c = '_';
+              }
+            }
+            return s;
+          };
+          nd << "{\"t_ns\":" << e.t_ns << ",\"source\":\"" << esc(e.source)
+             << "\",\"id\":\"" << esc(e.event_id) << "\",\"detail\":\""
+             << esc(e.detail) << "\",\"pid\":0}\n";
+          ++count;
+          if (nd.tellp() > 48000) {
+            break;
+          }
+        }
+        const std::string body_s = nd.str();
+        std::vector<std::uint8_t> body = {0x71, 0x01, 0xF2, 0x01};
+        body.push_back(static_cast<std::uint8_t>((total >> 8) & 0xFF));
+        body.push_back(static_cast<std::uint8_t>(total & 0xFF));
+        body.push_back(static_cast<std::uint8_t>((offset >> 8) & 0xFF));
+        body.push_back(static_cast<std::uint8_t>(offset & 0xFF));
+        body.push_back(static_cast<std::uint8_t>((count >> 8) & 0xFF));
+        body.push_back(static_cast<std::uint8_t>(count & 0xFF));
+        body.insert(body.end(), body_s.begin(), body_s.end());
+        return finish(std::move(body));
       }
       if (routine_) {
         return finish(routine_(request));

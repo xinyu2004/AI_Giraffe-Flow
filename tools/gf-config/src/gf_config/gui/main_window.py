@@ -21,7 +21,12 @@ from PySide6.QtWidgets import (
 )
 
 from gf_config.core import ProjectSession
-from gf_config.gui.doc_history import DocHistory, apply_snapshot
+from gf_config.gui.doc_history import (
+    DocHistory,
+    apply_snapshot,
+    capture_snapshot,
+    locate_doc_change,
+)
 from gf_config.gui.platform_editor import PlatformEditor
 from gf_config.gui.req_editor import ReqEditor
 from gf_config.gui.wiring_graph import WiringGraphView
@@ -297,21 +302,42 @@ class MainWindow(QMainWindow):
         if not self._history.can_undo() or self._session is None:
             self.statusBar().showMessage(t("没有可撤销的操作"), 2000)
             return
+        before = capture_snapshot(self._session)
         snap = self._history.undo()
         if snap is None:
             return
         self._apply_doc_snapshot(snap)
-        self.statusBar().showMessage(t("已撤销"), 2000)
+        self._navigate_after_history(before, snap, action="undo")
 
     def _redo_doc(self) -> None:
         if not self._history.can_redo() or self._session is None:
             self.statusBar().showMessage(t("没有可重做的操作"), 2000)
             return
+        before = capture_snapshot(self._session)
         snap = self._history.redo()
         if snap is None:
             return
         self._apply_doc_snapshot(snap)
-        self.statusBar().showMessage(t("已重做"), 2000)
+        self._navigate_after_history(before, snap, action="redo")
+
+    def _navigate_after_history(
+        self, before: dict, after: dict, *, action: str
+    ) -> None:
+        """Jump to the page that changed so undo/redo is visible; tip in status bar."""
+        area, plat_key, hint = locate_doc_change(before, after)
+        if area == "platform":
+            self._tabs.setCurrentWidget(self._platform)
+            if plat_key:
+                self._platform.select_nav(plat_key)
+        else:
+            self._tabs.setCurrentWidget(self._signals_page)
+            if area == "req" and self._sku_collapsed:
+                self._toggle_sku_panel()
+            elif area == "wiring" and not self._sku_collapsed:
+                # Prefer canvas when the edit was on the graph
+                pass
+        verb = t("已撤销") if action == "undo" else t("已重做")
+        self.statusBar().showMessage(f"{verb} — {hint}", 5000)
 
     def _apply_doc_snapshot(self, snap: dict) -> None:
         assert self._session is not None

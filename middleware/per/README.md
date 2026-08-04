@@ -1,12 +1,13 @@
-# per — persistency skeleton (in-memory KV)
+# per — persistency lite（file-backed dual-slot KV）
 
 | API | Role |
 |-----|------|
-| `KeyValueStorage::Open` | 打开实例（进程内 stub） |
-| `SetValue` / `GetValue` | KV；未 Open / 缺 key → `NotAvailable` |
+| `KeyValueStorage::Open` | 打开实例；从 `GF_PER_DIR/<instance>.kv.{a,b}` 加载较新槽 |
+| `SetValue` / `GetValue` | KV；写后原子落盘到另一槽 + 世代号 |
+| `ClearValues` / `Close` | 清空并持久化 / 关闭 |
 
-Not SQLite. SKU 可裁剪：`req.runtime_modules` 含 `per` 时编入。
+**Not SQLite.** 环境变量 `GF_PER_DIR`（默认 `.`）。SKU：`req.runtime_modules` 含 `per`。
 
-Smoke: `gf_per_smoke`（PER-01…03）.
+Smoke: `gf_per_smoke`（PER-01…04，含跨 Open 持久化）.
 
 FuSa: [per_cases.md](../../fusa/cases/per_cases.md).

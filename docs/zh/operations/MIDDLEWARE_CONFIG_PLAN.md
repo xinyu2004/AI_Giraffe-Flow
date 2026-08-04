@@ -1,7 +1,9 @@
 # 中间件模块与 gf-config 配置规划
 
 > 配套：[ROADMAP.md](ROADMAP.md) · [DESIGN.md](../architecture/DESIGN.md) · [P2_PLAN.md](P2_PLAN.md)  
-> **状态（2026-07-31）：** **P3 两页 UI 已落地**（页 1 信号与应用 · 页 2 平台运行时：exec / **EM 启动表** / PHM / Collector…）；废止「不做 DEM」旧口径。历史冻结字段见 §8。
+> **状态（2026-08-04）：** **P3 两页 UI 已落地**（页 1 信号与应用 · 页 2 平台运行时：exec / **EM 启动表** / PHM / 日志 / Collector…）；废止「不做 DEM」旧口径。  
+> **同日工具面：** gf-config 日志表行选中 UX + 重复 context Verify；撤销跳页；GMT **OTA/UDS** 单页汇合 OTA·DEM·Collector（见 [DOIP_OTA.md](DOIP_OTA.md)）。历史冻结字段见 §8。  
+> **产品定位：** AUTOSAR **AP lite**（`gf_ara::*`）。后置项登记：[AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md)。
 
 本文回答：
 
@@ -33,7 +35,7 @@
                          compose → gf.sor.json → generate / CMake
                                     │
                                     ▼
-              GMT：只读 lineage / measure / Live·Inject；OTA sheet 经 DoIP 操作（不写回配置）
+              GMT：只读 lineage / measure / Live·Inject；OTA/UDS（OTA·DEM·Collector）经 DoIP 操作（不写回配置）
 ```
 
 ---
@@ -120,6 +122,8 @@
 载体：`platform/log.yaml`（`default_level`、`contexts[]`）。  
 观测粗开关（live_tap/record）留在 **页 1 薄 SKU**，与 log 级别分工。
 
+**gf-config（页 2 · 日志）：** 默认级别 + 按模块覆盖表；新增行模块可空、级别默认 `INFO`；**行号选中**（行号/模块浅蓝，级别枚举色不变）；compose **拒绝重复 context id**。
+
 ### 3.6 `gf_ara::diag` — DoIP / UDS 子集（不是 Classic DEM）
 
 | 完整 AP | 我们的 ③（`platform/diag.yaml`） |
@@ -127,7 +131,7 @@
 | DM、UDS、DoIP、DID/RID… | `standards`（14229 父 / 13400 子）+ `doip` + **`timing`** + **`ota_transfer`** + DID/RID 最小表 |
 | Classic DEM 全栈 | **不做**；事件见 §3.9 |
 
-**P3-4（已落地）：** 会话级 DoIP + GMT OTA sheet。字段与操作面见 [DOIP_OTA.md](DOIP_OTA.md)。  
+**P3-4（已落地）：** 会话级 DoIP + GMT **OTA/UDS** 操作面（OTA · DEM-lite · Collector 同页）。字段与操作面见 [DOIP_OTA.md](DOIP_OTA.md)。  
 **gf-config：** 页 2「诊断」——可折叠 doip / timing / ota_transfer；下载 SID 显式 `0x38`/`0x34`/`0x31`。不提供完整 DTC 防抖策略编辑器。  
 **0x27 插件路径：** 不进 yaml；GMT 本地设置 + 板端 `GF_DIAG_SEC_PLUGIN`。
 
@@ -159,7 +163,7 @@ ota_transfer:
 | 阶段 | 内容 |
 |------|------|
 | P2 | `ucm.yaml` 空壳 + Spike 选型 |
-| P3-4 | 编排 + SIL stub Activate；**操作面在 GMT OTA（DoIP）**；真 RAUC → P3z |
+| P3-4 | 编排 + SIL stub Activate；**操作面在 GMT OTA/UDS（DoIP）**；真 RAUC → P3z |
 
 **gf-config：** 页 2 策略字段；**不**在 gf-config 里做刷写进度 UI。  
 详见 [DOIP_OTA.md](DOIP_OTA.md) · [OTA_SPIKE.md](OTA_SPIKE.md)。
@@ -184,7 +188,8 @@ per、tsync、nm、crypto/iam/idsm/fw、hal — 见模块总表；板级 hal 跟
 - 本地：是否落盘、最大条数（DEM-lite）  
 - 映射：内部 event_id → DTC（可选，最小表）
 
-**gf-config：** 页 2「事件收集」子页。  
+**gf-config：** 页 2「事件收集」子页（写 `collector.yaml`）。  
+**GMT：** OTA/UDS 页 · Collector 单选 — 读本机 NDJSON 或 UDS `0x31 01 F201` 环缓；**DEM** 单选 — `0x19`/`0x14`（DEM-lite）。  
 **不做：** Classic DEM 全编辑器、完整 FDC 状态机 GUI。
 
 ---
@@ -334,7 +339,7 @@ map_dtc: []              # { event_id, dtc, severity? }
 - [x] gf-config **三页 → 两页**；默认 **信号与应用**；`runtime_modules` 进平台页  
 - [x] 废止「不做 DEM」→ **Event Collector 最小集**（CP 转发 / DoIP DEM-lite）  
 - [x] 安全口径：**经得起认证的支持**，不代认证  
-- [x] GMT：**可有 OTA sheet（DoIP）**；仍 **不写** 配置资产  
+- [x] GMT：**OTA/UDS sheet（DoIP）** — OTA · DEM-lite · Collector 同页；仍 **不写** 配置资产  
 - [x] 真板 / 真 MCU：**P3z 冲刺门禁**，非主航道  
 - [x] 画布：**裸拖 Out/In=连线；Ctrl+拖拽=移端口边**（修正移动盖连线）  
 - [x] 观测：粗合同 + codegen tap + GMT 焦点；布局权威见根目录 [STRUCTURE.md](../../../STRUCTURE.md)

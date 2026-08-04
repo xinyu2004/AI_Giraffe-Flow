@@ -1,4 +1,23 @@
-# 默认级别 / 上下文；后期再扩
-schema_version: "0.1"
+schema_version: '0.1'
 default_level: INFO
-contexts: []
+color: auto
+sinks:
+- stdout
+- stderr
+contexts:
+- id: phm
+  level: INFO
+- id: ucm
+  level: INFO
+- id: diag
+  level: INFO
+- id: collector
+  level: WARN
+gmt_export:
+  enabled: false
+  min_level: ERROR
+  contexts:
+  - phm
+  - ucm
+  mode: pull
+  max_bytes: 65536

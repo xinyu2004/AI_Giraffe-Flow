@@ -8,12 +8,12 @@ In multi-process SIL, terminal logs rarely answer “who published what, when.�
 
 | Entry | Role |
 |-------|------|
-| **`gf-config`** | Authoring GUI (tab B = design-time graph) |
+| **`gf-config`** | Authoring GUI (tab 1 canvas = design-time graph) |
 | `GMT architect lineage\|dag` | CI / export |
 | `GMT measure record\|tag\|export\|import-ndjson` | Record, trim, MCAP/**VCD**, tap NDJSON import |
 | `GMT bridge foxglove` | Studio live / JSONL (8765) |
 | `GMT bridge live` | GMT GUI live WebSocket (8766) |
-| **`GMT gui`** | Live / Tag / animated DAG / **Graphics** / **playhead inject** / export |
+| **`GMT gui`** | Live / Tag / animated DAG / **Graphics** / **playhead inject** / **OTA/UDS (DoIP)** / export |
 
 ```bash
 pip install -e tools/gmt -e tools/gf-codegen
@@ -34,6 +34,10 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 - With “follow playhead inject”: **Live follow-latest is forced off**; Live can still observe/record  
 - Inject result: top bar **green=published / red=skipped**, reason in status bar  
 - Inject tab: event table; click row to seek; optional loop  
+- **OTA/UDS tab** (shared DoIP + UDS log): radio **OTA / DEM / Collector** (config stays in gf-config)
+  - **OTA**: Start OTA → `gf_doip_ota_server` (SIL; not real flash); compact module area so the UDS log sits under the button
+  - **DEM**: `0x19` read DTCs · `0x14` clear (DEM-lite; not a Classic DEM editor)
+  - **Collector**: local NDJSON or UDS `0x31 01 F201` dump of the on-target ring
 - Graphics (CANoe-style): one row per signal; wheel / ± zoom; drag name-column edge for width; orange playhead  
 - Wall clock: one `session_meta` anchor + `(t_ns - t0_ns)`  
 - Without `project.yaml`: **inject disabled**; Live still works  

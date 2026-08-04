@@ -24,6 +24,7 @@ platform:
   log: platform/log.yaml
   ucm: platform/ucm.yaml
   collector: platform/collector.yaml
+  tsync: platform/tsync.yaml
 
 delivery:
   req: req.yaml

@@ -1,13 +1,24 @@
-# Event Collector 最小集（非 Classic DEM 全编辑器）
-# 有 CP：forward→cp_dem；无 CP：local_store（DEM-lite over DoIP）
+# Event Collector + DEM-lite（非 Classic DEM）
 schema_version: "0.1"
 forward: local_store  # cp_dem | local_store | both
 sources:
   - phm
   - process
   - com
+  - ucm
 local:
   enabled: true
   max_entries: 256
-# optional: internal event_id → DTC
-# dtc_map: []
+# event_id → DTC（防抖 / FDC / 老化数值）
+dtc_map:
+  - event: phm/alive_timeout
+    dtc: 0xC01234
+    debounce_count: 2
+    fdc_threshold: 3
+    aging_cycles: 40
+  - event: ucm/ota_failed
+    dtc: 0xC0A001
+    debounce_count: 1
+    fdc_threshold: 1
+    aging_cycles: 40
+freeze_dids: []

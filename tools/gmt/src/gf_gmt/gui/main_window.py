@@ -281,7 +281,7 @@ class GmtMainWindow(QMainWindow):
         self._tabs.addTab(self._var_strip, t("图形"))
         self._tabs.addTab(self._tags, t("Tag"))
         self._tabs.addTab(self._inject_panel, t("Inject"))
-        self._tabs.addTab(self._ota_panel, t("OTA"))
+        self._tabs.addTab(self._ota_panel, t("OTA/UDS"))
         self._tabs.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self._tabs, stretch=1)
 
@@ -423,7 +423,9 @@ class GmtMainWindow(QMainWindow):
         view_menu.addAction(t("图形"), lambda: self._tabs.setCurrentWidget(self._var_strip))
         view_menu.addAction(t("Tag"), lambda: self._tabs.setCurrentWidget(self._tags))
         view_menu.addAction(t("Inject"), lambda: self._tabs.setCurrentWidget(self._inject_panel))
-        view_menu.addAction(t("OTA"), lambda: self._tabs.setCurrentWidget(self._ota_panel))
+        view_menu.addAction(
+            t("OTA/UDS"), lambda: self._tabs.setCurrentWidget(self._ota_panel)
+        )
 
         lang_menu = self.menuBar().addMenu(t("语言"))
         act_zh = QAction(t("中文"), self)
@@ -470,13 +472,13 @@ class GmtMainWindow(QMainWindow):
         if w is self._ota_panel:
             if proj and self._sor is not None:
                 self._path_label.setText(
-                    t("项目={name} · OTA：DoIP Host:Port →「连接」→ Start OTA").format(
-                        name=proj
-                    )
+                    t(
+                        "项目={name} · OTA/UDS：DoIP 连接后选 OTA / DEM / Collector"
+                    ).format(name=proj)
                 )
             else:
                 self._path_label.setText(
-                    t("OTA：请先加载项目，再填 DoIP Host:Port「连接」")
+                    t("OTA/UDS：请先加载项目，再填 DoIP Host:Port「连接」")
                 )
             return
         # Restore observability status when leaving OTA

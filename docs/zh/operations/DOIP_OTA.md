@@ -8,7 +8,7 @@
 | 项 | 口径 |
 |----|------|
 | 配置真源 | **gf-config** → `platform/diag.yaml` / `ucm.yaml`（GMT **不写**配置） |
-| 操作面 | **GMT → OTA**：连接 DoIP → 按 yaml 模式发 UDS → UCM 编排 |
+| 操作面 | **GMT → OTA/UDS**：共用 DoIP；单选 **OTA / DEM / Collector**；按 yaml 模式发 UDS → UCM 编排 |
 | 下载 SID | 默认 **0x38** `request_file_transfer`；可选 **0x34** / SIL **0x31** 捷径 |
 | 传输 | ISO **14229** 父能力；ISO **13400** DoIP 为子传输（不可单独开） |
 | 刷写后端 | SIL stub（写 `.activated` / magic 校验）；**真 RAUC → P3z** |
@@ -58,14 +58,19 @@ UdsDispatcher → UCM OtaOrchestrator → PackageManager →（stub）落盘/Act
 - **0x27 插件路径不写进 yaml**：在 **GMT → OTA** 本地记住；板端用 `GF_DIAG_SEC_PLUGIN`。
 - **ucm** 子页：编排开关、目标 FG、失败是否 Rollback（不是刷写进度 UI）。
 
-## GMT（OTA 页）
+## GMT（OTA/UDS 页）
+
+> **2026-08-04：** 原独立 Collector 页已并入本 Tab；与 DEM 共用上方 DoIP 连接与下方 **UDS 交互**日志。
 
 | 控件 | 行为 |
 |------|------|
 | Standards / 传输模式 / 会话时序 | **只读**，跟从已加载项目的 `diag.yaml` |
 | Host:Port · 连接 | DoIP TCP + RoutingActivation；连接后按 yaml 周期发 **0x3E** |
-| Package id / Artifact | 包逻辑名 vs 主机产物路径（可 `scripts/make_sil_swu.sh` 造假包） |
-| Start OTA | 按 mode 跑完整序列；日志打出每步 UDS |
+| 模块单选 | **OTA** · **DEM** · **Collector**（配置仍只在 gf-config） |
+| Package id / Artifact · Start OTA | 包逻辑名 vs 主机产物路径；按 mode 跑完整序列（OTA 选中时模块区收短，UDS 日志紧挨 Start OTA） |
+| DEM | `0x19` 读 DTC 列表 · `0x14` 清除（DEM-lite；非 Classic DEM 编辑器） |
+| Collector | 本机 NDJSON **或** UDS `0x31 01 F201` 读板端环缓 Snapshot（NDJSON） |
+| UDS 交互 | 各模块步骤共用同一日志区 |
 
 **须先「加载项目」**（与回灌相同）；未开 ISO 13400 时连接禁用。
 
@@ -81,7 +86,8 @@ bash scripts/make_sil_swu.sh /tmp/gf_demo.swu
 # 3) 自动化冒烟
 bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
 
-# 4) 或开 GMT → 加载 project.yaml → OTA → 连接 → Start OTA
+# 4) 或开 GMT → 加载 project.yaml → OTA/UDS → 连接 → Start OTA
+#    （同页可切 DEM 读/清 DTC，或 Collector 读环缓）
 ```
 
 环境变量覆盖（服务端 / smoke，可选）：`GF_DOIP_PORT`、`GF_OTA_TRANSFER_MODE`、`GF_DIAG_S3_SERVER_MS`、`GF_DIAG_TP_PERIOD_MS`、`GF_DIAG_SEC_PLUGIN`。
@@ -90,13 +96,14 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
 
 - 真 A/B 分区 / RAUC 实刷 → **P3z**
 - Classic DEM 全栈 / 完整 DTC 策略编辑器
-- GMT 写回 `diag.yaml` / `ucm.yaml`
+- GMT 写回 `diag.yaml` / `ucm.yaml` / `collector.yaml`
 - 把主机 SIL 延时表当成 ECU ASIL 证据
 
 ## 验收
 
 - [x] DoIP TCP 会话 + NRC（`smoke_doip_ota.sh` / ctest doip|uds）
-- [x] GMT OTA sheet：选包 / 进度日志 / 结果
+- [x] GMT OTA/UDS sheet：选包 / 进度日志 / 结果
+- [x] 同页 DEM-lite（0x19/0x14）与 Collector 读环缓（0x31 F201）
 - [x] 0x38（默认）与 0x34 可经 `ota_transfer.mode` 切换
 - [x] UCM 编排 + 失败 Collector
 - [ ] 真板 RAUC（P3z）

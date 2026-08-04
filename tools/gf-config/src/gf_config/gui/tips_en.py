@@ -39,10 +39,10 @@ TIP_EN: dict[str, str] = {
         "State management: FG Off / Running / Updating. Shares the Exec/FG "
         "page with exec; OTA switches to Updating."
     ),
-    "事件收集（DEM-lite）：汇总 PHM/进程/通信等事件，可本地落盘或转 MCU DEM。"
+    "事件收集（DEM-lite）：防抖/FDC/老化 + DTC；勾选后自动带上 per 做跨重启持久化。"
     "解锁「事件收集」；有 phm/diag 时也会出现入口。": (
-        "Event collector (DEM-lite): aggregates PHM/process/com events; "
-        "local store or MCU DEM. Unlocks Collector; also appears with phm/diag."
+        "Event collector (DEM-lite): debounce/FDC/aging + DTC; auto-checks per "
+        "for cross-reboot persistency. Unlocks Collector; also with phm/diag."
     ),
     "OTA 编排：DoIP/GMT 触发后切 Updating → 跑包状态机 → 记结果；"
     "真板 RAUC 刷写仍是 stub。解锁「OTA ucm」。": (
@@ -54,15 +54,15 @@ TIP_EN: dict[str, str] = {
         "Diagnostics: ISO 14229 UDS (+NRC) base; optional ISO 13400 DoIP "
         "for Ethernet; without DoIP, CAN PDUs go to MCU. Unlocks Diag."
     ),
-    "持久化 KV 骨架：编进镜像供以后存标定/状态；"
-    "目前无独立 YAML 子页，只影响是否链接该库。": (
-        "Persistence KV skeleton: linked into the image for future cal/state; "
-        "no YAML page yet — only controls whether the lib is linked."
+    "持久化 lite（双槽文件 KV，无 SQLite）。"
+    "collector/ucm 需要跨重启 DTC 或版本时会自动勾选。": (
+        "Persistency lite (dual-slot file KV, no SQLite). "
+        "Auto-checked when collector/ucm need cross-reboot DTC or version."
     ),
-    "时间同步骨架：编进镜像供以后做跨域时钟对齐；"
-    "目前无独立 YAML 子页。": (
-        "Time-sync skeleton: linked for future cross-domain clock alignment; "
-        "no YAML page yet."
+    "时间同步 lite：platform/tsync.yaml；SIL 用 osal mock，"
+    "板上配 linuxptp/ptp4l，本模块用 pmc 读状态。": (
+        "Time-sync lite: platform/tsync.yaml; SIL uses osal mock; "
+        "on-target use linuxptp/ptp4l, this module reads status via pmc."
     ),
     "时序/trace 导出到 VCD / GMT，偏调试路径；"
     "production-release 剖面下通常关掉观测相关能力。": (
@@ -353,8 +353,14 @@ TIP_EN: dict[str, str] = {
         "Forward to MCU Classic DEM (needs CP/gateway)."
     ),
     "本地存一份，同时尝试转 MCU。": "Store locally and also try MCU forward.",
-    "勾选后，这类来源产生的事件会进入 Collector（写入 sources 列表）。": (
-        "When checked, events from this source enter Collector (sources list)."
+    "勾选后，该来源会写入 collector.yaml 的 sources。"
+    "当前运行时会 ReportEvent 的有：phm（健康）、process（进程退出）、"
+    "com（通信超时等）、ucm（OTA）。不是只能这三个；后续还可扩展。"
+    "注意：runtime 暂未按 sources 过滤，勾选主要用于配置意图与文档。": (
+        "When checked, this source is listed in collector.yaml sources. "
+        "Today ReportEvent producers are: phm, process, com, ucm — not only "
+        "three; more can be added later. Runtime does not filter by sources yet "
+        "(checkbox is config intent / docs)."
     ),
     "是否启用本地 DEM-lite 存储；关则只转发、不在本机留历史。": (
         "Enable local DEM-lite storage; off = forward only, no local history."

@@ -40,6 +40,7 @@ from gf_config.gui.field_ux import (
     COLORS_ON_FAILURE,
     ColorPair,
     combo_text,
+    enable_table_row_selection,
     multi_selected,
     refresh_enum_combo_style,
     set_cell,
@@ -73,6 +74,23 @@ KNOWN_MODULES = [
 
 # CMake always builds these (cmake/GfModules.cmake) — not trimable via checkbox.
 ALWAYS_ON_MODULES = frozenset({"core", "com", "osal"})
+
+# Soft deps: checking a module auto-checks these (with status tip).
+MODULE_DEPS: dict[str, tuple[str, ...]] = {
+    "collector": ("per",),
+    "ucm": ("per", "sm"),
+    "diag": ("log",),
+    "phm": ("log",),
+    "exec": ("sm",),
+}
+
+MODULE_DEP_HINTS: dict[str, str] = {
+    "collector": "已自动勾选 per：DTC/事件跨重启需要持久化（gf_ara::per）",
+    "ucm": "已自动勾选 per（记版本）、sm（Updating 功能组）",
+    "diag": "已自动勾选 log：诊断/OTA 步骤需要可观测日志",
+    "phm": "已自动勾选 log：健康失败默认 on_failure=log",
+    "exec": "已自动勾选 sm：进程功能组状态需要 sm",
+}
 
 _DEFAULT_MAX_RESTARTS = 3
 # Explicit default argv token so the EM table never leaves args blank.
@@ -184,7 +202,8 @@ _NAV = [
 
 _LOG_LEVELS = ["FATAL", "ERROR", "WARN", "INFO", "DEBUG", "VERBOSE"]
 _FORWARD_MODES = ["local_store", "cp_dem", "both"]
-_COLLECTOR_SOURCES = ["phm", "process", "com"]
+# Producers that call ReportEvent today (not a closed world — see collector tip).
+_COLLECTOR_SOURCES = ["phm", "process", "com", "ucm"]
 
 
 def _int_or_none(text: str) -> int | None:
@@ -280,11 +299,16 @@ class PlatformEditor(QWidget):
         mods_note = QLabel(
             t(
                 "必选 core / com / osal 灰显不可关（CMake always-on）。"
-                "其余悬停看说明；勾选后左侧出现对应平台清单。"
+                "勾选 collector/ucm/phm/diag/exec 会自动带上依赖模块并提示原因。"
             )
         )
         mods_note.setStyleSheet("color:#666; font-size:11px;")
         mods_l.addWidget(mods_note)
+        self._mod_dep_hint = QLabel("")
+        self._mod_dep_hint.setWordWrap(True)
+        self._mod_dep_hint.setStyleSheet("color:#0d47a1; font-size:11px;")
+        self._mod_dep_hint.hide()
+        mods_l.addWidget(self._mod_dep_hint)
         root.addWidget(mods)
 
         body = QHBoxLayout()
@@ -699,7 +723,10 @@ class PlatformEditor(QWidget):
         w = QWidget()
         lay = QVBoxLayout(w)
         hint = QLabel(
-            t("log.yaml：默认级别与 contexts（细配置在此；页 1 仅粗开关）。")
+            t(
+                "log.yaml：默认级别；按模块选择级别（勿手填 id）。"
+                "页 1 的 live/record 是观测通道，与这里分开。"
+            )
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#666;")
@@ -714,19 +741,20 @@ class PlatformEditor(QWidget):
             self._log_level, COLORS_LOG_LEVEL, item_tips=T.LOG_LEVEL_ITEMS
         )
         self._log_level.currentTextChanged.connect(self._on_log_changed)
-        form.addRow("default_level", self._log_level)
+        form.addRow(t("默认级别"), self._log_level)
         lay.addLayout(form)
 
-        ctx_box = QGroupBox("contexts")
+        ctx_box = QGroupBox(t("按模块覆盖级别"))
         ctx_l = QVBoxLayout(ctx_box)
         self._ctx_table = QTableWidget(0, 2)
-        self._ctx_table.setHorizontalHeaderLabels(["id", "level"])
+        self._ctx_table.setHorizontalHeaderLabels([t("模块"), t("级别")])
         set_header_tips(self._ctx_table, [T.LOG_CTX_ID, T.LOG_CTX_LEVEL])
         self._ctx_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        enable_table_row_selection(self._ctx_table)
         self._ctx_table.itemChanged.connect(self._on_log_changed)
         ctx_l.addWidget(self._ctx_table)
         ctx_btns = QHBoxLayout()
-        add_c = QPushButton(t("添加 context"))
+        add_c = QPushButton(t("添加模块级别"))
         tipify(add_c, T.BTN_ADD_CTX)
         add_c.clicked.connect(self._add_log_ctx_row)
         del_c = QPushButton(t("删除选中"))
@@ -783,6 +811,8 @@ class PlatformEditor(QWidget):
             t(
                 "collector.yaml：Event Collector 最小集。"
                 "有 MCU CP → forward=cp_dem；否则 local_store（DEM-lite）。"
+                "sources 勾选本工程会 ReportEvent 的来源：phm / process / com / ucm"
+                "（不是封闭枚举；diag 多是读 DTC，一般不作 source）。"
                 "不做 Classic DEM 全编辑器。"
             )
         )
@@ -878,6 +908,7 @@ class PlatformEditor(QWidget):
             else:
                 cb.setChecked(name in selected)
         self._modules = set(selected)
+        self._apply_module_deps(None)
         merged = self.selected_modules()
         if set(session.req.get("runtime_modules") or []) != set(merged):
             session.req["runtime_modules"] = merged
@@ -901,10 +932,78 @@ class PlatformEditor(QWidget):
                 out.append(n)
         return out
 
+    def _dependents_of(self, dep: str) -> list[str]:
+        return [m for m, deps in MODULE_DEPS.items() if dep in deps]
+
+    def _apply_module_deps(self, newly_checked: str | None) -> list[str]:
+        """Auto-check soft deps; return human hints for status line."""
+        hints: list[str] = []
+        changed = True
+        while changed:
+            changed = False
+            for name, cb in self._module_boxes.items():
+                if name in ALWAYS_ON_MODULES or not cb.isChecked():
+                    continue
+                for dep in MODULE_DEPS.get(name, ()):
+                    dcb = self._module_boxes.get(dep)
+                    if dcb is None or dcb.isChecked():
+                        continue
+                    dcb.blockSignals(True)
+                    dcb.setChecked(True)
+                    dcb.blockSignals(False)
+                    # Compose after t(): tipify(t(full)) would miss formatted keys.
+                    dcb.setToolTip(
+                        t("因勾选了 {0} 而自动启用：{1}").format(
+                            name, t(MODULE_DEP_HINTS.get(name, dep))
+                        )
+                    )
+                    tipify(dcb, "")  # hand cursor only
+                    changed = True
+                    if newly_checked == name or newly_checked is None:
+                        h = MODULE_DEP_HINTS.get(name)
+                        if h and h not in hints:
+                            hints.append(t(h))
+        return hints
+
     def _on_modules_toggled(self, *_args: object) -> None:
         if self._loading or not self._session:
             return
+        src = self.sender()
+        name = ""
+        for n, cb in self._module_boxes.items():
+            if cb is src:
+                name = n
+                break
+
+        # Turning off a soft dependency while dependents remain → confirm.
+        if name and name not in ALWAYS_ON_MODULES:
+            cb = self._module_boxes[name]
+            if not cb.isChecked():
+                deps_users = [
+                    u
+                    for u in self._dependents_of(name)
+                    if self._module_boxes[u].isChecked()
+                ]
+                if deps_users:
+                    reply = QMessageBox.question(
+                        self,
+                        t("关闭依赖模块"),
+                        t(
+                            "关闭 {0} 后，仍勾选的 {1} 将降级"
+                            "（例如 DTC/版本仅本会话有效，重启丢失）。仍要关闭？"
+                        ).format(name, ", ".join(deps_users)),
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        cb.blockSignals(True)
+                        cb.setChecked(True)
+                        cb.blockSignals(False)
+                        return
+
         self._checkpoint(coalesce=False)
+        hints = self._apply_module_deps(name if name and self._module_boxes[name].isChecked() else None)
+        if hints:
+            self._mod_dep_hint.setText(" · ".join(hints))
+            self._mod_dep_hint.show()
         modules = self.selected_modules()
         self._session.req["runtime_modules"] = modules
         self._session.dirty_req = True
@@ -1383,12 +1482,26 @@ class PlatformEditor(QWidget):
         refresh_enum_combo_style(self._log_level)
         self._ctx_table.blockSignals(True)
         self._ctx_table.setRowCount(0)
+        mods = [m for m in KNOWN_MODULES if m not in ALWAYS_ON_MODULES] + ["app"]
         for c in data.get("contexts") or []:
             if not isinstance(c, dict):
                 continue
             r = self._ctx_table.rowCount()
             self._ctx_table.insertRow(r)
-            _set_cell(self._ctx_table, r, 0, str(c.get("id") or ""), T.LOG_CTX_ID)
+            cid = str(c.get("id") or "").strip()
+            if not cid:
+                continue
+            if cid not in mods:
+                mods = mods + [cid]
+            _set_combo(
+                self._ctx_table,
+                r,
+                0,
+                mods,
+                cid,
+                self._on_log_changed,
+                tip=T.LOG_CTX_ID,
+            )
             level = str(c.get("level") or "INFO")
             if level not in _LOG_LEVELS:
                 level = "INFO"
@@ -1404,6 +1517,8 @@ class PlatformEditor(QWidget):
                 item_tips=T.LOG_LEVEL_ITEMS,
             )
         self._ctx_table.blockSignals(False)
+        if self._ctx_table.rowCount():
+            self._ctx_table.selectRow(0)
 
     def _load_ucm(self, data: dict[str, Any]) -> None:
         self._ucm_enabled.blockSignals(True)
@@ -1687,7 +1802,7 @@ class PlatformEditor(QWidget):
         self._checkpoint(coalesce=coalesce)
         contexts: list[dict[str, Any]] = []
         for r in range(self._ctx_table.rowCount()):
-            cid = _cell(self._ctx_table, r, 0)
+            cid = _combo_text(self._ctx_table, r, 0) or _cell(self._ctx_table, r, 0)
             if not cid:
                 continue
             level = _combo_text(self._ctx_table, r, 1) or "INFO"
@@ -1913,11 +2028,30 @@ class PlatformEditor(QWidget):
         self._did_table.blockSignals(False)
         self._on_diag_changed()
 
+    def select_nav(self, key: str) -> bool:
+        """Switch left nav / stack to a platform page key (exec, phm, log, …)."""
+        enabled = self._enabled_nav()
+        for i, (k, _title) in enumerate(enabled):
+            if k == key:
+                self._nav.setCurrentRow(i)
+                self._show_key(key)
+                return True
+        return False
+
     def _add_log_ctx_row(self) -> None:
         self._ctx_table.blockSignals(True)
         r = self._ctx_table.rowCount()
         self._ctx_table.insertRow(r)
-        _set_cell(self._ctx_table, r, 0, f"ctx{r + 1}", T.LOG_CTX_ID)
+        mods = [m for m in KNOWN_MODULES if m not in ALWAYS_ON_MODULES] + ["app"]
+        _set_combo(
+            self._ctx_table,
+            r,
+            0,
+            mods,
+            "",
+            self._on_log_changed,
+            tip=T.LOG_CTX_ID,
+        )
         _set_combo(
             self._ctx_table,
             r,
@@ -1930,6 +2064,7 @@ class PlatformEditor(QWidget):
             item_tips=T.LOG_LEVEL_ITEMS,
         )
         self._ctx_table.blockSignals(False)
+        self._ctx_table.selectRow(r)
         self._on_log_changed()
 
     def _add_empty_row(
@@ -1945,6 +2080,8 @@ class PlatformEditor(QWidget):
 
     def _del_rows(self, table: QTableWidget, on_change: Callable[..., None]) -> None:
         rows = sorted({i.row() for i in table.selectedIndexes()}, reverse=True)
+        if not rows and table.currentRow() >= 0:
+            rows = [table.currentRow()]
         if not rows:
             return
         table.blockSignals(True)

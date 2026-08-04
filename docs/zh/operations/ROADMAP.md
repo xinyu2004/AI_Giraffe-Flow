@@ -96,8 +96,9 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 ## P3 — 深化与扩大（当前）
 
-**产品定位：** 轻量类 AUTOSAR AP 中间件 + 工具链。桌面 MVP 已通；P3 加深配置与运行时，提供 **经得起认证的支持**（非代认证），并扩展 DoIP/OTA 操作面与仿真尖刺。  
-**真板 / 真 MCU：** 冲刺门禁（P3z），非主航道。
+**产品定位：** **AUTOSAR AP lite**（`gf_ara::*`）中间件 + 工具链——原理对齐 AP 功能簇，实现可裁剪、可上板。桌面 MVP 已通；P3 加深配置与运行时，提供 **经得起认证的支持**（非代认证），并扩展 DoIP/OTA 操作面与仿真尖刺。  
+**真板 / 真 MCU：** 冲刺门禁（P3z），非主航道。  
+**后置登记（防遗忘）：** [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md)（Method/Field、RAUC、crypto、DLT…）。
 
 ```text
 主航道：  P3-1 Config → P3-2 Middleware ∥ P3-5 Sim尖刺 → P3-3 Cert-ready → P3-4 DoIP/OTA/GMT
@@ -111,7 +112,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | C1 | **两页 UI**：① **信号与应用**（默认首页）· ② **平台运行时** | ✅ |
 | C1b | **端口交互**：裸拖 Out/In=连线；**Ctrl+拖拽**=改端口边 | ✅ |
 | C1c | 观测：`wiring_all` 天花板 + **codegen tap** + GMT 焦点过滤 | ✅ 合同+codegen；GMT 焦点既有 |
-| C2 | 页 2 做实：exec / phm / sm / diag / log / ucm / Collector | ◐ 编辑器齐；运行时加深另见 P3-2 |
+| C2 | 页 2 做实：exec / phm / sm / diag / log / ucm / Collector | ◐ 编辑器齐（含日志行选中 UX / 重复 context Verify / 撤销跳页）；运行时加深另见 P3-2 |
 | C3 | Event Collector 配置表（`platform/collector.yaml`） | ✅ 最小编辑 |
 | C4 | 对齐 [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md) · [STRUCTURE.md](../../../STRUCTURE.md) | ✅ |
 
@@ -147,11 +148,12 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | # | 交付物 | 状态 |
 |---|--------|------|
 | D1 | DoIP **会话级**互通（可先 SIL/假 board，不绑量产板） | ✅ TCP；**依赖** ISO 14229；`UdsDispatcher` + NRC |
-| D2 | **GMT OTA sheet**：选包 / 进度 / 结果；经 **DoIP** 下发路径 | ✅ 只读跟从 `diag.yaml`；默认 **0x38→0x36→0x37**（可选 0x34 / 0x31） |
+| D2 | **GMT OTA/UDS sheet**：选包 / 进度 / 结果；经 **DoIP** 下发路径 | ✅ 只读跟从 `diag.yaml`；默认 **0x38→0x36→0x37**（可选 0x34 / 0x31）；**同页** DEM-lite（0x19/0x14）+ Collector 读环缓（0x31 F201） |
 | D3 | UCM 编排（+ SM Pause）；后端可 stub→RAUC | ✅ `OtaOrchestrator`；0x27/0x29 插件 ABI（`.so/.dll`） |
 | D4 | OTA/升级失败路径上 Collector 事件可观测 | ✅ `ucm/ota_failed` |
 
-操作说明：[DOIP_OTA.md](DOIP_OTA.md) · 验收：`bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh`
+操作说明：[DOIP_OTA.md](DOIP_OTA.md) · 验收：`bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh`  
+**2026-08-04：** gf-config 日志表 UX / 重复 context Verify / 撤销跳页；GMT 独立 Collector 页并入 OTA/UDS。
 
 ### P3-5 Sim spike — 场景演示（未开工；弃 VP）
 
@@ -201,7 +203,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | **Event Collector** | — | **最小集 ●** |
 | log / per / tsync | skeleton / 缺 | **lite / 骨架 ●**（vsomeip→P3z） |
 | gf-config | **两页 UI ✅** · wiring_all / codegen tap ✅ | 平台加深 |
-| GMT | GUI + Foxglove | **OTA sheet ●** · measure 证据 |
+| GMT | GUI + Foxglove | **OTA/UDS sheet ●**（OTA·DEM·Collector）· measure 证据 |
 | Sim (CARLA/VP) | — | adapter 尖刺 |
 | 真板 / 真 CP | — | **P3z 冲刺** |
 | 代认证 | — | **不做**（只做 cert-ready 支持） |

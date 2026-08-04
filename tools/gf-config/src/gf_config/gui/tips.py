@@ -36,8 +36,12 @@ MODULE: dict[str, str] = {
         "与 exec 共用「执行/FG」页；OTA 时会切到 Updating。"
     ),
     "collector": (
-        "事件收集（DEM-lite）：汇总 PHM/进程/通信等事件，可本地落盘或转 MCU DEM。"
+        "事件收集（DEM-lite）：防抖/FDC/老化 + DTC；勾选后自动带上 per 做跨重启持久化。"
         "解锁「事件收集」；有 phm/diag 时也会出现入口。"
+    ),
+    "per": (
+        "持久化 lite（双槽文件 KV，无 SQLite）。"
+        "collector/ucm 需要跨重启 DTC 或版本时会自动勾选。"
     ),
     "ucm": (
         "OTA 编排：DoIP/GMT 触发后切 Updating → 跑包状态机 → 记结果；"
@@ -47,13 +51,9 @@ MODULE: dict[str, str] = {
         "诊断：ISO 14229 UDS（含 NRC）为基础，可选 ISO 13400 DoIP 作以太网传输；"
         "无 DoIP 时 CAN PDU 交 MCU。解锁「诊断」。"
     ),
-    "per": (
-        "持久化 KV 骨架：编进镜像供以后存标定/状态；"
-        "目前无独立 YAML 子页，只影响是否链接该库。"
-    ),
     "tsync": (
-        "时间同步骨架：编进镜像供以后做跨域时钟对齐；"
-        "目前无独立 YAML 子页。"
+        "时间同步 lite：platform/tsync.yaml；SIL 用 osal mock，"
+        "板上配 linuxptp/ptp4l，本模块用 pmc 读状态。"
     ),
     "trace": (
         "时序/trace 导出到 VCD / GMT，偏调试路径；"
@@ -269,7 +269,12 @@ COL_FORWARD_ITEMS: dict[str, str] = {
     "cp_dem": "转发到 MCU Classic DEM 路径（需要 CP/gateway）。",
     "both": "本地存一份，同时尝试转 MCU。",
 }
-COL_SOURCE = "勾选后，这类来源产生的事件会进入 Collector（写入 sources 列表）。"
+COL_SOURCE = (
+    "勾选后，该来源会写入 collector.yaml 的 sources。"
+    "当前运行时会 ReportEvent 的有：phm（健康）、process（进程退出）、"
+    "com（通信超时等）、ucm（OTA）。不是只能这三个；后续还可扩展。"
+    "注意：runtime 暂未按 sources 过滤，勾选主要用于配置意图与文档。"
+)
 COL_LOCAL_EN = "是否启用本地 DEM-lite 存储；关则只转发、不在本机留历史。"
 COL_MAX = "本地最多保留多少条事件；超出按策略丢弃最旧条目，防止磁盘涨满。"
 

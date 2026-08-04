@@ -13,7 +13,6 @@ _EN: dict[str, str] = {
     "语言": "Language",
     "中文": "中文",
     "English": "English",
-    "正在切换语言并重启应用…": "Switching language and restarting…",
     "gf-config — Giraffe Flow（信号与应用 / 平台）": "gf-config — Giraffe Flow (Signals & Apps / Platform)",
     "未打开项目": "No project open",
     "1 · 信号与应用": "1 · Signals & apps",
@@ -35,6 +34,40 @@ _EN: dict[str, str] = {
     "编辑": "Edit",
     "撤销": "Undo",
     "重做": "Redo",
+    "关闭依赖模块": "Disable dependency module",
+    "关闭 {0} 后，仍勾选的 {1} 将降级（例如 DTC/版本仅本会话有效，重启丢失）。仍要关闭？": (
+        "Disabling {0} while {1} remain checked will degrade "
+        "(e.g. DTC/version session-only). Continue?"
+    ),
+    "因勾选了 {0} 而自动启用：{1}": "Auto-enabled because {0} is checked: {1}",
+    "已自动勾选 per：DTC/事件跨重启需要持久化（gf_ara::per）": (
+        "Auto-checked per: DTC/events need persistency (gf_ara::per)"
+    ),
+    "已自动勾选 per（记版本）、sm（Updating 功能组）": (
+        "Auto-checked per (version) and sm (Updating FG)"
+    ),
+    "已自动勾选 log：诊断/OTA 步骤需要可观测日志": (
+        "Auto-checked log: diag/OTA steps need observable logs"
+    ),
+    "已自动勾选 log：健康失败默认 on_failure=log": (
+        "Auto-checked log: PHM on_failure defaults to log"
+    ),
+    "已自动勾选 sm：进程功能组状态需要 sm": (
+        "Auto-checked sm: process function-group state needs sm"
+    ),
+    "必选 core / com / osal 灰显不可关（CMake always-on）。勾选 collector/ucm/phm/diag/exec 会自动带上依赖模块并提示原因。": (
+        "core/com/osal are always on. Checking collector/ucm/phm/diag/exec "
+        "auto-enables dependencies with a tip."
+    ),
+    "默认级别": "Default level",
+    "按模块覆盖级别": "Per-module level overrides",
+    "模块": "Module",
+    "级别": "Level",
+    "添加模块级别": "Add module level",
+    "log.yaml：默认级别；按模块选择级别（勿手填 id）。页 1 的 live/record 是观测通道，与这里分开。": (
+        "log.yaml: default level; pick module levels (do not type ids). "
+        "Tab-1 live/record is a separate observability path."
+    ),
     "撤销（信号图）": "Undo (graph)",
     "重做（信号图）": "Redo (graph)",
     "重做（Ctrl+Y）": "Redo (Ctrl+Y)",
@@ -54,6 +87,11 @@ _EN: dict[str, str] = {
     "没有可重做的操作": "Nothing to redo",
     "已重做": "Redone",
     "已重做（信号图）": "Redone (graph)",
+    "平台": "Platform",
+    "平台运行时": "Platform runtime",
+    "信号连线 / 部署": "Signal wiring / deploy",
+    "SKU / 需求": "SKU / requirements",
+    "文档": "Document",
     "请先打开项目": "Open a project first",
     "打开失败": "Open failed",
     "保存失败": "Save failed",
@@ -384,9 +422,13 @@ _EN: dict[str, str] = {
     ),
     "collector.yaml：Event Collector 最小集。"
     "有 MCU CP → forward=cp_dem；否则 local_store（DEM-lite）。"
+    "sources 勾选本工程会 ReportEvent 的来源：phm / process / com / ucm"
+    "（不是封闭枚举；diag 多是读 DTC，一般不作 source）。"
     "不做 Classic DEM 全编辑器。": (
         "collector.yaml: minimal Event Collector. "
         "With MCU CP → forward=cp_dem; else local_store (DEM-lite). "
+        "sources: producers that ReportEvent — phm / process / com / ucm "
+        "(not a closed set; diag usually reads DTCs, not a source). "
         "Not a full Classic DEM editor."
     ),
     "local（DEM-lite 落盘）": "local (DEM-lite on disk)",
@@ -540,16 +582,14 @@ def switch_language_and_restart(
 ) -> None:
     """Persist language, remember project, relaunch this process (sys.argv)."""
     from PySide6.QtCore import QProcess
-    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtWidgets import QApplication
 
     save_language(lang)
     set_pending_reopen_project(project_path)
-    QMessageBox.information(
-        None,
-        t("语言"),
-        t("正在切换语言并重启应用…"),
-    )
-    QProcess.startDetached(sys.executable, sys.argv)
     app = QApplication.instance()
+    if app is not None:
+        for w in app.topLevelWidgets():
+            w.hide()
+    QProcess.startDetached(sys.executable, sys.argv)
     if app is not None:
         app.quit()

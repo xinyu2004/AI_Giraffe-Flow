@@ -21,6 +21,9 @@ _SIL_KEY = bytes([0x55, 0xAA])
 _SID_NAME = {
     0x10: "DiagnosticSessionControl",
     0x11: "ECUReset",
+    0x14: "ClearDiagnosticInformation",
+    0x19: "ReadDTCInformation",
+    0x22: "ReadDataByIdentifier",
     0x27: "SecurityAccess",
     0x29: "Authentication",
     0x31: "RoutineControl",
@@ -29,6 +32,7 @@ _SID_NAME = {
     0x37: "RequestTransferExit",
     0x38: "RequestFileTransfer",
     0x3E: "TesterPresent",
+    0x85: "ControlDTCSetting",
 }
 
 OTA_MODE_FILE = "request_file_transfer"
@@ -250,3 +254,88 @@ class DoipClient:
                 on_step(f"… transfer {off}/{len(data)} bytes")
 
         return _step(bytes([0x37]))
+
+    def read_dtc_list(
+        self,
+        *,
+        status_mask: int = 0xFF,
+        on_step: Callable[[str], None] | None = None,
+    ) -> list[dict]:
+        """0x19 0x02 — report DTC by status mask. Returns {code, status}."""
+        req = bytes([0x19, 0x02, status_mask & 0xFF])
+        resp = self.transceive(req)
+        line = format_uds_step(req, resp)
+        if on_step is not None:
+            on_step(line)
+        if not resp or resp[0] == 0x7F:
+            nrc = resp[2] if resp and len(resp) >= 3 else -1
+            raise RuntimeError(f"0x19 failed NRC=0x{nrc:02X}: {line}")
+        if len(resp) < 3 or resp[0] != 0x59:
+            raise RuntimeError(f"0x19 unexpected: {resp.hex()}")
+        out: list[dict] = []
+        body = resp[3:]  # skip 59 02 mask
+        for i in range(0, len(body) - 3, 4):
+            code = (body[i] << 16) | (body[i + 1] << 8) | body[i + 2]
+            status = body[i + 3]
+            out.append({"code": code, "status": status})
+        return out
+
+    def clear_dtcs(
+        self,
+        *,
+        group: int = 0xFFFFFF,
+        on_step: Callable[[str], None] | None = None,
+    ) -> None:
+        """0x14 ClearDiagnosticInformation."""
+        req = bytes(
+            [
+                0x14,
+                (group >> 16) & 0xFF,
+                (group >> 8) & 0xFF,
+                group & 0xFF,
+            ]
+        )
+        resp = self.transceive(req)
+        line = format_uds_step(req, resp)
+        if on_step is not None:
+            on_step(line)
+        if not resp or resp[0] == 0x7F:
+            nrc = resp[2] if resp and len(resp) >= 3 else -1
+            raise RuntimeError(f"0x14 failed NRC=0x{nrc:02X}: {line}")
+
+    def read_collector_events(
+        self,
+        *,
+        offset: int = 0,
+        max_n: int = 200,
+        on_step: Callable[[str], None] | None = None,
+    ) -> list[dict]:
+        """RID F201: dump EventCollector ring (NDJSON body). Same shape as store file."""
+        import json
+
+        req = bytes([0x31, 0x01, 0xF2, 0x01]) + struct.pack(
+            "!HH", max(0, int(offset)), max(1, min(int(max_n), 500))
+        )
+        resp = self.transceive(req)
+        line = format_uds_step(req, resp)
+        if on_step is not None:
+            on_step(line)
+        if not resp or resp[0] == 0x7F:
+            nrc = resp[2] if resp and len(resp) >= 3 else -1
+            raise RuntimeError(f"Collector dump failed NRC=0x{nrc:02X}: {line}")
+        if len(resp) < 10 or resp[0] != 0x71:
+            raise RuntimeError(f"Collector dump unexpected: {resp.hex()}")
+        # 0x71 01 F2 01 | total | offset | count | ndjson…
+        payload = resp[10:]
+        rows: list[dict] = []
+        for raw in payload.splitlines():
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                rec = json.loads(raw.decode("utf-8", errors="replace"))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(rec, dict):
+                rows.append(rec)
+        return rows

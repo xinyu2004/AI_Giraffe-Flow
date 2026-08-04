@@ -2,16 +2,38 @@
 #include "gf_ara/diag/doip_session.hpp"
 #include "gf_ara/diag/uds_dispatcher.hpp"
 #include "gf_ara/ucm/ota_orchestrator.hpp"
+#include "gf_ara/ucm/package_manager.hpp"
 #include "gf_ara/collector/event_collector.hpp"
 
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
+#include <regex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
 
 namespace {
+
+std::string ReadFile(const std::string& path) {
+  std::ifstream in(path);
+  if (!in) {
+    return {};
+  }
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+
+std::string PlatformPath(const char* name) {
+  const char* dir = std::getenv("GF_PLATFORM_DIR");
+  if (dir == nullptr || dir[0] == '\0') {
+    return {};
+  }
+  return std::string(dir) + "/" + name;
+}
 
 std::uint16_t EnvU16(const char* key, std::uint16_t def) {
   if (const char* e = std::getenv(key); e && *e) {
@@ -66,15 +88,42 @@ int main() {
   gf_ara::collector::CollectorConfig ccfg;
   ccfg.forward = "local_store";
   ccfg.local_enabled = true;
-  gf_ara::collector::EventCollector::Instance().Configure(ccfg);
+  const auto collector_yaml = ReadFile(PlatformPath("collector.yaml"));
+  if (!collector_yaml.empty()) {
+    gf_ara::collector::EventCollector::Instance().ConfigureFromYaml(collector_yaml);
+  } else {
+    gf_ara::collector::EventCollector::Instance().Configure(ccfg);
+  }
 
   gf_ara::ucm::OtaConfig oc;
   oc.enabled = true;
   oc.allow_rollback = true;
   oc.function_group = "MachineFG";
+  gf_ara::ucm::UcmRuntimeConfig ur;
+  ur.enabled = true;
+  ur.allow_rollback = true;
+  ur.function_group = "MachineFG";
+  const auto ucm_yaml = ReadFile(PlatformPath("ucm.yaml"));
+  if (!ucm_yaml.empty()) {
+    std::smatch m;
+    if (std::regex_search(ucm_yaml, m, std::regex(R"(enabled:\s*(true|false))"))) {
+      ur.enabled = oc.enabled = (m[1].str() == "true");
+    }
+    if (std::regex_search(ucm_yaml, m, std::regex(R"(allow_rollback:\s*(true|false))"))) {
+      ur.allow_rollback = oc.allow_rollback = (m[1].str() == "true");
+    }
+    if (std::regex_search(ucm_yaml, m, std::regex(R"(function_group:\s*(\S+))"))) {
+      ur.function_group = oc.function_group = m[1].str();
+    }
+    if (std::regex_search(ucm_yaml, m, std::regex(R"(package_source:\s*(\S+))"))) {
+      ur.package_source = m[1].str();
+    }
+  }
   if (const char* m = std::getenv("GF_UCM_MANIFEST"); m && *m) {
     oc.manifest_path = m;
+    ur.manifest_path = m;
   }
+  gf_ara::ucm::PackageManager::SetRuntimeConfig(ur);
   gf_ara::ucm::OtaOrchestrator::Configure(oc);
 
   gf_ara::diag::UdsConfig ucfg;
@@ -102,6 +151,25 @@ int main() {
     return EXIT_FAILURE;
   }
   gf_ara::diag::UdsDispatcher::Instance().Configure(ucfg);
+  // Optional DID seed from diag.yaml (id: 0xF191 style lines)
+  const auto diag_yaml = ReadFile(PlatformPath("diag.yaml"));
+  if (!diag_yaml.empty()) {
+    std::regex did_re(R"(-?\s*id:\s*(0x[0-9A-Fa-f]+|\d+)[\s\S]*?name:\s*(\S+))");
+    for (auto it = std::sregex_iterator(diag_yaml.begin(), diag_yaml.end(), did_re);
+         it != std::sregex_iterator(); ++it) {
+      const auto did = static_cast<std::uint16_t>(std::stoul((*it)[1].str(), nullptr, 0));
+      const std::string name = (*it)[2].str();
+      gf_ara::diag::UdsDispatcher::Instance().SetDid(
+          did, std::vector<std::uint8_t>(name.begin(), name.end()));
+    }
+  }
+  // Version DID 0xF191 from UCM stored version when present
+  {
+    const auto ver = gf_ara::ucm::PackageManager::StoredVersion("pkg.xfer");
+    const std::string v = ver.empty() ? std::string("sil") : ver;
+    gf_ara::diag::UdsDispatcher::Instance().SetDid(
+        0xF191, std::vector<std::uint8_t>(v.begin(), v.end()));
+  }
   gf_ara::diag::UdsDispatcher::Instance().SetRoutineHook(OtaRoutine);
   gf_ara::diag::UdsDispatcher::Instance().SetTransferCompleteHook(
       [](const std::string& path, std::uint64_t bytes) {

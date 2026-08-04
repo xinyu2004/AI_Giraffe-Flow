@@ -36,7 +36,7 @@ int main() {
   if (ts.GetStatus() != SyncStatus::kSynchronized) {
     return Fail("TSYNC-02", "default status");
   }
-  Pass("TSYNC-02", "Status=Synchronized (stub)");
+  Pass("TSYNC-02", "Status=Synchronized (osal/mock)");
 
   TsyncConfig off;
   off.pretend_synchronized = false;
