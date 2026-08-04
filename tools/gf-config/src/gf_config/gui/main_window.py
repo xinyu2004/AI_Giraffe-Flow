@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from gf_config.core import ProjectSession
+from gf_config.gui.doc_history import DocHistory, apply_snapshot
 from gf_config.gui.platform_editor import PlatformEditor
 from gf_config.gui.req_editor import ReqEditor
 from gf_config.gui.wiring_graph import WiringGraphView
@@ -34,6 +35,11 @@ class MainWindow(QMainWindow):
         self.resize(1400, 860)
         self._session: ProjectSession | None = None
         self._skip_close_prompt = False
+        self._history = DocHistory()
+        self._history.bind(
+            lambda: self._session,
+            lambda: self._graph.flush_canvas(),
+        )
 
         self._tabs = QTabWidget()
         self._req = ReqEditor()
@@ -78,6 +84,16 @@ class MainWindow(QMainWindow):
         status = QStatusBar()
         status.addWidget(self._path_label, stretch=1)
         self.setStatusBar(status)
+
+        self._graph.set_history_hooks(
+            self._history.checkpoint,
+            self._history.end_edit,
+            self._history.clear,
+        )
+        self._req.set_history_hooks(self._history.checkpoint, self._history.end_edit)
+        self._platform.set_history_hooks(
+            self._history.checkpoint, self._history.end_edit
+        )
 
         self._req.changed.connect(self._on_req_changed)
         self._graph.changed.connect(self._mark_dirty)
@@ -146,20 +162,20 @@ class MainWindow(QMainWindow):
         file_menu.addAction(act_quit)
 
         edit_menu = self.menuBar().addMenu(t("编辑"))
-        act_undo = QAction(t("撤销（信号图）"), self)
+        act_undo = QAction(t("撤销"), self)
         act_undo.setShortcut(QKeySequence.StandardKey.Undo)
         act_undo.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_undo.triggered.connect(self._undo_graph)
+        act_undo.triggered.connect(self._undo_doc)
         edit_menu.addAction(act_undo)
-        act_redo = QAction(t("重做（信号图）"), self)
+        act_redo = QAction(t("重做"), self)
         act_redo.setShortcut(QKeySequence.StandardKey.Redo)
         act_redo.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_redo.triggered.connect(self._redo_graph)
+        act_redo.triggered.connect(self._redo_doc)
         edit_menu.addAction(act_redo)
         act_redo_y = QAction(t("重做（Ctrl+Y）"), self)
         act_redo_y.setShortcut("Ctrl+Y")
         act_redo_y.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_redo_y.triggered.connect(self._redo_graph)
+        act_redo_y.triggered.connect(self._redo_doc)
         edit_menu.addAction(act_redo_y)
 
         view_menu = self.menuBar().addMenu(t("视图"))
@@ -277,21 +293,37 @@ class MainWindow(QMainWindow):
         self._tabs.setCurrentWidget(self._signals_page)
         self._graph.fit_in_window()
 
-    def _undo_graph(self) -> None:
-        self._tabs.setCurrentWidget(self._signals_page)
-        if not self._graph._undo_stack:
+    def _undo_doc(self) -> None:
+        if not self._history.can_undo() or self._session is None:
             self.statusBar().showMessage(t("没有可撤销的操作"), 2000)
             return
-        self._graph.undo()
-        self.statusBar().showMessage(t("已撤销（信号图）"), 2000)
+        snap = self._history.undo()
+        if snap is None:
+            return
+        self._apply_doc_snapshot(snap)
+        self.statusBar().showMessage(t("已撤销"), 2000)
 
-    def _redo_graph(self) -> None:
-        self._tabs.setCurrentWidget(self._signals_page)
-        if not self._graph._redo_stack:
+    def _redo_doc(self) -> None:
+        if not self._history.can_redo() or self._session is None:
             self.statusBar().showMessage(t("没有可重做的操作"), 2000)
             return
-        self._graph.redo()
-        self.statusBar().showMessage(t("已重做（信号图）"), 2000)
+        snap = self._history.redo()
+        if snap is None:
+            return
+        self._apply_doc_snapshot(snap)
+        self.statusBar().showMessage(t("已重做"), 2000)
+
+    def _apply_doc_snapshot(self, snap: dict) -> None:
+        assert self._session is not None
+        apply_snapshot(self._session, snap)
+        self._history.suppress = True
+        try:
+            self._req.set_session(self._session)
+            self._platform.set_session(self._session)
+            self._graph.apply_session_restore(self._session)
+        finally:
+            self._history.suppress = False
+            self._history.end_edit()
 
     def _show_flows_panel(self) -> None:
         self._tabs.setCurrentWidget(self._signals_page)
@@ -315,10 +347,15 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "打开失败", str(exc))
 
     def open_project(self, project_file: Path) -> None:
+        self._history.clear()
         self._session = ProjectSession.open(project_file)
-        self._req.set_session(self._session)
-        self._graph.set_session(self._session)
-        self._platform.set_session(self._session)
+        self._history.suppress = True
+        try:
+            self._req.set_session(self._session)
+            self._graph.set_session(self._session)
+            self._platform.set_session(self._session)
+        finally:
+            self._history.suppress = False
         self._path_label.setText(str(self._session.paths.project_file))
         self.setWindowTitle(f"gf-config — {self._session.paths.project_dir.name}")
         lr = self._session.paths.lineage_report

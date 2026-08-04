@@ -253,6 +253,8 @@ class PlatformEditor(QWidget):
         self._module_boxes: dict[str, QCheckBox] = {}
         self._pages: dict[str, QWidget] = {}
         self._src_boxes: dict[str, QCheckBox] = {}
+        self._checkpoint_fn: Callable[..., None] | None = None
+        self._end_edit_fn: Callable[[], None] | None = None
 
         root = QVBoxLayout(self)
 
@@ -321,6 +323,7 @@ class PlatformEditor(QWidget):
         for key, _title, _mods in _NAV:
             self._stack.addWidget(self._pages[key])
 
+        self._wire_coalesce_end_edit()
         self._nav.currentItemChanged.connect(self._on_nav_item)
         self._rebuild_nav()
 
@@ -825,7 +828,42 @@ class PlatformEditor(QWidget):
         lay.addStretch(1)
         return w
 
-    # ── session ───────────────────────────────────────────
+    # ── session / history ─────────────────────────────────
+
+    def set_history_hooks(
+        self,
+        checkpoint: Callable[..., None] | None,
+        end_edit: Callable[[], None] | None = None,
+    ) -> None:
+        self._checkpoint_fn = checkpoint
+        self._end_edit_fn = end_edit
+
+    def _checkpoint(self, *, coalesce: bool = False) -> None:
+        if self._checkpoint_fn is not None:
+            self._checkpoint_fn(coalesce=coalesce)
+
+    def _end_doc_edit(self) -> None:
+        if self._end_edit_fn is not None:
+            self._end_edit_fn()
+
+    def _coalesce_sender(self) -> bool:
+        return isinstance(self.sender(), (QLineEdit, QSpinBox))
+
+    def _wire_coalesce_end_edit(self) -> None:
+        for w in (
+            self._doip_addr,
+            self._doip_tester,
+            self._doip_port,
+            self._s3_ms,
+            self._tp_ms,
+            self._p2_ms,
+            self._p2star_ms,
+            self._sec_delay_ms,
+            self._ota_block,
+            self._ucm_source,
+            self._col_max,
+        ):
+            w.editingFinished.connect(self._end_doc_edit)
 
     def set_session(self, session: ProjectSession | None) -> None:
         self._session = session
@@ -866,12 +904,14 @@ class PlatformEditor(QWidget):
     def _on_modules_toggled(self, *_args: object) -> None:
         if self._loading or not self._session:
             return
+        self._checkpoint(coalesce=False)
         modules = self.selected_modules()
         self._session.req["runtime_modules"] = modules
         self._session.dirty_req = True
         self._modules = set(modules)
         self._rebuild_nav()
         self.changed.emit()
+        self._end_doc_edit()
 
     def set_runtime_modules(self, modules: list[str]) -> None:
         """Compatibility: sync checkboxes if external code still calls this."""
@@ -1411,6 +1451,8 @@ class PlatformEditor(QWidget):
     def _on_exec_changed(self, *_a: object) -> None:
         if self._loading or not self._session:
             return
+        coalesce = self._coalesce_sender()
+        self._checkpoint(coalesce=coalesce)
         fgs: list[dict[str, Any]] = []
         for r in range(self._fg_table.rowCount()):
             fid = _cell(self._fg_table, r, 0)
@@ -1444,10 +1486,14 @@ class PlatformEditor(QWidget):
         self._refresh_proc_fg_options()
         self._refresh_ucm_fg_combo()
         self._mark("exec")
+        if not coalesce:
+            self._end_doc_edit()
 
     def _on_em_launch_changed(self, *_a: object) -> None:
         if self._loading or not self._session:
             return
+        coalesce = self._coalesce_sender()
+        self._checkpoint(coalesce=coalesce)
         procs: list[dict[str, Any]] = []
         for r in range(self._em_table.rowCount()):
             name = _combo_text(self._em_table, r, 0)
@@ -1473,10 +1519,14 @@ class PlatformEditor(QWidget):
         data["schema_version"] = data.get("schema_version") or "0.1"
         data["processes"] = procs
         self._mark("em_launch")
+        if not coalesce:
+            self._end_doc_edit()
 
     def _on_phm_changed(self, *_a: object) -> None:
         if self._loading or not self._session:
             return
+        coalesce = self._coalesce_sender()
+        self._checkpoint(coalesce=coalesce)
         entities: list[dict[str, Any]] = []
         for r in range(self._phm_table.rowCount()):
             eid = _cell(self._phm_table, r, 0)
@@ -1508,6 +1558,8 @@ class PlatformEditor(QWidget):
         data["schema_version"] = data.get("schema_version") or "0.1"
         data["entities"] = entities
         self._mark("phm")
+        if not coalesce:
+            self._end_doc_edit()
 
     def _on_iso_14229_toggled(self, checked: bool) -> None:
         if self._loading:
@@ -1551,6 +1603,8 @@ class PlatformEditor(QWidget):
     def _on_diag_changed(self, *_a: object) -> None:
         if self._loading or not self._session:
             return
+        coalesce = self._coalesce_sender()
+        self._checkpoint(coalesce=coalesce)
         try:
             addr = _int_or_none(self._doip_addr.text())
             if addr is None:
@@ -1623,10 +1677,14 @@ class PlatformEditor(QWidget):
         data["dids"] = dids
         data["rids"] = rids
         self._mark("diag")
+        if not coalesce:
+            self._end_doc_edit()
 
     def _on_log_changed(self, *_a: object) -> None:
         if self._loading or not self._session:
             return
+        coalesce = self._coalesce_sender()
+        self._checkpoint(coalesce=coalesce)
         contexts: list[dict[str, Any]] = []
         for r in range(self._ctx_table.rowCount()):
             cid = _cell(self._ctx_table, r, 0)
@@ -1641,10 +1699,14 @@ class PlatformEditor(QWidget):
         data["default_level"] = self._log_level.currentText().strip() or "INFO"
         data["contexts"] = contexts
         self._mark("log")
+        if not coalesce:
+            self._end_doc_edit()
 
     def _on_ucm_changed(self, *_a: object) -> None:
         if self._loading or not self._session:
             return
+        coalesce = self._coalesce_sender()
+        self._checkpoint(coalesce=coalesce)
         data = self._session.platform.setdefault("ucm", {"schema_version": "0.1"})
         data["schema_version"] = data.get("schema_version") or "0.1"
         data["enabled"] = self._ucm_enabled.isChecked()
@@ -1652,10 +1714,14 @@ class PlatformEditor(QWidget):
         data["function_group"] = self._ucm_fg.currentText().strip() or "MachineFG"
         data["allow_rollback"] = self._ucm_rollback.isChecked()
         self._mark("ucm")
+        if not coalesce:
+            self._end_doc_edit()
 
     def _on_collector_changed(self, *_a: object) -> None:
         if self._loading or not self._session:
             return
+        coalesce = self._coalesce_sender()
+        self._checkpoint(coalesce=coalesce)
         data = self._session.platform.setdefault("collector", {"schema_version": "0.1"})
         data["schema_version"] = data.get("schema_version") or "0.1"
         data["forward"] = self._col_forward.currentText().strip() or "local_store"
@@ -1665,6 +1731,8 @@ class PlatformEditor(QWidget):
             "max_entries": int(self._col_max.value()),
         }
         self._mark("collector")
+        if not coalesce:
+            self._end_doc_edit()
 
     # ── row helpers ───────────────────────────────────────
 

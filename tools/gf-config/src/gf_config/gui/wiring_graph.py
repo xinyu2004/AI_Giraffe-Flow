@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import copy
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import shiboken6
 from PySide6.QtCore import QEvent, QPointF, QRectF, QTimer, Qt, Signal
@@ -15,6 +14,7 @@ from PySide6.QtGui import (
     QCursor,
     QFont,
     QKeySequence,
+    QMouseEvent,
     QPainter,
     QPainterPath,
     QPainterPathStroker,
@@ -113,6 +113,18 @@ def _norm_side(side: str | None, default: str) -> str:
 
 def _qpoint(x: float, y: float) -> QPointF:
     return QPointF(x, y)
+
+
+class DeselectableListWidget(QListWidget):
+    """Click empty area → clear current row (no sticky last selection)."""
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        if self.itemAt(event.position().toPoint()) is None:
+            self.clearSelection()
+            self.setCurrentRow(-1)
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
 
 def cubic_bezier_point(p0: QPointF, p1: QPointF, p2: QPointF, p3: QPointF, t: float) -> QPointF:
@@ -1633,17 +1645,17 @@ class WiringGraphView(QWidget):
         self._layout_pos: dict[str, tuple[float, float]] = {}
         # 打开项目时 Tab 可能尚未显示，viewport=0 → fitInView 无效；显示后再 fit
         self._need_fit_on_show = False
-        self._undo_stack: list[dict[str, Any]] = []
-        self._redo_stack: list[dict[str, Any]] = []
         self._undo_suppress = False
         self._drag_undo_armed = False
-        self._undo_limit = 40
+        self._checkpoint_fn: Callable[..., None] | None = None
+        self._end_edit_fn: Callable[[], None] | None = None
+        self._clear_history_fn: Callable[[], None] | None = None
 
         self._scene = QGraphicsScene(self)
         self._view = ZoomGraphicsView(self._scene, self)
         self._scene.selectionChanged.connect(self._on_selection_changed)
 
-        self._flow_list = QListWidget()
+        self._flow_list = DeselectableListWidget()
         self._flow_list.setMinimumWidth(340)
         self._flow_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
@@ -1657,7 +1669,7 @@ class WiringGraphView(QWidget):
 
         self._legend = QLabel(
             "Out=绿 · In=橙 · ! =未连\n"
-            "拖拽连线 · Ctrl+拖改边/同边调序 · Ctrl+Z/Y 撤销"
+            "拖拽连线 · Ctrl+拖改边/同边调序 · Ctrl+Z/Y 撤销（全应用）"
         )
         self._legend.setWordWrap(True)
         self._legend.setStyleSheet("color: #a9cfc0; font-size: 11px;")
@@ -1737,14 +1749,27 @@ class WiringGraphView(QWidget):
     def delete_selection(self) -> None:
         self._delete_selection()
 
+    def set_history_hooks(
+        self,
+        checkpoint: Callable[..., None] | None,
+        end_edit: Callable[[], None] | None = None,
+        clear: Callable[[], None] | None = None,
+    ) -> None:
+        """Bind document-wide undo (MainWindow DocHistory)."""
+        self._checkpoint_fn = checkpoint
+        self._end_edit_fn = end_edit
+        self._clear_history_fn = clear
+
     def _push_undo(self) -> None:
         if self._undo_suppress or self._session is None:
             return
-        self.flush_canvas()
-        self._undo_stack.append(copy.deepcopy(self._session.wiring))
-        if len(self._undo_stack) > self._undo_limit:
-            self._undo_stack.pop(0)
-        self._redo_stack.clear()
+        if self._checkpoint_fn is not None:
+            self._checkpoint_fn(coalesce=False)
+            return
+
+    def _end_doc_edit(self) -> None:
+        if self._end_edit_fn is not None:
+            self._end_edit_fn()
 
     def begin_card_drag(self, card: ProcessCard) -> None:
         """Arm one undo snapshot per drag gesture."""
@@ -1753,34 +1778,13 @@ class WiringGraphView(QWidget):
         self._push_undo()
         self._drag_undo_armed = True
 
-    def undo(self) -> None:
-        if not self._undo_stack or self._session is None:
-            return
-        self.flush_canvas()
-        self._redo_stack.append(copy.deepcopy(self._session.wiring))
-        snap = self._undo_stack.pop()
-        self._apply_wiring_snapshot(snap)
-        self.changed.emit()
-
-    def redo(self) -> None:
-        if not self._redo_stack or self._session is None:
-            return
-        self.flush_canvas()
-        self._undo_stack.append(copy.deepcopy(self._session.wiring))
-        snap = self._redo_stack.pop()
-        self._apply_wiring_snapshot(snap)
-        self.changed.emit()
-
-    def _apply_wiring_snapshot(self, snap: dict[str, Any]) -> None:
-        assert self._session is not None
+    def apply_session_restore(self, session: ProjectSession) -> None:
+        """Reload canvas from session after doc undo/redo (keep DocHistory)."""
+        self._session = session
         self._undo_suppress = True
         try:
-            self._session.wiring = snap
-            self._session.dirty_wiring = True
-            # Load positions from snapshot; rebuild must NOT overwrite from live cards
-            # (those still hold post-drag coords until scene.clear).
             self._layout_pos.clear()
-            nodes = (snap.get("canvas") or {}).get("nodes") or {}
+            nodes = (session.wiring.get("canvas") or {}).get("nodes") or {}
             if isinstance(nodes, dict):
                 for name, ui in nodes.items():
                     if isinstance(ui, dict) and "x" in ui and "y" in ui:
@@ -1791,9 +1795,9 @@ class WiringGraphView(QWidget):
             self._drag_undo_armed = False
 
     def clear_undo_history(self) -> None:
-        self._undo_stack.clear()
-        self._redo_stack.clear()
         self._drag_undo_armed = False
+        if self._clear_history_fn is not None:
+            self._clear_history_fn()
 
     def showEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().showEvent(event)
@@ -1891,6 +1895,7 @@ class WiringGraphView(QWidget):
             self.changed.emit()
         self._refresh_scene_rect()
         self._drag_undo_armed = False
+        self._end_doc_edit()
         # Drop ScrollHandDrag "closed hand" residual after item drag.
         self._view.viewport().unsetCursor()
 
@@ -2433,6 +2438,7 @@ class WiringGraphView(QWidget):
             self._pop_app_cursor()
             self._view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
             self._drag_undo_armed = False
+            self._end_doc_edit()
             self.refresh_port_hover_cursor()
 
     def cancel_port_relocate(self) -> None:
@@ -2457,6 +2463,7 @@ class WiringGraphView(QWidget):
             # Cancelled gesture: drop the armed undo snapshot usability by
             # keeping stack as-is (snapshot == current). Clear armed flag.
             self._drag_undo_armed = False
+            self._end_doc_edit()
             self.refresh_port_hover_cursor()
 
     def apply_port_side_and_order(
@@ -2512,6 +2519,7 @@ class WiringGraphView(QWidget):
             if hasattr(e, "update_path"):
                 e.update_path()
         self._drag_undo_armed = False
+        self._end_doc_edit()
         self.changed.emit()
 
     # --- context menus / edit ---
@@ -3445,6 +3453,10 @@ class WiringGraphView(QWidget):
 
     def _highlight_list_edge(self, row: int) -> None:
         if row < 0:
+            self._scene.blockSignals(True)
+            self._scene.clearSelection()
+            self._scene.blockSignals(False)
+            self._clear_visual_emphasis()
             return
         item = self._flow_list.item(row)
         if item is None:

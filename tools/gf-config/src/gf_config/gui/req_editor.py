@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -90,6 +92,8 @@ class ReqEditor(QWidget):
         self._session: ProjectSession | None = None
         self._binding_boxes: dict[str, QCheckBox] = {}
         self._loading = False
+        self._checkpoint_fn: Callable[..., None] | None = None
+        self._end_edit_fn: Callable[[], None] | None = None
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -120,6 +124,7 @@ class ReqEditor(QWidget):
         self._variant = QLineEdit()
         tipify(self._variant, T.SKU_VARIANT)
         self._variant.textChanged.connect(self._on_any)
+        self._variant.editingFinished.connect(self._end_doc_edit)
         self._topology = TintedComboBox()
         tipify(self._topology, T.SKU_TOPOLOGY)
         for value, label in KNOWN_TOPOLOGIES:
@@ -134,6 +139,7 @@ class ReqEditor(QWidget):
         self._product = QLineEdit()
         tipify(self._product, T.SKU_PRODUCT)
         self._product.textChanged.connect(self._on_any)
+        self._product.editingFinished.connect(self._end_doc_edit)
         meta_f.addRow(t("变体"), self._variant)
         meta_f.addRow(t("拓扑"), self._topology)
         meta_f.addRow(t("产品"), self._product)
@@ -248,6 +254,7 @@ class ReqEditor(QWidget):
         self._acc_desc = QLineEdit()
         tipify(self._acc_desc, T.SKU_ACC_DESC)
         self._acc_desc.textChanged.connect(self._on_any)
+        self._acc_desc.editingFinished.connect(self._end_doc_edit)
         self._acc_lineage = QCheckBox(t("强制 lineage 门禁"))
         tipify(self._acc_lineage, T.SKU_ACC_LINEAGE)
         self._acc_lineage.toggled.connect(self._on_any)
@@ -279,6 +286,22 @@ class ReqEditor(QWidget):
         if not self._session:
             return []
         return self._session.wiring_service_names()
+
+    def set_history_hooks(
+        self,
+        checkpoint: Callable[..., None] | None,
+        end_edit: Callable[[], None] | None = None,
+    ) -> None:
+        self._checkpoint_fn = checkpoint
+        self._end_edit_fn = end_edit
+
+    def _checkpoint(self, *, coalesce: bool = False) -> None:
+        if self._checkpoint_fn is not None:
+            self._checkpoint_fn(coalesce=coalesce)
+
+    def _end_doc_edit(self) -> None:
+        if self._end_edit_fn is not None:
+            self._end_edit_fn()
 
     def set_session(self, session: ProjectSession | None) -> None:
         self._session = session
@@ -400,6 +423,9 @@ class ReqEditor(QWidget):
     def _on_any(self, *_args: object) -> None:
         if self._loading or not self._session:
             return
+        src = self.sender()
+        coalesce = isinstance(src, QLineEdit)
+        self._checkpoint(coalesce=coalesce)
         req = self._session.req
         prof = self._profile.currentData()
         req["profile"] = str(prof) if prof else "vehicle-debug"
@@ -442,3 +468,5 @@ class ReqEditor(QWidget):
         req["acceptance"] = acceptance
         self._session.dirty_req = True
         self.changed.emit()
+        if not coalesce:
+            self._end_doc_edit()
