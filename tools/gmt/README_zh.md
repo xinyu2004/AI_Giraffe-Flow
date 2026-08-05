@@ -48,7 +48,7 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 - **连接 Live**：WS 收流进内存；**默认不落盘**；「跟随最新」控制是否贴尾  
 - **录制**：顶栏按钮；默认 `session_live.jsonl`（已有非空则问新建/覆盖）  
 - 断开：停录制；保留内存 session，可 scrub / Tag  
-- Tag：`M` 标记点；`[` / `]` 片段；`Ctrl+R` / `Ctrl+Shift+R` 连接/断开  
+- Tag：`M` 标记点；`[` / `]` 片段；Live/Inject 在顶栏连接  
 - GMT **不启动 SIL**  
 
 前提：`gf-config` A 页 `live_tap` 已开 + 已 `compile_sil`。  
@@ -75,10 +75,12 @@ GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
 
 ### ADAS 场景 demo
 
-主文件 `overtake_acc_aeb.jsonl`（变道 → ACC → AEB）。剧本帧只用于合成 BEV Image，Studio 不再依赖 `/gf/AdasDemo` topic。
+主文件 `overtake_acc_aeb.jsonl`（变道 → ACC → AEB）。由 **GMT 打开 session / 回灌** 加载；`run_sil` 不会自动挂该文件。SIL 上 Foxglove BEV 来自 EgoMotion+Trajectory；Studio 不再依赖 `/gf/AdasDemo` topic。
 
 ```bash
 python scripts/gen_adas_scenarios.py
+# SIL：run_sil → GMT 打开 jsonl → 回灌播放
+# 离线（无 SIL）也可：
 GMT bridge foxglove --ws --synth-bev \
   --jsonl projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl --port 8765
 
@@ -99,7 +101,7 @@ CLI 入口：**`GMT`**。GMT GUI **不写 wiring**（配置只经 gf-config）�
 
 ```bash
 # 种 Collector / DEM / 多级日志（SIL + DoIP），再开 GMT
-bash scripts/verify/oem_a_afc_with_uss/smoke_obs_demo.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_phm_dem_doip.sh
 # 或交互：
 export GF_COLLECTOR_STORE=$PWD/projects/oem_a/afc_with_uss/build-sil/runtime/collector/events.ndjson
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh

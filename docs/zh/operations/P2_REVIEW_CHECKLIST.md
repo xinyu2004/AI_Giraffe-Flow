@@ -78,9 +78,9 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| O.1 | Record→Tag→MCAP | `bash …/smoke_sil_observability.sh` → `build/observability/session.mcap` ≥1 topic | □ | □ | □ | |
+| O.1 | Record→Tag→MCAP | `bash …/smoke_sil_observability.sh` → `projects/oem_a/afc_with_uss/build-sil/observability/session.mcap` ≥1 topic | □ | □ | □ | |
 | O.2 | 演示步骤 | 按 [OBSERVABILITY_DEMO.md](OBSERVABILITY_DEMO.md) 约 10 min | □ | □ | □ | |
-| F.1 | Foxglove | `GMT bridge foxglove --mcap build/observability/session.mcap`；Studio 打开 | □ | □ | □ | |
+| F.1 | Foxglove | `GMT bridge foxglove --mcap projects/oem_a/afc_with_uss/build-sil/observability/session.mcap`；Studio 打开 | □ | □ | □ | |
 | F.2 | 字段说明 | SIL stub 多数字段为 0 **属预期** | □ | □ | □ | |
 
 ---

@@ -15,6 +15,11 @@ THIRD_PARTY="${ROOT}/middleware/third_party"
 BUILD_SIL="${GF_BUILD_DIR:-${PROJECT_DIR}/build-sil}"
 BUILD_HIL="${GF_BUILD_DIR_HIL:-${PROJECT_DIR}/build-hil}"
 
+# Session / MCAP under the active SIL build tree (override with GF_OBS_OUT).
+gf_obs_dir() {
+  echo "${GF_OBS_OUT:-${GF_BUILD_DIR:-${BUILD_SIL}}/observability}"
+}
+
 gf_project_env() {
   cd "${ROOT}"
   export PATH="${ROOT}/.venv/bin:${PATH}"

@@ -33,16 +33,13 @@ bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 
 Foxglove 连接后加 **Raw Messages** / **Plot**，勾选 `/gf/EgoMotion`、`/gf/Trajectory`。
 
-落盘默认：`build/observability/session_live.jsonl`（`GF_LIVE_SESSION` 可改；`GF_LIVE_TEE=0` 关 tee）。
+落盘默认：`projects/.../build-sil/observability/session_live.jsonl`（`${BUILD}/observability/`；`GF_LIVE_SESSION` / `GF_OBS_OUT` 可改；`GF_LIVE_TEE=0` 关 tee）。
 
 ```bash
 # 推荐：终端 run_sil + GUI 连接
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 GMT gui --project projects/oem_a/afc_with_uss
-# Ctrl+R 连接 / Ctrl+Shift+R 断开；M=标记点
-
-# 或高级：仅跟随已有 JSONL（不连 WS）
-# GMT gui --project … --follow
+# 顶栏 Live 连接/录制；M=标记点；打开 session → 回灌
 ```
 
 **另一台电脑：** 默认 `GF_WS_HOST=0.0.0.0`，Studio 填 `ws://<SIL 主机 LAN IP>:8765`。
@@ -58,7 +55,7 @@ GMT gui --project projects/oem_a/afc_with_uss
 bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
 ```
 
-产物默认在 `build/observability/`：
+产物默认在 `${BUILD}/observability/`（即 `projects/.../build-sil/observability/`）：
 
 | 文件 | 说明 |
 |------|------|
@@ -67,7 +64,7 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
 | `session.mcap` | 多 topic MCAP |
 
 ```bash
-GMT bridge foxglove --mcap build/observability/session.mcap
+GMT bridge foxglove --mcap projects/oem_a/afc_with_uss/build-sil/observability/session.mcap
 ```
 
 ## 2b. ADAS 场景 demo（合场景 · 无需 SIL）
@@ -86,27 +83,28 @@ GMT gui --project projects/oem_a/afc_with_uss \
 
 注入：场景联调推荐  
 `GF_INJECT_MODE=playhead GF_INJECT_LIVE=all bash …/run_sil.sh`  
-（保留 EgoMotion；`run_sil` 默认 `GF_SYNTH_BEV=1`，Foxglove 用 **EgoMotion+Trajectory 合成 BEV**，无需另开 `--synth-bev` 命令）。  
-`AdasDemo` 仍可在 GMT 变量轨对照剧本；主链 BEV 不依赖 JSONL 画图。
+→ **GMT 打开** `overtake_acc_aeb.jsonl` → 回灌播放  
+（`run_sil` 不自动加载该 JSONL；默认 `GF_SYNTH_BEV=1`，Foxglove 用 **EgoMotion+Trajectory 合成 BEV**）。  
+`AdasDemo` 在 GMT 变量轨对照剧本；主链 BEV 不依赖 JSONL 画图。
 
 ## 3. WebSocket 回放（非 live）
 
 ```bash
-GMT bridge foxglove --ws --jsonl build/observability/session_tagged.jsonl --port 8765
+GMT bridge foxglove --ws --jsonl projects/oem_a/afc_with_uss/build-sil/observability/session_tagged.jsonl --port 8765
 ```
 
 ## 4. Tag 窗示例（CLI）
 
 ```bash
-GMT measure tag --in build/observability/session.jsonl \
-  --out build/observability/session_tagged.jsonl --label demo
+GMT measure tag --in projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
+  --out projects/oem_a/afc_with_uss/build-sil/observability/session_tagged.jsonl --label demo
 ```
 
 ## 5. GMT GUI：录制 / Tag / 主机回放
 
 ```bash
 GMT gui --project projects/oem_a/afc_with_uss \
-  --session build/observability/session.jsonl
+  --session projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl
 ```
 
 - **文件**：从日志录制、导入 NDJSON、跟随 live、导出 MCAP / **VCD**  
@@ -127,8 +125,8 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_gmt_vcd.sh
 # 或手工：
 GMT measure export --format vcd \
   --in tools/gmt/fixtures/session_stub.jsonl \
-  --out build/observability/session_stub.vcd
-gtkwave build/observability/session_stub.vcd   # 若已安装
+  --out projects/oem_a/afc_with_uss/build-sil/observability/session_stub.vcd
+gtkwave projects/oem_a/afc_with_uss/build-sil/observability/session_stub.vcd   # 若已安装
 ```
 
 轨名：`gf.<Service>.<field>`（如 `gf.EgoMotion.seq`）。GUI：**文件 → 导出 VCD**。
@@ -145,14 +143,15 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_sil_inject.sh
 bash scripts/verify/oem_a_afc_with_uss/smoke_sil_inject_b2.sh
 
 # 或手工 B1：
-GF_SKIP_COMPILE=1 GF_INJECT_SESSION=build/observability/session.jsonl \
+GF_SKIP_COMPILE=1 GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 
 # 手工 B2：
-GF_SKIP_COMPILE=1 GF_INJECT_SESSION=build/observability/session.jsonl \
+GF_SKIP_COMPILE=1 GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
   GF_INJECT_DUT=sensing.uss \
   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 ```
 
 `vehicle-debug` compose 会编 `debug_bridge/iox_obs_inject`；`production-release` 不编。  
-详情：[apps/debug_bridge/iox_obs_inject/README.md](../../../apps/debug_bridge/iox_obs_inject/README.md)
+详情：[tools/debug_bridge/iox_obs_inject/README.md](../../../tools/debug_bridge/iox_obs_inject/README.md)  
+（构建产物仍在 `$GF_BUILD_DIR/apps/debug_bridge/...`，与 compose id 一致。）

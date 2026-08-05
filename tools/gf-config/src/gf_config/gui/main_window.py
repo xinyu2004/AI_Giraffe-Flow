@@ -177,11 +177,6 @@ class MainWindow(QMainWindow):
         act_redo.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_redo.triggered.connect(self._redo_doc)
         edit_menu.addAction(act_redo)
-        act_redo_y = QAction(t("重做（Ctrl+Y）"), self)
-        act_redo_y.setShortcut("Ctrl+Y")
-        act_redo_y.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_redo_y.triggered.connect(self._redo_doc)
-        edit_menu.addAction(act_redo_y)
 
         view_menu = self.menuBar().addMenu(t("视图"))
 
@@ -289,10 +284,6 @@ class MainWindow(QMainWindow):
         self._sku_panel.setVisible(not self._sku_collapsed)
         # 收起 ▶ / 展开 ◀（与右侧 ▶收起 / ◀展开 对称）
         self._btn_toggle_sku.setText("▶" if self._sku_collapsed else "◀")
-
-    def ensure_sku_panel(self) -> None:
-        if self._sku_collapsed:
-            self._toggle_sku_panel()
 
     def _fit_graph(self) -> None:
         self._tabs.setCurrentWidget(self._signals_page)

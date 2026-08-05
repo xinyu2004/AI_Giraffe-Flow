@@ -57,52 +57,6 @@ bool EnvBool(const char* key, bool def) {
   return def;
 }
 
-bool EnvFlag(const char* key) {
-  const char* v = std::getenv(key);
-  return v && (*v == '1' || *v == 'y' || *v == 'Y' || *v == 't' || *v == 'T');
-}
-
-/// GF_OBS_DEMO=1: seed ring + DEM-lite DTC for GMT OTA/UDS (F201 / 0x19).
-void SeedObsDemoIfRequested() {
-  if (!EnvFlag("GF_OBS_DEMO")) {
-    return;
-  }
-  const auto log_yaml = ReadFile(PlatformPath("log.yaml"));
-  if (!log_yaml.empty()) {
-    gf_ara::log::Logger::Instance().ConfigureFromYaml(log_yaml);
-  }
-  using gf_ara::log::LogLevel;
-  using gf_ara::log::Logger;
-  auto& log = Logger::Instance();
-  auto lcfg = log.Config();
-  lcfg.default_level = LogLevel::kVerbose;
-  for (auto& kv : lcfg.contexts) {
-    kv.second = LogLevel::kVerbose;
-  }
-  for (const char* ctx : {"diag", "phm", "ucm", "collector"}) {
-    lcfg.contexts[ctx] = LogLevel::kVerbose;
-  }
-  log.Configure(std::move(lcfg));
-  log.Fatal("diag", "obs_demo: FATAL sample (doip)");
-  log.Error("phm", "obs_demo: ERROR sample (doip)");
-  log.Warn("collector", "obs_demo: WARN sample (doip)");
-  log.Info("ucm", "obs_demo: INFO sample (doip)");
-  log.Debug("phm", "obs_demo: DEBUG sample (doip)");
-  log.Log("diag", LogLevel::kVerbose, "obs_demo: VERBOSE sample (doip)");
-
-  auto& col = gf_ara::collector::EventCollector::Instance();
-  using gf_ara::collector::EventSeverity;
-  col.ReportEvent("phm", "AliveMissed", "obs_demo entity=doip_seed",
-                  EventSeverity::kError);
-  col.ReportEvent("phm", "DeadlineMissed", "obs_demo entity=doip_seed",
-                  EventSeverity::kError);
-  col.ReportEvent("ucm", "ota_failed", "obs_demo package=pkg.demo",
-                  EventSeverity::kError);
-  col.ReportEvent("com", "Timeout", "obs_demo svc=EgoMotion", EventSeverity::kWarn);
-  std::cerr << "obs_demo: seeded doip collector ring + DEM-lite DTCs"
-            << " (GMT: Collector UDS / DEM 0x19)\n";
-}
-
 std::vector<std::uint8_t> OtaRoutine(const std::vector<std::uint8_t>& uds) {
   if (uds.size() >= 4 && uds[0] == 0x31 && uds[1] == 0x01 && uds[2] == 0xF1 &&
       uds[3] == 0x00) {
@@ -142,7 +96,8 @@ int main() {
   } else {
     gf_ara::collector::EventCollector::Instance().Configure(ccfg);
   }
-  SeedObsDemoIfRequested();
+  // DEM DTCs come from apps via shared GF_PER_DIR (PHM → ReportEvent → PersistDtc).
+  // 0x19 reloads with EventCollector::ReloadDtcsFromPer — no in-process seed.
 
   gf_ara::ucm::OtaConfig oc;
   oc.enabled = true;

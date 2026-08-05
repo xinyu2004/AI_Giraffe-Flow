@@ -20,6 +20,9 @@ class KeyValueStorage {
   gf_ara::core::Result<void> Open(std::string_view instance);
   [[nodiscard]] bool IsOpen() const noexcept;
 
+  /// Re-read newest slot from disk (cross-process writers). Instance must be open.
+  gf_ara::core::Result<void> ReloadFromDisk();
+
   gf_ara::core::Result<void> SetValue(std::string_view key, std::string_view value);
   gf_ara::core::Result<std::string> GetValue(std::string_view key) const;
   /// Remove all keys and persist empty store (instance stays open).

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1066" width="1100" height="1066"
+     role="img" aria-label="Giraffe Modules: middleware collaboration">
+  <rect width="1100" height="1066" fill="#fafbfc"/>
+  <text x="550" y="36" text-anchor="middle" font="700 22px sans-serif" fill="#1b5e20">Giraffe Modules</text>
+  <text x="550" y="60" text-anchor="middle" font="500 16px sans-serif" fill="#546e7a">How middleware boots &amp; collaborates (on-board · sm / phm / exec / com …)</text>
+  <text x="550" y="120" text-anchor="middle" font="500 14px sans-serif" fill="#546e7a">See Giraffe_Modules.gif for the animated layout.</text>
+  <text x="550" y="150" text-anchor="middle" font="500 13px sans-serif" fill="#78909c">Host: RouDi → EM → OSAL Spawn → SOA apps · in-process ring</text>
+</svg>

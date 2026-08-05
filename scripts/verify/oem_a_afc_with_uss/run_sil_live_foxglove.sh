@@ -3,6 +3,6 @@
 #
 # Usage:
 #   bash scripts/verify/oem_a_afc_with_uss/run_sil_live_foxglove.sh
-echo "note: run_sil_live_foxglove.sh → projects/.../scripts/run_sil.sh (product path)" >&2
+echo "WARN: deprecated run_sil_live_foxglove.sh → projects/.../scripts/run_sil.sh" >&2
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 exec bash "${ROOT}/projects/oem_a/afc_with_uss/scripts/run_sil.sh" "$@"

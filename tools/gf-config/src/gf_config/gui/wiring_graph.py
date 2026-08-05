@@ -1581,10 +1581,6 @@ class ImportPortsDialog(QDialog):
         return self._proc.currentText(), names, direction
 
 
-# Back-compat alias
-ImportHppDialog = ImportPortsDialog
-
-
 class AddNodeDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1898,10 +1894,6 @@ class WiringGraphView(QWidget):
         self._end_doc_edit()
         # Drop ScrollHandDrag "closed hand" residual after item drag.
         self._view.viewport().unsetCursor()
-
-    def remember_card_pos(self, card: ProcessCard) -> None:
-        """兼容旧调用：等价于松开时落盘。"""
-        self.finalize_card_drag(card)
 
     def _nodes_content_rect(self) -> QRectF:
         """以模块卡片为准算包围盒（含负坐标 MCU，不依赖细线 path）。"""
@@ -3474,23 +3466,5 @@ class WiringGraphView(QWidget):
             self._focus_missing(self._missing[idx])
         elif kind == "peer" and 0 <= idx < len(self._peers):
             self._focus_peer(self._peers[idx])
-
-    def _remove_selected_flow(self) -> None:
-        edges = [i for i in self._scene.selectedItems() if isinstance(i, EdgeCurve)]
-        if edges:
-            self._remove_edge(edges[0])
-            return
-        if not self._session:
-            return
-        row = self._flow_list.currentRow()
-        if row < 0 or row >= len(self._edges):
-            QMessageBox.information(
-                self,
-                "删除边",
-                "请单击选中一条信号线，或在右侧列表选中后删除",
-            )
-            return
-        self._remove_edge(self._edges[row])
-
 
 # ProcessCard / PortItem refer to WiringGraphView via from __future__ annotations

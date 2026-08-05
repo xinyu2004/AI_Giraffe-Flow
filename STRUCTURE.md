@@ -17,7 +17,7 @@ AI_Giraffe-Flow/
   schemas/
   dep-manifest/       # dependency pins + bootstrap.sh (checkouts → middleware/third_party/)
   cmake/ scripts/ devops/ docs/
-  result_pic/         # README assets
+  result_pic/         # README assets (Giraffe_Flow/, Giraffe_Modules/, screenshots)
 ```
 
 Flow today:
@@ -101,7 +101,7 @@ AI_Giraffe-Flow/
 │   ├── runs/                     # local CASE logs (gitignore)
 │   └── packs/                    # SKU packs via projects/.../generate_fusa_artifacts.sh
 │
-├── result_pic/                   # README screenshots / architecture GIFs
+├── result_pic/                   # README: Giraffe_Flow/ + Giraffe_Modules/ + screenshots
 └── STRUCTURE.md                  # this file
 ```
 

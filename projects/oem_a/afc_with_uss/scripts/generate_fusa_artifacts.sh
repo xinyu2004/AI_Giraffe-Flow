@@ -15,8 +15,10 @@ export PATH="${ROOT}/.venv/bin:${PATH}"
 
 PROJ="${ROOT}/projects/oem_a/afc_with_uss"
 PACK="${ROOT}/fusa/packs/oem_a_afc_with_uss"
-BUILD="${GF_BUILD_DIR:-${ROOT}/build}"
-OBS="${GF_OBS_OUT:-${ROOT}/build/observability}"
+# shellcheck source=_common.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+BUILD="${GF_BUILD_DIR:-${BUILD_SIL}}"
+OBS="${GF_OBS_OUT:-$(gf_obs_dir)}"
 LOG_DIR="${BUILD}/runtime/logs"
 TAG="[fusa_artifacts]"
 

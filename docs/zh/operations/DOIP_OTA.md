@@ -82,7 +82,7 @@ bash scripts/make_sil_swu.sh /tmp/gf_demo.swu
 
 # 2) 编译 + 跑 SIL（diag 开 13400 时会起 gf_doip_ota_server）
 #    见 projects/.../scripts/run_sil.sh
-#    默认写 GF_COLLECTOR_STORE=build/iox_multiproc_logs/collector_shared.ndjson
+#    默认写 GF_COLLECTOR_STORE=${BUILD}/runtime/collector/events.ndjson
 
 # 3) 自动化冒烟
 bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
@@ -91,22 +91,25 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
 #    （同页可切 DEM 读/清 DTC，或 Collector 读环缓）
 ```
 
-### 观测演示（Collector / DEM / 多级日志）
+### 观测演示（Collector / DEM）
+
+路径：**PHM 真实故障 → Collector `ReportEvent` → PER（`GF_PER_DIR`）→ DoIP 0x19 `ReloadDtcsFromPer`**。  
+没有进程内假种数；环缓 NDJSON 看 `GF_COLLECTOR_STORE`。
 
 ```bash
-# 自动种数据并断言 SIL 日志 + NDJSON + UDS 0x19 / F201
-bash scripts/verify/oem_a_afc_with_uss/smoke_obs_demo.sh
+# 断言：uss AliveMissed → NDJSON + PER → UDS 0x19 读到 0xC01234
+bash scripts/verify/oem_a_afc_with_uss/smoke_phm_dem_doip.sh
 
-# 交互：种数据后开 GMT
-export GF_OBS_DEMO=1
-export GF_COLLECTOR_STORE=$PWD/build/iox_multiproc_logs/collector_shared.ndjson
+# 交互：DoIP 开时默认对 uss 短注 PHM（GF_PHM_FAULT_MS=500）
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 # 另开终端：
 GMT gui --project projects/oem_a/afc_with_uss
-# → OTA/UDS 连接 → DEM「读取 DTC」/ Collector「本机文件」或「UDS」
+# → OTA/UDS 连接 → 等 ~1s → DEM「读取 DTC」
+# Collector「本机文件」→ …/runtime/collector/events.ndjson
 ```
 
-`GF_OBS_DEMO=1` 时：应用进程与 `gf_doip_ota_server` 各打 FATAL…VERBOSE 样例，并 `ReportEvent`（`AliveMissed` / `DeadlineMissed` / `ota_failed`…）。`dtc_map` 事件键须与这些 `event_id` 一致。
+**关闭 PHM 注入：** `GF_PHM_FAULT_MS=0 bash …/run_sil.sh`。  
+`dtc_map` 事件键须与 `AliveMissed` / `DeadlineMissed` / `ota_failed` 等 `event_id` 一致。
 
 环境变量覆盖（服务端 / smoke，可选）：`GF_DOIP_PORT`、`GF_OTA_TRANSFER_MODE`、`GF_DIAG_S3_SERVER_MS`、`GF_DIAG_TP_PERIOD_MS`、`GF_DIAG_SEC_PLUGIN`。
 

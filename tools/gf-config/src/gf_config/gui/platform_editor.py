@@ -69,7 +69,6 @@ KNOWN_MODULES = [
     "diag",
     "per",
     "tsync",
-    "trace",
 ]
 
 # CMake always builds these (cmake/GfModules.cmake) — not trimable via checkbox.
@@ -1012,19 +1011,6 @@ class PlatformEditor(QWidget):
         self.changed.emit()
         self._end_doc_edit()
 
-    def set_runtime_modules(self, modules: list[str]) -> None:
-        """Compatibility: sync checkboxes if external code still calls this."""
-        self._loading = True
-        sel = {str(m) for m in modules} | ALWAYS_ON_MODULES
-        for name, cb in self._module_boxes.items():
-            if name in ALWAYS_ON_MODULES:
-                cb.setChecked(True)
-            else:
-                cb.setChecked(name in sel)
-        self._loading = False
-        self._modules = sel
-        self._rebuild_nav()
-
     def _enabled_nav(self) -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []
         for key, title, unlock in _NAV:
@@ -1077,10 +1063,6 @@ class PlatformEditor(QWidget):
         if page is not None:
             self._stack.setCurrentWidget(page)
             self._stack.updateGeometry()
-
-    def refresh_process_lists(self) -> None:
-        """Call after wiring process set may have changed (optional UX)."""
-        return
 
     def _process_names(self) -> list[str]:
         if not self._session:

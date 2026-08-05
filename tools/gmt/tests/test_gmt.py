@@ -857,7 +857,6 @@ def test_inject_stream_helpers() -> None:
             "events": 0,
         }
     )
-    assert helper.stream_mode
     assert helper.window_max_events == 256
     helper.configure_session(10)
     assert sent[0] == {"cmd": "session", "events": 10}

@@ -64,11 +64,6 @@ _RECORD_MODES = [
     ("full", "全量"),
     ("off", "关闭"),
 ]
-_TRACE_MODES = [
-    ("on", "开"),
-    ("off", "关"),
-]
-
 TAP_APP = "debug_bridge/iox_obs_tap"
 INJECT_APP = "debug_bridge/iox_obs_inject"
 _AUTO_APPS = frozenset({TAP_APP, INJECT_APP})
@@ -203,20 +198,11 @@ class ReqEditor(QWidget):
             title=t("选择录制服务"),
         )
         self._record_svcs.changed.connect(self._on_any)
-        self._trace = TintedComboBox()
-        tipify(self._trace, T.SKU_TRACE)
-        for value, label in _TRACE_MODES:
-            self._trace.addItem(t(label), value)
-        style_enum_combo(
-            self._trace, COLORS_ON_OFF, data_role=True, item_tips=T.SKU_TRACE_ITEMS
-        )
-        self._trace.currentIndexChanged.connect(self._on_profile_or_any)
         stage_f.addRow("", self._live_en)
         stage_f.addRow(t("Live 范围"), self._live_mode)
         stage_f.addRow(t("Live 服务"), self._live_svcs)
         stage_f.addRow(t("录制"), self._record_mode)
         stage_f.addRow(t("录制服务"), self._record_svcs)
-        stage_f.addRow(t("时序导出"), self._trace)
         stage_l.addLayout(stage_f)
         self._obs_hint = QLabel("")
         self._obs_hint.setWordWrap(True)
@@ -336,7 +322,6 @@ class ReqEditor(QWidget):
         else:
             self._set_combo_data(self._record_mode, str(rec or "minimal"))
             self._record_svcs.set_selected([])
-        self._set_combo_data(self._trace, str(obs.get("trace_export") or "on"))
 
         acc = req.get("acceptance") or {}
         if isinstance(acc, dict):
@@ -380,12 +365,11 @@ class ReqEditor(QWidget):
         self._live_svcs.setEnabled(live_on and not wiring_all)
         self._record_mode.setEnabled(not release)
         self._record_svcs.setEnabled(not release and not record_off)
-        self._trace.setEnabled(not release)
 
         if release:
             self._obs_hint.setText(
                 t(
-                    "量产发布：Live/录制/时序灰调；不编 iox_obs_tap；"
+                    "量产发布：Live/录制灰调；不编 iox_obs_tap；"
                     "run_sil 不起 Foxglove。通信绑定仍保留。"
                 )
             )
@@ -449,13 +433,13 @@ class ReqEditor(QWidget):
         }
         if live_mode == "explicit":
             live_block["services"] = self._live_svcs.selected()
+        # trace_export removed (orphan — GMT owns VCD/export; not consumed by build).
         req["observability"] = {
             "live_tap": live_block,
             "record": {
                 "mode": str(self._record_mode.currentData() or "minimal"),
                 "services": self._record_svcs.selected(),
             },
-            "trace_export": str(self._trace.currentData() or "on"),
         }
         prev_acc = req.get("acceptance") if isinstance(req.get("acceptance"), dict) else {}
         acceptance: dict = {

@@ -55,10 +55,6 @@ MODULE: dict[str, str] = {
         "时间同步 lite：platform/tsync.yaml；SIL 用 osal mock，"
         "板上配 linuxptp/ptp4l，本模块用 pmc 读状态。"
     ),
-    "trace": (
-        "时序/trace 导出到 VCD / GMT，偏调试路径；"
-        "production-release 剖面下通常关掉观测相关能力。"
-    ),
 }
 
 # ── exec / SM ───────────────────────────────────────────────
@@ -324,11 +320,6 @@ SKU_RECORD_ITEMS: dict[str, str] = {
     "off": "关闭录制；下方服务白名单也会灰掉。",
 }
 SKU_REC_SVCS = "参与 record 的服务白名单；从 wiring 多选。"
-SKU_TRACE = "是否导出时序 trace（供 GMT/VCD）。on=导出；off=不导出。"
-SKU_TRACE_ITEMS: dict[str, str] = {
-    "on": "打开 trace 导出。",
-    "off": "关闭 trace 导出。",
-}
 SKU_BIND_ICEORYX = "本机/进程间零拷贝通信（iceoryx）。SIL 双进程联调几乎总是要开。"
 SKU_BIND_SOMEIP = "SOME/IP：车载以太网服务发现与序列化（对标量产 SOME/IP 栈时再开）。"
 SKU_BIND_DDS = "DDS 绑定（可选中间件路径）；未接真 DDS 前多为占位能力开关。"

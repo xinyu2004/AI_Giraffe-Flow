@@ -163,14 +163,26 @@ void DoipTcpServer::ThreadMain() {
       }
       continue;
     }
+    char peer_ip[INET_ADDRSTRLEN] = "?";
+    if (cli.sin_family == AF_INET) {
+      (void)::inet_ntop(AF_INET, &cli.sin_addr, peer_ip, sizeof(peer_ip));
+    }
+    const auto peer_port = static_cast<unsigned>(::ntohs(cli.sin_port));
     bool expected = false;
     if (!client_busy_.compare_exchange_strong(expected, true)) {
-      std::cout << "[DoIP] reject second TCP client (single-session entity)\n"
+      std::cout << "[DoIP] reject second TCP client (single-session entity) peer="
+                << peer_ip << ':' << peer_port << '\n'
                 << std::flush;
       ::close(cfd);
       continue;
     }
+    std::cout << "[DoIP] TCP client connected peer=" << peer_ip << ':' << peer_port
+              << '\n'
+              << std::flush;
     ServeClient(cfd);
+    std::cout << "[DoIP] TCP client disconnected peer=" << peer_ip << ':' << peer_port
+              << '\n'
+              << std::flush;
     ::close(cfd);
     client_busy_ = false;
   }

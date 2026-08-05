@@ -16,7 +16,7 @@
 | **2** | **Giraffe 模块** | **产品主体** · 运行时、进程、**FuSa 证据** | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [设计](docs/zh/architecture/DESIGN.md) |
 | **3** | **GMT** | 工具链 · 观测侧 | [tools/gmt](tools/gmt/README_zh.md) · [可观测演示](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
-![架构：gf-config → Giraffe 模块（含 FuSa）→ GMT](result_pic/architecture_flow_zh.gif)
+![架构：CARLA → Giraffe 模块 → Foxglove · GMT](result_pic/Giraffe_Flow/Giraffe_Flow.gif)
 
 ---
 
@@ -44,6 +44,8 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 ### 2. Giraffe 模块（主体）
 
 这里是交付到板端、在 SIL 里真正跑起来的部分。业务算法可外仓替换；本仓提供 **可裁剪平台 + 参考进程**，用同一套 semantic 契约联调。
+
+![Giraffe Modules：板内中间件如何起来、如何协作](result_pic/Giraffe_Modules/Giraffe_Modules.gif)
 
 #### 2.1 分层
 

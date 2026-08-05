@@ -19,12 +19,13 @@
 
 | `GF_INJECT_MODE` | 谁持 session | 行为 |
 |------------------|--------------|------|
-| **`playhead`** | **GMT（上位机）** | 监听 `GF_INJECT_PORT`（默认 **8767**）；`caps: stream_window` — A/B 小窗 + `inject` 单帧；**不必**本地 JSONL |
+| **`playhead`** | **GMT（上位机）** | 监听 `GF_INJECT_PORT`（默认 **8767**）；GMT 打开 JSONL 后推帧；**不必**板端本地 session |
 | **`continuous`** | **板端文件** | 读 `GF_INJECT_SESSION`（仅可灌 topic）；`GF_INJECT_MAX_EVENTS` 硬上限；可选 `GF_INJECT_LOOP=1` |
 
-### playhead + GMT stream（推荐）
+### playhead + GMT（推荐）
 
-完整 session 在 GMT；板端只缓存窗口（预算约 1～2MB）。
+完整 session 在 GMT；板端用 **A/B 双缓冲**只缓存当前窗口，避免整文件进内存。  
+窗口大小：`GF_INJECT_WINDOW_MAX_EVENTS`（默认 256，范围 16–4096；总缓存 ≈ 2×该值）。
 
 ```bash
 # SIL — 无本地 session 亦可
@@ -34,7 +35,7 @@ GF_INJECT_MODE=playhead \
 
 # 主机 GMT
 GMT gui --project projects/oem_a/afc_with_uss \
-  --session build/observability/session.jsonl
+  --session projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl
 # →「回灌」→ 连接 host:8767 →「跟 playhead 灌」→ scrub
 # 非 EgoMotion：GMT 本地记粉；EgoMotion：cmd inject
 # 板端 need_window → GMT window_begin/push/window_end
@@ -45,7 +46,7 @@ GMT **不**调用 `run_sil`；只连 inject 控制口。
 ### continuous（板端文件 + 限额）
 
 ```bash
-GF_INJECT_SESSION=build/observability/session.jsonl \
+GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 # 可选：GF_INJECT_MAX_EVENTS=20000  GF_INJECT_LOOP=1
 ```
@@ -56,7 +57,7 @@ GF_INJECT_SESSION=build/observability/session.jsonl \
 → {"cmd":"hello"} | {"cmd":"status"} | {"cmd":"seek","index":N}
 → {"cmd":"step"} | {"cmd":"play","rate":1.0} | {"cmd":"pause"}
 → {"cmd":"reset"} | {"cmd":"session","events":N}
-→ {"cmd":"window_begin","slot":"A"|"B","base":N}
+→ {"cmd":"window_begin","slot":"A"|"B","base":N}   # N = session/list scan start (playhead index)
 → {"cmd":"push","slot":"A"|"B","index":i,"t_ns":…,"topic":"…","data":{…}}
 → {"cmd":"window_end","slot":"A"|"B"}
 → {"cmd":"inject","index":i,"t_ns":…,"topic":"…","data":{…}}
@@ -64,6 +65,9 @@ GF_INJECT_SESSION=build/observability/session.jsonl \
 ← {"op":"published","index":N,"topic":"...","injected":true|false}
 ← {"op":"need_window","from":N,"count":64}
 ← {"op":"eof"} | {"op":"error","msg":"..."}
+# SIL log: LOAD A scan_from=1152 ego=[1155..1330] ego_n=64
+#   scan_from = window_begin.base (session index, NOT EgoMotion ordinal / "Nth received")
+#   ego=[first..last] = session indices of EgoMotion frames stored in the slot
 ```
 
 ## B2 单模块示例
@@ -86,6 +90,7 @@ GF_INJECT_MODE=playhead \
 | `GF_INJECT_SERVICES` | 短名列表；默认 `EgoMotion` |
 | `GF_INJECT_DUT` / `GF_INJECT_APPS` | B2 拓扑 |
 | `GF_INJECT_MAX_EVENTS` | continuous 硬上限（默认约 20000） |
+| `GF_INJECT_WINDOW_MAX_EVENTS` | playhead：每个 A/B 窗口最多事件数（默认 256，夹紧 16–4096） |
 | `GF_INJECT_LOOP` | continuous：`1` = 播完再从头直到信号 |
 
 playhead + live：GMT 可同时连 **8767（控制）** 与 **8766（旁观下游）**；开「跟 playhead 灌」时 GUI 会关 Live 跟随。

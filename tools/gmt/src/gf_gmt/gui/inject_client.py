@@ -3,9 +3,8 @@
 Protocol matches tools/debug_bridge/iox_obs_inject (GF_INJECT_MODE=playhead).
 GMT never launches run_sil — only connects to an already-running inject.
 
-Stream mode (hello caps contains ``stream_window``): GMT owns the full session
-and pushes A/B windows / single-frame inject cmds; board holds small buffers only.
-Legacy mode: board already loaded a file; GMT only sends seek/step/play.
+GMT owns the full session and pushes A/B windows / single-frame inject cmds;
+board holds small buffers (size from hello ``window_max_events``).
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ import select
 import socket
 import time
 from typing import Any
+from gf_gmt.i18n import t
 
 DEFAULT_INJECT_PORT = 8767
 PROTO = "gf_inject_ctrl"
@@ -110,9 +110,11 @@ class InjectCtrlClient:
                     return
         self.close()
         raise TimeoutError(
-            f"inject ctrl hello timeout @ {host}:{port}\n"
-            "请确认：GF_INJECT_MODE=playhead、端口 8767（TCP）、防火墙放行；\n"
-            "不要用上方 Live 的 ws://8766。"
+            t(
+                "inject ctrl hello timeout @ {host}:{port}\n"
+                "请确认：GF_INJECT_MODE=playhead、端口 8767（TCP）、防火墙放行；\n"
+                "不要用上方 Live 的 ws://8766。"
+            ).format(host=host, port=port)
         )
 
     def reset(self) -> None:
@@ -248,7 +250,6 @@ class InjectStreamHelper:
 
     def __init__(self, client: InjectCtrlClient) -> None:
         self.client = client
-        self.stream_mode = False
         self.window_max_events = self.WINDOW
         self.window_buffers = 2
         # slot → base index of first pushed (window order / model index)
@@ -256,7 +257,6 @@ class InjectStreamHelper:
         self._next_prefetch_from: int = 0
 
     def on_hello(self, hello: dict[str, Any] | None) -> None:
-        self.stream_mode = hello_has_stream_window(hello)
         if not hello:
             return
         wmax = hello.get("window_max_events")
@@ -311,8 +311,9 @@ class InjectStreamHelper:
     ) -> int:
         """Scan forward from ``from_index``; push only injectable frames.
 
-        Returns number of frames pushed. ``base`` on the wire is the first
-        *model* index scanned (from_index), not the first EgoMotion index.
+        Returns number of frames pushed. Wire ``base`` is the session/list
+        index where the forward scan started (playhead), not an EgoMotion
+        ordinal and not "Nth frame received on SIL".
         """
         events = getattr(model, "events", None) or []
         n = len(events)
@@ -354,6 +355,23 @@ class InjectStreamHelper:
         self.fill_window(model, "A", index)
         if self.window_buffers >= 2 and self._next_prefetch_from < len(events):
             self.fill_window(model, "B", self._next_prefetch_from)
+
+    def ensure_cover(self, model: Any, index: int) -> bool:
+        """Refill A/B when playhead leaves the currently loaded model range.
+
+        Returns True if windows were reloaded (board will log LOAD A|B again).
+        """
+        events = getattr(model, "events", None) or []
+        if not events:
+            return False
+        index = max(0, min(int(index), len(events) - 1))
+        if self._slot_base:
+            lo = min(self._slot_base.values())
+            hi = self._next_prefetch_from
+            if lo <= index < hi:
+                return False
+        self.ensure_windows_around(model, index)
+        return True
 
     def handle_need_window(
         self,

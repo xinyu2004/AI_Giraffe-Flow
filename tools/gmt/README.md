@@ -47,7 +47,7 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 - **Connect Live:** WS into memory; **no disk by default**; “follow latest” controls tail stickiness  
 - **Record:** top-bar button; default `session_live.jsonl` (prompt new/overwrite if non-empty)  
 - Disconnect: stop record; keep in-memory session for scrub / Tag  
-- Tag: `M` mark; `[` / `]` segment; `Ctrl+R` / `Ctrl+Shift+R` connect/disconnect  
+- Tag: `M` mark; `[` / `]` segment; Live/Inject connect on the top bar  
 - GMT **does not start SIL**  
 
 Prerequisite: `gf-config` tab A `live_tap` on + `compile_sil` done.  
@@ -74,10 +74,12 @@ GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
 
 ### ADAS scenario demo
 
-Primary file `overtake_acc_aeb.jsonl` (lane change → ACC → AEB). Script frames enrich BEV Image only; Studio need not subscribe `/gf/AdasDemo`.
+Primary file `overtake_acc_aeb.jsonl` (lane change → ACC → AEB). Load it in **GMT** (Open session → Inject); `run_sil` does not auto-attach it. On SIL, Foxglove BEV is EgoMotion+Trajectory; Studio need not subscribe `/gf/AdasDemo`.
 
 ```bash
 python scripts/gen_adas_scenarios.py
+# SIL: run_sil → GMT open jsonl → Inject play
+# Offline (no SIL):
 GMT bridge foxglove --ws --synth-bev \
   --jsonl projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl --port 8765
 
@@ -97,7 +99,7 @@ CLI entry: **`GMT`**. GMT GUI **does not write wiring** (authoring stays in gf-c
 ### OTA/UDS demo data (Collector / DEM / log levels)
 
 ```bash
-bash scripts/verify/oem_a_afc_with_uss/smoke_obs_demo.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_phm_dem_doip.sh
 # Interactive:
 export GF_COLLECTOR_STORE=$PWD/projects/oem_a/afc_with_uss/build-sil/runtime/collector/events.ndjson
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh

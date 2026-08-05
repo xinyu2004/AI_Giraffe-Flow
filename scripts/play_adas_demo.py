@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Play an ADAS scenario JSONL to stdout (NDJSON) with synthetic BEV frames.
+"""Deprecated debug helper — prefer GMT GUI / ``GMT bridge foxglove``.
 
-Typical:
+Play an ADAS scenario JSONL to stdout (NDJSON) with synthetic BEV frames.
+For SIL demos use: run_sil + GMT open session + Inject (playhead).
+
+Typical (offline only):
   python scripts/gen_adas_scenarios.py
   python scripts/play_adas_demo.py projects/oem_a/afc_with_uss/scenarios/aeb_cutin.jsonl \\
     | GMT bridge foxglove --ws --stdin --host 127.0.0.1 --port 8765
-
-GMT GUI (numbers):
-  GMT gui --session projects/oem_a/afc_with_uss/scenarios/aeb_cutin.jsonl \\
-    --project projects/oem_a/afc_with_uss
 """
 
 from __future__ import annotations
@@ -27,6 +26,11 @@ from gf_gmt.bridge_foxglove import rows_from_jsonl  # noqa: E402
 
 
 def main() -> int:
+    print(
+        "WARN: scripts/play_adas_demo.py is deprecated; "
+        "prefer GMT gui --session … or GMT bridge foxglove --jsonl …",
+        file=sys.stderr,
+    )
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("jsonl", type=Path, help="Scenario session JSONL")
     ap.add_argument(

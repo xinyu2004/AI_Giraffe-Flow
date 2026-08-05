@@ -4,7 +4,7 @@ Board-deployable packages. Public API: `gf_ara::*`; internals: `gf::*`.
 
 Enable subsets per SKU via SOR / `req.yaml` `runtime_modules[]`.
 
-**与架构 GIF SoC 芯片对齐**（`result_pic/architecture_flow*.gif`）：
+**与架构 GIF SoC 芯片对齐**（`result_pic/Giraffe_Flow/Giraffe_Flow.gif`）：
 
 | GIF 芯片 | 本目录包 | 说明 |
 |----------|----------|------|

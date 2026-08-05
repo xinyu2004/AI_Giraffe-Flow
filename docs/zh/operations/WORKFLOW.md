@@ -137,13 +137,11 @@ CI 在合入 / 发版前执行 compose + lint + golden diff；**不**把 codegen
 
 ### 5.1 建议启动顺序
 
-1. 平台：`exec_manager`、`phm`（及需要的路由组件）  
-2. 共享信号：`vehicle.motion_gateway`  
-3. 传感器：`radar`、`camera_ingest`  
-4. `perception` → `planning` → `control`  
-5. `ivi`（可选）  
+1. 平台：`exec` / `phm`（及需要的路由组件）  
+2. 共享信号：SKU gateway（如 `adapter.vehicle_can_gateway`）  
+3. 感知 / 规划链：SKU 进程（如 `sensing.uss` → `perception.fcm` → `planning.driving`）  
 
-顺序可由 EM 按 manifest 依赖自动执行（实现后）。
+顺序由 EM / `run_sil` 按 manifest 依赖执行。具体进程名以 `projects/<oem>/<sku>/` 为准。
 
 ### 5.2 Binding 切换
 

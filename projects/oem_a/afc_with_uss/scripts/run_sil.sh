@@ -11,7 +11,7 @@
 #   # B1 boundary inject (no gateway; full consumer chain):
 #   GF_INJECT_MODE=playhead bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #   # continuous (board-side file):
-#   GF_INJECT_SESSION=build/observability/session.jsonl \
+#   GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
 #     bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #   # B2 single-module (DUT only + inject):
 #   GF_INJECT_MODE=playhead GF_INJECT_DUT=sensing.uss \
@@ -22,7 +22,8 @@
 #   GF_WS_HOST       default 0.0.0.0
 #   GF_WS_PORT       default 8765
 #   GF_LIVE_PORT     default 8766 (GMT GUI live bridge)
-#   GF_LIVE_SESSION  optional tee path (default build/observability/session_live.jsonl)
+#   GF_LIVE_SESSION  optional tee path (default ${BUILD}/observability/session_live.jsonl)
+#   GF_OBS_OUT       observability root (default ${BUILD}/observability)
 #   GF_SYNTH_BEV       default 1 — Foxglove live bridge composes BEV from EgoMotion/Trajectory
 #   GF_SKIP_COMPILE=1  skip compile_sil (assume already built)
 #   GF_INJECT_SESSION  continuous 必填；playhead 可选（GMT stream，可不设）
@@ -36,13 +37,17 @@
 #   GF_INJECT_SERVICES default EgoMotion (or auto from DUT requires ∩ injectable)
 #   GF_INJECT_DUT      B2: SOR process id (e.g. sensing.uss) → only that app + inject
 #   GF_INJECT_APPS     B2 override: comma list uss,fcm,planning (skip SOR lookup)
-#   GF_INJECT_MAX_EVENTS  continuous: hard max events (default ~20000); ignore for playhead stream
+#   GF_INJECT_MAX_EVENTS  continuous: hard max events (default ~20000); ignore for playhead
+#   GF_INJECT_WINDOW_MAX_EVENTS  playhead: events per A/B window (default 256, clamp 16–4096)
 #   GF_INJECT_LOOP     continuous: 1 = replay from start until signal; playhead uses GMT UI loop
 #   GF_SIL_KILL_STALE  default 1 — 启动前释放被旧 SIL/GMT 占用的 8765/8766/8767/13400
 #                      设 0 则端口忙时直接失败并提示如何手动停
 #   GF_DOIP            default auto — 1/0 强制开/关 DoIP OTA（gf_doip_ota_server）
 #                      auto = diag.yaml iso_13400_doip / doip.enabled
 #   GF_DOIP_PORT       default from diag.yaml tcp_port（通常 13400）；GMT OTA 连此端口
+#   GF_PHM_FAULT_MS    DoIP 开且未显式设置时默认 500 — 真实 AliveMissed → GF_PER_DIR → DEM 0x19
+#   GF_PHM_FAULT_TARGET  默认 uss（fcm|uss|planning|gateway）；其它进程 fault=0
+#                      关闭 PHM 注入：GF_PHM_FAULT_MS=0
 #   # playhead (GMT stream; session file optional):
 #   GF_INJECT_MODE=playhead bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #   # then GMT gui → open session → 回灌 tab → connect 127.0.0.1:8767
@@ -61,7 +66,10 @@ BUILD="${GF_BUILD_DIR:-${BUILD_SIL}}"
 HOST="${GF_WS_HOST:-0.0.0.0}"
 PORT="${GF_WS_PORT:-8765}"
 export GF_PLATFORM_DIR="${GF_PLATFORM_DIR:-${PROJECT_DIR}/platform}"
+# Remember whether caller set PHM fault (empty = unset) before applying defaults.
+_PHM_FAULT_USER="${GF_PHM_FAULT_MS-}"
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
+export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-uss}"
 export LD_LIBRARY_PATH="${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 # Shared collector NDJSON + per (DEM DTC) for GMT OTA/UDS
 _COLLECTOR_DEFAULT="${BUILD}/runtime/collector/events.ndjson"
@@ -602,7 +610,15 @@ if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then
 fi
 
 if [[ "${DOIP_ON}" == "1" ]]; then
+  # GMT DEM: real PHM AliveMissed in apps → PersistDtc → shared GF_PER_DIR;
+  # DoIP 0x19 uses ReloadDtcsFromPer (no fake seed).
+  # Opt-out: GF_PHM_FAULT_MS=0 before run_sil.
+  if [[ -z "${_PHM_FAULT_USER}" ]]; then
+    export GF_PHM_FAULT_MS=500
+    export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-uss}"
+  fi
   echo "${TAG} DoIP OTA server → TCP ${DOIP_PORT} (GMT OTA: 127.0.0.1:${DOIP_PORT})"
+  echo "${TAG} DEM: PHM fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET} per=${GF_PER_DIR}"
   : >"${LOG_DIR}/doip_ota.log"
   # Export diag.yaml timing / ota_transfer into env for gf_doip_ota_server
   export GF_PROJECT_DIR_FOR_DOIP="${PROJECT_DIR}"
@@ -670,6 +686,18 @@ PY
   fi
 fi
 
+# Per-process PHM fault (others get 0). Target via GF_PHM_FAULT_TARGET.
+_fault_ms_for() {
+  local name="$1"
+  if [[ "${GF_PHM_FAULT_MS}" == "0" ]]; then
+    echo 0
+  elif [[ "${name}" == "${GF_PHM_FAULT_TARGET}" ]]; then
+    echo "${GF_PHM_FAULT_MS}"
+  else
+    echo 0
+  fi
+}
+
 start_consumers() {
   local apps="${1:-fcm,uss,planning}"
   local a
@@ -677,18 +705,18 @@ start_consumers() {
   for a in "${_arr[@]}"; do
     case "${a}" in
       fcm)
-        echo "${TAG} start fcm"
-        "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
+        echo "${TAG} start fcm (PHM fault_ms=$(_fault_ms_for fcm))"
+        GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
         FCM_PID=$!
         ;;
       uss)
-        echo "${TAG} start uss"
-        "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
+        echo "${TAG} start uss (PHM fault_ms=$(_fault_ms_for uss))"
+        GF_PHM_FAULT_MS="$(_fault_ms_for uss)" "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
         USS_PID=$!
         ;;
       planning)
-        echo "${TAG} start planning"
-        GF_PHM_FAULT_MS=0 "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
+        echo "${TAG} start planning (PHM fault_ms=$(_fault_ms_for planning))"
+        GF_PHM_FAULT_MS="$(_fault_ms_for planning)" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
         PLAN_PID=$!
         ;;
     esac
@@ -747,7 +775,7 @@ if [[ "${INJECT_ON}" == "1" ]]; then
   if [[ "${LIVE_ON}" == "1" ]]; then
     export GF_OBS_LIVE_SERVICES="${LIVE_SVCS}"
     LIVE_PORT="${GF_LIVE_PORT:-8766}"
-    LIVE_SESSION="${GF_LIVE_SESSION:-${ROOT}/build/observability/session_live.jsonl}"
+    LIVE_SESSION="${GF_LIVE_SESSION:-$(gf_obs_dir)/session_live.jsonl}"
     LIVE_TEE="${GF_LIVE_TEE:-1}"
     HINT_IP="127.0.0.1"
     if [[ "${HOST}" == "0.0.0.0" || "${HOST}" == "::" ]]; then
@@ -756,28 +784,12 @@ if [[ "${INJECT_ON}" == "1" ]]; then
     fi
     echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
     echo "${TAG} listen Foxglove ws://${HINT_IP}:${PORT}  GMT-Live ws://${HINT_IP}:${LIVE_PORT}"
-    # Default: compose BEV from EgoMotion/Trajectory on the Foxglove bridge
+    # BEV from EgoMotion/Trajectory only. Scenario JSONL → GMT Open session / Inject
+    # (or GF_INJECT_SESSION for continuous); not attached here.
     _FOX_BEV=()
-    _FOX_SCRIPT=()
     if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
       _FOX_BEV=(--synth-bev)
       echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → /gf/camera/front/compressed; GF_SYNTH_BEV=0 to disable)"
-      # Scenario story (三幕) → Image only; never publish /gf/AdasDemo to Studio.
-      # GF_BEV_SCRIPT=0 disables; else INJECT_SESSION or default overtake_acc_aeb.jsonl.
-      _BEV_SCRIPT=""
-      if [[ "${GF_BEV_SCRIPT:-}" == "0" ]]; then
-        _BEV_SCRIPT=""
-      elif [[ -n "${GF_BEV_SCRIPT:-}" && -f "${GF_BEV_SCRIPT}" ]]; then
-        _BEV_SCRIPT="${GF_BEV_SCRIPT}"
-      elif [[ -n "${INJECT_SESSION}" && -f "${INJECT_SESSION}" ]]; then
-        _BEV_SCRIPT="${INJECT_SESSION}"
-      elif [[ -f "${PROJECT_DIR}/scenarios/overtake_acc_aeb.jsonl" ]]; then
-        _BEV_SCRIPT="${PROJECT_DIR}/scenarios/overtake_acc_aeb.jsonl"
-      fi
-      if [[ -n "${_BEV_SCRIPT}" ]]; then
-        _FOX_SCRIPT=(--bev-script "${_BEV_SCRIPT}")
-        echo "${TAG} Foxglove --bev-script ${_BEV_SCRIPT} (三幕→Image; Studio 无 AdasDemo topic)"
-      fi
     fi
     if [[ "${LIVE_TEE}" == "1" ]]; then
       mkdir -p "$(dirname "${LIVE_SESSION}")"
@@ -805,11 +817,11 @@ if [[ "${INJECT_ON}" == "1" ]]; then
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
           | tee "${LIVE_SESSION}" \
           | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
+          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" --host "${HOST}" --port "${PORT}"
       else
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
           | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
+          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" --host "${HOST}" --port "${PORT}"
       fi
     ) &
     LIVE_FAN_PID=$!
@@ -841,7 +853,8 @@ echo "${TAG} fcm / uss / planning ..."
 start_consumers "fcm,uss,planning"
 
 # max_traj=0 → run forever
-GF_PHM_FAULT_MS=0 "${GW}" 0 >"${LOG_DIR}/gateway.log" 2>&1 &
+echo "${TAG} start gateway (PHM fault_ms=$(_fault_ms_for gateway))"
+GF_PHM_FAULT_MS="$(_fault_ms_for gateway)" "${GW}" 0 >"${LOG_DIR}/gateway.log" 2>&1 &
 GW_PID=$!
 sleep 0.5
 
@@ -866,7 +879,7 @@ if [[ -t 2 ]]; then
   export GF_STATUS_COLOR=1
 fi
 
-LIVE_SESSION="${GF_LIVE_SESSION:-${ROOT}/build/observability/session_live.jsonl}"
+LIVE_SESSION="${GF_LIVE_SESSION:-$(gf_obs_dir)/session_live.jsonl}"
 LIVE_TEE="${GF_LIVE_TEE:-1}"
 if [[ "${LIVE_TEE}" == "1" ]]; then
   mkdir -p "$(dirname "${LIVE_SESSION}")"
@@ -874,22 +887,9 @@ if [[ "${LIVE_TEE}" == "1" ]]; then
 fi
 
 _FOX_BEV=()
-_FOX_SCRIPT=()
 if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
   _FOX_BEV=(--synth-bev)
   echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → BEV)"
-  _BEV_SCRIPT=""
-  if [[ "${GF_BEV_SCRIPT:-}" == "0" ]]; then
-    _BEV_SCRIPT=""
-  elif [[ -n "${GF_BEV_SCRIPT:-}" && -f "${GF_BEV_SCRIPT}" ]]; then
-    _BEV_SCRIPT="${GF_BEV_SCRIPT}"
-  elif [[ -f "${PROJECT_DIR}/scenarios/overtake_acc_aeb.jsonl" ]]; then
-    _BEV_SCRIPT="${PROJECT_DIR}/scenarios/overtake_acc_aeb.jsonl"
-  fi
-  if [[ -n "${_BEV_SCRIPT}" ]]; then
-    _FOX_SCRIPT=(--bev-script "${_BEV_SCRIPT}")
-    echo "${TAG} Foxglove --bev-script ${_BEV_SCRIPT} (三幕→Image)"
-  fi
 fi
 
 # GNU tee: if GMT Live process-sub dies, do NOT collapse the pipe to Foxglove.
@@ -920,11 +920,11 @@ _live_fan() {
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
       | tee "${LIVE_SESSION}" \
       | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
+      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" --host "${HOST}" --port "${PORT}"
   else
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
       | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
+      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" --host "${HOST}" --port "${PORT}"
   fi
 }
 
@@ -933,5 +933,5 @@ _live_fan() {
 _live_fan &
 LIVE_FAN_PID=$!
 echo "${TAG} live fan pid=${LIVE_FAN_PID} (apps keep running if fan dies; Ctrl+C stops all)"
-echo "${TAG} GMT GUI 可随时开关，不影响本 SIL"
+echo "${TAG} GMT GUI can open/close anytime; this SIL keeps running"
 wait "${GW_PID}" || true

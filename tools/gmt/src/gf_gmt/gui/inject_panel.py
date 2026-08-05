@@ -45,9 +45,12 @@ class InjectPanel(QWidget):
         )
         tools.addWidget(self.follow_playhead)
         self.loop_at_end = QCheckBox(t("Loop at end"))
-        self.loop_at_end.setChecked(False)
+        self.loop_at_end.setChecked(True)
         self.loop_at_end.setToolTip(
-            t("板端 eof 时弹窗：继续则 seek 0 并清空结果表；停止则保持在结尾")
+            t(
+                "播放到结尾自动从 #0 再灌（无限循环）："
+                "重置板端 A/B、清空结果表。取消勾选则停在结尾。"
+            )
         )
         tools.addWidget(self.loop_at_end)
         tools.addStretch(1)
@@ -82,9 +85,10 @@ class InjectPanel(QWidget):
         self._results: dict[int, dict[str, Any]] = {}
 
     def set_connected(self, on: bool, *, detail: str = "") -> None:
+        """TCP link state only (not per-frame inject success)."""
         self._connected = on
         if on:
-            self.state.setText(t("Inject: connected (playhead)"))
+            self.state.setText(t("Inject: connected"))
             self.state.setStyleSheet("color:#2e7d32; font-weight:700;")
             self.follow_playhead.setChecked(True)
         else:

@@ -151,15 +151,15 @@ class TagPanel(QWidget):
     def live_drop_marker(self, t_ns: int | None = None, *, label: str = "") -> str:
         """One-shot bookmark at playhead (primary live Tag action)."""
         if self._session is None:
-            return "无 session（先打开或跟随 live）"
-        t = self._playhead_ns if t_ns is None else t_ns
-        if t is None:
-            return "无 playhead"
+            return t("无 session（先打开或跟随 live）")
+        ts = self._playhead_ns if t_ns is None else t_ns
+        if ts is None:
+            return t("无 playhead")
         n = sum(1 for x in self._tags if x.is_marker)
         tag = new_tag(
             label=label or f"mark_{n + 1}",
-            from_ns=t,
-            to_ns=t,
+            from_ns=ts,
+            to_ns=ts,
             notes="marker",
             kind="marker",
         )
@@ -168,19 +168,21 @@ class TagPanel(QWidget):
         self._persist()
         self._refresh_list()
         self._fill_form(tag)
-        return f"● 标记 {tag.label} @ {t} → {self._tags_path()}"
+        return t("● 标记 {label} @ {t_ns} → {path}").format(
+            label=tag.label, t_ns=ts, path=self._tags_path()
+        )
 
     def live_mark_from(self, t_ns: int | None = None) -> str:
         """Start a range tag at from_ns."""
         if self._session is None:
-            return "无 session（先打开或跟随 live）"
-        t = self._playhead_ns if t_ns is None else t_ns
-        if t is None:
-            return "无 playhead"
+            return t("无 session（先打开或跟随 live）")
+        ts = self._playhead_ns if t_ns is None else t_ns
+        if ts is None:
+            return t("无 playhead")
         n = sum(1 for x in self._tags if (x.label or "").startswith("range_"))
         tag = new_tag(
             label=f"range_{n + 1}",
-            from_ns=t,
+            from_ns=ts,
             to_ns=None,
             notes="range",
             kind="range",
@@ -190,15 +192,15 @@ class TagPanel(QWidget):
         self._persist()
         self._refresh_list()
         self._fill_form(tag)
-        return f"▬ from={t} → {tag.label}"
+        return t("▬ from={t_ns} → {label}").format(t_ns=ts, label=tag.label)
 
     def live_mark_to(self, t_ns: int | None = None) -> str:
         """Close current / newest open range at to_ns and persist."""
         if self._session is None:
-            return "无 session"
-        t = self._playhead_ns if t_ns is None else t_ns
-        if t is None:
-            return "无 playhead"
+            return t("无 session")
+        ts = self._playhead_ns if t_ns is None else t_ns
+        if ts is None:
+            return t("无 playhead")
         tag = None
         if self._current_id:
             tag = next((x for x in self._tags if x.id == self._current_id), None)
@@ -211,11 +213,11 @@ class TagPanel(QWidget):
                     break
         if tag is None:
             # no open range → drop marker instead
-            return self.live_drop_marker(t)
+            return self.live_drop_marker(ts)
         tag.kind = "range"
-        tag.to_ns = t
+        tag.to_ns = ts
         if tag.from_ns is None:
-            tag.from_ns = t
+            tag.from_ns = ts
         if tag.to_ns is not None and tag.from_ns is not None and tag.to_ns < tag.from_ns:
             tag.from_ns, tag.to_ns = tag.to_ns, tag.from_ns
         self._tags = upsert_tag(self._tags, tag)
@@ -223,7 +225,9 @@ class TagPanel(QWidget):
         self._persist()
         self._refresh_list()
         self._fill_form(tag)
-        return f"▬ 片段 {tag.label} [{tag.from_ns}…{tag.to_ns}] → {self._tags_path()}"
+        return t("▬ 片段 {label} [{a}…{b}] → {path}").format(
+            label=tag.label, a=tag.from_ns, b=tag.to_ns, path=self._tags_path()
+        )
 
     def _tags_path(self) -> Path | None:
         if self._session is None:
@@ -301,18 +305,18 @@ class TagPanel(QWidget):
     def _on_jump(self) -> None:
         tag = next((t for t in self._tags if t.id == self._current_id), None)
         if tag is None:
-            QMessageBox.information(self, "Tag", "先选中一个标记/片段")
+            QMessageBox.information(self, "Tag", t("先选中一个标记/片段"))
             return
         at = tag.at_ns()
         if at is None:
-            QMessageBox.information(self, "Tag", "该条目没有时间点")
+            QMessageBox.information(self, "Tag", t("该条目没有时间点"))
             return
         self.seek_ns_requested.emit(at)
 
     def _on_drop_marker(self) -> None:
         msg = self.live_drop_marker()
         if msg.startswith("无"):
-            QMessageBox.information(self, "标记", msg)
+            QMessageBox.information(self, t("标记"), msg)
 
     def _parse_opt_int(self, text: str) -> int | None:
         s = text.strip()
@@ -322,7 +326,7 @@ class TagPanel(QWidget):
 
     def _form_to_tag(self) -> TagRecord | None:
         if self._session is None:
-            QMessageBox.information(self, "Tag", "请先打开 session")
+            QMessageBox.information(self, "Tag", t("请先打开 session"))
             return None
         label = self._label.text().strip() or "untagged"
         kind = str(self._kind.currentData() or "marker")
@@ -330,7 +334,7 @@ class TagPanel(QWidget):
             from_ns = self._parse_opt_int(self._from.text())
             to_ns = self._parse_opt_int(self._to.text())
         except ValueError:
-            QMessageBox.warning(self, "Tag", "from_ns / to_ns 必须是整数")
+            QMessageBox.warning(self, "Tag", t("from_ns / to_ns 必须是整数"))
             return None
         if kind == "marker" and from_ns is not None and to_ns is None:
             to_ns = from_ns
@@ -361,14 +365,14 @@ class TagPanel(QWidget):
     def _persist(self) -> bool:
         tp = self._tags_path()
         if tp is None:
-            QMessageBox.information(self, "Tag", "请先打开 session")
+            QMessageBox.information(self, "Tag", t("请先打开 session"))
             return False
         save_tags(tp, self._tags)
         return True
 
     def _on_new(self) -> None:
         if self._session is None:
-            QMessageBox.information(self, "Tag", "请先打开 session")
+            QMessageBox.information(self, "Tag", t("请先打开 session"))
             return
         tag = new_tag(
             label="mark",
@@ -393,7 +397,7 @@ class TagPanel(QWidget):
             QMessageBox.information(
                 self,
                 "Tag",
-                f"已保存 {self._tags_path()}",
+                t("已保存 {path}").format(path=self._tags_path()),
             )
 
     def _on_delete(self) -> None:
@@ -407,7 +411,7 @@ class TagPanel(QWidget):
 
     def _fill_bound(self, which: str) -> None:
         if self._playhead_ns is None:
-            QMessageBox.information(self, "Tag", "无 playhead（先加载并 scrub session）")
+            QMessageBox.information(self, "Tag", t("无 playhead（先加载并 scrub session）"))
             return
         if which == "from":
             self._from.setText(str(self._playhead_ns))
@@ -418,7 +422,7 @@ class TagPanel(QWidget):
 
     def _on_clip(self) -> None:
         if self._session is None or not self._session.is_file():
-            QMessageBox.information(self, "clip", "请先打开 session")
+            QMessageBox.information(self, "clip", t("请先打开 session"))
             return
         tag = self._form_to_tag()
         if tag is None:
@@ -427,12 +431,14 @@ class TagPanel(QWidget):
             QMessageBox.information(
                 self,
                 "clip",
-                "当前是标记点 ●，不是时间窗。\n"
-                "请把类型改成「片段」并填 from/to，或用 [ / ] 定窗后再导出。",
+                t(
+                    "当前是标记点 ●，不是时间窗。\n"
+                    "请把类型改成「片段」并填 from/to，或用 [ / ] 定窗后再导出。"
+                ),
             )
             return
         if tag.from_ns is None or tag.to_ns is None:
-            QMessageBox.information(self, "clip", "片段需要 from_ns 与 to_ns")
+            QMessageBox.information(self, "clip", t("片段需要 from_ns 与 to_ns"))
             return
         self._tags = upsert_tag(self._tags, tag)
         self._current_id = tag.id
@@ -448,7 +454,9 @@ class TagPanel(QWidget):
         reply = QMessageBox.question(
             self,
             "clip",
-            f"已写入 {path}\nkept={kept}/{total}\n是否加载到时间轴？",
+            t("已写入 {path}\nkept={kept}/{total}\n是否加载到时间轴？").format(
+                path=path, kept=kept, total=total
+            ),
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.request_load_clip.emit(str(path))

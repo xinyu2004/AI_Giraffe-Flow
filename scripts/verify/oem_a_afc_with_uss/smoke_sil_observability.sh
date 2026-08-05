@@ -14,7 +14,7 @@ source "${SCRIPT_DIR}/_verify_common.sh"
 
 gf_project_env
 
-OUT_DIR="${GF_OBS_OUT:-${ROOT}/build/observability}"
+OUT_DIR="${GF_OBS_OUT:-$(gf_obs_dir)}"
 LOG_DIR="${GF_BUILD_DIR:-${BUILD_SIL}}/runtime/logs"
 mkdir -p "${OUT_DIR}"
 

@@ -35,7 +35,6 @@ observability:
     - services.semantic.EgoMotion
     - services.semantic.UssZones
     - services.semantic.Trajectory
-  trace_export: 'True'
 apps:
 - simulators/uss_feed
 - demo_pipeline

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -44,9 +45,6 @@ def default_collector_store(project_dir: Path | None = None) -> Path:
             [
                 root / "build-sil" / "runtime" / "collector" / "events.ndjson",
                 root / "build" / "runtime" / "collector" / "events.ndjson",
-                # legacy
-                root / "build-sil" / "iox_multiproc_logs" / "collector_shared.ndjson",
-                root / "build" / "iox_multiproc_logs" / "collector_shared.ndjson",
             ]
         )
     cwd = Path.cwd()
@@ -55,7 +53,6 @@ def default_collector_store(project_dir: Path | None = None) -> Path:
             cwd / "projects" / "oem_a" / "afc_with_uss" / "build-sil" / "runtime" / "collector" / "events.ndjson",
             cwd / "build-sil" / "runtime" / "collector" / "events.ndjson",
             cwd / "build" / "runtime" / "collector" / "events.ndjson",
-            cwd / "build" / "iox_multiproc_logs" / "collector_shared.ndjson",
         ]
     )
     for cand in candidates:
@@ -146,11 +143,24 @@ class CollectorPanel(QWidget):
         self._table.setHorizontalHeaderLabels(
             ["t_ns", "source", "id", "detail", "pid"]
         )
-        self._table.horizontalHeader().setSectionResizeMode(
-            3, QHeaderView.ResizeMode.Stretch
-        )
+        hdr = self._table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setStretchLastSection(False)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.setAlternatingRowColors(True)
+        self._table.setMinimumHeight(160)
+        self._table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._table.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         lay.addWidget(self._table, stretch=1)
 
         self._timer = QTimer(self)

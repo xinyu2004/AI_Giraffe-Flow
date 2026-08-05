@@ -173,6 +173,15 @@ bool KeyValueStorage::IsOpen() const noexcept {
   return open_;
 }
 
+gf_ara::core::Result<void> KeyValueStorage::ReloadFromDisk() {
+  std::lock_guard lock(mu_);
+  if (!open_) {
+    return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kNotAvailable);
+  }
+  LoadBestSlotLocked();
+  return gf_ara::core::Result<void>::Ok();
+}
+
 gf_ara::core::Result<void> KeyValueStorage::SetValue(std::string_view key,
                                                      std::string_view value) {
   std::lock_guard lock(mu_);

@@ -21,8 +21,8 @@
 ```text
 用户配置 CC/CXX 或 toolchain
         │
-        ├─ compile_sil  → 仓根 build/（或 build-clang/）
-        └─ compile_hil  → 仓根 build-hil/（已有 GF_CROSS_*）
+        ├─ compile_sil  → projects/.../build-sil/（或 GF_BUILD_DIR）
+        └─ compile_hil  → projects/.../build-hil/（已有 GF_CROSS_*）
 
 gf-config B 画布 = 设计期拓扑真图
 gf-config 导出 .dot/SVG（可选附件）
@@ -54,7 +54,7 @@ session JSONL/MCAP ──► VCD ──► GTKWave（只读；`GMT measure expor
 |------|------|------|
 | `GF_CC` / `GF_CXX` | 主机 C/C++ 编译器 | `clang` / `clang++` |
 | `GF_SIL_TOOLCHAIN_FILE` | 可选完整 toolchain.cmake | `cmake/toolchains/host-clang.cmake` |
-| `GF_BUILD_DIR` | SIL 输出目录（已有） | 默认 `build/`；Clang 建议 `build-clang/` 避免混用 |
+| `GF_BUILD_DIR` | SIL 输出目录（已有） | 默认 `projects/.../build-sil/`；换编译器可用独立目录避免混用 |
 | `GF_DEPS_PREFIX`（可选） | 依赖安装前缀隔离 | 换编译器时避免与 GCC 的 iceoryx 混链 |
 
 `compile_sil` 行为：
@@ -151,8 +151,9 @@ Host-only 时序/波形；与 **Foxglove**（语义 topic 实时）互补，**�
 | 用途 | 路径 |
 |------|------|
 | 生成物 | `projects/<oem>/<sku>/generated/` |
-| SIL 二进制 | 仓根 `build/`（或 `GF_BUILD_DIR`） |
-| HIL 二进制 | 仓根 `build-hil/` |
+| SIL 二进制 | `projects/<oem>/<sku>/build-sil/`（或 `GF_BUILD_DIR`） |
+| HIL 二进制 | `projects/<oem>/<sku>/build-hil/`（或 `GF_BUILD_DIR_HIL`） |
+| 观测落盘 | `${BUILD}/observability/`（session/MCAP）；`${BUILD}/runtime/{logs,collector,per}` |
 | 产品脚本 | 仅 `compile_sil\|hil` + `run_sil\|hil` |
 | 验证 | `scripts/verify/` |
 

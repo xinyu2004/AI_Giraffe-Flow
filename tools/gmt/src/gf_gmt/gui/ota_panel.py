@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from PySide6.QtCore import QSettings, QThread, QTimer, Signal
+from PySide6.QtCore import Qt, QSettings, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -22,10 +22,12 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QSizePolicy,
     QSpinBox,
+    QSplitter,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -358,19 +360,59 @@ class OtaPanel(QWidget):
         self.log.setPlaceholderText(
             t("DoIP / UDS 过程日志（各模块操作细节都写在这里）")
         )
-        self.log.setMinimumHeight(120)
+        self.log.setMinimumHeight(0)
+        self.log.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+
+        # OTA: plain title + always-visible log. DEM/Collector: collapsible in splitter.
+        self._uds_label = QLabel(t("UDS 交互"))
+        self._uds_toggle = QToolButton()
+        self._uds_toggle.setAutoRaise(True)
+        self._uds_toggle.setCheckable(True)
+        self._uds_toggle.setChecked(True)
+        self._uds_toggle.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        self._uds_toggle.setToolTip(
+            t("展开/收起 UDS traffic，给 DEM / Collector 表格腾空间")
+        )
+        self._uds_toggle.toggled.connect(self._on_uds_log_toggled)
+        self._uds_hdr = QWidget()
+        self._uds_hdr.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        _uh = QHBoxLayout(self._uds_hdr)
+        _uh.setContentsMargins(0, 0, 0, 0)
+        _uh.addWidget(self._uds_label)
+        _uh.addWidget(self._uds_toggle)
+        _uh.addStretch(1)
+
+        self._uds_pane = QWidget()
+        self._uds_pane.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        _up = QVBoxLayout(self._uds_pane)
+        _up.setContentsMargins(0, 0, 0, 0)
+        _up.setSpacing(4)
+        _up.addWidget(self._uds_hdr)
+        _up.addWidget(self.log, stretch=1)
+
+        self._body_split = QSplitter(Qt.Orientation.Vertical)
+        self._body_split.setChildrenCollapsible(True)
+        self._body_split.setHandleWidth(6)
+        self._body_split.addWidget(self._stack)
+        self._body_split.addWidget(self._uds_pane)
+        self._body_split.setStretchFactor(0, 3)
+        self._body_split.setStretchFactor(1, 1)
+        self._body_split.setCollapsible(0, False)  # never crush DEM/Collector
+        self._body_split.setCollapsible(1, True)
 
         root = QVBoxLayout(self)
         root.addWidget(hint)
         root.addLayout(shared)
         root.addLayout(mode_row)
-        # stretch adjusted in _on_module_radio (OTA compact / DEM·Collector expand).
-        root.addWidget(self._stack, stretch=0)
-        root.addWidget(QLabel(t("UDS 交互")))
-        root.addWidget(self.log, stretch=1)
-        self._root = root
-        self._stack_idx = root.indexOf(self._stack)
-        self._log_idx = root.indexOf(self.log)
+        root.addWidget(self._body_split, stretch=1)
 
         self._tp_timer = QTimer(self)
         self._tp_timer.timeout.connect(self._on_tester_present_tick)
@@ -379,28 +421,101 @@ class OtaPanel(QWidget):
         self._refresh_actions()
         self._on_module_radio()
 
-    def _on_module_radio(self, *_a: object) -> None:
-        if self._radio_ota.isChecked():
-            idx, compact = 0, True
-        elif self._radio_dem.isChecked():
-            idx, compact = 1, False
-        else:
-            idx, compact = 2, False
-        self._stack.setCurrentIndex(idx)
-        if compact:
+    def _sync_uds_toggle_label(self) -> None:
+        expanded = self._uds_toggle.isChecked()
+        arrow = "▼" if expanded else "▶"
+        self._uds_toggle.setText(f"{arrow} {t('UDS 交互')}")
+
+    def _on_uds_log_toggled(self, expanded: bool) -> None:
+        self.log.setVisible(bool(expanded))
+        self._sync_uds_toggle_label()
+        self._apply_module_stretch()
+
+    def _hdr_height(self) -> int:
+        h = self._uds_hdr.sizeHint().height()
+        return max(24, h + 4)
+
+    def _apply_module_stretch(self) -> None:
+        """Keep module page and UDS log in a real splitter — no overlap."""
+        ota = self._radio_ota.isChecked()
+        total = max(self._body_split.height(), 360)
+
+        if ota:
+            # OTA form is short; UDS log always open (no collapse chrome).
+            self._uds_label.setVisible(True)
+            self._uds_toggle.setVisible(False)
+            if not self._uds_toggle.isChecked():
+                self._uds_toggle.blockSignals(True)
+                self._uds_toggle.setChecked(True)
+                self._uds_toggle.blockSignals(False)
+            self.log.setVisible(True)
+            self.log.setMinimumHeight(96)
+            self.log.setMaximumHeight(16777215)
+            form_h = max(100, self._stack.sizeHint().height() + 8)
+            self._stack.setMinimumHeight(0)
+            self._stack.setMaximumHeight(form_h)
             self._stack.setSizePolicy(
                 QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum
             )
-            self._stack.setMaximumHeight(self._stack.sizeHint().height() + 4)
-            self._root.setStretch(self._stack_idx, 0)
+            self._uds_pane.setMinimumHeight(96)
+            self._uds_pane.setMaximumHeight(16777215)
+            self._body_split.setStretchFactor(0, 0)
+            self._body_split.setStretchFactor(1, 1)
+            top = min(form_h, max(80, total // 4))
+            self._body_split.setSizes([top, max(120, total - top)])
         else:
+            # DEM / Collector: table owns the pane; UDS is optional below the handle.
+            self._uds_label.setVisible(False)
+            self._uds_toggle.setVisible(True)
+            log_on = self._uds_toggle.isChecked()
+            self.log.setVisible(log_on)
             self._stack.setMaximumHeight(16777215)
+            self._stack.setMinimumHeight(200)
             self._stack.setSizePolicy(
                 QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
             )
-            self._root.setStretch(self._stack_idx, 2)
-        self._root.setStretch(self._log_idx, 1)
+            self._body_split.setStretchFactor(0, 4)
+            self._body_split.setStretchFactor(1, 1)
+            hdr = self._hdr_height()
+            if log_on:
+                self.log.setMinimumHeight(64)
+                self.log.setMaximumHeight(16777215)
+                uds_h = max(120, min(180, total // 4))
+                self._uds_pane.setMinimumHeight(hdr + 64)
+                self._uds_pane.setMaximumHeight(16777215)
+                self._body_split.setSizes([max(220, total - uds_h), uds_h])
+            else:
+                self.log.setMinimumHeight(0)
+                self.log.setMaximumHeight(0)
+                self._uds_pane.setMinimumHeight(hdr)
+                self._uds_pane.setMaximumHeight(hdr)
+                self._body_split.setSizes([max(220, total - hdr), hdr])
+        self._sync_uds_toggle_label()
         self._stack.updateGeometry()
+        self._body_split.updateGeometry()
+
+    def _on_module_radio(self, *_a: object) -> None:
+        if self._radio_ota.isChecked():
+            idx = 0
+        elif self._radio_dem.isChecked():
+            idx = 1
+            # DEM/Collector need table room — start with UDS collapsed.
+            if self._uds_toggle.isChecked():
+                self._uds_toggle.blockSignals(True)
+                self._uds_toggle.setChecked(False)
+                self._uds_toggle.blockSignals(False)
+                self.log.setVisible(False)
+        else:
+            idx = 2
+            if self._uds_toggle.isChecked():
+                self._uds_toggle.blockSignals(True)
+                self._uds_toggle.setChecked(False)
+                self._uds_toggle.blockSignals(False)
+                self.log.setVisible(False)
+        self._stack.setCurrentIndex(idx)
+        self._apply_module_stretch()
+        # Re-apply after layout has a real height (avoids first-paint overlap).
+        QTimer.singleShot(0, self._apply_module_stretch)
 
     def _build_ota_page(self) -> QWidget:
         w = QWidget()
@@ -513,13 +628,23 @@ class OtaPanel(QWidget):
 
         self._dem_table = QTableWidget(0, 2)
         self._dem_table.setHorizontalHeaderLabels(["DTC", "status"])
-        self._dem_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
+        hdr = self._dem_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hdr.setStretchLastSection(True)
         self._dem_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
         self._dem_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._dem_table.setAlternatingRowColors(True)
+        self._dem_table.setMinimumHeight(160)
+        self._dem_table.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self._dem_table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self._dem_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         lay.addWidget(self._dem_table, stretch=1)
         return w
 

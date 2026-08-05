@@ -32,7 +32,6 @@ observability:
       - services.semantic.EgoMotion
       - services.semantic.Trajectory
   remote_log_dump: on
-  trace_export: on
 
 apps:
   - adapters/mcu_cp_gateway

@@ -12,7 +12,7 @@ source "${SCRIPT_DIR}/_verify_common.sh"
 
 gf_project_env
 
-OUT_DIR="${GF_OBS_OUT:-${ROOT}/build/observability}"
+OUT_DIR="${GF_OBS_OUT:-$(gf_obs_dir)}"
 SESSION="${GF_INJECT_SESSION:-${OUT_DIR}/session_inject_ego_b2.jsonl}"
 mkdir -p "${OUT_DIR}"
 

@@ -1026,7 +1026,7 @@ class VarStripView(QWidget):
             item = QListWidgetItem(key)
             if key not in live:
                 item.setForeground(QColor("#999"))
-                item.setToolTip("当前 session 暂无此字段（曾出现过，仍可添加/保留）")
+                item.setToolTip(t("当前 session 暂无此字段（曾出现过，仍可添加/保留）"))
             self._avail.addItem(item)
         self._avail.blockSignals(False)
 

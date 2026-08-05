@@ -16,7 +16,7 @@ Desktop-first, **ARM Linux** embedded primary (OSAL reserved for MIPS / RISC-V).
 | **2** | **Giraffe modules** | **Product core** · runtime, processes, **FuSa evidence** | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [Design](docs/en/architecture/DESIGN.md) |
 | **3** | **GMT** | Toolchain · observe / inject | [tools/gmt](tools/gmt/README.md) · [Observability demo](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
-![Architecture: gf-config → Giraffe modules (incl. FuSa) → GMT](result_pic/architecture_flow.gif)
+![Architecture: CARLA → Giraffe modules → Foxglove · GMT](result_pic/Giraffe_Flow/Giraffe_Flow.en.gif)
 
 ---
 
@@ -44,6 +44,8 @@ Details: [tools/gf-config/README.md](tools/gf-config/README.md) · [WORKFLOW](do
 ### 2. Giraffe modules (core)
 
 What actually runs on the board and in SIL. Production algorithms may live in **external repos**; this tree ships a **trimmable platform + reference processes** on one semantic contract.
+
+![Giraffe Modules: on-board middleware boot & collaboration](result_pic/Giraffe_Modules/Giraffe_Modules.en.gif)
 
 #### 2.1 Layers
 

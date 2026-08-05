@@ -18,9 +18,9 @@ if [[ ! -d "${BUILD_HIL}" ]]; then
   exit 1
 fi
 
-echo "${TAG} run_hil: P0 stub — board deploy/run not automated yet."
+echo "${TAG} run_hil: STUB only — board deploy/run is not automated (P2.5-H / P3)."
 echo "${TAG}   build dir : ${BUILD_HIL}"
-echo "${TAG}   next steps: copy binaries + middleware/.deps-prefix libs to board,"
-echo "${TAG}               start RouDi, then uss_feed / demo_pipeline (same as SIL)."
-echo "${TAG}   optional  : bash ${ROOT}/scripts/verify/oem_a_afc_with_uss/deploy_hil.sh  (stub)"
+echo "${TAG}   use SIL for day-to-day: bash ${SCRIPT_DIR}/run_sil.sh"
+echo "${TAG}   later    : scp ${BUILD_HIL} + deps to board → RouDi → same apps as SIL"
+echo "${TAG}   optional : bash ${ROOT}/scripts/verify/oem_a_afc_with_uss/deploy_hil.sh  (also stub)"
 exit 0

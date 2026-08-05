@@ -61,7 +61,7 @@
 ### SIL-SM-01 — PHM miss → SM health_fault（notify_sm）+ 共享 Collector
 - 类别: fusa
 - 脚本: `scripts/verify/oem_a_afc_with_uss/smoke_sil_sm_fg.sh`
-- 环境: `GF_PHM_FAULT_TARGET=uss` · `GF_SM_ENTER_UPDATING_ON_FAULT=1` · `GF_COLLECTOR_STORE=…/collector_shared.ndjson`
+- 环境: `GF_PHM_FAULT_TARGET=uss` · `GF_SM_ENTER_UPDATING_ON_FAULT=1` · `GF_COLLECTOR_STORE=…/runtime/collector/events.ndjson`
 - 期望: `uss.log` 含 PHM miss · `sm: health_fault` · `collector: event` ·（可选）Updating/paused；`gateway.log` 仍有 Trajectory；共享 store 含 miss 事件
 - 状态: active
 - SG: SG-03 · SG-04（跨进程 store）

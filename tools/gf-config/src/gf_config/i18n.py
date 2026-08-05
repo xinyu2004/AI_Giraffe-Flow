@@ -475,6 +475,11 @@ _EN: dict[str, str] = {
         "Production release: Live/record/trace greyed; no iox_obs_tap; "
         "run_sil skips Foxglove. Bindings kept."
     ),
+    "量产发布：Live/录制灰调；不编 iox_obs_tap；"
+    "run_sil 不起 Foxglove。通信绑定仍保留。": (
+        "Production release: Live/record greyed; no iox_obs_tap; "
+        "run_sil skips Foxglove. Bindings kept."
+    ),
     "跟随画布：天花板=页 1 dataflows；将编入 tap（codegen）。"
     "GMT 可再过滤。": (
         "Follow canvas: ceiling = tab-1 dataflows; builds tap (codegen). "

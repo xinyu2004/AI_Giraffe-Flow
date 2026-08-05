@@ -67,8 +67,12 @@ observability/
 **/iox_multiproc_logs/
 **/runtime/logs/
 **/runtime/collector/
-**/runtime/logs/
-**/runtime/collector/
+**/runtime/per/
+# PER dual-slot leftovers if run from repo root
+*.kv.a
+*.kv.b
+*.kv.*.tmp
+/dtc.kv.*
 
 # Session captures outside build/ — GMT fixtures only
 *.mcap

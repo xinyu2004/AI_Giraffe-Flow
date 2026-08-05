@@ -6,8 +6,8 @@
 //   continuous (default) — wall-clock replay from board session file (filtered + max)
 //   playhead             — listen GF_INJECT_PORT (default 8767); GMT streams A/B windows
 //
-// Playhead = stream_window (default): session file optional; GMT holds the full session
-// and pushes window_begin/push/window_end (or inject for scrub). Board keeps 2×256 events.
+// Playhead: session file optional; GMT holds the full session and pushes A/B windows
+// (or inject for scrub). Board keeps 2 × GF_INJECT_WINDOW_MAX_EVENTS (default 256).
 //
 // Control protocol (TCP, one JSON object per line):
 //   → {"cmd":"hello"} | {"cmd":"status"} | {"cmd":"seek","index":N}
@@ -58,8 +58,8 @@ constexpr const char* kAnsiOk = "\033[32m";
 constexpr const char* kAnsiBye = "\033[36m";
 constexpr const char* kAnsiErr = "\033[31m";
 
-constexpr std::size_t kWindowMaxEvents = 256;
-constexpr int kWindowBuffers = 2;
+constexpr std::size_t kDefaultWindowMaxEvents = 256;
+constexpr int kWindowBuffers = 2;  // fixed A/B double buffer
 constexpr std::size_t kNeedWindowCount = 64;
 constexpr std::size_t kDefaultMaxEvents = 20000;
 
@@ -173,6 +173,22 @@ std::size_t parse_max_events() {
   }
   const long v = std::atol(env);
   return v > 0 ? static_cast<std::size_t>(v) : kDefaultMaxEvents;
+}
+
+/// Playhead A/B slot capacity (events per window). Memory ≈ 2 × this × sizeof(event).
+std::size_t parse_window_max_events() {
+  const char* env = std::getenv("GF_INJECT_WINDOW_MAX_EVENTS");
+  if (!env || !*env) {
+    return kDefaultWindowMaxEvents;
+  }
+  const long v = std::atol(env);
+  if (v < 16) {
+    return 16;
+  }
+  if (v > 4096) {
+    return 4096;
+  }
+  return static_cast<std::size_t>(v);
 }
 
 bool parse_loop() {
@@ -543,7 +559,8 @@ int run_playhead_stream(const std::set<std::string>& allow,
                         bool want_ego,
                         gf_gen::EgoMotionSkeleton& ego_pub,
                         const std::string& host,
-                        int port) {
+                        int port,
+                        std::size_t window_max_events) {
   const int listen_fd = listen_control(host, port);
   if (listen_fd < 0) {
     inject_status(kAnsiErr, std::string("cannot bind ") + host + ":" + std::to_string(port));
@@ -551,8 +568,8 @@ int run_playhead_stream(const std::set<std::string>& allow,
   }
   inject_status(kAnsiListen,
                 std::string("LISTENING tcp://") + host + ":" + std::to_string(port)
-                    + " mode=playhead caps=stream_window"
-                    + " window_max_events=" + std::to_string(kWindowMaxEvents)
+                    + " mode=playhead"
+                    + " window_max_events=" + std::to_string(window_max_events)
                     + " window_buffers=" + std::to_string(kWindowBuffers));
 
   Window windows[2];
@@ -581,7 +598,7 @@ int run_playhead_stream(const std::set<std::string>& allow,
     std::ostringstream oss;
     oss << "{\"op\":\"hello\",\"proto\":\"gf_inject_ctrl\",\"version\":1"
         << ",\"caps\":[\"stream_window\"]"
-        << ",\"window_max_events\":" << kWindowMaxEvents
+        << ",\"window_max_events\":" << window_max_events
         << ",\"window_buffers\":" << kWindowBuffers
         << ",\"mode\":\"playhead\",\"events\":" << session_events
         << ",\"index\":" << index << ",\"port\":" << port << "}";
@@ -754,7 +771,7 @@ int run_playhead_stream(const std::set<std::string>& allow,
         send_line(client_fd, "{\"op\":\"error\",\"msg\":\"window_begin first\"}");
         return;
       }
-      if (windows[s].events.size() >= kWindowMaxEvents) {
+      if (windows[s].events.size() >= window_max_events) {
         send_line(client_fd, "{\"op\":\"error\",\"msg\":\"window full\"}");
         return;
       }
@@ -775,11 +792,20 @@ int run_playhead_stream(const std::set<std::string>& allow,
       }
       windows[s].ready = true;
       windows[s].cursor = 0;
-      // One log per slot load (not per-frame inject scrub)
+      // base = GMT session event index where the scan started (playhead/list index).
+      // NOT "Nth EgoMotion received". ego_n = injectable frames stored in this slot.
+      const std::int64_t last_idx =
+          windows[s].events.empty() ? windows[s].base
+                                    : windows[s].events.back().index;
+      const std::int64_t first_ego =
+          windows[s].events.empty() ? windows[s].base
+                                    : windows[s].events.front().index;
       inject_status(kAnsiOk,
                     std::string("LOAD ") + slot_name(s)
-                        + " base=" + std::to_string(windows[s].base)
-                        + " n=" + std::to_string(windows[s].events.size()));
+                        + " scan_from=" + std::to_string(windows[s].base)
+                        + " ego=[" + std::to_string(first_ego)
+                        + ".." + std::to_string(last_idx) + "]"
+                        + " ego_n=" + std::to_string(windows[s].events.size()));
       emit_status(client_fd);
       return;
     }
@@ -1052,10 +1078,12 @@ int main(int argc, char** argv) {
                     std::string("session path ignored in playhead stream mode (hint only): ")
                         + path);
     }
-    std::cerr << "gf-iox-obs-inject: mode=playhead stream_window"
-              << " (do not co-publish with gateway)\n";
+    const std::size_t win_max = parse_window_max_events();
+    std::cerr << "gf-iox-obs-inject: mode=playhead"
+              << " window_max_events=" << win_max
+              << " (A/B buffers; do not co-publish with gateway)\n";
     return run_playhead_stream(
-        allow, want_ego, ego_pub, parse_control_host(), parse_control_port());
+        allow, want_ego, ego_pub, parse_control_host(), parse_control_port(), win_max);
   }
 
   // continuous: session file required, filtered load + hard max + optional loop

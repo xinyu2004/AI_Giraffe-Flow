@@ -177,10 +177,6 @@ class ProjectSession:
         self.wiring["dataflows"] = flows
         self.dirty_wiring = True
 
-    def set_list_field(self, key: str, values: list[str]) -> None:
-        self.req[key] = values
-        self.dirty_req = True
-
     def upsert_deployment(
         self,
         process: str,

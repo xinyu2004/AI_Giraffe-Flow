@@ -9,22 +9,21 @@
 
 `AdasDemo` 是 JSONL 里的可观测 topic，**不是**新的 iceoryx app。
 
-## BEV 从哪来？
+## 谁加载这个 JSONL？
 
-**主路径（SIL / 回灌）：** Foxglove bridge 用 **模块输出** 合成俯视图：
+**主路径：GMT / Inject。** `run_sil` **不**挂场景 JSONL。
 
-`EgoMotion` + `Trajectory` → `/gf/camera/front/compressed`
-
-三幕戏（变道→ACC→AEB）来自同场景 JSONL 里的剧本帧，经 `--bev-script` **只画进 Image**，**不再**向 Studio 发布 `/gf/AdasDemo`。
-
-`run_sil` 默认 `GF_SYNTH_BEV=1`，并自动带上 `scenarios/overtake_acc_aeb.jsonl` 作 bev-script（`GF_BEV_SCRIPT=0` 可关）。
+1. `bash …/run_sil.sh`（默认 `GF_SYNTH_BEV=1`）→ Foxglove 只从 **EgoMotion + Trajectory** 合成 BEV Image  
+2. 场景文件二选一：  
+   - **playhead**：GMT **打开** `scenarios/overtake_acc_aeb.jsonl` → 连回灌 → 播放  
+   - **continuous**：`GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl` 给板端 inject 读文件  
 
 | 模式 | 用法 |
 |------|------|
-| **playhead（场景 demo）** | `GF_INJECT_MODE=playhead GF_INJECT_LIVE=all bash …/run_sil.sh` → GMT 打开 jsonl 回灌。Studio 看 Ego/Trajectory/**BEV（含相位条/前车/变道）**。 |
+| **playhead（场景 demo）** | `GF_INJECT_MODE=playhead GF_INJECT_LIVE=all bash …/run_sil.sh` → GMT 打开 jsonl 回灌 |
 | **continuous** | `GF_INJECT_MODE=continuous GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl run_sil` |
 
-GMT **变量轨**仍可读本地 jsonl 里的 AdasDemo（若打开了文件）；Foxglove topic 列表里不应再出现 `/gf/AdasDemo`。
+GMT **变量轨**可读本地 jsonl 里的 AdasDemo；Foxglove topic 列表里不应再出现 `/gf/AdasDemo`。
 
 ```bash
 python scripts/gen_adas_scenarios.py

@@ -91,8 +91,14 @@ bool DecodeDtc(const std::string& s, DtcEntry& e) {
 }
 
 std::uint32_t ParseDtcHex(std::string_view s) {
+  // INDEX / DtcKey persist bare hex (e.g. c01235); YAML may use 0xC01235.
+  // stoul base 0 rejects bare hex (leading 'c' is not a decimal digit).
   try {
-    return static_cast<std::uint32_t>(std::stoul(std::string(s), nullptr, 0));
+    const std::string str(s);
+    if (str.size() >= 2 && str[0] == '0' && (str[1] == 'x' || str[1] == 'X')) {
+      return static_cast<std::uint32_t>(std::stoul(str, nullptr, 16));
+    }
+    return static_cast<std::uint32_t>(std::stoul(str, nullptr, 16));
   } catch (...) {
     return 0;
   }
@@ -380,6 +386,12 @@ bool EventCollector::DtcControlEnabled() const noexcept {
 void EventCollector::ReloadDtcsFromPer() {
   std::lock_guard lock(mu_);
   EnsurePerLocked();
+  auto& kv = gf_ara::per::KeyValueStorage::Instance();
+  if (kv.IsOpen()) {
+    // Apps write DTC into shared GF_PER_DIR; DoIP must re-read slots, not RAM cache.
+    (void)kv.ReloadFromDisk();
+  }
+  dtcs_.clear();
   LoadDtcsFromPerLocked();
 }
 

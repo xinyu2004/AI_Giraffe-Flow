@@ -172,17 +172,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="session JSONL to open",
     )
-    p_gui.add_argument("--sor", type=Path, default=None, help="gf.sor.json for topology")
+    p_gui.add_argument(
+        "--sor",
+        type=Path,
+        default=None,
+        help="optional gf.sor.json (normally loaded via --project)",
+    )
     p_gui.add_argument(
         "--project",
         type=Path,
         default=None,
         help="project dir / project.yaml (loads SOR if present)",
-    )
-    p_gui.add_argument(
-        "--follow",
-        action="store_true",
-        help="Tail session JSONL (default build/observability/session_live.jsonl)",
     )
 
     args = parser.parse_args(argv)
@@ -201,7 +201,6 @@ def main(argv: list[str] | None = None) -> int:
             session=args.session,
             sor=args.sor,
             project=args.project,
-            follow=bool(args.follow),
         )
 
     if args.cmd == "architect":

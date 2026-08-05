@@ -18,7 +18,6 @@ bindings:
 
 observability:
   record: full
-  trace_export: on
 
 apps:
   - demo_pipeline

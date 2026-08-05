@@ -53,7 +53,7 @@ _EN: dict[str, str] = {
     '跟随最新 ON — 贴最新事件': 'Follow latest ON',
     '回灌成功：#{idx} {topic} 已 Send': 'Injected #{idx} {topic}',
     '回灌跳过：#{idx} {topic}': 'Skipped #{idx} {topic}',
-    'Inject 已连接 tcp://{host}:{port} ({mode})': 'Inject connected tcp://{host}:{port} ({mode})',
+    'Inject 已连接 tcp://{host}:{port}': 'Inject connected tcp://{host}:{port}',
     'Live 旁观 ws://{host}:{port}（保留 session/回灌；可录制落盘，不写入时间轴）': (
         'Live observe ws://{host}:{port} (keep session/inject; Record to save, no timeline write)'
     ),
@@ -198,13 +198,16 @@ _EN: dict[str, str] = {
     'No variables yet — ▼ then Add →': 'No variables yet — ▼ then Add →',
     'Toggle variable picker': 'Toggle variable picker',
     'Inject: disconnected': 'Inject: disconnected',
-    'Inject: connected (playhead)': 'Inject: connected (playhead)',
+    'Inject: connected': 'Inject: connected',
+    'Inject: connected (playhead)': 'Inject: connected',
+    '窗口重载 session_idx≈{idx}（A/B）': 'Window reload session_idx≈{idx} (A/B)',
     '\n（检测到 :8765 已被占用，多半是 SIL live；离线回放改用本端口，勿与 live 混连。）': (
         '\n(:8765 busy — usually SIL live; offline replay uses this port.)'
     ),
     ' 录制': ' recording',
     ' 跟随': ' follow',
     'Inject 已断开': 'Inject disconnected',
+    'Inject 已断开 — 播放已停': 'Inject disconnected — playback stopped',
     'Inject 连接已断开': 'Inject connection lost',
     'Inject: 已连接（playhead）— 用下方播放/单步控制灌入': 'Inject: connected (playhead)',
     'Inject: 未连接（请用顶栏连接）': 'Inject: disconnected',
@@ -221,9 +224,6 @@ _EN: dict[str, str] = {
     'eof（未勾选循环）': 'eof (loop unchecked)',
     'inject seek 失败': 'inject seek failed',
     'inject session 重置失败': 'inject session reset failed',
-    'legacy（无 stream_window）两边必须打开同一 JSONL。\nstream 模式请升级板端 inject，由 GMT 下发窗口。': (
-        'legacy: both sides must open the same JSONL.\nstream: upgrade board inject; GMT sends the window.'
-    ),
     'to_ns（标记点可留空或同 from）': 'to_ns (empty OK for markers)',
     '不跟播': 'frozen',
     '保存': 'Save',
@@ -281,6 +281,7 @@ _EN: dict[str, str] = {
     ),
     '录制失败': 'Record failed',
     '循环（到结尾确认）': 'Loop at end',
+    '循环播放': 'Loop at end',
     '打开 project.yaml': 'Open project.yaml',
     '打开 session JSONL': 'Open session JSONL',
     '打开 session？': 'Open session?',
@@ -289,7 +290,17 @@ _EN: dict[str, str] = {
     '新建时间戳文件，还是覆盖？': 'New timestamped file, or overwrite?',
     '无 whitelist（全量解析）': 'No whitelist (parse all)',
     '无法写入': 'Cannot write',
-    '板端 eof 时弹窗：继续则 seek 0 并清空结果表；停止则保持在结尾': 'On eof: confirm → seek 0; stop → stay at end',
+    '板端 eof 时弹窗：继续则 seek 0 并清空结果表；停止则保持在结尾': (
+        'On eof: confirm → seek 0; stop → stay at end'
+    ),
+    '播放到结尾自动从 #0 再灌（无限循环）：重置板端 A/B、清空结果表。取消勾选则停在结尾。': (
+        'At end, auto-wrap to #0 (infinite): reset board A/B, clear results. Uncheck to stop at end.'
+    ),
+    '循环：已回到开头': 'Loop: back to start',
+    '回灌循环 → #0': 'Inject loop → #0',
+    '打开 session JSONL（回灌 / 时间轴权威源；加载项目后常用）': (
+        'Open session JSONL (inject / timeline authority; usual after Load project)'
+    ),
     '标签': 'Label',
     '标记点 (marker)': 'Marker',
     '标记点 ●：热键 M 在 playhead 钉一下，方便回头找；片段 ▬：热键 [ / ] 定 from/to，可导出 clip。列表显示墙钟（方案 1）。': (
@@ -337,6 +348,9 @@ _EN: dict[str, str] = {
     '打开项目 SOR 后显示拓扑': 'Open a project SOR to show topology',
     'SOR 无 deployments/dataflows': 'SOR has no deployments/dataflows',
     'UDS 交互': 'UDS traffic',
+    '展开/收起 UDS traffic，给 DEM / Collector 表格腾空间': (
+        'Expand/collapse UDS traffic to free space for DEM / Collector tables'
+    ),
     'DoIP / UDS 过程日志（各模块操作细节都写在这里）': 'DoIP / UDS log (all module steps appear here)',
     'OTA/UDS：共用 DoIP 连接与下方 UDS 日志。上方单选切换 OTA / DEM / Collector 模块。先加载项目 → 连接 → 再操作对应模块。': (
         'OTA/UDS: shared DoIP + UDS log below. Radio switches OTA / DEM / Collector. Load project → Connect → use the module.'
@@ -348,7 +362,7 @@ _EN: dict[str, str] = {
     '清除全部（0x14）': 'Clear all (0x14)',
     '已读取 {n} 条 DTC': 'Read {n} DTCs',
     '0 条 DTC。需 SIL 先产生故障（如 PHM AliveMissed）且 GF_PER_DIR 与 DoIP 共享；也可用 Collector 看事件。': (
-        '0 DTCs. Need a SIL fault first (e.g. PHM AliveMissed) with shared GF_PER_DIR for DoIP; or check Collector events.'
+        '0 DTCs. Need a SIL PHM fault (e.g. AliveMissed) written to shared GF_PER_DIR; DoIP 0x19 reloads from PER. run_sil+DoIP defaults a short PHM fault on uss.'
     ),
     '未连接时此表为空。顶栏「回灌 tcp」连接后，勾选 Follow playhead 并回放/单步，结果才会出现。': (
         'Table stays empty until Inject is connected. Then enable Follow playhead and play/step to see results.'
@@ -491,6 +505,77 @@ _EN: dict[str, str] = {
     '浏览…': 'Browse…',
     '选择 0x27/0x29 安全插件（.so / .dll）': 'Select 0x27/0x29 security plugin (.so / .dll)',
     '动态库 (*.so *.dll);;所有文件 (*)': 'Libraries (*.so *.dll);;All (*)',
+    '已存在 {name}（{n} 字节）。\n新建时间戳文件，还是覆盖？': (
+        'File {name} already exists ({n} bytes).\nNew timestamped file, or overwrite?'
+    ),
+    'stream session/reset 失败：{exc}': 'stream session/reset failed: {exc}',
+    '\n⚠ 事件数不一致：inject={n_inj} GUI={n_gui}（请用同一 session）': (
+        '\n⚠ event count mismatch: inject={n_inj} GUI={n_gui} (use same session)'
+    ),
+    'inject 侧事件数 = {n_inj}，GMT 当前 session = {n_gui}。\n\n': (
+        'inject events = {n_inj}, GMT session = {n_gui}.\n\n'
+    ),
+    '超出 session（{err}）': 'past session end ({err})',
+    '超出 inject session（{err}）— ': 'past inject session ({err}) — ',
+    '跳过 #{index} {topic}（MVP 仅 EgoMotion）': 'skip #{index} {topic} (MVP EgoMotion only)',
+    '{dir}\n下未找到 project.yaml\n请选 SKU 目录或其 project.yaml（与 gf-config 同一入口）。': (
+        '{dir}\nproject.yaml not found\nPick SKU folder or its project.yaml.'
+    ),
+    '请选择 project.yaml，而不是：\n{name}': (
+        'Select project.yaml, not:\n{name}'
+    ),
+    '未找到 {sor}\n请先在 gf-config Verify / Compose。': (
+        'Missing {sor}\nRun gf-config Verify / Compose first.'
+    ),
+    '项目={dir}（无 SOR）': 'project={dir} (no SOR)',
+    '发现 {cand}\n是否加载？（也可先 run_sil 再 GUI「连接」）': (
+        'Found {cand}\nLoad it? (or run_sil then Connect)'
+    ),
+    '写入 {path}\n事件数=0\n({note})\n检查日志目录或 record.services / mode=off。': (
+        'Wrote {path}\nevents=0\n({note})\nCheck log dir or record.services / mode=off.'
+    ),
+    '写入 {path}\n事件数={n}\n{note}': (
+        'Wrote {path}\nevents={n}\n{note}'
+    ),
+    '写入 {path}\n事件数={n}': (
+        'Wrote {path}\nevents={n}'
+    ),
+    '已写入 {path}\nvars={n_vars} events={n_ev}\n打开：gtkwave {path}': (
+        'Wrote {path}\nvars={n_vars} events={n_ev}\nOpen: gtkwave {path}'
+    ),
+    '进程已退出（码 {code}）。\n检查端口 {port} 是否被占用，或用 CLI 调试。': (
+        'Process exited (code {code}).\nCheck port {port} or debug via CLI.'
+    ),
+    '已启动 WS 回放：ws://127.0.0.1:{port}\n': (
+        'WS replay started: ws://127.0.0.1:{port}\n'
+    ),
+    'Foxglove 回放已启动 ws://127.0.0.1:{port}': 'Foxglove replay started ws://127.0.0.1:{port}',
+    '无 session（先打开或跟随 live）': 'No session (open or follow live first)',
+    '无 playhead': 'No playhead',
+    '● 标记 {label} @ {t_ns} → {path}': '● marker {label} @ {t_ns} → {path}',
+    '无 session': 'No session',
+    '▬ 片段 {label} [{a}…{b}] → {path}': '▬ range {label} [{a}…{b}] → {path}',
+    '先选中一个标记/片段': 'Select a marker/range first',
+    '该条目没有时间点': 'Entry has no timestamp',
+    '标记': 'Marker',
+    'from_ns / to_ns 必须是整数': 'from_ns / to_ns must be integers',
+    '已保存 {path}': 'Saved {path}',
+    '无 playhead（先加载并 scrub session）': 'No playhead (load and scrub session first)',
+    '片段需要 from_ns 与 to_ns': 'Range needs from_ns and to_ns',
+    '已写入 {path}\nkept={kept}/{total}\n是否加载到时间轴？': (
+        'Wrote {path}\nkept={kept}/{total}\nLoad onto timeline?'
+    ),
+    '当前 session 暂无此字段（曾出现过，仍可添加/保留）': (
+        'Field absent in current session (seen before; still addable)'
+    ),
+    'inject ctrl hello timeout @ {host}:{port}\n请确认：GF_INJECT_MODE=playhead、端口 8767（TCP）、防火墙放行；\n不要用上方 Live 的 ws://8766。': (
+        'inject ctrl hello timeout @ {host}:{port}\nCheck: GF_INJECT_MODE=playhead, TCP 8767, firewall;\nDo not use Live ws://8766 above.'
+    ),
+    '▬ from={t_ns} → {label}': '▬ from={t_ns} → {label}',
+    '当前是标记点 ●，不是时间窗。\n请把类型改成「片段」并填 from/to，或用 [ / ] 定窗后再导出。': (
+        'This is a marker ●, not a time window.\nChange type to Range and set from/to, or use [ / ] then export.'
+    ),
+    'Foxglove Studio → Open connection。': 'Foxglove Studio → Open connection.',
 }
 
 _ZH: dict[str, str] = {
@@ -543,7 +628,7 @@ _ZH: dict[str, str] = {
     'Export clip…': '导出 clip…',
     'Pin mark ●': '钉标记 ●',
     'Follow playhead': '跟 playhead 灌',
-    'Loop at end': '循环（到结尾确认）',
+    'Loop at end': '循环播放',
     'Order: events by time (Δt). Click to seek; yellow = same t_ns.': (
         '按时间列出事件与 Δt。单击跳转；同 t_ns 标黄。'
     ),
@@ -562,7 +647,9 @@ _ZH: dict[str, str] = {
     'No variables yet — ▼ then Add →': '尚未添加变量 — ▼ 后「添加 →」',
     'Toggle variable picker': '展开 / 收起选变量',
     'Inject: disconnected': 'Inject: 未连接',
-    'Inject: connected (playhead)': 'Inject: 已连接（playhead）',
+    'Inject: connected': 'Inject: 已连接',
+    'Inject: connected (playhead)': 'Inject: 已连接',
+    '窗口重载 session_idx≈{idx}（A/B）': '窗口重载 session_idx≈{idx}（A/B）',
 }
 
 

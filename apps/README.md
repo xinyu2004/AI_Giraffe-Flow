@@ -1,34 +1,25 @@
 # apps/
 
-Reference processes for integration tests — **not customer production algorithms**.
+Shared / reference processes for integration tests — **not** customer production algorithms.
 
-## Layout
+## Layout（现行）
 
 | Dir | Role |
 |-----|------|
 | [common/](common/) | Shared demo headers (e.g. `uss_zones_topic`) |
-| [adapters/](adapters/) | Shared adapters (e.g. `mcu_cp_gateway`); SKU CAN gateway lives under project |
+| [adapters/](adapters/) | Shared adapters (e.g. `mcu_cp_gateway`) |
 | [simulators/](simulators/) | Semantic output stubs when external repos absent |
 | [demo_pipeline/](demo_pipeline/) | End-to-end wiring demo |
 
-Process bring-up (Offer→Running + FG + PHM/Collector/Log) lives in [`middleware/runtime/`](../middleware/runtime/) (`gf_ara::runtime`).
-
-Tap / inject live in [`tools/debug_bridge/`](../tools/debug_bridge/).
-
-## SKU stubs
-
-Product-specific stubs (gateway / sensing / perception / planning for a given OEM SKU) live under:
+SKU 业务 stub（gateway / uss / fcm / planning）在：
 
 `projects/<oem>/<sku>/apps/`
 
-Example: [projects/oem_a/afc_with_uss/apps/](../projects/oem_a/afc_with_uss/apps/).
+例：[projects/oem_a/afc_with_uss/apps/](../projects/oem_a/afc_with_uss/apps/)。
 
-## Production components
+Process bring-up → [`middleware/runtime/`](../middleware/runtime/)。  
+Tap / inject → [`tools/debug_bridge/`](../tools/debug_bridge/)。
 
-Perception / planning / control **ship in external repos**. SOR `components[].package` selects sim vs production.
-
-## Legacy top-level dirs
-
-`radar`, `perception`, `planning`, `control`, `ivi` remain as migration references — prefer project `apps/` + shared `adapters/` / `simulators/`.
+Production perception / planning / control 在外部仓库；SOR `components[].package` 选 sim vs production。
 
 Parent: [component-composition.md](../docs/en/architecture/component-composition.md)

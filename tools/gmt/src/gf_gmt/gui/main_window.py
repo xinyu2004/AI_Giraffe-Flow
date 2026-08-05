@@ -44,7 +44,6 @@ from gf_gmt.gui.ota_panel import OtaPanel
 from gf_gmt.gui.live_client import LiveWsSession
 from gf_gmt.gui.order_view import OrderRaceView
 from gf_gmt.gui.session_model import (
-    SessionFileTail,
     SessionModel,
     load_session,
     write_session_meta_line,
@@ -53,8 +52,7 @@ from gf_gmt.gui.tag_panel import TagPanel
 from gf_gmt.gui.var_strip_view import VarStripView
 from gf_gmt.gui.wall_time import SessionClock
 from gf_gmt.measure_export import export_session_jsonl
-from gf_gmt.measure_ndjson import parse_session_line, record_from_ndjson
-from gf_gmt.measure_record import record_from_sil_logs
+from gf_gmt.measure_ndjson import parse_session_line
 from gf_gmt.i18n import get_language, switch_language_and_restart, t
 
 
@@ -76,18 +74,12 @@ class GmtMainWindow(QMainWindow):
         self._live_observe_only = False
         self._inject: InjectCtrlClient | None = None
         self._inject_helper: InjectStreamHelper | None = None
-        self._inject_stream = False  # hello caps contains stream_window
         self._inject_active = False
         self._inject_syncing = False  # avoid re-entrant seek storms
-        self._inject_last_ok: bool | None = None  # None=unknown, True=green, False=red
         self._inject_eof_asking = False  # avoid stacked eof dialogs
         self._playing = False
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_tick)
-        self._tail = SessionFileTail()
-        self._follow_timer = QTimer(self)
-        self._follow_timer.setInterval(250)
-        self._follow_timer.timeout.connect(self._on_follow_tick)
         self._ws_timer = QTimer(self)
         self._ws_timer.setInterval(50)
         self._ws_timer.timeout.connect(self._on_ws_tick)
@@ -109,6 +101,12 @@ class GmtMainWindow(QMainWindow):
         )
         self._btn_proj.clicked.connect(self._open_project)
         row1.addWidget(self._btn_proj)
+        self._btn_open = QPushButton(t("打开 session…"))
+        self._btn_open.setToolTip(
+            t("打开 session JSONL（回灌 / 时间轴权威源；加载项目后常用）")
+        )
+        self._btn_open.clicked.connect(self._open_session)
+        row1.addWidget(self._btn_open)
         row1.addWidget(QLabel("Host"))
         self._host_edit = QLineEdit("127.0.0.1")
         self._host_edit.setToolTip(
@@ -200,16 +198,9 @@ class GmtMainWindow(QMainWindow):
         )
         root.addWidget(self._proj_banner)
 
+        # Transport: playhead only. Rare paths (record logs / SOR / follow file)
+        # stay under File menu.
         transport = QHBoxLayout()
-        self._btn_open = QPushButton(t("打开 session…"))
-        self._btn_open.clicked.connect(self._open_session)
-        self._btn_record = QPushButton(t("从日志录制…"))
-        self._btn_record.clicked.connect(self._record_from_logs)
-        self._btn_sor = QPushButton(t("加载 SOR…"))
-        self._btn_sor.clicked.connect(self._open_sor)
-        self._btn_live = QPushButton(t("仅跟随文件…"))
-        self._btn_live.setToolTip(t("高级：不连 WS，只尾随已有 JSONL"))
-        self._btn_live.clicked.connect(self._open_live_follow)
         self._btn_home = QPushButton("|◀")
         self._btn_home.setToolTip(t("跳到开头"))
         self._btn_home.clicked.connect(self._jump_start)
@@ -230,10 +221,6 @@ class GmtMainWindow(QMainWindow):
         self._btn_mcap.clicked.connect(self._export_mcap)
 
         for w in (
-            self._btn_open,
-            self._btn_record,
-            self._btn_sor,
-            self._btn_live,
             self._btn_home,
             self._btn_back,
             self._btn_play,
@@ -259,13 +246,6 @@ class GmtMainWindow(QMainWindow):
         self._use_dt = QCheckBox(t("按 Δt"))
         self._use_dt.setToolTip(t("播放间隔按相邻事件真实 Δt，再乘倍速%"))
         transport.addWidget(self._use_dt)
-        self._follow = QCheckBox(t("跟随文件"))
-        self._follow.setToolTip(
-            t("轮询 JSONL 新行（「仅跟随 live 文件」用）。"
-            "是否跳到最新由上方「跟随最新」决定。")
-        )
-        self._follow.toggled.connect(self._on_follow_toggled)
-        transport.addWidget(self._follow)
         transport.addStretch(1)
         root.addLayout(transport)
 
@@ -337,22 +317,6 @@ class GmtMainWindow(QMainWindow):
         act_sess.setShortcut(QKeySequence.StandardKey.Open)
         act_sess.triggered.connect(self._open_session)
         file_menu.addAction(act_sess)
-
-        act_rec = QAction(t("从 SIL 日志录制…"), self)
-        act_rec.triggered.connect(self._record_from_logs)
-        file_menu.addAction(act_rec)
-
-        act_ndjson = QAction(t("从 tap NDJSON 导入…"), self)
-        act_ndjson.triggered.connect(self._import_ndjson)
-        file_menu.addAction(act_ndjson)
-
-        act_live = QAction(t("仅跟随 live 文件…"), self)
-        act_live.triggered.connect(self._open_live_follow)
-        file_menu.addAction(act_live)
-
-        act_sor = QAction(t("加载 gf.sor.json…"), self)
-        act_sor.triggered.connect(self._open_sor)
-        file_menu.addAction(act_sor)
 
         file_menu.addSeparator()
         act_mcap = QAction(t("导出 MCAP…"), self)
@@ -522,7 +486,7 @@ class GmtMainWindow(QMainWindow):
         self._refresh_conn_bar_ui()
 
     def _refresh_conn_bar_ui(self) -> None:
-        """Live 与回灌可并行；回灌按最近一帧红/绿。"""
+        """Live 与回灌可并行。Inject 顶栏只表示 TCP 链路，与单帧成败无关。"""
         live_on = self._live_active
         inj_on = self._inject_active
 
@@ -559,27 +523,18 @@ class GmtMainWindow(QMainWindow):
             self._live_state.setText(t("空闲"))
             self._live_state.setStyleSheet(idle_s)
 
+        # TCP link only — never paint Failed/red for per-frame inject skip/error.
         sock_ok = (
             inj_on
             and self._inject is not None
             and self._inject.connected
         )
-        if not inj_on or not sock_ok:
+        if sock_ok:
+            self._inject_state.setText(t("已连接"))
+            self._inject_state.setStyleSheet(green)
+        else:
             self._inject_state.setText(t("空闲"))
             self._inject_state.setStyleSheet(idle_s)
-            if not inj_on:
-                self._inject_last_ok = None
-        elif self._inject_last_ok is True:
-            self._inject_state.setText(t("已连接"))
-            self._inject_state.setStyleSheet(green)
-        elif self._inject_last_ok is False:
-            red = "color:#c62828; font-weight:700;"
-            self._inject_state.setText(t("已连接"))
-            self._inject_state.setStyleSheet(red)
-        else:
-            # Connected, no frame result yet
-            self._inject_state.setText(t("已连接"))
-            self._inject_state.setStyleSheet(green)
 
         self._refresh_window_title()
 
@@ -625,7 +580,7 @@ class GmtMainWindow(QMainWindow):
             return
         self._stick_tail = on
         self._refresh_live_state_label()
-        if not self._live_active and not self._follow.isChecked():
+        if not self._live_active:
             return
         if on and not self._model.empty:
             # Unfreeze: rebuild views that were skipped while frozen.
@@ -647,7 +602,20 @@ class GmtMainWindow(QMainWindow):
         return fallback if fallback.is_file() else None
 
     def _default_obs_dir(self) -> Path:
-        d = Path.cwd() / "build" / "observability"
+        # Align with run_sil: ${BUILD}/observability (SKU build-sil by default).
+        if self._project_dir is not None:
+            d = Path(self._project_dir) / "build-sil" / "observability"
+        else:
+            d = (
+                Path.cwd()
+                / "projects"
+                / "oem_a"
+                / "afc_with_uss"
+                / "build-sil"
+                / "observability"
+            )
+            if not d.parent.is_dir():
+                d = Path.cwd() / "build-sil" / "observability"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
@@ -662,10 +630,6 @@ class GmtMainWindow(QMainWindow):
             self._model = SessionModel()
             self._model.path = path
             self._model.bind_sor(self._sor)
-        self._tail.reset(path)
-        if path.is_file():
-            self._tail.offset = path.stat().st_size
-            self._tail.partial = ""
         self._apply_model()
 
     def _write_live_session_meta_if_needed(self, first_t_ns: int) -> None:
@@ -677,31 +641,6 @@ class GmtMainWindow(QMainWindow):
         if self._live_log_fp is not None:
             write_session_meta_line(self._live_log_fp, clock)
 
-    def start_follow(self, path: Path | None = None) -> None:
-        """Open path (default session_live.jsonl) and enable tail follow."""
-        p = path or self._default_live_session()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        if not p.is_file():
-            p.touch()
-        self._session_path = p
-        self._model = SessionModel()
-        self._model.path = p
-        self._model.bind_sor(self._sor)
-        self._tail.reset(p)
-        self._tags.set_session(p, clock=self._model.clock)
-        self._dag.set_topology(self._sor)
-        self._dag.set_model(self._model)
-        self._inject_panel.set_model(self._model)
-        self._var_strip.set_model(self._model)
-        self._apply_model()
-        self._follow.blockSignals(True)
-        self._follow.setChecked(True)
-        self._follow.blockSignals(False)
-        self._stick_tail = self._follow_latest.isChecked()
-        self._follow_timer.start()
-        self._on_follow_tick()
-        mode = t("跟随最新") if self._stick_tail else t("不跟播")
-        self.statusBar().showMessage(f'{t("跟随 live")}（{mode}）：{p}', 5000)
 
     def _close_live_log(self) -> None:
         if self._live_log_fp is not None:
@@ -739,8 +678,9 @@ class GmtMainWindow(QMainWindow):
             box.setWindowTitle(t("Live 录制"))
             box.setIcon(QMessageBox.Icon.Question)
             box.setText(
-                f"已存在 {default.name}（{default.stat().st_size} 字节）。\n"
-                + t("新建时间戳文件，还是覆盖？")
+                t("已存在 {name}（{n} 字节）。\n新建时间戳文件，还是覆盖？").format(
+                    name=default.name, n=default.stat().st_size
+                )
             )
             btn_new = box.addButton(t("新建"), QMessageBox.ButtonRole.AcceptRole)
             btn_over = box.addButton(t("覆盖"), QMessageBox.ButtonRole.DestructiveRole)
@@ -823,10 +763,6 @@ class GmtMainWindow(QMainWindow):
         self._var_strip.set_model(self._model)
         self._order.set_model(self._model)
         self._apply_model()
-        self._follow.blockSignals(True)
-        self._follow.setChecked(False)
-        self._follow.blockSignals(False)
-        self._follow_timer.stop()
         self._stick_tail = self._follow_latest.isChecked()
 
     def _connect_live(self) -> None:
@@ -913,10 +849,6 @@ class GmtMainWindow(QMainWindow):
             self._ws = None
         was_rec = self._live_log_fp is not None
         self._stop_live_record(quiet=True) if was_rec else self._close_live_log()
-        self._follow_timer.stop()
-        self._follow.blockSignals(True)
-        self._follow.setChecked(False)
-        self._follow.blockSignals(False)
         observe = self._live_observe_only
         self._live_observe_only = False
         self._set_live_ui(False)
@@ -1018,50 +950,34 @@ class GmtMainWindow(QMainWindow):
                 ),
             )
             return
+        hello = client.last_hello or {}
         self._inject = client
         helper = InjectStreamHelper(client)
-        hello = client.last_hello or {}
         helper.on_hello(hello)
         self._inject_helper = helper
-        self._inject_stream = helper.stream_mode
         n_inj = hello.get("events", "?")
         n_gui = len(self._model.events)
-        warn = ""
-        if self._inject_stream:
-            try:
-                helper.configure_session(n_gui)
-                # Prefetch A/B once so board logs LOAD A / LOAD B (not per-scrub)
-                if n_gui > 0:
-                    helper.ensure_windows_around(self._model, 0)
-            except ConnectionError as exc:
-                self._refresh_conn_bar_ui()
-                QMessageBox.critical(
-                    self,
-                    t("回灌"),
-                    f"stream session/reset 失败：{exc}",
-                )
-                client.close()
-                self._inject = None
-                self._inject_helper = None
-                self._inject_stream = False
-                return
-            detail = (
-                f"tcp://{host}:{port} · stream_window · "
-                f"GMT events={n_gui} · board hint={n_inj} · "
-                f"window≤{helper.window_size}"
+        try:
+            helper.configure_session(n_gui)
+            # Prefetch A/B once so board logs LOAD A / LOAD B (not per-scrub)
+            if n_gui > 0:
+                helper.ensure_windows_around(self._model, 0)
+        except ConnectionError as exc:
+            self._refresh_conn_bar_ui()
+            QMessageBox.critical(
+                self,
+                t("回灌"),
+                t("stream session/reset 失败：{exc}").format(exc=exc),
             )
-        else:
-            if isinstance(n_inj, int) and n_gui and n_inj != n_gui:
-                warn = f"\n⚠ 事件数不一致：inject={n_inj} GUI={n_gui}（请用同一 session）"
-                QMessageBox.warning(
-                    self,
-                    t("回灌 session 不一致"),
-                    f"inject 侧事件数 = {n_inj}，GMT 当前 session = {n_gui}。\n\n"
-                    + t("legacy（无 stream_window）两边必须打开同一 JSONL。\n"
-                    "stream 模式请升级板端 inject，由 GMT 下发窗口。"),
-                )
-            detail = f"tcp://{host}:{port} · inject events={n_inj} · GUI={n_gui}{warn}"
-        self._inject_last_ok = None
+            client.close()
+            self._inject = None
+            self._inject_helper = None
+            return
+        detail = (
+            f"tcp://{host}:{port} · "
+            f"GMT events={n_gui} · board hint={n_inj} · "
+            f"window≤{helper.window_size}"
+        )
         self._inject_eof_asking = False
         self._inject_panel.set_connected(True, detail=detail)
         self._set_inject_ui(True)
@@ -1070,28 +986,41 @@ class GmtMainWindow(QMainWindow):
                 reason=t("回灌已连且跟 playhead → Live 跟随已关（可另连 Live 旁观/录制）")
             )
         self._inject_timer.start()
-        mode = "stream" if self._inject_stream else "legacy"
         self.statusBar().showMessage(
-            t("Inject 已连接 tcp://{host}:{port} ({mode})").format(
-                host=host, port=port, mode=mode
-            ),
+            t("Inject 已连接 tcp://{host}:{port}").format(host=host, port=port),
             6000,
         )
         if not self._model.empty and self._inject_panel.wants_playhead_sync():
             self._inject_seek(self._slider.value())
 
+    def _pause_playback(self, *, reason: str = "") -> None:
+        """Stop GMT playhead timer (does not disconnect Live/Inject)."""
+        if not self._playing:
+            return
+        self._playing = False
+        self._timer.stop()
+        self._btn_play.setText(t("播放"))
+        if reason:
+            self.statusBar().showMessage(reason, 4000)
+
     def _disconnect_inject(self) -> None:
         self._inject_timer.stop()
+        # Disconnect must stop 回灌：pause board + stop GMT playhead.
+        if self._inject is not None and self._inject.connected:
+            try:
+                self._inject.pause()
+            except (OSError, ConnectionError):
+                pass
+        self._pause_playback(reason=t("Inject 已断开 — 播放已停"))
         if self._inject is not None:
             self._inject.close()
             self._inject = None
         self._inject_helper = None
-        self._inject_stream = False
-        self._inject_last_ok = None
         self._inject_eof_asking = False
         self._inject_panel.set_connected(False, detail="—")
         self._set_inject_ui(False)
-        self.statusBar().showMessage(t("Inject 已断开"), 3000)
+        if not self.statusBar().currentMessage():
+            self.statusBar().showMessage(t("Inject 已断开"), 3000)
 
     def _poll_inject_msgs(self, msgs: list[dict[str, Any]]) -> None:
         for msg in msgs:
@@ -1108,11 +1037,9 @@ class GmtMainWindow(QMainWindow):
             elif op == "eof":
                 self._on_inject_eof(msg)
             elif op == "error":
-                self._inject_last_ok = False
-                self._refresh_conn_bar_ui()
                 err = str(msg.get("msg") or "error")
                 if err == "need_window":
-                    # board may send error alongside need_window; fill if helper ready
+                    # Prefetch signal — not a TCP link failure.
                     self._on_inject_need_window(
                         {
                             "from": msg.get("from", self._slider.value()),
@@ -1124,19 +1051,11 @@ class GmtMainWindow(QMainWindow):
                 self._inject_panel.set_detail(f'{t("回灌错误")}：{err}')
                 idx = self._slider.value()
                 if err in {"index out of range", "at end"} and idx >= 0:
-                    reason = (
-                        f"超出 session（{err}）"
-                        if self._inject_stream
-                        else (
-                            f"超出 inject session（{err}）— "
-                            + t("请确认 GF_INJECT_SESSION 与 GUI 同一文件")
-                        )
-                    )
                     self._inject_panel.record_result(
                         idx,
                         injected=False,
                         topic="",
-                        reason=reason,
+                        reason=t("超出 session（{err}）").format(err=err),
                     )
                 self.statusBar().showMessage(f'{t("回灌失败")}：{err}', 6000)
 
@@ -1144,7 +1063,6 @@ class GmtMainWindow(QMainWindow):
         if (
             self._inject is None
             or self._inject_helper is None
-            or not self._inject_stream
             or self._model.empty
         ):
             return
@@ -1157,6 +1075,31 @@ class GmtMainWindow(QMainWindow):
             self.statusBar().showMessage(f'{t("填窗失败")}：{exc}', 4000)
             self._disconnect_inject()
 
+    def _restart_inject_loop(self, *, keep_playing: bool) -> None:
+        """Wrap to session start: reset board A/B, clear result table, seek 0."""
+        self._inject_panel.clear_results()
+        if (
+            self._inject_helper is not None
+            and self._inject is not None
+            and self._inject.connected
+            and not self._model.empty
+        ):
+            try:
+                self._inject_helper.configure_session(len(self._model.events))
+                self._inject_helper.ensure_windows_around(self._model, 0)
+                self._poll_inject_msgs(self._inject.poll_messages())
+            except ConnectionError:
+                self._disconnect_inject()
+                return
+        was_playing = keep_playing and self._playing
+        if was_playing:
+            self._timer.stop()
+        self._seek_index(0)
+        self._inject_panel.set_detail(t("循环：已回到开头"))
+        self.statusBar().showMessage(t("回灌循环 → #0"), 2500)
+        if was_playing:
+            self._timer.start(self._next_interval_ms())
+
     def _on_inject_eof(self, _msg: dict[str, Any]) -> None:
         if self._inject_eof_asking:
             return
@@ -1166,29 +1109,7 @@ class GmtMainWindow(QMainWindow):
             return
         self._inject_eof_asking = True
         try:
-            reply = QMessageBox.question(
-                self,
-                t("回灌到结尾"),
-                t("已到 session 结尾。是否从开头继续循环？"),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
-            )
-            if reply == QMessageBox.StandardButton.Yes:
-                self._inject_panel.clear_results()
-                if (
-                    self._inject_helper is not None
-                    and self._inject is not None
-                    and self._inject.connected
-                    and self._inject_stream
-                ):
-                    try:
-                        self._inject_helper.configure_session(len(self._model.events))
-                    except ConnectionError:
-                        self._disconnect_inject()
-                        return
-                self._seek_index(0)
-            else:
-                self._inject_panel.set_detail(t("eof — 已停止"))
+            self._restart_inject_loop(keep_playing=True)
         finally:
             self._inject_eof_asking = False
 
@@ -1196,9 +1117,8 @@ class GmtMainWindow(QMainWindow):
         if self._inject is None:
             return
         if not self._inject.connected:
-            # Peer closed (or replaced); sync UI — do not auto-reconnect
+            # Peer closed — same as user Disconnect (stops play + board pause).
             self._disconnect_inject()
-            self.statusBar().showMessage(t("Inject 连接已断开"), 4000)
             return
         self._poll_inject_msgs(self._inject.poll_messages())
 
@@ -1207,7 +1127,6 @@ class GmtMainWindow(QMainWindow):
         topic = str(msg.get("topic") or "?")
         injected = msg.get("injected")
         ok = injected is True or injected == "true"
-        self._inject_last_ok = bool(ok)
         try:
             index_i = int(idx) if idx is not None else -1
         except (TypeError, ValueError):
@@ -1245,7 +1164,6 @@ class GmtMainWindow(QMainWindow):
                 t("回灌跳过：#{idx} {topic}").format(idx=idx, topic=topic),
                 4000,
             )
-        self._refresh_conn_bar_ui()
 
     def _inject_seek(self, index: int) -> None:
         if self._inject is None or not self._inject.connected:
@@ -1256,33 +1174,37 @@ class GmtMainWindow(QMainWindow):
             return
         self._inject_syncing = True
         try:
-            if self._inject_stream and self._inject_helper is not None:
-                # Primary scrub path: inject_event for EgoMotion; local pink otherwise
-                if self._model.empty or index < 0 or index >= len(self._model.events):
-                    return
-                ev = self._model.events[int(index)]
-                topic = ev.topic or ""
-                if not is_injectable_topic(topic):
-                    self._inject_last_ok = False
-                    self._refresh_conn_bar_ui()
-                    self._inject_panel.record_result(
-                        int(index),
-                        injected=False,
-                        topic=topic,
-                        reason=t("MVP 仅 EgoMotion"),
-                        t_ns=ev.t_ns,
-                    )
-                    self._inject_panel.set_detail(
-                        f"跳过 #{index} {topic}（MVP 仅 EgoMotion）"
-                    )
-                    return
-                kind, _topic = self._inject_helper.inject_model_index(
-                    self._model, int(index)
+            if self._inject_helper is None:
+                return
+            # Scrub: inject_event for EgoMotion; local pink otherwise
+            if self._model.empty or index < 0 or index >= len(self._model.events):
+                return
+            ev = self._model.events[int(index)]
+            topic = ev.topic or ""
+            if not is_injectable_topic(topic):
+                self._inject_panel.record_result(
+                    int(index),
+                    injected=False,
+                    topic=topic,
+                    reason=t("MVP 仅 EgoMotion"),
+                    t_ns=ev.t_ns,
                 )
-                if kind == "sent":
-                    self._poll_inject_msgs(self._inject.poll_messages())
-            else:
-                self._inject.seek(int(index))
+                self._inject_panel.set_detail(
+                    t("跳过 #{index} {topic}（MVP 仅 EgoMotion）").format(
+                        index=index, topic=topic
+                    )
+                )
+                return
+            # Keep board A/B covering playhead (session index); SIL logs LOAD A|B.
+            if self._inject_helper.ensure_cover(self._model, int(index)):
+                self._inject_panel.set_detail(
+                    t("窗口重载 session_idx≈{idx}（A/B）").format(idx=index)
+                )
+                self._poll_inject_msgs(self._inject.poll_messages())
+            kind, _topic = self._inject_helper.inject_model_index(
+                self._model, int(index)
+            )
+            if kind == "sent":
                 self._poll_inject_msgs(self._inject.poll_messages())
         except ConnectionError as exc:
             self.statusBar().showMessage(f'{t("inject seek 失败")}：{exc}', 4000)
@@ -1319,7 +1241,7 @@ class GmtMainWindow(QMainWindow):
 
         proj = f"{self._project_dir.name} · " if self._project_dir else ""
         mode = ""
-        if self._live_active or self._follow.isChecked():
+        if self._live_active:
             mode = t(" [跟随]") if follow else t(" [冻屏]")
             if self._live_log_fp is not None:
                 mode += t("·录制")
@@ -1352,64 +1274,8 @@ class GmtMainWindow(QMainWindow):
             self._slider.setValue(n - 1)
             self._slider.blockSignals(False)
 
-    def _open_live_follow(self) -> None:
-        start = str(self._default_live_session())
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            t("跟随 live session JSONL"),
-            start,
-            "JSONL (*.jsonl);;All (*)",
-        )
-        if not path:
-            # still offer default even if missing
-            self.start_follow(self._default_live_session())
-            return
-        self.start_follow(Path(path))
 
-    def _on_follow_toggled(self, on: bool) -> None:
-        if on:
-            if self._session_path is None:
-                self.start_follow()
-                return
-            self._tail.reset(self._session_path)
-            if self._session_path.is_file() and self._model.events:
-                # continue from EOF of already-loaded content
-                self._tail.offset = self._session_path.stat().st_size
-            self._stick_tail = self._follow_latest.isChecked()
-            self._follow_timer.start()
-            self.statusBar().showMessage(
-                t("跟随文件 ON")
-                + (
-                    t("（跟随最新）")
-                    if self._follow_latest.isChecked()
-                    else t("（不跟播）")
-                ),
-                2500,
-            )
-        else:
-            self._follow_timer.stop()
-            self.statusBar().showMessage(t("跟随文件 OFF"), 2000)
 
-    def _on_follow_tick(self) -> None:
-        if self._session_path is None:
-            return
-        # detect truncate → full reload
-        if self._session_path.is_file():
-            size = self._session_path.stat().st_size
-            if size < self._tail.offset:
-                self._model.clear_events()
-                self._tail.reset(self._session_path)
-        lines = self._tail.poll_lines()
-        if not lines:
-            return
-        rows: list[dict[str, Any]] = []
-        for line in lines:
-            row = parse_session_line(line)
-            if row is not None:
-                rows.append(row)
-        if not rows:
-            return
-        self._append_live_rows(rows)
 
     def _live_tag_marker(self) -> None:
         msg = self._tags.live_drop_marker()
@@ -1453,15 +1319,16 @@ class GmtMainWindow(QMainWindow):
                 QMessageBox.warning(
                     self,
                     t("项目"),
-                    f"{proj_dir}\n下未找到 project.yaml\n"
-                    + t("请选 SKU 目录或其 project.yaml（与 gf-config 同一入口）。"),
+                    t("{dir}\n下未找到 project.yaml\n请选 SKU 目录或其 project.yaml（与 gf-config 同一入口）。").format(
+                        dir=proj_dir
+                    ),
                 )
                 return
         elif p.is_file():
             QMessageBox.warning(
                 self,
                 t("项目"),
-                f"请选择 project.yaml，而不是：\n{p.name}",
+                t("请选择 project.yaml，而不是：\n{name}").format(name=p.name),
             )
             return
         else:
@@ -1474,9 +1341,9 @@ class GmtMainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 t("项目"),
-                f"未找到 {sor}\n请先在 gf-config Verify / Compose。",
+                t("未找到 {sor}\n请先在 gf-config Verify / Compose。").format(sor=sor),
             )
-            self._path_label.setText(f"项目={proj_dir}（无 SOR）")
+            self._path_label.setText(t("项目={dir}（无 SOR）").format(dir=proj_dir))
             self._refresh_project_gate()
             return
         with sor.open(encoding="utf-8") as f:
@@ -1490,7 +1357,7 @@ class GmtMainWindow(QMainWindow):
             self._seek_index(self._slider.value())
         self._refresh_project_gate()
         # offer latest session if present (skip when CLI already passes --session)
-        cand = Path.cwd() / "build" / "observability" / "session.jsonl"
+        cand = self._default_obs_dir() / "session.jsonl"
         if (
             offer_session
             and cand.is_file()
@@ -1499,7 +1366,7 @@ class GmtMainWindow(QMainWindow):
             reply = QMessageBox.question(
                 self,
                 t("打开 session？"),
-                f"发现 {cand}\n是否加载？（也可先 run_sil 再 GUI「连接」）",
+                t("发现 {cand}\n是否加载？（也可先 run_sil 再 GUI「连接」）").format(cand=cand),
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self.load_session_path(cand)
@@ -1524,12 +1391,11 @@ class GmtMainWindow(QMainWindow):
             if self._session_path
             else f"{proj}{n} events"
         )
-        # Stream mode: GMT session is authoritative — re-declare + reset board buffers
+        # GMT session is authoritative — re-declare + reset board buffers
         if (
             self._inject_active
             and self._inject is not None
             and self._inject.connected
-            and self._inject_stream
             and self._inject_helper is not None
         ):
             try:
@@ -1595,76 +1461,7 @@ class GmtMainWindow(QMainWindow):
             self.load_project(Path(path))
             self.statusBar().showMessage(f'{t("已加载项目")} {path}', 4000)
 
-    def _record_from_logs(self) -> None:
-        start_logs = Path.cwd() / "build"
-        if self._project_dir is not None:
-            # prefer multiproc / sil logs under build
-            pass
-        log_dir = QFileDialog.getExistingDirectory(
-            self,
-            t("选择 SIL multiproc / iox_*_logs 目录"),
-            str(start_logs),
-        )
-        if not log_dir:
-            return
-        out, _ = QFileDialog.getSaveFileName(
-            self,
-            t("保存 session.jsonl"),
-            str(self._default_obs_dir() / "session.jsonl"),
-            "JSONL (*.jsonl)",
-        )
-        if not out:
-            return
-        out_path = Path(out)
-        if out_path.suffix.lower() != ".jsonl":
-            out_path = out_path.with_suffix(".jsonl")
-        obs = self._obs_json()
-        try:
-            path, n = record_from_sil_logs(
-                Path(log_dir),
-                out_path,
-                observability_json=obs,
-            )
-            self.load_session_path(path)
-            note = f"observability={obs}" if obs else t("无 whitelist（全量解析）")
-            if n == 0:
-                QMessageBox.warning(
-                    self,
-                    t("录制"),
-                    f"写入 {path}\n事件数=0\n({note})\n"
-                    + t("检查日志目录或 record.services / mode=off。"),
-                )
-            else:
-                QMessageBox.information(self, t("录制"), f"写入 {path}\n事件数={n}\n{note}")
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, t("录制失败"), str(exc))
 
-    def _import_ndjson(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            t("导入 tap NDJSON"),
-            str(Path.cwd()),
-            "JSONL/NDJSON (*.jsonl *.ndjson);;All (*)",
-        )
-        if not path:
-            return
-        out, _ = QFileDialog.getSaveFileName(
-            self,
-            t("保存为 session.jsonl"),
-            str(self._default_obs_dir() / "session_from_tap.jsonl"),
-            "JSONL (*.jsonl)",
-        )
-        if not out:
-            return
-        out_path = Path(out)
-        if out_path.suffix.lower() != ".jsonl":
-            out_path = out_path.with_suffix(".jsonl")
-        try:
-            path_out, n = record_from_ndjson(Path(path), out_path)
-            self.load_session_path(path_out)
-            QMessageBox.information(self, t("导入"), f"写入 {path_out}\n事件数={n}")
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, t("导入失败"), str(exc))
 
     def _export_mcap(self) -> None:
         if self._session_path is None or not self._session_path.is_file():
@@ -1709,8 +1506,9 @@ class GmtMainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 t("导出"),
-                f"已写入 {path}\nvars={n_vars} events={n_ev}\n"
-                f"打开：gtkwave {path}",
+                t("已写入 {path}\nvars={n_vars} events={n_ev}\n打开：gtkwave {path}").format(
+                    path=path, n_vars=n_vars, n_ev=n_ev
+                ),
             )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, t("导出失败"), str(exc))
@@ -1778,8 +1576,9 @@ class GmtMainWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 "Foxglove",
-                f"进程已退出（码 {self._fox_proc.returncode}）。\n"
-                f"检查端口 {port} 是否被占用，或用 CLI 调试。",
+                t("进程已退出（码 {code}）。\n检查端口 {port} 是否被占用，或用 CLI 调试。").format(
+                    code=self._fox_proc.returncode, port=port
+                ),
             )
             self._fox_proc = None
             return
@@ -1792,12 +1591,12 @@ class GmtMainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Foxglove",
-            f"已启动 WS 回放：ws://127.0.0.1:{port}\n"
-            "Foxglove Studio → Open connection。"
-            f"{tip}",
+            t("已启动 WS 回放：ws://127.0.0.1:{port}\n").format(port=port)
+            + t("Foxglove Studio → Open connection。")
+            + tip,
         )
         self.statusBar().showMessage(
-            f"Foxglove 回放已启动 ws://127.0.0.1:{port}",
+            t("Foxglove 回放已启动 ws://127.0.0.1:{port}").format(port=port),
             5000,
         )
 
@@ -1810,28 +1609,6 @@ class GmtMainWindow(QMainWindow):
                 self._fox_proc.kill()
         self._fox_proc = None
 
-    def _open_sor(self) -> None:
-        start = str(self._project_dir or Path.cwd())
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            t("加载 gf.sor.json"),
-            start,
-            "JSON (*.json);;All (*)",
-        )
-        if not path:
-            return
-        try:
-            with Path(path).open(encoding="utf-8") as f:
-                self._sor = json.load(f)
-            self._model.bind_sor(self._sor)
-            self._order.set_model(self._model)
-            self._dag.set_topology(self._sor)
-            self._dag.set_model(self._model)
-            if self._model.events:
-                self._seek_index(self._slider.value())
-            self.statusBar().showMessage(f'{t("已加载 SOR")} {path}', 4000)
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, t("SOR 失败"), str(exc))
 
     def _toggle_play(self) -> None:
         if self._model.empty:
@@ -1863,6 +1640,15 @@ class GmtMainWindow(QMainWindow):
             return
         cur = self._slider.value()
         if cur >= self._slider.maximum():
+            # Loop only while inject TCP is up (checkbox lives on Inject tab).
+            if (
+                self._inject_active
+                and self._inject is not None
+                and self._inject.connected
+                and self._inject_panel.wants_loop_confirm()
+            ):
+                self._restart_inject_loop(keep_playing=True)
+                return
             self._toggle_play()
             return
         self._slider.setValue(cur + 1)
@@ -1910,7 +1696,7 @@ class GmtMainWindow(QMainWindow):
             self._pause_follow_latest()
         elif (
             value >= self._slider.maximum()
-            and (self._live_active or self._follow.isChecked())
+            and self._live_active
             and not self._inject_panel.wants_playhead_sync()
         ):
             # 拖回尾部：恢复跟随（回灌 playhead 时不恢复，避免冲突）
@@ -1934,7 +1720,7 @@ class GmtMainWindow(QMainWindow):
             self._slider.blockSignals(False)
         ev = self._model.events[index]
         live = ""
-        if self._follow.isChecked() or self._live_active:
+        if self._live_active:
             live = t(" 跟随") if self._follow_latest.isChecked() else ""
             if self._live_log_fp is not None:
                 live += t(" 录制")
@@ -1954,7 +1740,6 @@ class GmtMainWindow(QMainWindow):
         self._inject_seek(index)
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        self._follow_timer.stop()
         self._ws_timer.stop()
         self._inject_timer.stop()
         if self._live_active:
@@ -1970,7 +1755,6 @@ def run_gui(
     session: Path | None = None,
     sor: Path | None = None,
     project: Path | None = None,
-    follow: bool = False,
 ) -> int:
     from PySide6.QtCore import QCoreApplication
     from PySide6.QtWidgets import QApplication
@@ -1982,15 +1766,12 @@ def run_gui(
     app = QApplication.instance() or QApplication(sys.argv)
     win = GmtMainWindow()
     if project:
-        win.load_project(project, offer_session=session is None and not follow)
+        win.load_project(project, offer_session=session is None)
     if sor and sor.is_file():
         with sor.open(encoding="utf-8") as f:
             win._sor = json.load(f)
         win._dag.set_topology(win._sor)
-    if follow:
-        live = session or win._default_live_session()
-        win.start_follow(live)
-    elif session and session.is_file():
+    if session and session.is_file():
         win.load_session_path(session, sor_path=sor)
     win.show()
     return app.exec()
