@@ -136,10 +136,25 @@ dependencies:
     notes: >
       Host-only. Install via pip install -e tools/gf-config. Not for production images.
 
+  - id: dlt_daemon
+    name: COVESA dlt-daemon (libdlt + daemon)
+    category: runtime_board
+    purpose: ara::log DLT backend — apps link libdlt; SIL/HIL/board run dlt-daemon
+    homepage: https://github.com/COVESA/dlt-daemon
+    license: MPL-2.0
+    planned_version: "v2.18.11"
+    integration: source_staging
+    enabled_profiles: [desktop, board, vehicle-debug, production]
+    notes: >
+      Source-build only (same path as iceoryx): middleware/third_party or .deps-prefix.
+      Pin v2.18.x for classic DLT protocol compatibility with common viewers; v3 Protocol v2 later.
+      See docs/zh/operations/DLT_PLAN.md. Host apt dlt-* is NOT the product path.
+      dlt-viewer remains host-only (optional); gate with dlt-receive from this build.
+
   - id: spdlog
     name: spdlog
     category: optional
-    purpose: Optional structured logging backend before DLT
+    purpose: Optional structured logging (legacy; prefer DLT)
     homepage: https://github.com/gabime/spdlog
     license: MIT
     planned_version: TBD
@@ -234,7 +249,5 @@ dependencies:
 deferred:
   - id: ros2_rclcpp
     reason: Prefer DDS direct interop first; full ROS2 optional later
-  - id: dlt_daemon
-    reason: ara::log DLT compatibility is P1+
   - id: sqlite
     reason: persistency (ara::per) is P1

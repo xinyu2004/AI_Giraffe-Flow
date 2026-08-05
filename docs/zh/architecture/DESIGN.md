@@ -225,12 +225,19 @@ OEM 换信号表时，优先改 gateway + 映射，**尽量不改编感知 / 规
 
 ```mermaid
 sequenceDiagram
-  participant Host as 启动脚本/systemd
-  participant Com as RouDi / com 底座
+  participant Init as systemd/init
+  participant Host as HOST守护
+  participant Dlt as dlt-daemon
+  participant Com as RouDi
   participant EM as gf_em_daemon
-  participant App as Apps (topo)
+  participant App as Apps_topo
 
-  Host->>Com: 启动 iceoryx RouDi 等
+  Init->>Host: 拉起平台守护（非 SOA）
+  opt log.yaml sinks 含 dlt
+    Host->>Dlt: 启动 dlt-daemon
+    Dlt-->>Host: 就绪
+  end
+  Host->>Com: 启动 iceoryx RouDi
   Com-->>Host: 就绪
   Host->>EM: 启动（platform + em_launch + build_dir）
   Note over EM: 读 exec.yaml 拓扑<br/>phm.yaml on_failure<br/>em_launch.yaml 二进制
@@ -239,20 +246,21 @@ sequenceDiagram
     App-->>EM: Offer / Running（可选账本）
   end
   loop 运行期
-    EM->>EM: WaitProcess (nonblocking)
+    EM->>EM: WaitProcess nonblocking
     alt exit 75 或信号 且 restart 允许
-      EM->>App: SpawnProcess (relaunch)
+      EM->>App: SpawnProcess relaunch
     end
   end
 ```
 
 | 阶段 | 谁 | 做什么 |
 |------|-----|--------|
-| 0 | Host | 起 com 底座（如 RouDi） |
-| 1 | Host | 起 **唯一** `gf_em_daemon` |
-| 2 | EM | 解析 `exec.yaml` 依赖拓扑 + `em_launch.yaml` 二进制 + `phm.yaml` restart |
-| 3 | EM | 按拓扑 `gf::osal::SpawnProcess` 拉起进程；设 `GF_EM_MANAGED=1` |
-| 4 | EM | `PollOnce`：子进程 exit **75** / 信号 → 策略允许则 relaunch |
+| 0 | systemd/init → HOST | 若 `log.yaml` sinks 含 **dlt**：起 `dlt-daemon`（标准 COVESA；按需） |
+| 1 | HOST | 起 com 底座（RouDi） |
+| 2 | HOST | 起 **唯一** `gf_em_daemon` |
+| 3 | EM | 解析 `exec.yaml` 依赖拓扑 + `em_launch.yaml` 二进制 + `phm.yaml` restart |
+| 4 | EM | 按拓扑 `gf::osal::SpawnProcess` 拉起进程；设 `GF_EM_MANAGED=1` |
+| 5 | EM | `PollOnce`：子进程 exit **75** / 信号 → 策略允许则 relaunch |
 
 细节与 SIL：[middleware/exec/README.md](../../../middleware/exec/README.md) · [exec_cases.md](../../../fusa/cases/exec_cases.md)。
 

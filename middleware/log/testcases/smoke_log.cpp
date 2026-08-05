@@ -53,6 +53,34 @@ contexts:
   }
   Pass("LOG-03", "ConfigureFromYaml default_level+contexts");
 
+  const char* yaml_dlt = R"(
+schema_version: "0.1"
+default_level: INFO
+sinks:
+  - console
+  - dlt
+dlt:
+  app_id: TEST
+)";
+  log.ConfigureFromYaml(yaml_dlt);
+  {
+    bool has_dlt = false;
+    for (const auto& s : log.Config().sinks) {
+      if (s == "dlt") {
+        has_dlt = true;
+      }
+    }
+    if (!has_dlt) {
+      return Fail("LOG-04", "sinks missing dlt");
+    }
+    if (log.Config().dlt_app_id != "TEST") {
+      return Fail("LOG-04", "dlt.app_id from yaml");
+    }
+  }
+  // Must stay fast without daemon: DltSink probes /tmp/dlt before dlt_register_app.
+  log.Info("runtime", "Offer→Running dlt-smoke");
+  Pass("LOG-04", "dlt sink configure + Info (no hang if daemon absent)");
+
   std::cout << "gf_log_smoke OK\n";
   return 0;
 }

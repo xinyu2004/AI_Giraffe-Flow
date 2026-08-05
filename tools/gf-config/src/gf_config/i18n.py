@@ -68,6 +68,24 @@ _EN: dict[str, str] = {
         "log.yaml: default level; pick module levels (do not type ids). "
         "Tab-1 live/record is a separate observability path."
     ),
+    "log.yaml：默认级别、输出 sinks（console / file / DLT）、按模块级别。勾选 DLT 时 SIL/HIL 会起 dlt-daemon；上位机用 dlt-viewer / GMT。页 1 的 live/record 是观测通道，与这里分开。": (
+        "log.yaml: default level, sinks (console / file / DLT), per-module levels. "
+        "With DLT checked, SIL/HIL starts dlt-daemon; host uses dlt-viewer / GMT. "
+        "Tab-1 live/record is a separate observability path."
+    ),
+    "输出 sinks": "Output sinks",
+    "console": "console",
+    "file": "file",
+    "dlt（remote）": "dlt (remote)",
+    "终端 stdout/stderr（SIL 本机）": "stdout/stderr (SIL local)",
+    "落盘 file_path；仅本机调试，非 GMT 路径": "file_path; local debug only, not GMT",
+    "COVESA DLT → dlt-daemon；标准协议给 viewer/GMT": (
+        "COVESA DLT → dlt-daemon; standard protocol for viewer/GMT"
+    ),
+    "DLT app_id": "DLT app_id",
+    "DLT Application ID（4 字符）；多进程可由运行时覆盖": (
+        "DLT Application ID (4 chars); runtime may override per process"
+    ),
     "撤销（信号图）": "Undo (graph)",
     "重做（信号图）": "Redo (graph)",
     "重做（Ctrl+Y）": "Redo (Ctrl+Y)",

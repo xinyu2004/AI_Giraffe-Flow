@@ -71,6 +71,11 @@ _PHM_FAULT_USER="${GF_PHM_FAULT_MS-}"
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
 export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-uss}"
 export LD_LIBRARY_PATH="${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+# COVESA libdlt from in-tree build (not apt)
+_DLT_LIBDIR="${BUILD}/_dep-manifest/dlt-daemon/src/lib"
+if [[ -d "${_DLT_LIBDIR}" ]]; then
+  export LD_LIBRARY_PATH="${_DLT_LIBDIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
 # Shared collector NDJSON + per (DEM DTC) for GMT OTA/UDS
 _COLLECTOR_DEFAULT="${BUILD}/runtime/collector/events.ndjson"
 mkdir -p "$(dirname "${_COLLECTOR_DEFAULT}")"
@@ -364,6 +369,21 @@ PLAN="${BUILD}/apps/planning/driving/gf_planning_driving"
 TAP="${BUILD}/apps/debug_bridge/iox_obs_tap/gf_iox_obs_tap"
 INJ="${BUILD}/apps/debug_bridge/iox_obs_inject/gf_iox_obs_inject"
 DOIP="${BUILD}/gf_doip_ota_server"
+DLT_DAEMON="${BUILD}/_dep-manifest/dlt-daemon/src/daemon/dlt-daemon"
+DLT_RECEIVE="${BUILD}/_dep-manifest/dlt-daemon/src/console/dlt-receive"
+# Whether to start dlt-daemon: driven by platform/log.yaml sinks (gf-config), not GF_DLT=0.
+DLT_ON=0
+_LOG_YAML=""
+if [[ -f "${GF_PLATFORM_DIR}/log.yaml" ]]; then
+  _LOG_YAML="${GF_PLATFORM_DIR}/log.yaml"
+elif [[ -f "${GF_PLATFORM_DIR}/platform/log.yaml" ]]; then
+  _LOG_YAML="${GF_PLATFORM_DIR}/platform/log.yaml"
+fi
+if [[ -n "${_LOG_YAML}" ]]; then
+  if grep -Eq '^[[:space:]]*-[[:space:]]*dlt[[:space:]]*$|[[:space:]]dlt[[:space:]]*(,|\])' "${_LOG_YAML}"; then
+    DLT_ON=1
+  fi
+fi
 
 NEED_BINS=("${ROUDI}")
 if [[ "${INJECT_ON}" == "1" ]]; then
@@ -421,6 +441,26 @@ fi
 
 LOG_DIR="${BUILD}/runtime/logs"
 mkdir -p "${LOG_DIR}"
+# SIL local file sink (optional); upstream path for Host Info is DLT via gf_dlt_log.
+export GF_LOG_DIR="${GF_LOG_DIR:-${LOG_DIR}}"
+export GF_LOG_FILE="${GF_LOG_FILE:-${LOG_DIR}/giraffe_modules.log}"
+: >"${LOG_DIR}/host.log"
+: >"${GF_LOG_FILE}"
+GF_DLT_LOG="${BUILD}/middleware/log/gf_dlt_log"
+
+# Host-phase Info → stdout + host.log + file；若 dlt-daemon 已起则再经 gf_dlt_log → DLT
+host_info() {
+  local msg="$*"
+  local line="log: [INFO] host ${msg}"
+  echo "${line}"
+  echo "${line}" >>"${LOG_DIR}/host.log"
+  echo "${line}" >>"${GF_LOG_FILE}"
+  if [[ "${DLT_ON}" == "1" && -x "${GF_DLT_LOG}" && -n "${DLT_PID:-}" ]] && kill -0 "${DLT_PID}" 2>/dev/null; then
+    GF_DLT_APP_ID=HOST GF_PLATFORM_DIR="${GF_PLATFORM_DIR}" \
+      GF_LOG_DIR="${GF_LOG_DIR}" GF_LOG_FILE="${GF_LOG_FILE}" \
+      "${GF_DLT_LOG}" -a HOST -c host "${msg}" >/dev/null 2>&1 || true
+  fi
+}
 
 LIVE_PORT="${GF_LIVE_PORT:-8766}"
 INJ_PORT="${GF_INJECT_PORT:-8767}"
@@ -578,7 +618,7 @@ gf_sil_preflight_ports
 
 cleanup() {
   set +e
-  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}"; do
+  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}" "${DLT_PID:-}"; do
     [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null
   done
   # process-substitution GMT bridges may outlive the fan pipeline
@@ -599,15 +639,47 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} apps=${RUN_APPS:-full}"
+
+# Boot order: dlt-daemon → host_info(DLT) → RouDi → apps
+# (log.yaml sinks include dlt from gf-config; no env kill-switch)
+DLT_PID=""
+if [[ "${DLT_ON}" == "1" ]]; then
+  if [[ -x "${DLT_DAEMON}" ]]; then
+    echo "${TAG} dlt-daemon ..."
+    : >"${LOG_DIR}/dlt_daemon.log"
+    "${DLT_DAEMON}" >"${LOG_DIR}/dlt_daemon.log" 2>&1 &
+    DLT_PID=$!
+    sleep 0.4
+    if ! kill -0 "${DLT_PID}" 2>/dev/null; then
+      echo "${TAG} WARN: dlt-daemon failed; see ${LOG_DIR}/dlt_daemon.log" >&2
+      DLT_PID=""
+    fi
+  else
+    echo "${TAG} WARN: log.yaml sinks include dlt but ${DLT_DAEMON} not built" >&2
+  fi
+fi
+
+host_info "run_sil begin platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} apps=${RUN_APPS:-full}"
+if [[ -n "${DLT_PID}" ]]; then
+  host_info "dlt-daemon ok pid=${DLT_PID} (viewer/GMT → TCP 3490)"
+elif [[ "${DLT_ON}" == "1" ]]; then
+  host_info "dlt-daemon unavailable — console/file only"
+else
+  host_info "dlt-daemon skipped (log.yaml sinks have no dlt — gf-config 日志)"
+fi
+
+host_info "start RouDi"
 echo "${TAG} RouDi ..."
 "${ROUDI}" >"${LOG_DIR}/roudi.log" 2>&1 &
 ROUDI_PID=$!
 sleep 1
 if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then
+  host_info "RouDi failed; see ${LOG_DIR}/roudi.log"
   echo "${TAG} RouDi failed; see ${LOG_DIR}/roudi.log" >&2
   cat "${LOG_DIR}/roudi.log" >&2 || true
   exit 1
 fi
+host_info "RouDi ok pid=${ROUDI_PID}"
 
 if [[ "${DOIP_ON}" == "1" ]]; then
   # GMT DEM: real PHM AliveMissed in apps → PersistDtc → shared GF_PER_DIR;
@@ -619,6 +691,7 @@ if [[ "${DOIP_ON}" == "1" ]]; then
   fi
   echo "${TAG} DoIP OTA server → TCP ${DOIP_PORT} (GMT OTA: 127.0.0.1:${DOIP_PORT})"
   echo "${TAG} DEM: PHM fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET} per=${GF_PER_DIR}"
+  host_info "start DoIP OTA server port=${DOIP_PORT} per=${GF_PER_DIR} phm_fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET}"
   : >"${LOG_DIR}/doip_ota.log"
   # Export diag.yaml timing / ota_transfer into env for gf_doip_ota_server
   export GF_PROJECT_DIR_FOR_DOIP="${PROJECT_DIR}"
@@ -680,10 +753,12 @@ PY
   DOIP_PID=$!
   sleep 0.3
   if ! kill -0 "${DOIP_PID}" 2>/dev/null; then
+    host_info "DoIP server failed; see ${LOG_DIR}/doip_ota.log"
     echo "${TAG} DoIP server failed; see ${LOG_DIR}/doip_ota.log" >&2
     cat "${LOG_DIR}/doip_ota.log" >&2 || true
     exit 1
   fi
+  host_info "DoIP ok pid=${DOIP_PID} port=${DOIP_PORT}"
 fi
 
 # Per-process PHM fault (others get 0). Target via GF_PHM_FAULT_TARGET.
@@ -701,22 +776,26 @@ _fault_ms_for() {
 start_consumers() {
   local apps="${1:-fcm,uss,planning}"
   local a
+  host_info "spawn apps (direct, no EM) apps=${apps}"
   IFS=',' read -r -a _arr <<< "${apps}"
   for a in "${_arr[@]}"; do
     case "${a}" in
       fcm)
         echo "${TAG} start fcm (PHM fault_ms=$(_fault_ms_for fcm))"
-        GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
+        host_info "start app=fcm fault_ms=$(_fault_ms_for fcm)"
+        GF_DLT_APP_ID=FCM_ GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
         FCM_PID=$!
         ;;
       uss)
         echo "${TAG} start uss (PHM fault_ms=$(_fault_ms_for uss))"
-        GF_PHM_FAULT_MS="$(_fault_ms_for uss)" "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
+        host_info "start app=uss fault_ms=$(_fault_ms_for uss)"
+        GF_DLT_APP_ID=USS_ GF_PHM_FAULT_MS="$(_fault_ms_for uss)" "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
         USS_PID=$!
         ;;
       planning)
         echo "${TAG} start planning (PHM fault_ms=$(_fault_ms_for planning))"
-        GF_PHM_FAULT_MS="$(_fault_ms_for planning)" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
+        host_info "start app=planning fault_ms=$(_fault_ms_for planning)"
+        GF_DLT_APP_ID=PLAN GF_PHM_FAULT_MS="$(_fault_ms_for planning)" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
         PLAN_PID=$!
         ;;
     esac
@@ -854,9 +933,11 @@ start_consumers "fcm,uss,planning"
 
 # max_traj=0 → run forever
 echo "${TAG} start gateway (PHM fault_ms=$(_fault_ms_for gateway))"
-GF_PHM_FAULT_MS="$(_fault_ms_for gateway)" "${GW}" 0 >"${LOG_DIR}/gateway.log" 2>&1 &
+host_info "start app=gateway fault_ms=$(_fault_ms_for gateway)"
+GF_DLT_APP_ID=GATE GF_PHM_FAULT_MS="$(_fault_ms_for gateway)" "${GW}" 0 >"${LOG_DIR}/gateway.log" 2>&1 &
 GW_PID=$!
 sleep 0.5
+host_info "apps launched (direct) — bring-up Info in per-app *.log and ${GF_LOG_FILE}"
 
 if [[ "${LIVE_ON}" != "1" ]]; then
   echo "${TAG} live_tap off — main chain only. logs: ${LOG_DIR}/"

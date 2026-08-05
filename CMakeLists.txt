@@ -15,6 +15,8 @@ option(GF_USE_GENERATED "Demo apps use gf-codegen Proxy/Skeleton under generated
 option(GF_WITH_SOMEIP "Build SOME/IP binding when implemented" OFF)
 option(GF_WITH_DDS "Build DDS binding when implemented" OFF)
 option(GF_WITH_CROSS_DOMAIN_IPC "Build cross_domain_ipc binding when implemented" OFF)
+option(GF_WITH_DLT "Build/link COVESA DLT when middleware/third_party/dlt-daemon is present" ON)
+option(GF_FORCE_NO_DLT "Do not auto-enable DLT when third_party/dlt-daemon is present" OFF)
 
 set(GF_GENERATED_DIR "${CMAKE_SOURCE_DIR}/generated" CACHE PATH "gf-codegen --out directory")
 set(GF_SKU_CMAKE "" CACHE FILEPATH "SKU fragment from compose (generated/gf_build.cmake)")

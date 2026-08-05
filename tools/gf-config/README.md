@@ -59,9 +59,9 @@ Daily: tab 1 graph / thin SKU → tab 2 modules → **Save** → **Verify** → 
 
 ### Tab 2 · Logging (`log.yaml`)
 
-- **Default level** + per-module **contexts[]** table (module / level).
+- **Default level** + **sinks** (`console` / `file` / `dlt`) + **DLT app_id** + per-module **contexts[]**.
+- Check **dlt** → SIL/HIL starts `dlt-daemon` from config (no env kill-switch).
 - New row: module may be empty; level defaults to `INFO` (enum tint kept).
-- **Selection:** click the row number; row number + module share light blue; **level tint unchanged**.
 - Verify fails on duplicate `context id` in `log.yaml`.
 
 ## Tab 1 canvas — four steps

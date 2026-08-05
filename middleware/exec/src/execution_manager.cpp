@@ -1,6 +1,7 @@
 #include "gf_ara/exec/execution_manager.hpp"
 
-#include <iostream>
+#include <gf_ara/log/logger.hpp>
+
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -62,7 +63,8 @@ bool ExecutionManager::StartProcess(std::string_view name) {
   e.desired = ExecutionState::kRunning;
   if (e.reported == ExecutionState::kIdle || e.reported == ExecutionState::kTerminating) {
     // Launch requested; client Offer will move to Starting.
-    std::cout << "em: start_process name=" << name << " (desired=Running)\n";
+    gf_ara::log::Logger::Instance().Info(
+        "exec", "start_process name=" + std::string(name) + " (desired=Running)");
   }
   return true;
 }
@@ -98,8 +100,9 @@ bool ExecutionManager::RequestRestart(std::string_view name, std::string_view re
   e.restart_pending = true;
   e.desired = ExecutionState::kRunning;
   e.reported = ExecutionState::kStarting;
-  std::cout << "em: restart_request name=" << name << " reason=" << reason
-            << " count=" << e.restarts << std::endl;
+  gf_ara::log::Logger::Instance().Info(
+      "exec", "restart_request name=" + std::string(name) + " reason=" + std::string(reason) +
+                  " count=" + std::to_string(e.restarts));
   return true;
 }
 

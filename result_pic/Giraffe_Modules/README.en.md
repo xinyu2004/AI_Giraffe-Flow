@@ -20,24 +20,26 @@ Source: [`middleware/README.md`](../../middleware/README.md)
 │  TITLE: Giraffe Modules · how middleware boots & collaborates│
 └──────────────────────────────────────────────────────────────┘
 
-                    ┌─────────────┐
-                    │ iceoryx     │   com dependency (RouDi)
-                    │ RouDi       │
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │ gf_em_daemon│   ← exec / EM
-                    │    (EM)     │
-                    └──────┬──────┘
-                           │ OSAL Spawn (em_launch topo)
-                           ▼
-              ┌────────────────────────────┐
-              │   SOA apps (processes)     │
-              │   gateway · sensing · …    │
-              └─────────────┬──────────────┘
-                            │ per-process: runtime bring-up
-                            ▼
+  ┌─────────────┐
+  │ systemd/init│  OS · not Giraffe (dashed; ~½ HOST height)
+  └──────┬──────┘
+         │
+         ▼
+       〔 HOST  ┌─ platform daemons (not SOA) ────────────┐
+               │  dlt-daemon (on demand · log.yaml sinks) │
+               │       ↓                                  │
+               │  RouDi (iceoryx)                         │
+               │       ↓                                  │
+               │  EM (gf_em_daemon)                       │
+               └──────────────┬───────────────────────────┘
+                              │ OSAL Spawn (em_launch topo)
+                              ▼
+                 ┌────────────────────────────┐
+                 │   SOA apps (processes)     │
+                 │   gateway · sensing · …    │
+                 └─────────────┬──────────────┘
+                               │ per-process: runtime bring-up
+                               ▼
 ┌──────────────────────────────────────────────────────────────┐
 │              In-process middleware ring (main subject)       │
 │                                                              │
@@ -57,7 +59,7 @@ Source: [`middleware/README.md`](../../middleware/README.md)
 │     diag ──DoIP/UDS──► ucm ──► sm Updating + phm pause       │
 │                           └──fail──► collector               │
 │                                                              │
-│     log          tsync          OSAL (clock/thread/process)  │
+│     log → DLT  ·  tsync  ·  OSAL                             │
 └──────────────────────────────────────────────────────────────┘
 
   FuSa evidence attaches to real behavior of:
@@ -73,8 +75,12 @@ Source: [`middleware/README.md`](../../middleware/README.md)
 
 | Module | One line | Key peers |
 |--------|----------|-----------|
+| **systemd/init** | OS-side guardian (**not Giraffe**); starts HOST | Dashed chip ≈½ HOST height; script or unit |
+| **HOST · dlt-daemon** | COVESA DLT (**on demand**: `log.yaml` sinks include `dlt`) | Host dlt-viewer / GMT Logging |
+| **HOST · RouDi** | iceoryx IPC base | Required by com binding |
+| **HOST · EM** | `gf_em_daemon` | Topo OSAL Spawn of SOA apps |
 | **OSAL** | Clock / thread / **process** Spawn·Wait·Kill | Only EM starts/stops processes via OSAL |
-| **exec / EM** | `ExecutionClient` + `gf_em_daemon` | Reads em_launch; topo Spawn; optional relaunch |
+| **exec / EM** | `ExecutionClient` + daemon | Reads em_launch; optional relaunch |
 | **sm** | Function groups Off ↔ Running ↔ Updating | runtime EnsureGroup; PHM faults; UCM Updating |
 | **phm** | Alive / Deadline / Logical | App ReportAlive; on fail → log / collector / sm / EM |
 | **runtime** | In-process bring-up glue | log → SM → Exec Offer → PHM Alive → collector hooks |
@@ -86,7 +92,7 @@ Source: [`middleware/README.md`](../../middleware/README.md)
 | **com** | Unified Event Proxy/Skeleton | → bindings; apps use service names only |
 | **bindings** | iceoryx / SOME/IP / DDS / … | Behind com; needs RouDi etc. |
 | **tsync** | Time-sync skeleton | OSAL Now; SKU-trimmable |
-| **log** | Lite logging | Bring-up / fault paths |
+| **log** | Lite logging → **DLT sink** | Bring-up / faults; host via DLT only |
 
 ### Diagnostics · OTA · events · persistency
 
@@ -146,9 +152,12 @@ App ──service name──► com ──► bindings ──► iceoryx | SOME/
 ## Drawing notes
 
 1. Hero = middleware ring + EM spawn arrow — do not redraw Flow peripherals.
-2. Chip names match Flow SoC strip: `com · EM · exec · phm · sm · collector · OSAL · diag · ucm · log · per · tsync`.
-3. Label arrows with actions (Spawn / Alive / NotifyFault / DoIP).
-4. Lock ZH layout first; EN follows this file.
+2. Chip names match Flow SoC strip: `com · EM · exec · phm · sm · collector · OSAL · diag · ucm · log · dlt · per` (tsync in ring).
+3. HOST frame = platform daemons; SOA apps outside. `dlt-daemon` subtitle marks on-demand config.
+4. Brace on the left; **HOST label to the right of the brace**; `systemd/init` dashed chip ≈½ HOST height.
+5. Ring base single-line: `log → DLT` · `tsync` · `OSAL`.
+6. Label arrows with actions (Spawn / Alive / NotifyFault / DoIP).
+7. Lock ZH layout first; EN follows this file.
 
 Generated:
 

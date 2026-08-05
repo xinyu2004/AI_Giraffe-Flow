@@ -80,8 +80,8 @@
 
   <rect class="inner" x="234" y="210" width="732" height="90" rx="6"/>
   <text class="inner-t" x="250" y="234" fill="#80cbc4">SoC · middleware / gf_ara  (SKU-trimmable)</text>
-  <text class="inner-t" x="250" y="256">com · EM · exec · phm · sm · collector · OSAL · diag · ucm · log · per · tsync</text>
-  <text class="inner-t" x="250" y="278">com → iceoryx | SOME/IP | DDS · OSAL process · platform below</text>
+  <text class="inner-t" x="250" y="256">com · EM · exec · phm · sm · collector · OSAL · diag · ucm · log · dlt · per</text>
+  <text class="inner-t" x="250" y="278">com → iceoryx | SOME/IP | DDS · log→DLT · OSAL · platform below</text>
 
   <rect class="fusa" x="234" y="312" width="732" height="60" rx="6"/>
   <text class="fusa-t" x="250" y="336">FuSa  → Safety Case</text>

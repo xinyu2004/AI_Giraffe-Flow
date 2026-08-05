@@ -824,8 +824,8 @@ ZH = {
     "arch_chips": ["ARM", "MIPS", "RISC-V", "…"],
     "board_sub": "真正跑在车端 / SIL — EM 按拓扑 OSAL Spawn Apps",
     "soc1": "SoC · middleware / gf_ara（SKU 可裁剪）",
-    "soc2": "com → iceoryx | SOME/IP | DDS · OSAL process · 下方为平台服务",
-    "chips": ["com", "EM", "exec", "phm", "sm", "collector", "OSAL", "diag", "ucm", "log", "per", "tsync"],
+    "soc2": "com → iceoryx | SOME/IP | DDS · log→DLT · OSAL · 下方为平台服务",
+    "chips": ["com", "EM", "exec", "phm", "sm", "collector", "OSAL", "diag", "ucm", "log", "dlt", "per"],
     "apps1": "SOA apps · 由 EM 按拓扑拉起",
     "apps_principle": "App 只发布/订阅服务名，不硬绑进程；换 OEM 包，契约不变",
     "fusa_title": "FuSa",
@@ -845,6 +845,7 @@ ZH = {
         "· Tag / clip",
         "· Studio 桥接",
         "· OTA",
+        "· Logging（DLT :3490）",
     ],
     "gmt_right": [
         "· Order / 先后",
@@ -852,6 +853,7 @@ ZH = {
         "· MCAP · VCD 导出",
         "· playhead 回灌 (8767)",
         "· DoIP",
+        "· dlt-viewer / receive",
     ],
 }
 
@@ -867,7 +869,7 @@ EN = {
     "board_title": "runs on  ·  SIL / HIL · BOARD  ·  product core",
     "board_sub": "what actually runs — EM topo-spawns apps via OSAL",
     "soc1": "SoC · middleware / gf_ara  (SKU-trimmable)",
-    "soc2": "com → iceoryx | SOME/IP | DDS · OSAL process · platform below",
+    "soc2": "com → iceoryx | SOME/IP | DDS · log→DLT · OSAL · platform below",
     "apps1": "SOA apps · launched by EM (topo order)",
     "apps_principle": "Apps pub/sub service names only — OEM swap keeps the contract",
     "fusa_sub": "→ Safety Case",
@@ -882,6 +884,7 @@ EN = {
         "· Tag / clip",
         "· Studio bridge",
         "· OTA",
+        "· Logging (DLT :3490)",
     ],
     "gmt_right": [
         "· Order / race",
@@ -889,6 +892,7 @@ EN = {
         "· MCAP · VCD export",
         "· playhead inject (8767)",
         "· DoIP",
+        "· dlt-viewer / receive",
     ],
 }
 

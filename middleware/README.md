@@ -9,7 +9,7 @@ Enable subsets per SKU via SOR / `req.yaml` `runtime_modules[]`.
 | GIF 芯片 | 本目录包 | 说明 |
 |----------|----------|------|
 | com | [com](com/) | 统一通信 |
-| EM | [exec](exec/)（EmDaemon） | OSAL Spawn / relaunch |
+| EM | [exec](exec/)（EmDaemon） | HOST 守护；OSAL Spawn / relaunch |
 | exec | [exec](exec/) | ExecutionClient |
 | phm | [phm](phm/) | Alive / Deadline / Logical |
 | sm | [sm](sm/) | Function groups |
@@ -17,9 +17,12 @@ Enable subsets per SKU via SOR / `req.yaml` `runtime_modules[]`.
 | OSAL | [osal](osal/) | 时钟 / 线程 / **process** |
 | diag | [diag](diag/) | DoIP 会话（TCP）+ UDS Routine → OTA |
 | ucm | [ucm](ucm/) | PackageManager + OtaOrchestrator（SIL） |
-| log | [log](log/) | 日志 lite |
+| log | [log](log/) | 日志 lite → DLT sink |
+| dlt | COVESA `dlt-daemon`（third_party） | HOST 守护；**按需**（`log.yaml` sinks 含 `dlt`） |
 | per | [per](per/) | 持久化 KV stub（可裁剪） |
-| tsync | [tsync](tsync/) | 时间同步骨架（可裁剪） |
+| tsync | [tsync](tsync/) | 时间同步骨架（可裁剪；Modules 环内） |
+
+HOST 启动（systemd/init）：`dlt-daemon?` → RouDi → `gf_em_daemon` → SOA apps。详见 [Giraffe_Modules](../result_pic/Giraffe_Modules/README.md) · [DLT_PLAN](../docs/zh/operations/DLT_PLAN.md)。
 
 另有： [core](core/) · [bindings/](bindings/) · [hal](hal/) · [trace](trace/)（偏 debug-path）· [third_party/](third_party/)。
 
@@ -35,7 +38,7 @@ Enable subsets per SKU via SOR / `req.yaml` `runtime_modules[]`.
 | [phm](phm/) | Platform health (`notify_sm` / restart→EM) | P3 |
 | [sm](sm/) | Function groups Off/Running/Updating | P3 |
 | [collector](collector/) | Event collector (DEM-lite / cp_dem stub) | P3 |
-| [log](log/) | Logging lite（stdout/stderr） | P3 |
+| [log](log/) | Logging lite + DLT sink | P3 |
 | [per](per/) | Persistency KV stub（可裁剪） | P3 |
 | [tsync](tsync/) | Time sync skeleton（可裁剪） | P3 |
 | [trace](trace/) | Trace → VCD / GMT | P2 |

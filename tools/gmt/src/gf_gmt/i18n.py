@@ -384,6 +384,18 @@ _EN: dict[str, str] = {
     ),
     '刷新': 'Refresh',
     '自动刷新': 'Auto-refresh',
+    'Logging（DLT）：连接板端/SIL 的 dlt-daemon（标准协议 TCP）。不读 log 文件。也可用 dlt-viewer / dlt-receive。': (
+        'Logging (DLT): connect to board/SIL dlt-daemon (standard TCP). '
+        'Does not read log files. dlt-viewer / dlt-receive also work.'
+    ),
+    '过滤 APP/CTX/文本（如 RUNT,Offer）': 'Filter APP/CTX/text (e.g. RUNT,Offer)',
+    '自动滚屏': 'Auto-scroll',
+    '清空': 'Clear',
+    '未连接': 'Disconnected',
+    'Logging（DLT）：Host {host} → 连接 dlt-daemon（默认 TCP 3490）': (
+        'Logging (DLT): Host {host} → connect dlt-daemon (TCP 3490 default)'
+    ),
+    'Logging': 'Logging',
     '本机文件': 'Local file',
     'UDS（板端）': 'UDS (board)',
     '从 UDS 读取': 'Read via UDS',
@@ -595,6 +607,7 @@ _ZH: dict[str, str] = {
     'OTA/UDS': 'OTA/UDS',
     'DEM': 'DEM',
     'Collector': 'Collector',
+    'Logging': 'Logging',
     'status_mask': 'status_mask',
     'Store': 'Store',
     'DoIP Host': 'DoIP Host',

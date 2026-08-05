@@ -10,7 +10,7 @@
 #   bash scripts/bootstrap_deps.sh              # check + fetch + build attr/acl
 #   bash scripts/bootstrap_deps.sh --check      # check only
 #   bash scripts/bootstrap_deps.sh --clean      # wipe staging; then re-run without flags
-#   bash scripts/bootstrap_deps.sh --clean-all  # wipe staging + middleware/third_party/{attr,acl,iceoryx,cyclonedds}
+#   bash scripts/bootstrap_deps.sh --clean-all  # wipe staging + middleware/third_party/{attr,acl,iceoryx,cyclonedds,dlt-daemon}
 #   GF_CROSS_PREFIX=aarch64-linux-gnu bash scripts/bootstrap_deps.sh
 set -euo pipefail
 
@@ -32,7 +32,7 @@ Usage: bash scripts/bootstrap_deps.sh [options]
   (default)       Check tools, fetch sources, build attr/acl into middleware/.deps-prefix
   --check, -n     Check only (no download / build)
   --clean         Remove middleware/.deps-prefix and legacy staging, then exit
-  --clean-all     --clean plus remove middleware/third_party/{attr,acl,iceoryx,cyclonedds}
+  --clean-all     --clean plus remove middleware/third_party/{attr,acl,iceoryx,cyclonedds,dlt-daemon}
   -h, --help      Show this help
 
 Env:
@@ -41,6 +41,7 @@ Env:
   GF_DEPS_PREFIX    Install prefix (default middleware/.deps-prefix); isolate when switching compilers
   GF_ICEORYX_TAG    Override iceoryx git tag (default v2.0.8)
   GF_CYCLONEDDS_TAG Override CycloneDDS git tag (default 0.10.5)
+  GF_DLT_TAG        Override dlt-daemon git tag (default v2.18.11)
 EOF
 }
 
@@ -66,9 +67,9 @@ do_clean() {
   echo "  removed: .deps-prefix/ (legacy root, if present)"
   echo "  removed: .deps-sysroot/ (legacy, if present)"
   if [[ "$CLEAN_ALL" -eq 1 ]]; then
-    rm -rf "${TP}/attr" "${TP}/acl" "${TP}/iceoryx" "${TP}/cyclonedds"
-    rm -rf "${LEGACY_TP}/attr" "${LEGACY_TP}/acl" "${LEGACY_TP}/iceoryx" "${LEGACY_TP}/cyclonedds"
-    echo "  removed: middleware/third_party/{attr,acl,iceoryx,cyclonedds}"
+    rm -rf "${TP}/attr" "${TP}/acl" "${TP}/iceoryx" "${TP}/cyclonedds" "${TP}/dlt-daemon"
+    rm -rf "${LEGACY_TP}/attr" "${LEGACY_TP}/acl" "${LEGACY_TP}/iceoryx" "${LEGACY_TP}/cyclonedds" "${LEGACY_TP}/dlt-daemon"
+    echo "  removed: middleware/third_party/{attr,acl,iceoryx,cyclonedds,dlt-daemon}"
   fi
   echo "Clean done. Re-run: bash scripts/bootstrap_deps.sh"
 }
@@ -86,6 +87,10 @@ ICEORYX_DIR="${TP}/iceoryx"
 CYCLONEDDS_TAG="${GF_CYCLONEDDS_TAG:-0.10.5}"
 CYCLONEDDS_URL="${GF_CYCLONEDDS_URL:-https://github.com/eclipse-cyclonedds/cyclonedds.git}"
 CYCLONEDDS_DIR="${TP}/cyclonedds"
+
+DLT_TAG="${GF_DLT_TAG:-v2.18.11}"
+DLT_URL="${GF_DLT_URL:-https://github.com/COVESA/dlt-daemon.git}"
+DLT_DIR="${TP}/dlt-daemon"
 
 ATTR_VER="${GF_ATTR_VER:-2.5.2}"
 ACL_VER="${GF_ACL_VER:-2.3.2}"
@@ -463,6 +468,11 @@ fetch_git "${ICEORYX_URL}" "${ICEORYX_TAG}" "${ICEORYX_DIR}" "iceoryx" || true
 step "[4b/5] Third-party CycloneDDS source (optional DDS backend)"
 # ============================================================
 fetch_git "${CYCLONEDDS_URL}" "${CYCLONEDDS_TAG}" "${CYCLONEDDS_DIR}" "cyclonedds" || true
+
+# ============================================================
+step "[4c/5] Third-party COVESA dlt-daemon (libdlt + daemon; CMake builds with this repo)"
+# ============================================================
+fetch_git "${DLT_URL}" "${DLT_TAG}" "${DLT_DIR}" "dlt-daemon" || true
 
 # ============================================================
 step "[5/5] Summary"

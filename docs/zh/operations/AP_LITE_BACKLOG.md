@@ -15,7 +15,8 @@
 | BL-FW | firewall / shwa | deferred | 同上 | |
 | BL-UCM-SIGN | UCM 非对称验签 | deferred | 与 crypto 同波 | Verify 钩子预留 magic/manifest |
 | BL-RAUC | RAUC 真刷 A/B | deferred | P3z 真板 | 本轮留 adapter 接口 |
-| BL-DLT | DLT daemon | deferred | OEM 点名时 | 现 serial/file/GMT 白名单 |
+| BL-DLT | DLT（libdlt + daemon + GMT 客户端） | **done** | 见 [DLT_PLAN.md](DLT_PLAN.md) | `gmt_export` 已清；真板 = rootfs 手验 |
+| BL-MEM-BOUND | **全模块有界内存**（环缓/配额；禁无界 `vector` 增长） | deferred | 平台硬化波 | log/DLT 子集已有界；collector/com 等仍待审 |
 | BL-SQLITE | SQLite per | deferred | 仅强查询需求 | 默认双槽文件 KV |
 | BL-ISOTP-AP | ISO-TP on AP | deferred | 仅「AP 直挂 CAN」SKU | 默认战略不做；CAN 在 MCU |
 | BL-CLASSIC | Classic DEM/DCM | wontfix | — | 用 collector DEM-lite + diag DCM-lite |
@@ -30,5 +31,5 @@
 - DEM-lite：防抖 / FDC / pending+confirmed / occurrence / operation-cycle 老化 / 0x19·14·85
 - Freeze frame（门禁 G1 之后）
 - UCM：yaml 加载、Present、版本→per、SoftwareCluster
-- log：彩色、按模块设 level、gmt_export
+- log：彩色、按模块设 level、sinks（console/file/dlt）；上位机走 DLT
 - `gf_ara::tsync` gPTP lite（linuxptp 后端）

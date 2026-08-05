@@ -19,6 +19,8 @@ python3 result_pic/Giraffe_Flow/scripts/render_gif.py
 ## 布局要点
 
 - 竖向：`gf-config` → **GIRAFFE 模块** → `GMT`
-- 板内：SoC → **FuSa** → **SOA apps**（FuSa 在上）
+- 板内：SoC 芯片含 **`dlt`**（与 `log` 并列）；文案 `log→DLT`
+- GMT：Logging（DLT :3490）· dlt-viewer / receive
 - 左：CARLA → 板（漏斗箭头：左粗右细 = 视频/大数据入）
 - 右：板 → Foxglove（比 GMT tap 线粗，比 CARLA 漏斗克制）
+- HOST 启动叙事见 [Giraffe_Modules](../Giraffe_Modules/README.md)（systemd/init → dlt? · RouDi · EM）

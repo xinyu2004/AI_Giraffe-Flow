@@ -9,7 +9,7 @@ target_include_directories(gf_ara_exec PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(gf_ara_exec PUBLIC gf_ara::core gf::osal)
+target_link_libraries(gf_ara_exec PUBLIC gf_ara::core gf::osal gf_ara::log)
 
 add_executable(gf_em_daemon src/em_daemon_main.cpp)
 target_link_libraries(gf_em_daemon PRIVATE gf_ara::exec)

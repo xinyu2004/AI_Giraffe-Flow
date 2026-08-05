@@ -723,7 +723,8 @@ class PlatformEditor(QWidget):
         lay = QVBoxLayout(w)
         hint = QLabel(
             t(
-                "log.yaml：默认级别；按模块选择级别（勿手填 id）。"
+                "log.yaml：默认级别、输出 sinks（console / file / DLT）、按模块级别。"
+                "勾选 DLT 时 SIL/HIL 会起 dlt-daemon；上位机用 dlt-viewer / GMT。"
                 "页 1 的 live/record 是观测通道，与这里分开。"
             )
         )
@@ -741,6 +742,28 @@ class PlatformEditor(QWidget):
         )
         self._log_level.currentTextChanged.connect(self._on_log_changed)
         form.addRow(t("默认级别"), self._log_level)
+
+        sink_row = QHBoxLayout()
+        self._log_sink_console = QCheckBox(t("console"))
+        self._log_sink_file = QCheckBox(t("file"))
+        self._log_sink_dlt = QCheckBox(t("dlt（remote）"))
+        self._log_sink_console.setChecked(True)
+        self._log_sink_dlt.setChecked(True)
+        tipify(self._log_sink_console, t("终端 stdout/stderr（SIL 本机）"))
+        tipify(self._log_sink_file, t("落盘 file_path；仅本机调试，非 GMT 路径"))
+        tipify(self._log_sink_dlt, t("COVESA DLT → dlt-daemon；标准协议给 viewer/GMT"))
+        for cb in (self._log_sink_console, self._log_sink_file, self._log_sink_dlt):
+            cb.toggled.connect(self._on_log_changed)
+            sink_row.addWidget(cb)
+        sink_row.addStretch(1)
+        form.addRow(t("输出 sinks"), sink_row)
+
+        self._log_dlt_app = QLineEdit("GFAP")
+        self._log_dlt_app.setMaxLength(4)
+        self._log_dlt_app.setMaximumWidth(80)
+        tipify(self._log_dlt_app, t("DLT Application ID（4 字符）；多进程可由运行时覆盖"))
+        self._log_dlt_app.textChanged.connect(self._on_log_changed)
+        form.addRow(t("DLT app_id"), self._log_dlt_app)
         lay.addLayout(form)
 
         ctx_box = QGroupBox(t("按模块覆盖级别"))
@@ -1462,6 +1485,28 @@ class PlatformEditor(QWidget):
         self._log_level.setCurrentText(str(data.get("default_level") or "INFO"))
         self._log_level.blockSignals(False)
         refresh_enum_combo_style(self._log_level)
+
+        sinks = data.get("sinks") or []
+        if not isinstance(sinks, list):
+            sinks = []
+        sink_set = {str(s).strip().lower() for s in sinks}
+        # Legacy: stdout/stderr ⇒ console
+        if "stdout" in sink_set or "stderr" in sink_set:
+            sink_set.add("console")
+        for cb, name in (
+            (self._log_sink_console, "console"),
+            (self._log_sink_file, "file"),
+            (self._log_sink_dlt, "dlt"),
+        ):
+            cb.blockSignals(True)
+            cb.setChecked(name in sink_set if sink_set else name in ("console", "dlt"))
+            cb.blockSignals(False)
+        dlt = data.get("dlt") if isinstance(data.get("dlt"), dict) else {}
+        app_id = str(dlt.get("app_id") or data.get("dlt_app_id") or "GFAP")[:4]
+        self._log_dlt_app.blockSignals(True)
+        self._log_dlt_app.setText(app_id or "GFAP")
+        self._log_dlt_app.blockSignals(False)
+
         self._ctx_table.blockSignals(True)
         self._ctx_table.setRowCount(0)
         mods = [m for m in KNOWN_MODULES if m not in ALWAYS_ON_MODULES] + ["app"]
@@ -1795,6 +1840,18 @@ class PlatformEditor(QWidget):
         data["schema_version"] = data.get("schema_version") or "0.1"
         data["default_level"] = self._log_level.currentText().strip() or "INFO"
         data["contexts"] = contexts
+        sinks: list[str] = []
+        if self._log_sink_console.isChecked():
+            sinks.append("console")
+        if self._log_sink_file.isChecked():
+            sinks.append("file")
+        if self._log_sink_dlt.isChecked():
+            sinks.append("dlt")
+        if not sinks:
+            sinks = ["console"]
+        data["sinks"] = sinks
+        app_id = (self._log_dlt_app.text().strip() or "GFAP")[:4]
+        data["dlt"] = {"app_id": app_id}
         self._mark("log")
         if not coalesce:
             self._end_doc_edit()

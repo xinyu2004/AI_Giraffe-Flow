@@ -14,12 +14,23 @@ foreach(_gf_mod IN ITEMS core com osal)
   endif()
 endforeach()
 
+# log before optional modules so exec/EM (and others) can link gf_ara::log
+# regardless of runtime_modules[] order in req.yaml.
+if(NOT TARGET gf_ara_log AND EXISTS "${CMAKE_SOURCE_DIR}/middleware/log/CMakeLists.txt")
+  add_subdirectory("${CMAKE_SOURCE_DIR}/middleware/log")
+  message(STATUS "Giraffe Flow: helper module log (early)")
+endif()
+
 # --- optional runtime modules from req.runtime_modules ---
 if(DEFINED GF_RUNTIME_MODULES)
   foreach(_gf_mod IN LISTS GF_RUNTIME_MODULES)
     if(_gf_mod STREQUAL "core" OR _gf_mod STREQUAL "com" OR _gf_mod STREQUAL "osal"
        OR _gf_mod STREQUAL "trace" OR _gf_mod STREQUAL "runtime")
       # runtime is added after exec/phm/sm/collector/log (see below)
+      continue()
+    endif()
+    # Already added early (e.g. log) or by a prior entry — do not add_subdirectory twice.
+    if(TARGET gf_ara_${_gf_mod})
       continue()
     endif()
     set(_gf_path "${CMAKE_SOURCE_DIR}/middleware/${_gf_mod}")

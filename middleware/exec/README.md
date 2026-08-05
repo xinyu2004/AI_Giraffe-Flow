@@ -19,20 +19,23 @@ ARA-inspired **Execution** — Client（进程侧）+ 进程内 **EM 账本** + 
 
 ```mermaid
 flowchart TD
-  A[Host: 起 com 底座 RouDi 等] --> B[Host: 起 gf_em_daemon]
+  I[systemd/init] --> H[HOST 平台守护]
+  H -->|按需 log.yaml sinks| D[dlt-daemon]
+  H --> A[RouDi]
+  H --> B[gf_em_daemon]
   B --> C[EM: Load exec + em_launch + phm]
-  C --> D[EM: TopoSort 依赖序]
-  D --> E[按序 OSAL SpawnProcess]
-  E --> F[PollOnce: WaitProcess WNOHANG]
-  F -->|exit 75 / 信号 且 restart| G[SpawnProcess relaunch]
-  G --> F
-  F -->|正常退出或达 max_restarts| H[terminal_exit]
-  F -->|shutdown| I[Terminate → Kill → Wait]
+  C --> E[TopoSort 依赖序]
+  E --> F[按序 OSAL SpawnProcess]
+  F --> G[PollOnce: WaitProcess WNOHANG]
+  G -->|exit 75 / 信号 且 restart| R[SpawnProcess relaunch]
+  R --> G
+  G -->|正常退出或达 max_restarts| T[terminal_exit]
+  G -->|shutdown| K[Terminate → Kill → Wait]
 ```
 
 要点：
 
-1. **EM 先于 Apps** — 业务进程由 daemon 统一拉起，不各自抢启动序。
+1. **HOST 先于 Apps** — `dlt-daemon?` → RouDi → EM；业务进程由 EM 统一拉起。
 2. **进程原语只经 OSAL** — `EmDaemon` 不直接 `fork`/`exec`/`waitpid`/`kill`。
 3. **配置三件套** — `platform/exec.yaml`（依赖）、`platform/em_launch.yaml`（二进制）、`phm.yaml`（`on_failure: restart`）。
 

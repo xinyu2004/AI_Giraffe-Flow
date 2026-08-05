@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <regex>
 #include <sstream>
 
@@ -94,7 +93,8 @@ ExecProcessConfig LoadExecProcess(std::string_view process_name) {
   }
   const std::string text = ReadFile(dir + "/exec.yaml");
   if (text.empty()) {
-    std::cerr << "runtime: cannot read " << dir << "/exec.yaml\n";
+    gf_ara::log::Logger::Instance().Error(
+        "runtime", "cannot read " + dir + "/exec.yaml");
     return cfg;
   }
 
@@ -129,7 +129,8 @@ PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
   }
   const std::string text = ReadFile(dir + "/phm.yaml");
   if (text.empty()) {
-    std::cerr << "runtime: cannot read " << dir << "/phm.yaml\n";
+    gf_ara::log::Logger::Instance().Error(
+        "runtime", "cannot read " + dir + "/phm.yaml");
     return cfg;
   }
 
@@ -183,41 +184,44 @@ void LoadCollectorConfig() {
   // Full scrape incl. dtc_map (same path as gf_doip_ota_server).
   gf_ara::collector::EventCollector::Instance().ConfigureFromYaml(text);
   const auto& cfg = gf_ara::collector::EventCollector::Instance().Config();
-  std::cout << "collector: configured forward=" << cfg.forward
-            << " max_entries=" << cfg.max_entries
-            << " dtc_map=" << cfg.dtc_map.size() << std::endl;
+  gf_ara::log::Logger::Instance().Info(
+      "collector",
+      "configured forward=" + cfg.forward + " max_entries=" + std::to_string(cfg.max_entries) +
+          " dtc_map=" + std::to_string(cfg.dtc_map.size()));
 }
 
 void LoadLogConfig() {
   const std::string dir = PlatformDir();
-  if (dir.empty()) {
-    return;
+  auto& log = gf_ara::log::Logger::Instance();
+  if (!dir.empty()) {
+    const std::string text = ReadFile(dir + "/log.yaml");
+    if (!text.empty()) {
+      log.ConfigureFromYaml(text);
+    }
   }
-  const std::string text = ReadFile(dir + "/log.yaml");
-  if (text.empty()) {
-    return;
-  }
-  gf_ara::log::Logger::Instance().ConfigureFromYaml(text);
-  std::cout << "log: configured from log.yaml default_level="
-            << gf_ara::log::Logger::ToString(
-                   gf_ara::log::Logger::Instance().Config().default_level)
-            << std::endl;
+  log.ApplyEnvFileSink();
+  log.Info("runtime",
+           std::string("log configured default_level=") +
+               gf_ara::log::Logger::ToString(log.Config().default_level) +
+               (log.Config().file_path.empty() ? "" : " file=" + log.Config().file_path));
 }
 
 bool ProcessSupervisor::Start(std::string_view process_name) {
   process_ = std::string(process_name);
-  LoadCollectorConfig();
+  // Log first so subsequent bring-up steps use Logger sinks (incl. shared file).
   LoadLogConfig();
+  auto& log = gf_ara::log::Logger::Instance();
+  log.Info("runtime", "bring-up begin process=" + process_);
+  LoadCollectorConfig();
 
   const auto exec_cfg = LoadExecProcess(process_name);
   if (PlatformDir().empty()) {
-    std::cerr << "runtime: GF_PLATFORM_DIR unset — using Offer defaults for "
-              << process_ << "\n";
+    log.Warn("runtime", "GF_PLATFORM_DIR unset — using Offer defaults for " + process_);
   } else if (!exec_cfg.found) {
-    std::cerr << "runtime: process not in exec.yaml: " << process_ << "\n";
+    log.Error("runtime", "process not in exec.yaml: " + process_);
     return false;
   } else if (!exec_cfg.execution_client) {
-    std::cerr << "runtime: execution_client=false for " << process_ << "\n";
+    log.Error("runtime", "execution_client=false for " + process_);
     return false;
   }
 
@@ -226,25 +230,29 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
 
   using gf_ara::sm::FunctionGroupState;
   using gf_ara::sm::StateClient;
+  log.Info("sm", "EnsureGroup " + function_group_ + " → Running");
   StateClient::EnsureGroup(function_group_, FunctionGroupState::kRunning);
   StateClient::RequestTransition(function_group_, FunctionGroupState::kRunning);
+  log.Info("sm", "state=" + std::string(gf_ara::sm::ToString(StateClient::GetState(function_group_))) +
+                     " fg=" + function_group_);
 
   using gf_ara::exec::ExecutionClient;
   using gf_ara::exec::ExecutionManager;
   using gf_ara::exec::ExecutionState;
+  log.Info("exec", "StartProcess/Offer process=" + process_);
   ExecutionManager::StartProcess(process_);
   if (!ExecutionClient::Offer(process_)) {
-    std::cerr << "runtime: Offer failed for " << process_ << "\n";
+    log.Error("exec", "Offer failed for " + process_);
     return false;
   }
   if (!ExecutionClient::ReportExecutionState(ExecutionState::kRunning)) {
-    std::cerr << "runtime: Report Running failed for " << process_ << "\n";
+    log.Error("exec", "Report Running failed for " + process_);
     return false;
   }
-  std::cout << "t_ms=" << MonoMs() << " Offer→Running process=" << process_
-            << " fg=" << function_group_
-            << " sm=" << gf_ara::sm::ToString(StateClient::GetState(function_group_))
-            << std::endl;
+  // Keep "Offer→Running" substring for SIL verify greps.
+  log.Info("runtime", "t_ms=" + std::to_string(MonoMs()) + " Offer→Running process=" + process_ +
+                          " fg=" + function_group_ + " sm=" +
+                          gf_ara::sm::ToString(StateClient::GetState(function_group_)));
 
   const auto phm_cfg = LoadPhmEntity(process_name);
   if (phm_cfg.found) {
@@ -253,19 +261,20 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
     on_failure_ = phm_cfg.on_failure.empty() ? "log" : phm_cfg.on_failure;
     entity_->Configure(phm_cfg.alive_period_ms, phm_cfg.alive_timeout_ms);
     next_alive_ = std::chrono::steady_clock::now();
-    std::cout << "phm entity=" << phm_cfg.id << " period_ms=" << phm_cfg.alive_period_ms
-              << " timeout_ms=" << phm_cfg.alive_timeout_ms
-              << " on_failure=" << on_failure_ << std::endl;
+    log.Info("phm", "entity=" + phm_cfg.id + " period_ms=" + std::to_string(phm_cfg.alive_period_ms) +
+                        " timeout_ms=" + std::to_string(phm_cfg.alive_timeout_ms) +
+                        " on_failure=" + on_failure_);
 
     const auto fault_ms = FaultMs();
     if (fault_ms > 0) {
       fault_pending_ = true;
-      std::cout << "t_ms=" << MonoMs() << " FAULT inject armed for " << fault_ms
-                << " ms after first Alive\n";
+      log.Info("phm", "t_ms=" + std::to_string(MonoMs()) + " FAULT inject armed for " +
+                          std::to_string(fault_ms) + " ms after first Alive");
     }
   } else if (!PlatformDir().empty()) {
-    std::cout << "runtime: no phm entity for " << process_ << " (ok)\n";
+    log.Info("phm", "no entity for " + process_ + " (ok)");
   }
+  log.Info("runtime", "bring-up done process=" + process_);
   return true;
 }
 
@@ -275,9 +284,10 @@ void ProcessSupervisor::SoftRestartViaEm(const char* reason) {
   using gf_ara::exec::ExecutionState;
 
   ExecutionManager::RequestRestart(process_, reason);
+  auto& log = gf_ara::log::Logger::Instance();
   if (!ExecutionClient::Offer(process_) ||
       !ExecutionClient::ReportExecutionState(ExecutionState::kRunning)) {
-    std::cerr << "em soft restart Offer/Running failed process=" << process_ << "\n";
+    log.Error("exec", "em soft restart Offer/Running failed process=" + process_);
     return;
   }
   ExecutionManager::ConsumeRestartPending(process_);
@@ -292,8 +302,8 @@ void ProcessSupervisor::SoftRestartViaEm(const char* reason) {
   ++em_restart_count_;
   next_alive_ = std::chrono::steady_clock::now() +
                 std::chrono::milliseconds(alive_period_ms_);
-  std::cout << "t_ms=" << MonoMs() << " em soft_restart process=" << process_
-            << " count=" << ExecutionManager::RestartCount(process_) << std::endl;
+  log.Info("exec", "t_ms=" + std::to_string(MonoMs()) + " em soft_restart process=" + process_ +
+                       " count=" + std::to_string(ExecutionManager::RestartCount(process_)));
 }
 
 void ProcessSupervisor::RequestOsEmRestart(const char* reason) {
@@ -301,16 +311,18 @@ void ProcessSupervisor::RequestOsEmRestart(const char* reason) {
   ExecutionManager::RequestRestart(process_, reason);
   ++em_restart_count_;
   exit_for_em_restart_ = true;
-  std::cout << "t_ms=" << MonoMs() << " em os_restart_exit process=" << process_
-            << " code=" << gf_ara::exec::kEmRestartExitCode
-            << " reason=" << reason << std::endl;
+  gf_ara::log::Logger::Instance().Info(
+      "exec", "t_ms=" + std::to_string(MonoMs()) + " em os_restart_exit process=" + process_ +
+                  " code=" + std::to_string(gf_ara::exec::kEmRestartExitCode) +
+                  " reason=" + reason);
 }
 
 void ProcessSupervisor::OnFault(gf_ara::phm::CheckpointStatus st) {
   const char* reason = StatusName(st);
   ++miss_count_;
-  std::cout << "t_ms=" << MonoMs() << " " << reason << " entity=" << entity_->Name()
-            << std::endl;
+  auto& log = gf_ara::log::Logger::Instance();
+  log.Error("phm", "t_ms=" + std::to_string(MonoMs()) + " " + reason +
+                       " entity=" + std::string(entity_->Name()));
 
   gf_ara::collector::EventCollector::Instance().ReportEvent(
       "phm", reason, std::string("entity=") + std::string(entity_->Name()),
@@ -333,14 +345,10 @@ void ProcessSupervisor::OnFault(gf_ara::phm::CheckpointStatus st) {
                                                enter_upd);
     if (enter_upd && entity_) {
       entity_->SetPaused(true);
-      std::cout << "phm paused (sm Updating) entity=" << entity_->Name() << std::endl;
+      log.Info("phm", "paused (sm Updating) entity=" + std::string(entity_->Name()));
     }
     return;
   }
-
-  // on_failure: log (default) — structured log lite + keep stdout line above
-  gf_ara::log::Logger::Instance().Error(
-      "phm", std::string(reason) + " entity=" + std::string(entity_->Name()));
 }
 
 void ProcessSupervisor::Tick() {
@@ -354,24 +362,26 @@ void ProcessSupervisor::Tick() {
     using gf_ara::sm::StateClient;
     if (StateClient::GetState(function_group_) != FunctionGroupState::kUpdating) {
       entity_->SetPaused(false);
-      std::cout << "phm resume entity=" << entity_->Name() << std::endl;
+      gf_ara::log::Logger::Instance().Info(
+          "phm", "resume entity=" + std::string(entity_->Name()));
     }
   }
 
   const auto now = std::chrono::steady_clock::now();
+  auto& log = gf_ara::log::Logger::Instance();
 
   if (fault_pending_ && ever_alive_) {
     const auto fault_ms = FaultMs();
     fault_until_ = now + std::chrono::milliseconds(fault_ms);
     fault_pending_ = false;
     fault_active_ = true;
-    std::cout << "t_ms=" << MonoMs() << " FAULT inject begin entity=" << entity_->Name()
-              << std::endl;
+    log.Info("phm", "t_ms=" + std::to_string(MonoMs()) +
+                        " FAULT inject begin entity=" + std::string(entity_->Name()));
   }
 
   if (fault_active_ && now >= fault_until_) {
-    std::cout << "t_ms=" << MonoMs() << " fault window ended entity=" << entity_->Name()
-              << std::endl;
+    log.Info("phm", "t_ms=" + std::to_string(MonoMs()) +
+                        " fault window ended entity=" + std::string(entity_->Name()));
     fault_active_ = false;
   }
 
@@ -389,8 +399,8 @@ void ProcessSupervisor::Tick() {
          last_status_ == CheckpointStatus::kDeadlineMissed ||
          last_status_ == CheckpointStatus::kLogicalFault)) {
       ++recover_count_;
-      std::cout << "t_ms=" << MonoMs() << " phm recovered entity=" << entity_->Name()
-                << std::endl;
+      log.Info("phm", "t_ms=" + std::to_string(MonoMs()) +
+                          " phm recovered entity=" + std::string(entity_->Name()));
     } else if (st == CheckpointStatus::kAliveMissed ||
                st == CheckpointStatus::kDeadlineMissed ||
                st == CheckpointStatus::kLogicalFault) {

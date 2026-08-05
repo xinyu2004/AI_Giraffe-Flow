@@ -39,6 +39,7 @@ from gf_gmt.gui.inject_client import (
     InjectStreamHelper,
     is_injectable_topic,
 )
+from gf_gmt.gui.dlt_log_panel import DltLogPanel
 from gf_gmt.gui.inject_panel import InjectPanel
 from gf_gmt.gui.ota_panel import OtaPanel
 from gf_gmt.gui.live_client import LiveWsSession
@@ -280,6 +281,10 @@ class GmtMainWindow(QMainWindow):
         self._inject_panel.follow_playhead.toggled.connect(self._on_follow_playhead_toggled)
         self._inject_panel.seek_requested.connect(self._seek_index)
         self._ota_panel = OtaPanel()
+        self._dlt_panel = DltLogPanel()
+        self._dlt_panel.set_host_provider(
+            lambda: self._host_edit.text().strip() or "127.0.0.1"
+        )
         self._var_strip = VarStripView()
         self._var_strip.seek_ns_requested.connect(self._seek_ns)
         self._tabs.addTab(self._order, t("Order"))
@@ -288,6 +293,7 @@ class GmtMainWindow(QMainWindow):
         self._tabs.addTab(self._tags, t("Tag"))
         self._tabs.addTab(self._inject_panel, t("Inject"))
         self._tabs.addTab(self._ota_panel, t("OTA/UDS"))
+        self._tabs.addTab(self._dlt_panel, t("Logging"))
         self._tabs.currentChanged.connect(self._on_tab_changed)
         root.addWidget(self._tabs, stretch=1)
 
@@ -443,6 +449,15 @@ class GmtMainWindow(QMainWindow):
                 self._path_label.setText(
                     t("OTA/UDS：请先加载项目，再填 DoIP Host:Port「连接」")
                 )
+            return
+        if w is self._dlt_panel:
+            self._dlt_panel.sync_host_from_bar()
+            host = self._host_edit.text().strip() or "127.0.0.1"
+            self._path_label.setText(
+                t("Logging（DLT）：Host {host} → 连接 dlt-daemon（默认 TCP 3490）").format(
+                    host=host
+                )
+            )
             return
         # Restore observability status when leaving OTA
         if self._session_path is not None:
@@ -1740,6 +1755,10 @@ class GmtMainWindow(QMainWindow):
         self._inject_seek(index)
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        try:
+            self._dlt_panel.shutdown()
+        except Exception:
+            pass
         self._ws_timer.stop()
         self._inject_timer.stop()
         if self._live_active:

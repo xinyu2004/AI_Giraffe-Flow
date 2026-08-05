@@ -20,24 +20,27 @@
 │  TITLE: Giraffe Modules · 中间件如何起来、如何协作              │
 └──────────────────────────────────────────────────────────────┘
 
-                    ┌─────────────┐
-                    │ iceoryx     │   com 依赖（RouDi）
-                    │ RouDi       │
-                    └──────┬──────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │ gf_em_daemon│   ← exec / EM
-                    │    (EM)     │
-                    └──────┬──────┘
-                           │ OSAL Spawn（em_launch 拓扑）
-                           ▼
-              ┌────────────────────────────┐
-              │   SOA apps（业务进程）        │
-              │   gateway · sensing · …    │
-              └─────────────┬──────────────┘
-                            │ 每进程内：runtime bring-up
-                            ▼
+  ┌─────────────┐
+  │ systemd/init│  系统侧 · 非 Giraffe（虚线框；高度≈HOST 一半）
+  │ 系统侧守护   │
+  └──────┬──────┘
+         │
+         ▼
+       〔 HOST  ┌─ 平台守护（非 SOA）──────────────┐
+               │  dlt-daemon（按需 · log.yaml sinks）│
+               │       ↓                            │
+               │  RouDi (iceoryx)                   │
+               │       ↓                            │
+               │  EM (gf_em_daemon)                 │
+               └──────────────┬─────────────────────┘
+                              │ OSAL Spawn（em_launch 拓扑）
+                              ▼
+                 ┌────────────────────────────┐
+                 │   SOA apps（业务进程）        │
+                 │   gateway · sensing · …    │
+                 └─────────────┬──────────────┘
+                               │ 每进程内：runtime bring-up
+                               ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                 进程内中间件环（本图主体）                        │
 │                                                              │
@@ -57,7 +60,7 @@
 │     diag ──DoIP/UDS──► ucm ──► sm Updating + phm pause       │
 │                           └──fail──► collector               │
 │                                                              │
-│     log          tsync          OSAL (clock/thread/process)  │
+│     log → DLT  ·  tsync  ·  OSAL                             │
 └──────────────────────────────────────────────────────────────┘
 
   FuSa 证据挂在：exec / phm / sm / collector … 的真实行为上
@@ -72,8 +75,12 @@
 
 | 模块 | 一句话 | 关键协作 |
 |------|--------|----------|
+| **systemd/init** | 系统侧守护（**非 Giraffe**）；同级拉起 HOST | 虚线框 = OS 所有；脚本或 unit |
+| **HOST · dlt-daemon** | COVESA DLT（**按需**：`log.yaml` sinks 含 `dlt`） | 上位机 dlt-viewer / GMT Logging |
+| **HOST · RouDi** | iceoryx 通信底座 | com binding 依赖 |
+| **HOST · EM** | `gf_em_daemon` | 拓扑 OSAL Spawn SOA apps |
 | **OSAL** | 时钟 / 线程 / **process** Spawn·Wait·Kill | EM 唯一用它起停进程 |
-| **exec / EM** | `ExecutionClient` + `gf_em_daemon` | 读 em_launch；拓扑 Spawn；失败可 relaunch |
+| **exec / EM** | `ExecutionClient` + daemon | 读 em_launch；失败可 relaunch |
 | **sm** | 功能组 Off ↔ Running ↔ Updating | runtime EnsureGroup；PHM 故障通知；UCM 进 Updating |
 | **phm** | Alive / Deadline / Logical | App ReportAlive；失败 → log / collector / sm / EM restart |
 | **runtime** | 进程内 bring-up 胶水 | log → SM → Exec Offer → PHM Alive → collector 钩子 |
@@ -85,7 +92,7 @@
 | **com** | 统一 Event Proxy/Skeleton | → bindings；App 只认服务名 |
 | **bindings** | iceoryx / SOME/IP / DDS / … | 被 com 调用；需 RouDi 等底座 |
 | **tsync** | 时间同步骨架 | 依赖 OSAL Now；可裁剪 |
-| **log** | 轻量日志 | bring-up / 故障路径 |
+| **log** | 日志 lite → **DLT sink** | bring-up / 故障；上位机只走 DLT |
 
 ### 诊断 · OTA · 事件 · 持久化
 
@@ -145,9 +152,12 @@ App ──服务名──► com ──► bindings ──► iceoryx | SOME/IP 
 ## 出图注意
 
 1. 主体 = 中间件环 + EM 启动箭头；不要再画一整圈外设。
-2. 芯片名与 Flow 板内一致：`com · EM · exec · phm · sm · collector · OSAL · diag · ucm · log · per · tsync`。
+2. 芯片名与 Flow 板内一致：`com · EM · exec · phm · sm · collector · OSAL · diag · ucm · log · dlt · per`（tsync 在环内）。
 3. 箭头标动作（Spawn / Alive / NotifyFault / DoIP），不要只画框。
-4. 中文定稿后再画；EN 跟 `README.en.md`。
+4. HOST 框 = 平台守护；SOA apps 在框外。`dlt-daemon` 副标写清按需配置。
+5. 括号在左，**HOST 文字在括号右侧**（靠守护框）；`systemd/init` 虚线芯片高度≈HOST 一半。
+6. 环底单行对齐：`log → DLT` · `tsync` · `OSAL`。
+7. 中文定稿后再画；EN 跟 `README.en.md`。
 
 已出图：
 

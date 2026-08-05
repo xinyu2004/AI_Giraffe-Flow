@@ -3,13 +3,14 @@
 #include "gf/osal/process.hpp"
 #include "gf/osal/clock.hpp"
 
+#include <gf_ara/log/logger.hpp>
+
 #include <sys/stat.h>
 
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <iostream>
 #include <regex>
 #include <sstream>
 #include <thread>
@@ -153,7 +154,7 @@ std::string EmDaemon::ResolveBinary(const EmProcessSpec& spec, std::string_view 
 bool EmDaemon::Configure(EmDaemonConfig cfg) {
   std::string err;
   if (!TopoSort(cfg.processes, err)) {
-    std::cerr << "em_daemon: " << err << "\n";
+    gf_ara::log::Logger::Instance().Error("em", "em_daemon: " + err);
     return false;
   }
   cfg_ = std::move(cfg);
@@ -184,13 +185,15 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
   }
   const std::string exec_text = ReadFile(exec_path);
   if (exec_text.empty()) {
-    std::cerr << "em_daemon: cannot read exec.yaml under " << cfg.platform_dir << "\n";
+    gf_ara::log::Logger::Instance().Error(
+        "em", "cannot read exec.yaml under " + cfg.platform_dir);
     return false;
   }
 
   const std::string launch_text = ReadFile(std::string(launch_yaml));
   if (launch_text.empty()) {
-    std::cerr << "em_daemon: cannot read launch yaml " << launch_yaml << "\n";
+    gf_ara::log::Logger::Instance().Error(
+        "em", "cannot read launch yaml " + std::string(launch_yaml));
     return false;
   }
 
@@ -324,16 +327,20 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
   }
 
   if (cfg.processes.empty()) {
-    std::cerr << "em_daemon: no processes to launch\n";
+    gf_ara::log::Logger::Instance().Error("em", "no processes to launch");
     return false;
   }
+  gf_ara::log::Logger::Instance().Info(
+      "em", "Load ok processes=" + std::to_string(cfg.processes.size()) +
+                " platform=" + cfg.platform_dir);
   return Configure(std::move(cfg));
 }
 
 bool EmDaemon::Spawn(Runtime& rt, bool is_relaunch) {
+  auto& log = gf_ara::log::Logger::Instance();
   const std::string bin = ResolveBinary(rt.spec, cfg_.build_dir);
   if (bin.empty() || !FileExists(bin)) {
-    std::cerr << "em_daemon: binary missing for " << rt.spec.name << " path=" << bin << "\n";
+    log.Error("em", "binary missing for " + rt.spec.name + " path=" + bin);
     return false;
   }
 
@@ -353,6 +360,17 @@ bool EmDaemon::Spawn(Runtime& rt, bool is_relaunch) {
   }
   req.env_set.emplace_back("GF_EM_MANAGED", "1");
   req.env_set.emplace_back("GF_PLATFORM_DIR", cfg_.platform_dir);
+  // Children share the same structured log file as Host/EM (GMT Logging tab).
+  if (const char* lf = std::getenv("GF_LOG_FILE"); lf != nullptr && lf[0] != '\0') {
+    req.env_set.emplace_back("GF_LOG_FILE", lf);
+  } else if (!cfg_.log_dir.empty()) {
+    req.env_set.emplace_back("GF_LOG_FILE", JoinPath(cfg_.log_dir, "giraffe_modules.log"));
+  }
+  if (const char* ld = std::getenv("GF_LOG_DIR"); ld != nullptr && ld[0] != '\0') {
+    req.env_set.emplace_back("GF_LOG_DIR", ld);
+  } else if (!cfg_.log_dir.empty()) {
+    req.env_set.emplace_back("GF_LOG_DIR", cfg_.log_dir);
+  }
   if (is_relaunch) {
     req.env_set.emplace_back("GF_PHM_FAULT_MS", "0");
     req.env_set.emplace_back("GF_EM_RELAUNCH", "1");
@@ -360,7 +378,7 @@ bool EmDaemon::Spawn(Runtime& rt, bool is_relaunch) {
 
   const auto pid = gf::osal::SpawnProcess(req);
   if (!gf::osal::IsValidProcessId(pid)) {
-    std::cerr << "em_daemon: SpawnProcess failed for " << rt.spec.name << "\n";
+    log.Error("em", "SpawnProcess failed for " + rt.spec.name);
     return false;
   }
 
@@ -371,22 +389,27 @@ bool EmDaemon::Spawn(Runtime& rt, bool is_relaunch) {
   }
   rt.ever_started = true;
   rt.terminal_exit = false;
-  std::cout << "t_ms=" << MonoMs() << " em_daemon: spawned name=" << rt.spec.name
-            << " pid=" << pid << " relaunch=" << (is_relaunch ? "yes" : "no")
-            << " launches=" << rt.launches << std::endl;
+  // Keep "em_daemon: spawned" for SIL verify greps.
+  log.Info("em", "t_ms=" + std::to_string(MonoMs()) + " em_daemon: spawned name=" +
+                     rt.spec.name + " pid=" + std::to_string(pid) +
+                     " relaunch=" + (is_relaunch ? "yes" : "no") +
+                     " launches=" + std::to_string(rt.launches));
   return true;
 }
 
 bool EmDaemon::StartAll() {
+  auto& log = gf_ara::log::Logger::Instance();
   if (!cfg_.log_dir.empty()) {
     ::mkdir(cfg_.log_dir.c_str(), 0755);
   }
+  log.Info("em", "StartAll begin count=" + std::to_string(runtimes_.size()));
   for (auto& rt : runtimes_) {
     if (!Spawn(rt, false)) {
       return false;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
+  log.Info("em", "StartAll done");
   return true;
 }
 
@@ -409,9 +432,11 @@ bool EmDaemon::PollOnce() {
     const int exit_code =
         (wr.status == gf::osal::ProcessWaitStatus::kExited) ? wr.exit_code : -1;
     const bool signaled = (wr.status == gf::osal::ProcessWaitStatus::kSignaled);
-    std::cout << "t_ms=" << MonoMs() << " em_daemon: child exit name=" << rt.spec.name
-              << " pid=" << rt.pid << " code=" << exit_code
-              << " signaled=" << (signaled ? "yes" : "no") << std::endl;
+    gf_ara::log::Logger::Instance().Info(
+        "em", "t_ms=" + std::to_string(MonoMs()) + " em_daemon: child exit name=" +
+                  rt.spec.name + " pid=" + std::to_string(rt.pid) +
+                  " code=" + std::to_string(exit_code) +
+                  " signaled=" + (signaled ? "yes" : "no"));
     rt.pid = gf::osal::kInvalidProcessId;
 
     const bool do_restart =
@@ -420,8 +445,9 @@ bool EmDaemon::PollOnce() {
         (exit_code == kEmRestartExitCode || signaled);
 
     if (do_restart) {
-      std::cout << "t_ms=" << MonoMs() << " em_daemon: relaunch name=" << rt.spec.name
-                << " restart#" << (rt.restarts + 1) << std::endl;
+      gf_ara::log::Logger::Instance().Info(
+          "em", "t_ms=" + std::to_string(MonoMs()) + " em_daemon: relaunch name=" +
+                    rt.spec.name + " restart#" + std::to_string(rt.restarts + 1));
       if (!Spawn(rt, true)) {
         rt.terminal_exit = true;
         return false;
@@ -455,7 +481,7 @@ int EmDaemon::RunForMs(std::uint32_t deadline_ms) {
       const auto ms =
           std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t0).count();
       if (ms >= static_cast<long>(deadline_ms)) {
-        std::cerr << "em_daemon: deadline reached\n";
+        gf_ara::log::Logger::Instance().Warn("em", "em_daemon: deadline reached");
         RequestShutdown();
         ShutdownAll();
         return 2;

@@ -59,9 +59,9 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 
 ### 页 2 · 日志（`log.yaml`）
 
-- **默认级别** + **按模块覆盖**表（`contexts[]`：模块 / 级别）。
+- **默认级别** + **输出 sinks**（`console` / `file` / `dlt`）+ **DLT app_id** + **按模块覆盖**表。
+- 勾选 **dlt** → SIL/HIL 按配置起 `dlt-daemon`（不用环境变量关开）。
 - 新增行：模块默认可空；级别默认 `INFO`（枚举着色保留）。
-- **选中：** 点左侧行号；行号与「模块」同色浅蓝，**级别颜色不变**。
 - Verify：同一 `context id` 重复则失败（勿在 `log.yaml` 写两条同名模块）。
 
 ## 页 1 画布日常四步

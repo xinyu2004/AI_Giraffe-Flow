@@ -1,7 +1,9 @@
 #include "gf_ara/sm/state_client.hpp"
 
-#include <iostream>
+#include <gf_ara/log/logger.hpp>
+
 #include <mutex>
+#include <string>
 
 namespace gf_ara::sm {
 namespace {
@@ -56,8 +58,9 @@ void StateClient::EnsureGroup(std::string_view fg_id, FunctionGroupState initial
   const auto [it, inserted] = table.try_emplace(key);
   if (inserted) {
     it->second.state = initial;
-    std::cout << "sm: ensure fg=" << fg_id << " initial=" << ToString(initial)
-              << std::endl;
+    // Keep "sm: ensure" substring for SIL greps / familiarity.
+    gf_ara::log::Logger::Instance().Info(
+        "sm", std::string("sm: ensure fg=") + key + " initial=" + ToString(initial));
   }
 }
 
@@ -77,13 +80,16 @@ bool StateClient::RequestTransition(std::string_view fg_id, FunctionGroupState t
   std::lock_guard lock(Mutex());
   auto& e = Table()[std::string(fg_id)];
   if (!Allowed(e.state, target)) {
-    std::cerr << "sm: illegal transition fg=" << fg_id << " " << ToString(e.state)
-              << "→" << ToString(target) << "\n";
+    gf_ara::log::Logger::Instance().Error(
+        "sm", std::string("sm: illegal transition fg=") + std::string(fg_id) + " " +
+                 ToString(e.state) + "→" + ToString(target));
     return false;
   }
   if (e.state != target) {
-    std::cout << "sm: transition fg=" << fg_id << " " << ToString(e.state) << "→"
-              << ToString(target) << std::endl;
+    // Keep "sm: transition" for smoke_sil_sm_fg.sh greps.
+    gf_ara::log::Logger::Instance().Info(
+        "sm", std::string("sm: transition fg=") + std::string(fg_id) + " " +
+                 ToString(e.state) + "→" + ToString(target));
     e.state = target;
   }
   return true;
@@ -98,8 +104,10 @@ void StateClient::NotifyHealthFault(std::string_view fg_id, std::string_view ent
     std::lock_guard lock(Mutex());
     auto& e = Table()[std::string(fg_id)];
     ++e.faults;
-    std::cout << "sm: health_fault fg=" << fg_id << " entity=" << entity
-              << " reason=" << reason << " faults=" << e.faults << std::endl;
+    gf_ara::log::Logger::Instance().Info(
+        "sm", std::string("sm: health_fault fg=") + std::string(fg_id) +
+                 " entity=" + std::string(entity) + " reason=" + std::string(reason) +
+                 " faults=" + std::to_string(e.faults));
   }
   if (enter_updating) {
     RequestTransition(fg_id, FunctionGroupState::kUpdating);

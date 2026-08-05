@@ -98,7 +98,8 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 **产品定位：** **AUTOSAR AP lite**（`gf_ara::*`）中间件 + 工具链——原理对齐 AP 功能簇，实现可裁剪、可上板。桌面 MVP 已通；P3 加深配置与运行时，提供 **经得起认证的支持**（非代认证），并扩展 DoIP/OTA 操作面与仿真尖刺。  
 **真板 / 真 MCU：** 冲刺门禁（P3z），非主航道。  
-**后置登记（防遗忘）：** [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md)（Method/Field、RAUC、crypto、DLT…）。
+**后置登记（防遗忘）：** [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md)（Method/Field、RAUC、crypto…）。  
+**DLT：** [DLT_PLAN.md](DLT_PLAN.md)（BL-DLT **done**；真板仅部署手验）。
 
 ```text
 主航道：  P3-1 Config → P3-2 Middleware ∥ P3-5 Sim尖刺 → P3-3 Cert-ready → P3-4 DoIP/OTA/GMT
@@ -128,6 +129,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | M3 | **Event Collector** 运行时：汇聚错误 → CP DEM 或本地事件库 | ✅ 环缓 + `cp_dem` stub 转发 |
 | M3b | **EM** 最小集 + OS daemon（fork/exec + exit75 relaunch） | ✅ `ExecutionManager` + `gf_em_daemon` |
 | M4 | **log** lite（超 skeleton） | ✅ `gf_ara::log` + `gf_log_smoke`；SIL 读 `log.yaml` |
+| M4b | **DLT**（`ara::log` 正统后端） | ✅ libdlt+daemon+GMT/dlt-viewer；`gmt_export` 已删 |
 | M5 | per / tsync 骨架落地（可裁剪） | ✅ `gf_ara::per` / `gf_ara::tsync` + smoke；`req` 可裁剪 |
 | M6 | vsomeip **择一**加深 | **降至 P3z 前**（Z0b；不挡 DoIP/OTA） |
 

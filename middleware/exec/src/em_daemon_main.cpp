@@ -1,8 +1,12 @@
 #include "gf_ara/exec/em_daemon.hpp"
 
+#include <gf_ara/log/logger.hpp>
+
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -56,17 +60,39 @@ int main(int argc, char** argv) {
     return 2;
   }
 
+  const std::string logs = log_dir.empty() ? build + "/em_daemon_logs" : log_dir;
+  {
+    auto& log = gf_ara::log::Logger::Instance();
+    std::ifstream in(platform + "/log.yaml");
+    if (in) {
+      std::ostringstream ss;
+      ss << in.rdbuf();
+      log.ConfigureFromYaml(ss.str());
+    }
+    if (std::getenv("GF_LOG_DIR") == nullptr || !*std::getenv("GF_LOG_DIR")) {
+      ::setenv("GF_LOG_DIR", logs.c_str(), 0);
+    }
+    if (std::getenv("GF_LOG_FILE") == nullptr || !*std::getenv("GF_LOG_FILE")) {
+      const std::string shared = logs + "/giraffe_modules.log";
+      ::setenv("GF_LOG_FILE", shared.c_str(), 0);
+    }
+    log.ApplyEnvFileSink();
+    log.Info("em", "gf_em_daemon start platform=" + platform + " launch=" + launch +
+                       " build=" + build + " log_dir=" + logs);
+  }
+
   gf_ara::exec::EmDaemon em;
-  if (!em.Load(platform, launch, build, log_dir.empty() ? build + "/em_daemon_logs" : log_dir)) {
+  if (!em.Load(platform, launch, build, logs)) {
+    gf_ara::log::Logger::Instance().Error("em", "Load failed");
     return 1;
   }
-  std::cout << "gf_em_daemon: processes=" << em.Config().processes.size()
-            << " platform=" << platform << std::endl;
   if (!em.StartAll()) {
+    gf_ara::log::Logger::Instance().Error("em", "StartAll failed");
     return 1;
   }
+  gf_ara::log::Logger::Instance().Info("em", "polling children");
   const int rc = em.RunForMs(deadline_ms);
   em.ShutdownAll();
-  std::cout << "gf_em_daemon: exit rc=" << rc << std::endl;
+  gf_ara::log::Logger::Instance().Info("em", "exit rc=" + std::to_string(rc));
   return rc;
 }

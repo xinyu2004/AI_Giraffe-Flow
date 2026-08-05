@@ -1,5 +1,7 @@
 #include "gf_ara/log/logger.hpp"
 
+#include "gf_ara/log/dlt_sink.hpp"
+
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -76,6 +78,9 @@ void Logger::Configure(LogConfig cfg) {
   if (cfg_.sinks.empty()) {
     cfg_.sinks = {"stdout", "stderr"};
   }
+  if (const char* app = std::getenv("GF_DLT_APP_ID"); app != nullptr && app[0] != '\0') {
+    cfg_.dlt_app_id = app;
+  }
 }
 
 void Logger::ConfigureFromYaml(std::string_view yaml_text) {
@@ -98,6 +103,11 @@ void Logger::ConfigureFromYaml(std::string_view yaml_text) {
   if (std::regex_search(text, m, std::regex(R"(file_path:\s*(\S+))"))) {
     cfg.file_path = m[1].str();
   }
+  if (std::regex_search(text, m, std::regex(R"(dlt:\s*[\s\S]*?app_id:\s*(\S+))"))) {
+    cfg.dlt_app_id = m[1].str();
+  } else if (std::regex_search(text, m, std::regex(R"(dlt_app_id:\s*(\S+))"))) {
+    cfg.dlt_app_id = m[1].str();
+  }
   std::regex sink_re(R"(sinks:\s*\[([^\]]*)\])");
   if (std::regex_search(text, m, sink_re)) {
     cfg.sinks.clear();
@@ -107,19 +117,44 @@ void Logger::ConfigureFromYaml(std::string_view yaml_text) {
          it != std::sregex_iterator(); ++it) {
       cfg.sinks.push_back((*it)[1].str());
     }
+  } else if (std::regex_search(text, m, std::regex(R"(sinks:\s*\n((?:\s*-\s*\S+\s*\n?)+))"))) {
+    cfg.sinks.clear();
+    const std::string block = m[1].str();
+    std::regex tok(R"(-\s*([A-Za-z_]+))");
+    for (auto it = std::sregex_iterator(block.begin(), block.end(), tok);
+         it != std::sregex_iterator(); ++it) {
+      cfg.sinks.push_back((*it)[1].str());
+    }
   }
   std::regex ctx_re(R"(-?\s*id:\s*(\S+)[\s\S]*?level:\s*(\S+))");
   for (auto it = std::sregex_iterator(text.begin(), text.end(), ctx_re);
        it != std::sregex_iterator(); ++it) {
     cfg.contexts[(*it)[1].str()] = ParseLevel((*it)[2].str(), cfg.default_level);
   }
-  if (std::regex_search(text, m, std::regex(R"(gmt_export:[\s\S]*?enabled:\s*(true|false))"))) {
-    cfg.gmt_export.enabled = (m[1].str() == "true");
-  }
-  if (std::regex_search(text, m, std::regex(R"(gmt_export:[\s\S]*?min_level:\s*(\S+))"))) {
-    cfg.gmt_export.min_level = ParseLevel(m[1].str(), LogLevel::kError);
-  }
   Configure(std::move(cfg));
+}
+
+void Logger::ApplyEnvFileSink() {
+  std::lock_guard lock(mu_);
+  const char* f = std::getenv("GF_LOG_FILE");
+  const char* d = std::getenv("GF_LOG_DIR");
+  if (f != nullptr && f[0] != '\0') {
+    cfg_.file_path = f;
+  } else if (d != nullptr && d[0] != '\0') {
+    cfg_.file_path = std::string(d) + "/giraffe_modules.log";
+  } else {
+    return;
+  }
+  bool has_file = false;
+  for (const auto& s : cfg_.sinks) {
+    if (s == "file") {
+      has_file = true;
+      break;
+    }
+  }
+  if (!has_file) {
+    cfg_.sinks.push_back("file");
+  }
 }
 
 LogLevel Logger::EffectiveLevel(std::string_view ctx) const {
@@ -140,24 +175,6 @@ bool Logger::UseColor() const {
   return ::isatty(STDOUT_FILENO) != 0;
 }
 
-bool Logger::GmtAccepts(std::string_view ctx, LogLevel level) const {
-  if (!cfg_.gmt_export.enabled) {
-    return false;
-  }
-  if (static_cast<std::uint8_t>(level) > static_cast<std::uint8_t>(cfg_.gmt_export.min_level)) {
-    return false;
-  }
-  if (cfg_.gmt_export.contexts.empty()) {
-    return true;
-  }
-  for (const auto& c : cfg_.gmt_export.contexts) {
-    if (c == ctx) {
-      return true;
-    }
-  }
-  return false;
-}
-
 void Logger::WriteFile(std::string_view line) {
   if (cfg_.file_path.empty()) {
     return;
@@ -168,51 +185,55 @@ void Logger::WriteFile(std::string_view line) {
   }
 }
 
+bool Logger::WantSink(std::string_view name) const {
+  for (const auto& s : cfg_.sinks) {
+    if (s == name) {
+      return true;
+    }
+    if (name == "stdout" && (s == "console" || s == "stdout")) {
+      return true;
+    }
+    if (name == "stderr" && (s == "console" || s == "stderr")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void Logger::EnsureDlt() {
+  if (!WantSink("dlt")) {
+    return;
+  }
+  DltSink::Instance().Configure(cfg_.dlt_app_id, "Giraffe Flow");
+}
+
 void Logger::Log(std::string_view ctx, LogLevel level, std::string_view msg) {
   std::lock_guard lock(mu_);
   if (static_cast<std::uint8_t>(level) > static_cast<std::uint8_t>(EffectiveLevel(ctx))) {
     return;
   }
+  EnsureDlt();
   const std::string plain =
       std::string("log: [") + ToString(level) + "] " + std::string(ctx) + " " + std::string(msg);
   const bool color = UseColor();
   const bool to_err = level <= LogLevel::kError;
-  for (const auto& sink : cfg_.sinks) {
-    if (sink == "stderr" || (sink == "stdout" && !to_err) || (sink == "stdout" && to_err)) {
-      // fall through unified below
-    }
-    if (sink == "file" || sink == "serial") {
-      WriteFile(plain);
-    }
+  if (WantSink("file") || WantSink("serial")) {
+    WriteFile(plain);
   }
   auto& out = to_err ? std::cerr : std::cout;
-  bool want_console = false;
-  for (const auto& sink : cfg_.sinks) {
-    if (sink == "stdout" || sink == "stderr" || sink == "serial") {
-      want_console = true;
-    }
-  }
-  if (want_console || cfg_.sinks.empty()) {
+  const bool want_console =
+      WantSink("console") || WantSink("stdout") || WantSink("stderr") || WantSink("serial") ||
+      cfg_.sinks.empty();
+  if (want_console) {
     if (color) {
       out << Ansi(level) << plain << "\033[0m" << std::endl;
     } else {
       out << plain << std::endl;
     }
   }
-  if (GmtAccepts(ctx, level)) {
-    if (gmt_bytes_ + plain.size() <= cfg_.gmt_export.max_bytes) {
-      gmt_buf_.push_back(plain);
-      gmt_bytes_ += static_cast<std::uint32_t>(plain.size());
-    }
+  if (WantSink("dlt")) {
+    DltSink::Instance().Write(ctx, level, msg);
   }
-}
-
-std::vector<std::string> Logger::DrainGmtExport() {
-  std::lock_guard lock(mu_);
-  std::vector<std::string> out;
-  out.swap(gmt_buf_);
-  gmt_bytes_ = 0;
-  return out;
 }
 
 }  // namespace gf_ara::log
