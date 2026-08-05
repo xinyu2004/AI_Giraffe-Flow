@@ -1,4 +1,4 @@
-#include "gf_demo/platform_sil.hpp"
+#include "gf_ara/runtime/process_bringup.hpp"
 
 #include <gf_ara/collector/event_collector.hpp>
 #include <gf_ara/log/logger.hpp>
@@ -10,7 +10,7 @@
 #include <regex>
 #include <sstream>
 
-namespace gf::demo::platform_sil {
+namespace gf_ara::runtime {
 namespace {
 
 std::string ReadFile(const std::string& path) {
@@ -94,7 +94,7 @@ ExecProcessConfig LoadExecProcess(std::string_view process_name) {
   }
   const std::string text = ReadFile(dir + "/exec.yaml");
   if (text.empty()) {
-    std::cerr << "platform_sil: cannot read " << dir << "/exec.yaml\n";
+    std::cerr << "runtime: cannot read " << dir << "/exec.yaml\n";
     return cfg;
   }
 
@@ -129,7 +129,7 @@ PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
   }
   const std::string text = ReadFile(dir + "/phm.yaml");
   if (text.empty()) {
-    std::cerr << "platform_sil: cannot read " << dir << "/phm.yaml\n";
+    std::cerr << "runtime: cannot read " << dir << "/phm.yaml\n";
     return cfg;
   }
 
@@ -176,34 +176,16 @@ void LoadCollectorConfig() {
     return;
   }
   const std::string text = ReadFile(dir + "/collector.yaml");
-  gf_ara::collector::CollectorConfig cfg;
   if (text.empty()) {
-    gf_ara::collector::EventCollector::Instance().Configure(cfg);
+    gf_ara::collector::EventCollector::Instance().Configure({});
     return;
   }
-  std::smatch m;
-  if (std::regex_search(text, m, std::regex(R"(forward:\s*(\S+))"))) {
-    cfg.forward = m[1].str();
-    // strip inline comments
-    const auto sp = cfg.forward.find('#');
-    if (sp != std::string::npos) {
-      cfg.forward = cfg.forward.substr(0, sp);
-    }
-    while (!cfg.forward.empty() &&
-           (cfg.forward.back() == ' ' || cfg.forward.back() == '\t')) {
-      cfg.forward.pop_back();
-    }
-  }
-  if (std::regex_search(text, m, std::regex(R"(enabled:\s*(true|false))",
-                                            std::regex::icase))) {
-    cfg.local_enabled = (m[1].str() != "false" && m[1].str() != "False");
-  }
-  if (std::regex_search(text, m, std::regex(R"(max_entries:\s*(\d+))"))) {
-    cfg.max_entries = static_cast<std::uint32_t>(std::stoul(m[1].str()));
-  }
-  gf_ara::collector::EventCollector::Instance().Configure(cfg);
+  // Full scrape incl. dtc_map (same path as gf_doip_ota_server).
+  gf_ara::collector::EventCollector::Instance().ConfigureFromYaml(text);
+  const auto& cfg = gf_ara::collector::EventCollector::Instance().Config();
   std::cout << "collector: configured forward=" << cfg.forward
-            << " max_entries=" << cfg.max_entries << std::endl;
+            << " max_entries=" << cfg.max_entries
+            << " dtc_map=" << cfg.dtc_map.size() << std::endl;
 }
 
 void LoadLogConfig() {
@@ -229,13 +211,13 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
 
   const auto exec_cfg = LoadExecProcess(process_name);
   if (PlatformDir().empty()) {
-    std::cerr << "platform_sil: GF_PLATFORM_DIR unset — using Offer defaults for "
+    std::cerr << "runtime: GF_PLATFORM_DIR unset — using Offer defaults for "
               << process_ << "\n";
   } else if (!exec_cfg.found) {
-    std::cerr << "platform_sil: process not in exec.yaml: " << process_ << "\n";
+    std::cerr << "runtime: process not in exec.yaml: " << process_ << "\n";
     return false;
   } else if (!exec_cfg.execution_client) {
-    std::cerr << "platform_sil: execution_client=false for " << process_ << "\n";
+    std::cerr << "runtime: execution_client=false for " << process_ << "\n";
     return false;
   }
 
@@ -252,11 +234,11 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
   using gf_ara::exec::ExecutionState;
   ExecutionManager::StartProcess(process_);
   if (!ExecutionClient::Offer(process_)) {
-    std::cerr << "platform_sil: Offer failed for " << process_ << "\n";
+    std::cerr << "runtime: Offer failed for " << process_ << "\n";
     return false;
   }
   if (!ExecutionClient::ReportExecutionState(ExecutionState::kRunning)) {
-    std::cerr << "platform_sil: Report Running failed for " << process_ << "\n";
+    std::cerr << "runtime: Report Running failed for " << process_ << "\n";
     return false;
   }
   std::cout << "t_ms=" << MonoMs() << " Offer→Running process=" << process_
@@ -282,7 +264,7 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
                 << " ms after first Alive\n";
     }
   } else if (!PlatformDir().empty()) {
-    std::cout << "platform_sil: no phm entity for " << process_ << " (ok)\n";
+    std::cout << "runtime: no phm entity for " << process_ << " (ok)\n";
   }
   return true;
 }
@@ -418,4 +400,4 @@ void ProcessSupervisor::Tick() {
   }
 }
 
-}  // namespace gf::demo::platform_sil
+}  // namespace gf_ara::runtime

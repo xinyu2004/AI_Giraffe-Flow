@@ -2,11 +2,11 @@
 # P3-4 smoke: DoIP session + UCM OTA + Collector fail path (SIL, no true flash).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-BUILD="${GF_BUILD_DIR:-$ROOT/build}"
+BUILD="${GF_BUILD_DIR:-$ROOT/projects/oem_a/afc_with_uss/build-sil}"
 export PYTHONPATH="${ROOT}/tools/gmt/src${PYTHONPATH:+:$PYTHONPATH}"
 
 if [[ ! -d "$BUILD" ]]; then
-  echo "build dir missing: $BUILD (set GF_BUILD_DIR or cmake -B build)"
+  echo "build dir missing: $BUILD (set GF_BUILD_DIR or cmake -B projects/.../build-sil)"
   exit 1
 fi
 

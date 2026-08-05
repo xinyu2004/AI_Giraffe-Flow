@@ -16,4 +16,4 @@ Smoke:
 | COLL-X02 | COLL-X01 | 读 store | 可见 AliveMissed 与 LogicalFault | 同上 |
 
 跨进程：`EventCollector::ReportEvent` 在设置 `GF_COLLECTOR_STORE` 时追加 flock NDJSON（非 Classic DEM / 非 iceoryx）。  
-SIL：`smoke_sil_sm_fg.sh` 写入 `iox_multiproc_logs/collector_shared.ndjson`。
+SIL：`smoke_sil_sm_fg.sh` 写入 `runtime/collector/events.ndjson`。

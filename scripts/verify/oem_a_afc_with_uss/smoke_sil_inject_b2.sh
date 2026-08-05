@@ -20,9 +20,9 @@ if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
   bash "${PROJECT_SCRIPTS}/compile_sil.sh"
 fi
 
-INJ="${GF_BUILD_DIR:-${BUILD_SIL}}/apps/tools/iox_obs_inject/gf_iox_obs_inject"
+INJ="${GF_BUILD_DIR:-${BUILD_SIL}}/apps/debug_bridge/iox_obs_inject/gf_iox_obs_inject"
 if [[ ! -x "${INJ}" ]]; then
-  echo "${TAG} ERROR: missing ${INJ} — vehicle-debug should compile tools/iox_obs_inject" >&2
+  echo "${TAG} ERROR: missing ${INJ} — vehicle-debug should compile debug_bridge/iox_obs_inject" >&2
   exit 1
 fi
 
@@ -55,7 +55,7 @@ elif [[ ! -f "${SESSION}" ]]; then
   exit 1
 fi
 
-LOG_DIR="${GF_BUILD_DIR:-${BUILD_SIL}}/iox_sil_logs"
+LOG_DIR="${GF_BUILD_DIR:-${BUILD_SIL}}/runtime/logs"
 rm -f "${LOG_DIR}/fcm.log" "${LOG_DIR}/planning.log" "${LOG_DIR}/gateway.log" \
   "${LOG_DIR}/uss.log" "${LOG_DIR}/inject.log" 2>/dev/null || true
 

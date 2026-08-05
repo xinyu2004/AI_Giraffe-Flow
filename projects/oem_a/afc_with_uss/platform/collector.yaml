@@ -1,4 +1,5 @@
 # Event Collector + DEM-lite（非 Classic DEM）
+# event 键必须与 ReportEvent 的 event_id 一致（AliveMissed / ota_failed …）
 schema_version: "0.1"
 forward: local_store  # cp_dem | local_store | both
 sources:
@@ -11,12 +12,17 @@ local:
   max_entries: 256
 # event_id → DTC（防抖 / FDC / 老化数值）
 dtc_map:
-  - event: phm/alive_timeout
+  - event: AliveMissed
     dtc: 0xC01234
-    debounce_count: 2
-    fdc_threshold: 3
+    debounce_count: 1
+    fdc_threshold: 1
     aging_cycles: 40
-  - event: ucm/ota_failed
+  - event: DeadlineMissed
+    dtc: 0xC01235
+    debounce_count: 1
+    fdc_threshold: 1
+    aging_cycles: 40
+  - event: ota_failed
     dtc: 0xC0A001
     debounce_count: 1
     fdc_threshold: 1

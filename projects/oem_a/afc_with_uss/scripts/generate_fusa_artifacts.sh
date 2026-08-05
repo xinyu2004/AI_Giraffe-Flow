@@ -17,7 +17,7 @@ PROJ="${ROOT}/projects/oem_a/afc_with_uss"
 PACK="${ROOT}/fusa/packs/oem_a_afc_with_uss"
 BUILD="${GF_BUILD_DIR:-${ROOT}/build}"
 OBS="${GF_OBS_OUT:-${ROOT}/build/observability}"
-LOG_DIR="${BUILD}/iox_multiproc_logs"
+LOG_DIR="${BUILD}/runtime/logs"
 TAG="[fusa_artifacts]"
 
 mkdir -p "${PACK}"/{compose,lineage,mcap,logs,smoke,runs}

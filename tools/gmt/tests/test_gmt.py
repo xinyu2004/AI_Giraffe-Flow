@@ -658,6 +658,54 @@ def test_live_bridge_ws_roundtrip() -> None:
     assert row["data"]["speed_mps"] == 1.0
 
 
+def test_live_bridge_survives_client_disconnect() -> None:
+    """GMT GUI close must not tear down the live bridge (Foxglove sibling)."""
+    import os
+    import socket
+    import threading
+    import time
+
+    from gf_gmt.bridge_live import serve_live_stdin
+    from gf_gmt.gui.live_client import LiveWsSession
+
+    srv_probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv_probe.bind(("127.0.0.1", 0))
+    port = srv_probe.getsockname()[1]
+    srv_probe.close()
+
+    r_fd, w_fd = os.pipe()
+    reader = os.fdopen(r_fd, "r", encoding="utf-8", closefd=True)
+    writer = os.fdopen(w_fd, "w", encoding="utf-8", closefd=True)
+
+    def _serve() -> None:
+        serve_live_stdin("127.0.0.1", port, stream=reader)
+
+    thread = threading.Thread(target=_serve, daemon=True)
+    thread.start()
+    time.sleep(0.15)
+
+    c1 = LiveWsSession()
+    c1.connect("127.0.0.1", port)
+    c1.close()  # simulate GMT disconnect / window close
+    time.sleep(0.1)
+    assert thread.is_alive(), "live bridge must stay up after GMT disconnect"
+
+    c2 = LiveWsSession()
+    c2.connect("127.0.0.1", port)
+    line = json.dumps({"t_ns": 7, "topic": "/gf/EgoMotion", "data": {"v": 1}})
+    writer.write(line + "\n")
+    writer.flush()
+    got: list[str] = []
+    for _ in range(100):
+        got.extend(c2.poll_lines())
+        if got:
+            break
+        time.sleep(0.02)
+    c2.close()
+    writer.close()
+    assert got, "reconnect after GMT close must still receive tap lines"
+
+
 def test_inject_ctrl_client_seek() -> None:
     """Mock playhead inject TCP server ↔ InjectCtrlClient."""
     import socket

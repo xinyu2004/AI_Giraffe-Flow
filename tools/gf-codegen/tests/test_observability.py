@@ -156,8 +156,8 @@ def test_compose_afc_writes_observability(repo_root: Path, tmp_path: Path) -> No
     cmake = (repo_root / "projects/oem_a/afc_with_uss/generated/gf_build.cmake").read_text(
         encoding="utf-8"
     )
-    assert "tools/iox_obs_tap" in cmake
-    assert "tools/iox_obs_inject" in cmake
+    assert "debug_bridge/iox_obs_tap" in cmake
+    assert "debug_bridge/iox_obs_inject" in cmake
     assert "GF_PROJECT_DIR" in cmake
     assert "projects/oem_a/afc_with_uss" in cmake
 

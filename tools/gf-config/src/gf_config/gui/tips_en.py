@@ -404,9 +404,9 @@ TIP_EN: dict[str, str] = {
         "run_sil skips Foxglove."
     ),
     "Live tap：把画布上的服务镜像到观测工具。"
-    "开启后 compose 会加入 tools/iox_obs_tap，run_sil 可接 Foxglove WebSocket。": (
+    "开启后 compose 会加入 debug_bridge/iox_obs_tap，run_sil 可接 Foxglove WebSocket。": (
         "Live tap: mirror canvas services to observability tools. "
-        "On → compose adds tools/iox_obs_tap; run_sil can attach Foxglove WS."
+        "On → compose adds debug_bridge/iox_obs_tap; run_sil can attach Foxglove WS."
     ),
     "live 服务范围：\n"
     "• wiring_all：天花板=页 1 全部 dataflow（推荐）\n"

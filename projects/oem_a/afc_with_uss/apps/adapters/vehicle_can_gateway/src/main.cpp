@@ -1,5 +1,5 @@
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
-#include "gf_demo/platform_sil.hpp"
+#include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/proxy/trajectory_proxy.hpp"
 #include "gf_gen/skeleton/ego_motion_skeleton.hpp"
 #include "gf_gen/skeleton/perception__in__st_skeleton.hpp"
@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
 
   gf_ara::com::binding::iceoryx::InitRuntime("gf-vehicle-can-gateway");
 
-  gf::demo::platform_sil::ProcessSupervisor supervisor;
+  gf_ara::runtime::ProcessSupervisor supervisor;
   if (!supervisor.Start(kProcess)) {
     return EXIT_FAILURE;
   }

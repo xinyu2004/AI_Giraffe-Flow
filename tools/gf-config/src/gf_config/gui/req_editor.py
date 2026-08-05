@@ -69,8 +69,8 @@ _TRACE_MODES = [
     ("off", "关"),
 ]
 
-TAP_APP = "tools/iox_obs_tap"
-INJECT_APP = "tools/iox_obs_inject"
+TAP_APP = "debug_bridge/iox_obs_tap"
+INJECT_APP = "debug_bridge/iox_obs_inject"
 _AUTO_APPS = frozenset({TAP_APP, INJECT_APP})
 
 

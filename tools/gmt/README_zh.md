@@ -66,7 +66,7 @@ GF_INJECT_MODE=playhead \
 
 GMT：打开 session → **回灌** → 连接 `host:8767` → 「跟 playhead 灌」→ scrub。
 
-**continuous**：板端读文件。见 [`iox_obs_inject`](../../apps/tools/iox_obs_inject/README.md)。
+**continuous**：板端读文件。见 [`iox_obs_inject`](../../tools/debug_bridge/iox_obs_inject/README.md)。
 
 ```bash
 GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
@@ -94,5 +94,16 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_gmt_vcd.sh
 ```
 
 CLI 入口：**`GMT`**。GMT GUI **不写 wiring**（配置只经 gf-config）。
+
+### OTA/UDS 观测演示数据
+
+```bash
+# 种 Collector / DEM / 多级日志（SIL + DoIP），再开 GMT
+bash scripts/verify/oem_a_afc_with_uss/smoke_obs_demo.sh
+# 或交互：
+export GF_COLLECTOR_STORE=$PWD/projects/oem_a/afc_with_uss/build-sil/runtime/collector/events.ndjson
+bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+GMT gui --project projects/oem_a/afc_with_uss
+```
 
 上级：[tools/README.md](../README.md)

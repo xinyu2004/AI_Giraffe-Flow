@@ -8,7 +8,7 @@
 #   GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
 #
 # Env:
-#   GF_BUILD_DIR       default <repo>/build
+#   GF_BUILD_DIR       default projects/oem_a/afc_with_uss/build-sil
 #   GF_FUSA_CODEGEN    1 = run gf-codegen pytest subset
 #   GF_FUSA_SIL        1 = L3 FuSa SIL suite (SIL-01/02/03/EM-02/06 + SIL-SM-01)
 #   GF_FUSA_SIL_MCU    0 = skip SIL-06 MCU desktop (default 1)
@@ -19,7 +19,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 export PATH="${ROOT}/.venv/bin:${PATH}"
 
-BUILD="${GF_BUILD_DIR:-${ROOT}/build}"
+BUILD="${GF_BUILD_DIR:-${ROOT}/projects/oem_a/afc_with_uss/build-sil}"
 OUT_DIR="${ROOT}/fusa/runs"
 mkdir -p "${OUT_DIR}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"

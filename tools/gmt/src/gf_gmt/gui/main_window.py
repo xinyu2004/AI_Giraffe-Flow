@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QSpinBox,
     QStatusBar,
@@ -61,7 +62,8 @@ class GmtMainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(t("GMT — 选项目 → Live / 回灌 / Tag / 回放"))
-        self.resize(1380, 780)
+        self.resize(1100, 720)
+        self.setMinimumSize(720, 480)
         self._model = SessionModel()
         self._sor: dict[str, Any] | None = None
         self._session_path: Path | None = None
@@ -93,35 +95,39 @@ class GmtMainWindow(QMainWindow):
         self._inject_timer.setInterval(100)
         self._inject_timer.timeout.connect(self._on_inject_tick)
         self._stick_tail = True  # when following, keep playhead at end
+        self._last_follow_seek_ms = 0  # throttle Graphics seek while Live-following
 
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
 
-        # —— 统一连接条：共用 Host；Live ws:8766 与 回灌 tcp:8767 同级 ——
-        conn = QHBoxLayout()
+        # —— 连接条拆两行，避免强制超宽 ——
+        row1 = QHBoxLayout()
         self._btn_proj = QPushButton(t("加载项目…"))
         self._btn_proj.setToolTip(
             t("选择 project.yaml（与 gf-config / codegen 同一入口；SOR 在同目录）")
         )
         self._btn_proj.clicked.connect(self._open_project)
-        conn.addWidget(self._btn_proj)
-        conn.addWidget(QLabel("Host"))
+        row1.addWidget(self._btn_proj)
+        row1.addWidget(QLabel("Host"))
         self._host_edit = QLineEdit("127.0.0.1")
         self._host_edit.setToolTip(
-            t("SIL / 观测机地址（本机 127.0.0.1；远端填局域网 IP）\n"
-            "Live 与回灌共用此 Host")
+            t(
+                "SIL / 观测机地址（本机 127.0.0.1；远端填局域网 IP）\n"
+                "Live 与回灌共用此 Host"
+            )
         )
-        self._host_edit.setMaximumWidth(140)
-        conn.addWidget(self._host_edit)
-
-        conn.addWidget(QLabel("│ Live ws"))
+        self._host_edit.setMaximumWidth(120)
+        row1.addWidget(self._host_edit)
+        row1.addWidget(QLabel("Live"))
         self._port_spin = QSpinBox()
         self._port_spin.setRange(1, 65535)
         self._port_spin.setValue(DEFAULT_LIVE_PORT)
-        self._port_spin.setToolTip(f"Live WebSocket 端口（默认 {DEFAULT_LIVE_PORT}）")
-        self._port_spin.setMaximumWidth(72)
-        conn.addWidget(self._port_spin)
+        self._port_spin.setToolTip(
+            t("Live WebSocket 端口（默认 {port}）").format(port=DEFAULT_LIVE_PORT)
+        )
+        self._port_spin.setMaximumWidth(64)
+        row1.addWidget(self._port_spin)
         self._btn_live_connect = QPushButton(t("连接"))
         self._btn_live_connect.setToolTip(
             t("连 live_tap 旁路（ws:8766）；默认只看流不落盘，需落盘请点「录制」")
@@ -138,21 +144,36 @@ class GmtMainWindow(QMainWindow):
         )
         self._btn_live_rec.toggled.connect(self._on_live_record_toggled)
         self._live_state = QLabel(t("空闲"))
-        self._live_state.setStyleSheet("color:#555; min-width: 4.5em;")
-        conn.addWidget(self._btn_live_connect)
-        conn.addWidget(self._btn_live_disconnect)
-        conn.addWidget(self._btn_live_rec)
-        conn.addWidget(self._live_state)
+        self._live_state.setStyleSheet("color:#555;")
+        row1.addWidget(self._btn_live_connect)
+        row1.addWidget(self._btn_live_disconnect)
+        row1.addWidget(self._btn_live_rec)
+        row1.addWidget(self._live_state)
+        # Follow latest = Live 显示策略（不是回灌）。关=冻屏仍收流/可录制。
+        self._follow_latest = QCheckBox(t("跟随最新"))
+        self._follow_latest.setChecked(True)
+        self._follow_latest.setToolTip(
+            t(
+                "仅影响 playhead：开=贴最新；关=停在当前帧（与是否录制落盘无关）"
+            )
+        )
+        self._follow_latest.toggled.connect(self._on_follow_latest_toggled)
+        row1.addWidget(self._follow_latest)
+        row1.addStretch(1)
+        root.addLayout(row1)
 
-        conn.addWidget(QLabel(t("│ 回灌 tcp")))
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel(t("回灌 tcp")))
         self._inject_port_spin = QSpinBox()
         self._inject_port_spin.setRange(1, 65535)
         self._inject_port_spin.setValue(DEFAULT_INJECT_PORT)
         self._inject_port_spin.setToolTip(
-            f"inject 控制口（默认 {DEFAULT_INJECT_PORT}，GF_INJECT_PORT）"
+            t("inject 控制口（默认 {port}，GF_INJECT_PORT）").format(
+                port=DEFAULT_INJECT_PORT
+            )
         )
-        self._inject_port_spin.setMaximumWidth(72)
-        conn.addWidget(self._inject_port_spin)
+        self._inject_port_spin.setMaximumWidth(64)
+        row2.addWidget(self._inject_port_spin)
         self._btn_inject_connect = QPushButton(t("连接"))
         self._btn_inject_connect.setToolTip(
             t("连 playhead inject（TCP JSON）；需 GF_INJECT_MODE=playhead")
@@ -162,20 +183,12 @@ class GmtMainWindow(QMainWindow):
         self._btn_inject_disconnect.setEnabled(False)
         self._btn_inject_disconnect.clicked.connect(self._disconnect_inject)
         self._inject_state = QLabel(t("空闲"))
-        self._inject_state.setStyleSheet("color:#555; min-width: 4.5em;")
-        conn.addWidget(self._btn_inject_connect)
-        conn.addWidget(self._btn_inject_disconnect)
-        conn.addWidget(self._inject_state)
-
-        self._follow_latest = QCheckBox(t("跟随最新"))
-        self._follow_latest.setChecked(True)
-        self._follow_latest.setToolTip(
-            t("仅影响 playhead：开=贴最新；关=停在当前帧（与是否录制落盘无关）")
-        )
-        self._follow_latest.toggled.connect(self._on_follow_latest_toggled)
-        conn.addWidget(self._follow_latest)
-        conn.addStretch(1)
-        root.addLayout(conn)
+        self._inject_state.setStyleSheet("color:#555;")
+        row2.addWidget(self._btn_inject_connect)
+        row2.addWidget(self._btn_inject_disconnect)
+        row2.addWidget(self._inject_state)
+        row2.addStretch(1)
+        root.addLayout(row2)
 
         self._proj_banner = QLabel(
             t("⚠ 请先「加载项目…」选择 project.yaml（回灌已禁用；Live 仍可旁观）")
@@ -254,9 +267,22 @@ class GmtMainWindow(QMainWindow):
         self._follow.toggled.connect(self._on_follow_toggled)
         transport.addWidget(self._follow)
         transport.addStretch(1)
-        self._t_label = QLabel("t=—")
-        transport.addWidget(self._t_label)
         root.addLayout(transport)
+
+        # Wall clock on its own row so transport buttons cannot clip it.
+        clock_row = QHBoxLayout()
+        self._t_label = QLabel("t=—")
+        self._t_label.setMinimumWidth(520)
+        self._t_label.setMinimumHeight(22)
+        self._t_label.setSizePolicy(
+            QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed
+        )
+        self._t_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._t_label.setStyleSheet("font-family: monospace; font-size: 12px;")
+        clock_row.addWidget(self._t_label, stretch=1)
+        root.addLayout(clock_row)
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setEnabled(False)
@@ -346,24 +372,7 @@ class GmtMainWindow(QMainWindow):
         act_quit.triggered.connect(self.close)
         file_menu.addAction(act_quit)
 
-        conn_menu = self.menuBar().addMenu(t("连接"))
-        act_start = QAction(t("连接 Live (ws)"), self)
-        act_start.setShortcut(QKeySequence("Ctrl+R"))
-        act_start.triggered.connect(self._connect_live)
-        conn_menu.addAction(act_start)
-        act_stop = QAction(t("断开 Live"), self)
-        act_stop.setShortcut(QKeySequence("Ctrl+Shift+R"))
-        act_stop.triggered.connect(self._disconnect_live)
-        conn_menu.addAction(act_stop)
-        conn_menu.addSeparator()
-        act_inj = QAction(t("连接回灌 (tcp)"), self)
-        act_inj.setShortcut(QKeySequence("Ctrl+I"))
-        act_inj.triggered.connect(self._on_inject_connect_clicked)
-        conn_menu.addAction(act_inj)
-        act_inj_off = QAction(t("断开回灌"), self)
-        act_inj_off.setShortcut(QKeySequence("Ctrl+Shift+I"))
-        act_inj_off.triggered.connect(self._disconnect_inject)
-        conn_menu.addAction(act_inj_off)
+        # 连接 / 视图：顶栏与下方 Tab 已覆盖，不再重复菜单
 
         replay_menu = self.menuBar().addMenu(t("回放"))
         act_play = QAction(t("播放 / 暂停"), self)
@@ -416,16 +425,6 @@ class GmtMainWindow(QMainWindow):
         act_tag_to.setShortcut(QKeySequence(Qt.Key.Key_BracketRight))
         act_tag_to.triggered.connect(self._live_tag_to)
         tag_menu.addAction(act_tag_to)
-
-        view_menu = self.menuBar().addMenu(t("视图"))
-        view_menu.addAction(t("Order"), lambda: self._tabs.setCurrentWidget(self._order))
-        view_menu.addAction(t("DAG"), lambda: self._tabs.setCurrentWidget(self._dag))
-        view_menu.addAction(t("图形"), lambda: self._tabs.setCurrentWidget(self._var_strip))
-        view_menu.addAction(t("Tag"), lambda: self._tabs.setCurrentWidget(self._tags))
-        view_menu.addAction(t("Inject"), lambda: self._tabs.setCurrentWidget(self._inject_panel))
-        view_menu.addAction(
-            t("OTA/UDS"), lambda: self._tabs.setCurrentWidget(self._ota_panel)
-        )
 
         lang_menu = self.menuBar().addMenu(t("语言"))
         act_zh = QAction(t("中文"), self)
@@ -490,11 +489,12 @@ class GmtMainWindow(QMainWindow):
         if self._live_active:
             n = len(self._model.events)
             prefix = f"{proj} · " if proj else ""
-            self._path_label.setText(
-                f"{prefix}Live 旁观（未录制） · {n} events"
-                if not self._btn_live_rec.isChecked()
-                else f"{prefix}Live 录制中 · {n} events"
+            live_lbl = (
+                t("Live 录制中")
+                if self._btn_live_rec.isChecked()
+                else t("Live 旁观（未录制）")
             )
+            self._path_label.setText(f"{prefix}{live_lbl} · {n} events")
             return
         if proj and self._sor is not None:
             if w is self._inject_panel:
@@ -549,8 +549,8 @@ class GmtMainWindow(QMainWindow):
                 t("连 playhead inject（TCP JSON）；需 GF_INJECT_MODE=playhead")
             )
 
-        green = "color:#2e7d32; font-weight:700; min-width: 5em;"
-        idle_s = "color:#555; min-width: 5em;"
+        green = "color:#2e7d32; font-weight:700;"
+        idle_s = "color:#555;"
 
         if live_on:
             self._live_state.setText(t("已连接"))
@@ -559,13 +559,27 @@ class GmtMainWindow(QMainWindow):
             self._live_state.setText(t("空闲"))
             self._live_state.setStyleSheet(idle_s)
 
-        if inj_on:
-            self._inject_state.setText(t("已连接"))
-            self._inject_state.setStyleSheet(green)
-        else:
+        sock_ok = (
+            inj_on
+            and self._inject is not None
+            and self._inject.connected
+        )
+        if not inj_on or not sock_ok:
             self._inject_state.setText(t("空闲"))
             self._inject_state.setStyleSheet(idle_s)
-            self._inject_last_ok = None
+            if not inj_on:
+                self._inject_last_ok = None
+        elif self._inject_last_ok is True:
+            self._inject_state.setText(t("已连接"))
+            self._inject_state.setStyleSheet(green)
+        elif self._inject_last_ok is False:
+            red = "color:#c62828; font-weight:700;"
+            self._inject_state.setText(t("已连接"))
+            self._inject_state.setStyleSheet(red)
+        else:
+            # Connected, no frame result yet
+            self._inject_state.setText(t("已连接"))
+            self._inject_state.setStyleSheet(green)
 
         self._refresh_window_title()
 
@@ -611,14 +625,16 @@ class GmtMainWindow(QMainWindow):
             return
         self._stick_tail = on
         self._refresh_live_state_label()
-        if not self._live_active:
+        if not self._live_active and not self._follow.isChecked():
             return
         if on and not self._model.empty:
+            # Unfreeze: rebuild views that were skipped while frozen.
+            self._resync_views_from_model()
             self._seek_index(len(self._model.events) - 1)
             self.statusBar().showMessage(t("跟随最新 ON — 贴最新事件"), 2500)
         else:
             self.statusBar().showMessage(
-                t("跟随最新 OFF — playhead 不跟播（可 scrub / Tag）"),
+                t("跟随最新 OFF — 冻屏：继续收流/录制，视图不跳"),
                 4000,
             )
 
@@ -859,11 +875,15 @@ class GmtMainWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 "Live",
-                f"无法连接 ws://{host}:{port}\n{exc}\n\n"
-                + t("Live = tap 旁路 WebSocket（默认 8766）。\n"
-                "回灌 playhead 时 SIL 默认仍开 live（只订下游）；"
-                "若连不上请看 run_sil 是否打印 downstream tap。\n"
-                "回灌控制请用顶栏「回灌 tcp:8767」。"),
+                t("无法连接 ws://{host}:{port}\n{exc}\n\n").format(
+                    host=host, port=port, exc=exc
+                )
+                + t(
+                    "Live = tap 旁路 WebSocket（默认 8766）。\n"
+                    "回灌 playhead 时 SIL 默认仍开 live（只订下游）；"
+                    "若连不上请看 run_sil 是否打印 downstream tap。\n"
+                    "回灌控制请用顶栏「回灌 tcp:8767」。"
+                ),
             )
             return
 
@@ -872,13 +892,17 @@ class GmtMainWindow(QMainWindow):
         self._set_live_ui(True)
         if self._live_observe_only:
             self.statusBar().showMessage(
-                f"Live 旁观 ws://{host}:{port}（保留 session/回灌；可录制落盘，不写入时间轴）",
+                t(
+                    "Live 旁观 ws://{host}:{port}（保留 session/回灌；可录制落盘，不写入时间轴）"
+                ).format(host=host, port=port),
                 10000,
             )
         else:
             mode = t("跟随最新") if self._follow_latest.isChecked() else t("不跟播")
             self.statusBar().showMessage(
-                f"Live 已连接 ws://{host}:{port}（{mode}；落盘请点「录制」）",
+                t("Live 已连接 ws://{host}:{port}（{mode}；落盘请点「录制」）").format(
+                    host=host, port=port, mode=mode
+                ),
                 8000,
             )
 
@@ -899,7 +923,8 @@ class GmtMainWindow(QMainWindow):
         n = len(self._model.events)
         note = t("（旁观模式未改时间轴）") if observe else ""
         self.statusBar().showMessage(
-            f"Live 已断开 · 保留 session（{n} events）{note}"
+            t("Live 已断开 · 保留 session（{n} events）").format(n=n)
+            + note
             + (f"：{self._session_path}" if self._session_path else ""),
             8000,
         )
@@ -982,11 +1007,15 @@ class GmtMainWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 t("回灌"),
-                f"无法连接 inject ctrl tcp://{host}:{port}\n{exc}\n\n"
-                + t("远端请确认：\n"
-                "1) SIL 机 GF_INJECT_MODE=playhead，且 ss 能看到 0.0.0.0:8767\n"
-                "2) 防火墙放行 TCP 8767\n"
-                "3) 用本页「连接 inject」，不要点上方 Live（那是 ws://8766）"),
+                t("无法连接 inject ctrl tcp://{host}:{port}\n{exc}\n\n").format(
+                    host=host, port=port, exc=exc
+                )
+                + t(
+                    "远端请确认：\n"
+                    "1) SIL 机 GF_INJECT_MODE=playhead，且 ss 能看到 0.0.0.0:8767\n"
+                    "2) 防火墙放行 TCP 8767\n"
+                    "3) 用本页「连接 inject」，不要点上方 Live（那是 ws://8766）"
+                ),
             )
             return
         self._inject = client
@@ -1043,7 +1072,9 @@ class GmtMainWindow(QMainWindow):
         self._inject_timer.start()
         mode = "stream" if self._inject_stream else "legacy"
         self.statusBar().showMessage(
-            f"Inject 已连接 tcp://{host}:{port} ({mode})",
+            t("Inject 已连接 tcp://{host}:{port} ({mode})").format(
+                host=host, port=port, mode=mode
+            ),
             6000,
         )
         if not self._model.empty and self._inject_panel.wants_playhead_sync():
@@ -1202,15 +1233,19 @@ class GmtMainWindow(QMainWindow):
                 t_ns=t_i,
             )
         if ok:
-            self._inject_panel.set_detail(f"已发布 #{idx} {topic} t={msg.get('t_ns')}")
-            self.statusBar().showMessage(f"回灌成功：#{idx} {topic} 已 Send", 3000)
+            self._inject_panel.set_detail(f"#{idx} {topic} t={msg.get('t_ns')}")
+            self.statusBar().showMessage(
+                t("回灌成功：#{idx} {topic} 已 Send").format(idx=idx, topic=topic),
+                3000,
+            )
         else:
             why = reason or "injected=false"
-            self._inject_panel.set_detail(f"跳过 #{idx} {topic}（{why}）")
+            self._inject_panel.set_detail(f"#{idx} {topic} ({why})")
             self.statusBar().showMessage(
-                f"回灌跳过：#{idx} {topic}",
+                t("回灌跳过：#{idx} {topic}").format(idx=idx, topic=topic),
                 4000,
             )
+        self._refresh_conn_bar_ui()
 
     def _inject_seek(self, index: int) -> None:
         if self._inject is None or not self._inject.connected:
@@ -1255,44 +1290,67 @@ class GmtMainWindow(QMainWindow):
         finally:
             self._inject_syncing = False
 
+    def _resync_views_from_model(self) -> None:
+        """Rebuild Order/DAG/Graphics after unfreezing Live view."""
+        self._order.set_model(self._model)
+        self._dag.set_model(self._model)
+        self._inject_panel.set_model(self._model)
+        self._var_strip.set_model(self._model)
+        self._tags.set_clock(self._model.clock)
+
     def _append_live_rows(self, rows: list[dict[str, Any]]) -> None:
         follow = self._follow_latest.isChecked()
         keep_idx = self._slider.value()
+        prev_n = len(self._model.events)
         added = self._model.append_rows(rows, sor=self._sor)
         if added <= 0:
             # session_meta-only update still refreshes clock on tags
             self._tags.set_clock(self._model.clock)
             return
         n = len(self._model.events)
-        self._order.set_model(self._model)
-        self._dag.set_model(self._model)
-        self._inject_panel.set_model(self._model)
-        self._var_strip.set_model(self._model)
-        self._tags.set_clock(self._model.clock)
+        # Always grow timeline / keep recording path; freeze only skips view widgets.
         self._slider.blockSignals(True)
         self._slider.setEnabled(True)
         self._slider.setMaximum(max(0, n - 1))
         if not follow:
-            # 不跟播：扩大 timeline，playhead 不动
             self._slider.setValue(min(keep_idx, n - 1))
         self._slider.blockSignals(False)
+        self._inject_panel.set_model(self._model)
+
         proj = f"{self._project_dir.name} · " if self._project_dir else ""
         mode = ""
         if self._live_active or self._follow.isChecked():
-            mode = t(" [跟随]") if follow else t(" [不跟播]")
+            mode = t(" [跟随]") if follow else t(" [冻屏]")
             if self._live_log_fp is not None:
                 mode += t("·录制")
         if self._session_path:
             self._path_label.setText(f"{proj}{self._session_path} · {n} events{mode}")
         elif self._live_active:
-            self._path_label.setText(f"{proj}Live 旁观（未录制） · {n} events{mode}")
-        if follow:
-            self._stick_tail = True
+            live_lbl = (
+                t("Live 录制中")
+                if self._btn_live_rec.isChecked()
+                else t("Live 旁观（未录制）")
+            )
+            self._path_label.setText(f"{proj}{live_lbl} · {n} events{mode}")
+
+        if not follow:
+            # Freeze view: keep receiving into model (+ disk if Record), no UI jump.
+            self._stick_tail = False
+            return
+
+        self._order.append_events(self._model, from_index=prev_n)
+        self._dag.set_model(self._model)
+        self._var_strip.notify_model_grew()
+        self._tags.set_clock(self._model.clock)
+        self._stick_tail = True
+        now_ms = int(time.monotonic() * 1000)
+        if now_ms - self._last_follow_seek_ms >= 100:
+            self._last_follow_seek_ms = now_ms
             self._seek_index(n - 1)
         else:
-            self._stick_tail = False
-            # 刷新当前帧视图（事件表已变），不追尾
-            self._seek_index(min(keep_idx, n - 1))
+            self._slider.blockSignals(True)
+            self._slider.setValue(n - 1)
+            self._slider.blockSignals(False)
 
     def _open_live_follow(self) -> None:
         start = str(self._default_live_session())
@@ -1881,9 +1939,13 @@ class GmtMainWindow(QMainWindow):
             if self._live_log_fp is not None:
                 live += t(" 录制")
         wall = self._model.wall_str(ev.t_ns)
-        self._t_label.setText(
-            f'{t("Wall")}={wall}  t={ev.t_ns}  #{index}/{len(self._model.events) - 1}{live}'
+        # Dedicated clock row — full wall (not compact); tooltip mirrors text.
+        clock_txt = (
+            f'{t("Wall")}={wall}   t_ns={ev.t_ns}   '
+            f"#{index}/{len(self._model.events) - 1}{live}"
         )
+        self._t_label.setText(clock_txt)
+        self._t_label.setToolTip(clock_txt)
         self._order.highlight_upto(index)
         self._dag.set_playhead_index(index)
         self._var_strip.set_playhead_index(index)

@@ -13,8 +13,8 @@ source "${SCRIPT_DIR}/_verify_common.sh"
 gf_project_env
 
 BUILD="${GF_BUILD_DIR:-${BUILD_SIL}}"
-LOG_DIR="${BUILD}/iox_multiproc_logs"
-STORE="${BUILD}/iox_multiproc_logs/collector_shared.ndjson"
+LOG_DIR="${BUILD}/runtime/logs"
+STORE="${BUILD}/runtime/collector/events.ndjson"
 mkdir -p "${LOG_DIR}"
 rm -f "${STORE}"
 

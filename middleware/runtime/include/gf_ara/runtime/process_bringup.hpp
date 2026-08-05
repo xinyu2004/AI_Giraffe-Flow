@@ -1,6 +1,6 @@
 #pragma once
 
-// SIL helper: Offer→Running + SM FG + PHM Alive/Logical + Collector events.
+// Process bring-up (SIL/HIL shared): Offer→Running + SM FG + PHM Alive/Logical + Collector/Log.
 // Env:
 //   GF_PLATFORM_DIR     path to platform/ (or project root containing platform/)
 //   GF_PHM_FAULT_MS     skip ReportAlive for N ms after first Alive (0=off)
@@ -22,7 +22,7 @@
 #include <string>
 #include <string_view>
 
-namespace gf::demo::platform_sil {
+namespace gf_ara::runtime {
 
 struct ExecProcessConfig {
   bool found{false};
@@ -82,4 +82,4 @@ class ProcessSupervisor {
   bool exit_for_em_restart_{false};
 };
 
-}  // namespace gf::demo::platform_sil
+}  // namespace gf_ara::runtime

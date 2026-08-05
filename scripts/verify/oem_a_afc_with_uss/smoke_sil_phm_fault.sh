@@ -19,8 +19,8 @@ echo "${TAG} PHM fault inject GF_PHM_FAULT_MS=${GF_PHM_FAULT_MS} (planning)"
 bash "${SCRIPT_DIR}/run_sil_multiproc.sh"
 
 # Fault is injected on planning (gateway keeps GF_PHM_FAULT_MS=0 for e2e).
-LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/iox_multiproc_logs/planning.log"
-GW_LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/iox_multiproc_logs/gateway.log"
+LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/runtime/logs/planning.log"
+GW_LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/runtime/logs/gateway.log"
 if [[ ! -f "${LOG}" ]]; then
   echo "${TAG} missing planning log: ${LOG}" >&2
   exit 1

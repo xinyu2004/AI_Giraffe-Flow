@@ -1,20 +1,12 @@
 # Vehicle CAN gateway — SIL stub for adapter.vehicle_can_gateway
-# X-track: platform_sil Offer→Running + PHM Alive
+# X-track: process bring-up Offer→Running + PHM Alive
 
 add_executable(gf_vehicle_can_gateway
   src/main.cpp
-  ${CMAKE_SOURCE_DIR}/apps/common/src/platform_sil.cpp
-)
-target_include_directories(gf_vehicle_can_gateway PRIVATE
-  ${CMAKE_SOURCE_DIR}/apps/common/include
 )
 target_link_libraries(gf_vehicle_can_gateway PRIVATE
   gf_ara::com_iceoryx
-  gf_ara::exec
-  gf_ara::phm
-  gf_ara::sm
-  gf_ara::collector
-  gf_ara::log
+  gf_ara::runtime
 )
 add_dependencies(gf_vehicle_can_gateway iox-roudi)
 

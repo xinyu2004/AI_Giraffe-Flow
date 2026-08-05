@@ -552,6 +552,8 @@ std::vector<std::uint8_t> UdsDispatcher::Handle(const std::vector<std::uint8_t>&
         return finish(MakeNrc(0x19, UdsNrc::kIncorrectMessageLength));
       }
       auto& col = gf_ara::collector::EventCollector::Instance();
+      // SIL: apps persist DTC under shared GF_PER_DIR; reload so DoIP sees them.
+      col.ReloadDtcsFromPer();
       const auto sf = static_cast<std::uint8_t>(request[1] & 0x7F);
       if (sf == 0x01) {
         if (request.size() < 3) {

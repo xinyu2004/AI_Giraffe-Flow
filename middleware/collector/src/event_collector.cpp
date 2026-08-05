@@ -44,7 +44,16 @@ void AppendSharedStore(const EventRecord& rec) {
                            ",\"source\":\"" + esc(rec.source) + "\",\"id\":\"" + esc(rec.event_id) +
                            "\",\"detail\":\"" + esc(rec.detail) + "\",\"pid\":" +
                            std::to_string(static_cast<long>(::getpid())) + "}\n";
-  (void)::write(fd, line.data(), line.size());
+  const char* p = line.data();
+  std::size_t left = line.size();
+  while (left > 0) {
+    const ssize_t n = ::write(fd, p, left);
+    if (n < 0) {
+      break;
+    }
+    p += static_cast<std::size_t>(n);
+    left -= static_cast<std::size_t>(n);
+  }
 #if defined(__linux__) || defined(__APPLE__)
   ::flock(fd, LOCK_UN);
 #endif
@@ -366,6 +375,12 @@ void EventCollector::SetDtcControlEnabled(bool enabled) {
 bool EventCollector::DtcControlEnabled() const noexcept {
   std::lock_guard lock(mu_);
   return dtc_control_on_;
+}
+
+void EventCollector::ReloadDtcsFromPer() {
+  std::lock_guard lock(mu_);
+  EnsurePerLocked();
+  LoadDtcsFromPerLocked();
 }
 
 std::vector<DtcEntry> EventCollector::ListDtcs(std::uint8_t status_mask) const {

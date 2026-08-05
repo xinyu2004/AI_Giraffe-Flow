@@ -81,6 +81,9 @@ class EventCollector {
   void SetDtcControlEnabled(bool enabled);  // 0x85
   [[nodiscard]] bool DtcControlEnabled() const noexcept;
 
+  /// Re-read DTC:* keys from GF_PER_DIR (cross-process SIL/DoIP share).
+  void ReloadDtcsFromPer();
+
   [[nodiscard]] std::vector<DtcEntry> ListDtcs(std::uint8_t status_mask = 0xFF) const;
   [[nodiscard]] std::size_t CountDtcs(std::uint8_t status_mask = 0xFF) const;
   bool ClearDtc(std::uint32_t group_or_code);  // 0xFFFFFF = all

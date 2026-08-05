@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         "--from-logs",
         type=Path,
         required=True,
-        help="iox_multiproc_logs directory",
+        help="SIL runtime logs directory (…/runtime/logs)",
     )
     p_rec.add_argument("--out", type=Path, required=True, help="Output session.jsonl")
     p_rec.add_argument(

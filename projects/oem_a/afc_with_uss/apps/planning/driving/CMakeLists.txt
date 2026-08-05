@@ -1,19 +1,11 @@
-# planning.driving — SIL stub + platform_sil (exec/phm + fault inject)
+# planning.driving — SIL stub + process bring-up (exec/phm + fault inject)
 
 add_executable(gf_planning_driving
   src/main.cpp
-  ${CMAKE_SOURCE_DIR}/apps/common/src/platform_sil.cpp
-)
-target_include_directories(gf_planning_driving PRIVATE
-  ${CMAKE_SOURCE_DIR}/apps/common/include
 )
 target_link_libraries(gf_planning_driving PRIVATE
   gf_ara::com_iceoryx
-  gf_ara::exec
-  gf_ara::phm
-  gf_ara::sm
-  gf_ara::collector
-  gf_ara::log
+  gf_ara::runtime
 )
 add_dependencies(gf_planning_driving iox-roudi)
 

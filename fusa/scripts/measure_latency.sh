@@ -9,7 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 export PATH="${ROOT}/.venv/bin:${PATH}"
-export GF_BUILD_DIR="${GF_BUILD_DIR:-${ROOT}/build}"
+export GF_BUILD_DIR="${GF_BUILD_DIR:-${ROOT}/projects/oem_a/afc_with_uss/build-sil}"
 
 OUT_DIR="${ROOT}/fusa/runs"
 mkdir -p "${OUT_DIR}"
@@ -79,7 +79,7 @@ run(
     "bash scripts/verify/oem_a_afc_with_uss/run_sil_multiproc.sh",
     {"GF_MP_TRAJ_COUNT": "30", "GF_PHM_FAULT_MS": "0"},
 )
-gw = BUILD / "iox_multiproc_logs" / "gateway.log"
+gw = BUILD / "runtime" / "logs" / "gateway.log"
 ts = [
     int(m.group(1))
     for line in gw.read_text(errors="replace").splitlines()
@@ -95,7 +95,7 @@ report["traj"] = {
 }
 
 run("bash scripts/verify/oem_a_afc_with_uss/smoke_sil_phm_fault.sh")
-pl = BUILD / "iox_multiproc_logs" / "planning.log"
+pl = BUILD / "runtime" / "logs" / "planning.log"
 t_begin, _ = first_t(pl, r"FAULT inject begin")
 t_miss, miss_line = first_t(pl, r"(AliveMissed|DeadlineMissed)")
 t_rec, _ = first_t(pl, r"phm recovered")

@@ -82,6 +82,7 @@ bash scripts/make_sil_swu.sh /tmp/gf_demo.swu
 
 # 2) 编译 + 跑 SIL（diag 开 13400 时会起 gf_doip_ota_server）
 #    见 projects/.../scripts/run_sil.sh
+#    默认写 GF_COLLECTOR_STORE=build/iox_multiproc_logs/collector_shared.ndjson
 
 # 3) 自动化冒烟
 bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
@@ -89,6 +90,23 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
 # 4) 或开 GMT → 加载 project.yaml → OTA/UDS → 连接 → Start OTA
 #    （同页可切 DEM 读/清 DTC，或 Collector 读环缓）
 ```
+
+### 观测演示（Collector / DEM / 多级日志）
+
+```bash
+# 自动种数据并断言 SIL 日志 + NDJSON + UDS 0x19 / F201
+bash scripts/verify/oem_a_afc_with_uss/smoke_obs_demo.sh
+
+# 交互：种数据后开 GMT
+export GF_OBS_DEMO=1
+export GF_COLLECTOR_STORE=$PWD/build/iox_multiproc_logs/collector_shared.ndjson
+bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+# 另开终端：
+GMT gui --project projects/oem_a/afc_with_uss
+# → OTA/UDS 连接 → DEM「读取 DTC」/ Collector「本机文件」或「UDS」
+```
+
+`GF_OBS_DEMO=1` 时：应用进程与 `gf_doip_ota_server` 各打 FATAL…VERBOSE 样例，并 `ReportEvent`（`AliveMissed` / `DeadlineMissed` / `ota_failed`…）。`dtc_map` 事件键须与这些 `event_id` 一致。
 
 环境变量覆盖（服务端 / smoke，可选）：`GF_DOIP_PORT`、`GF_OTA_TRANSFER_MODE`、`GF_DIAG_S3_SERVER_MS`、`GF_DIAG_TP_PERIOD_MS`、`GF_DIAG_SEC_PLUGIN`。
 

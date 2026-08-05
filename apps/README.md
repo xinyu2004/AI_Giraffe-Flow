@@ -6,11 +6,14 @@ Reference processes for integration tests — **not customer production algorith
 
 | Dir | Role |
 |-----|------|
-| [common/](common/) | Shared SIL helpers (`platform_sil`, …) — **stay shared** |
+| [common/](common/) | Shared demo headers (e.g. `uss_zones_topic`) |
 | [adapters/](adapters/) | Shared adapters (e.g. `mcu_cp_gateway`); SKU CAN gateway lives under project |
 | [simulators/](simulators/) | Semantic output stubs when external repos absent |
 | [demo_pipeline/](demo_pipeline/) | End-to-end wiring demo |
-| [tools/](tools/) | obs tap / inject |
+
+Process bring-up (Offer→Running + FG + PHM/Collector/Log) lives in [`middleware/runtime/`](../middleware/runtime/) (`gf_ara::runtime`).
+
+Tap / inject live in [`tools/debug_bridge/`](../tools/debug_bridge/).
 
 ## SKU stubs
 

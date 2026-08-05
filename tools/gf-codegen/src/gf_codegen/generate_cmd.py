@@ -210,7 +210,7 @@ def _write_obs_tap(sor: dict[str, Any], out_dir: Path) -> int:
     """Generate src/obs_tap_main.cpp — subscribe all SOR event services → NDJSON.
 
     Runtime filter: GF_OBS_LIVE_SERVICES (comma-separated short names; empty = all).
-    Hand-maintained apps/tools/iox_obs_tap/src/main.cpp is fallback only.
+    Hand-maintained tools/debug_bridge/iox_obs_tap/src/main.cpp is fallback only.
     """
     type_by_id: dict[str, dict[str, Any]] = {}
     for t in sor.get("types") or []:

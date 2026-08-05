@@ -65,7 +65,7 @@ GF_INJECT_MODE=playhead \
 
 GMT: open session → **Inject** → connect `host:8767` → “follow playhead” → scrub.
 
-**continuous:** board reads a file. See [`iox_obs_inject`](../../apps/tools/iox_obs_inject/README.md).
+**continuous:** board reads a file. See [`iox_obs_inject`](../../tools/debug_bridge/iox_obs_inject/README.md).
 
 ```bash
 GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
@@ -93,5 +93,15 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_gmt_vcd.sh
 ```
 
 CLI entry: **`GMT`**. GMT GUI **does not write wiring** (authoring stays in gf-config).
+
+### OTA/UDS demo data (Collector / DEM / log levels)
+
+```bash
+bash scripts/verify/oem_a_afc_with_uss/smoke_obs_demo.sh
+# Interactive:
+export GF_COLLECTOR_STORE=$PWD/projects/oem_a/afc_with_uss/build-sil/runtime/collector/events.ndjson
+bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+GMT gui --project projects/oem_a/afc_with_uss
+```
 
 Parent: [tools/README.md](../README.md)

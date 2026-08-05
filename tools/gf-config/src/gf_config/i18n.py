@@ -102,8 +102,8 @@ _EN: dict[str, str] = {
     "vehicle-debug 可开 live；production-release 强制关": (
         "vehicle-debug allows live; production-release forces it off"
     ),
-    "开启后 Verify/compile_sil 自动加入 tools/iox_obs_tap；run_sil 自动接 Foxglove WS。": (
-        "When on, Verify/compile_sil adds tools/iox_obs_tap; run_sil starts Foxglove WS."
+    "开启后 Verify/compile_sil 自动加入 debug_bridge/iox_obs_tap；run_sil 自动接 Foxglove WS。": (
+        "When on, Verify/compile_sil adds debug_bridge/iox_obs_tap; run_sil starts Foxglove WS."
     ),
     "wiring_all（推荐）": "wiring_all (recommended)",
     "explicit：每行一服务": "explicit: one service per line",

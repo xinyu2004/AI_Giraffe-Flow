@@ -273,6 +273,13 @@ class _MultiStripCanvas(QWidget):
             self._selected_key = fit_key
         self._relayout()
 
+    def set_playhead_index(self, index: int) -> None:
+        self._play_idx = int(index)
+
+    def clamp_view_to_data(self) -> None:
+        if self._view_t0 is not None:
+            self._clamp_view()
+
     def _full_span(self) -> tuple[int, int]:
         if self._model is None or self._model.empty:
             return 0, 1
@@ -953,9 +960,19 @@ class VarStripView(QWidget):
 
     def set_model(self, model: SessionModel | None) -> None:
         same = model is self._model
+        prev_cat = len(self._catalog)
         self._model = model
         for k in discover_available_keys(model):
             self._catalog.add(k)
+        catalog_grew = len(self._catalog) > prev_cat
+        if same and model is not None:
+            # Live append: shared model already grew; avoid full relayout/tags I/O.
+            if catalog_grew:
+                self._refill_lists()
+            self._canvas.set_playhead_index(self._play_idx)
+            self._canvas.clamp_view_to_data()
+            self._canvas.update()
+            return
         self._refill_lists()
         self._canvas.set_state(
             self._model,
@@ -967,6 +984,10 @@ class VarStripView(QWidget):
         if self._catalog and not self._keys and not same:
             self._set_picker_open(True)
 
+    def notify_model_grew(self) -> None:
+        """Light Live-append hook (same SessionModel instance)."""
+        self.set_model(self._model)
+
     def _set_picker_open(self, open_: bool) -> None:
         self._picker_open = bool(open_)
         self._picker_panel.setVisible(self._picker_open)
@@ -976,14 +997,14 @@ class VarStripView(QWidget):
         self._set_picker_open(not self._picker_open)
 
     def set_playhead_index(self, index: int) -> None:
-        self._play_idx = int(index)
-        self._canvas.set_state(
-            self._model,
-            self._keys,
-            self._play_idx,
-            self._tags(),
-            keep_view=True,
-        )
+        idx = int(index)
+        if idx == self._play_idx:
+            self._canvas.update()
+            return
+        self._play_idx = idx
+        # Playhead-only: no tags disk reload / no full set_state relayout.
+        self._canvas.set_playhead_index(idx)
+        self._canvas.update()
 
     def _tags(self) -> list[TagRecord]:
         if self._model is None or self._model.path is None:

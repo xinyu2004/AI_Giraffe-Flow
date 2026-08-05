@@ -8,7 +8,7 @@
 #   GF_SIL_TOOLCHAIN_FILE=cmake/toolchains/host-clang.cmake GF_BUILD_DIR=$PWD/build-clang bash …/compile_sil.sh
 #
 # Env (P2.5):
-#   GF_BUILD_DIR              SIL build tree (default <repo>/build)
+#   GF_BUILD_DIR              SIL build tree (default projects/.../build-sil)
 #   GF_CC / GF_CXX            host compilers (e.g. clang / clang++)
 #   GF_SIL_TOOLCHAIN_FILE     optional CMake toolchain (overrides GF_CC/CXX)
 #   GF_DEPS_PREFIX            optional deps prefix when switching compilers

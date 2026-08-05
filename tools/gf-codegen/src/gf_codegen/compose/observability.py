@@ -7,8 +7,8 @@ from typing import Any
 PROFILE_DEBUG = "vehicle-debug"
 PROFILE_RELEASE = "production-release"
 VALID_PROFILES = frozenset({PROFILE_DEBUG, PROFILE_RELEASE})
-TAP_APP = "tools/iox_obs_tap"
-INJECT_APP = "tools/iox_obs_inject"
+TAP_APP = "debug_bridge/iox_obs_tap"
+INJECT_APP = "debug_bridge/iox_obs_inject"
 
 # live_tap.mode
 MODE_EXPLICIT = "explicit"  # req whitelist

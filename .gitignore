@@ -65,6 +65,10 @@ wheelhouse/
 # SIL / observability runtime when not under build/ (build/ already ignored)
 observability/
 **/iox_multiproc_logs/
+**/runtime/logs/
+**/runtime/collector/
+**/runtime/logs/
+**/runtime/collector/
 
 # Session captures outside build/ — GMT fixtures only
 *.mcap

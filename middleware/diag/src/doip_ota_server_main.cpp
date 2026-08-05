@@ -4,6 +4,7 @@
 #include "gf_ara/ucm/ota_orchestrator.hpp"
 #include "gf_ara/ucm/package_manager.hpp"
 #include "gf_ara/collector/event_collector.hpp"
+#include "gf_ara/log/logger.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -56,6 +57,52 @@ bool EnvBool(const char* key, bool def) {
   return def;
 }
 
+bool EnvFlag(const char* key) {
+  const char* v = std::getenv(key);
+  return v && (*v == '1' || *v == 'y' || *v == 'Y' || *v == 't' || *v == 'T');
+}
+
+/// GF_OBS_DEMO=1: seed ring + DEM-lite DTC for GMT OTA/UDS (F201 / 0x19).
+void SeedObsDemoIfRequested() {
+  if (!EnvFlag("GF_OBS_DEMO")) {
+    return;
+  }
+  const auto log_yaml = ReadFile(PlatformPath("log.yaml"));
+  if (!log_yaml.empty()) {
+    gf_ara::log::Logger::Instance().ConfigureFromYaml(log_yaml);
+  }
+  using gf_ara::log::LogLevel;
+  using gf_ara::log::Logger;
+  auto& log = Logger::Instance();
+  auto lcfg = log.Config();
+  lcfg.default_level = LogLevel::kVerbose;
+  for (auto& kv : lcfg.contexts) {
+    kv.second = LogLevel::kVerbose;
+  }
+  for (const char* ctx : {"diag", "phm", "ucm", "collector"}) {
+    lcfg.contexts[ctx] = LogLevel::kVerbose;
+  }
+  log.Configure(std::move(lcfg));
+  log.Fatal("diag", "obs_demo: FATAL sample (doip)");
+  log.Error("phm", "obs_demo: ERROR sample (doip)");
+  log.Warn("collector", "obs_demo: WARN sample (doip)");
+  log.Info("ucm", "obs_demo: INFO sample (doip)");
+  log.Debug("phm", "obs_demo: DEBUG sample (doip)");
+  log.Log("diag", LogLevel::kVerbose, "obs_demo: VERBOSE sample (doip)");
+
+  auto& col = gf_ara::collector::EventCollector::Instance();
+  using gf_ara::collector::EventSeverity;
+  col.ReportEvent("phm", "AliveMissed", "obs_demo entity=doip_seed",
+                  EventSeverity::kError);
+  col.ReportEvent("phm", "DeadlineMissed", "obs_demo entity=doip_seed",
+                  EventSeverity::kError);
+  col.ReportEvent("ucm", "ota_failed", "obs_demo package=pkg.demo",
+                  EventSeverity::kError);
+  col.ReportEvent("com", "Timeout", "obs_demo svc=EgoMotion", EventSeverity::kWarn);
+  std::cerr << "obs_demo: seeded doip collector ring + DEM-lite DTCs"
+            << " (GMT: Collector UDS / DEM 0x19)\n";
+}
+
 std::vector<std::uint8_t> OtaRoutine(const std::vector<std::uint8_t>& uds) {
   if (uds.size() >= 4 && uds[0] == 0x31 && uds[1] == 0x01 && uds[2] == 0xF1 &&
       uds[3] == 0x00) {
@@ -69,7 +116,8 @@ std::vector<std::uint8_t> OtaRoutine(const std::vector<std::uint8_t>& uds) {
       info.id = spec.substr(0, bar);
       info.artifact_path = spec.substr(bar + 1);
     }
-    info.version = "sil";
+    // Numeric semver — non-numeric ("sil") parses as 0 and fails anti-downgrade vs PER.
+    info.version = "1.0.0";
     const bool ok = static_cast<bool>(gf_ara::ucm::OtaOrchestrator::RunPackage(info));
     return {0x71, 0x01, 0xF1, 0x00, static_cast<std::uint8_t>(ok ? 0x00 : 0x01)};
   }
@@ -94,6 +142,7 @@ int main() {
   } else {
     gf_ara::collector::EventCollector::Instance().Configure(ccfg);
   }
+  SeedObsDemoIfRequested();
 
   gf_ara::ucm::OtaConfig oc;
   oc.enabled = true;
@@ -176,7 +225,8 @@ int main() {
         gf_ara::ucm::PackageInfo info;
         info.id = "pkg.xfer";
         info.artifact_path = path;
-        info.version = "sil-" + std::to_string(bytes);
+        // Monotonic-ish semver from transfer size (must stay numeric for CompareVersion).
+        info.version = "1." + std::to_string(bytes / 1000) + "." + std::to_string(bytes % 1000);
         return static_cast<bool>(gf_ara::ucm::OtaOrchestrator::RunPackage(info));
       });
 

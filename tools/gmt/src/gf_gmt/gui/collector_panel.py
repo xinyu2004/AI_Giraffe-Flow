@@ -11,6 +11,7 @@ from typing import Any
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QCheckBox,
     QFileDialog,
     QHBoxLayout,
@@ -20,7 +21,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
-    QButtonGroup,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -32,17 +32,41 @@ from gf_gmt.i18n import t
 
 
 def default_collector_store(project_dir: Path | None = None) -> Path:
+    """Resolve NDJSON path: env → project build-sil/build → cwd fallbacks."""
     env = (os.environ.get("GF_COLLECTOR_STORE") or "").strip()
     if env:
         return Path(env)
-    cand = Path.cwd() / "build" / "iox_multiproc_logs" / "collector_shared.ndjson"
-    if cand.is_file():
-        return cand
+
+    candidates: list[Path] = []
     if project_dir is not None:
-        alt = Path.cwd() / "build" / "iox_multiproc_logs" / "collector_shared.ndjson"
-        if alt.is_file():
-            return alt
-    return cand
+        root = Path(project_dir)
+        candidates.extend(
+            [
+                root / "build-sil" / "runtime" / "collector" / "events.ndjson",
+                root / "build" / "runtime" / "collector" / "events.ndjson",
+                # legacy
+                root / "build-sil" / "iox_multiproc_logs" / "collector_shared.ndjson",
+                root / "build" / "iox_multiproc_logs" / "collector_shared.ndjson",
+            ]
+        )
+    cwd = Path.cwd()
+    candidates.extend(
+        [
+            cwd / "projects" / "oem_a" / "afc_with_uss" / "build-sil" / "runtime" / "collector" / "events.ndjson",
+            cwd / "build-sil" / "runtime" / "collector" / "events.ndjson",
+            cwd / "build" / "runtime" / "collector" / "events.ndjson",
+            cwd / "build" / "iox_multiproc_logs" / "collector_shared.ndjson",
+        ]
+    )
+    for cand in candidates:
+        if cand.is_file():
+            return cand
+    # Prefer product default even if not created yet (matches run_sil.sh).
+    if project_dir is not None:
+        return (
+            Path(project_dir) / "build-sil" / "runtime" / "collector" / "events.ndjson"
+        )
+    return cwd / "build-sil" / "runtime" / "collector" / "events.ndjson"
 
 
 class CollectorPanel(QWidget):
@@ -84,7 +108,7 @@ class CollectorPanel(QWidget):
         row = QHBoxLayout(self._file_row)
         row.setContentsMargins(0, 0, 0, 0)
         self._path = QLineEdit()
-        self._path.setPlaceholderText("…/collector_shared.ndjson")
+        self._path.setPlaceholderText("…/runtime/collector/events.ndjson")
         self._path.setText(str(default_collector_store()))
         browse = QPushButton(t("浏览…"))
         browse.clicked.connect(self._browse)
@@ -146,8 +170,9 @@ class CollectorPanel(QWidget):
     def set_project_dir(self, project_dir: Path | None) -> None:
         self._project_dir = project_dir
         cur = self._path.text().strip()
+        default0 = str(default_collector_store(None))
         default = str(default_collector_store(project_dir))
-        if not cur or cur == str(default_collector_store(None)):
+        if not cur or cur == default0:
             self._path.setText(default)
         if self._src_file.isChecked():
             self.reload()
@@ -171,7 +196,7 @@ class CollectorPanel(QWidget):
             self._timer.stop()
 
     def _browse(self) -> None:
-        start = self._path.text().strip() or str(Path.cwd() / "build")
+        start = self._path.text().strip() or str(Path.cwd() / "build-sil")
         path, _ = QFileDialog.getOpenFileName(
             self,
             t("打开 Collector NDJSON"),

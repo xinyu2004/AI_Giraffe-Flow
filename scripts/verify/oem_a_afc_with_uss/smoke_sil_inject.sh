@@ -23,9 +23,9 @@ if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
   bash "${PROJECT_SCRIPTS}/compile_sil.sh"
 fi
 
-INJ="${GF_BUILD_DIR:-${BUILD_SIL}}/apps/tools/iox_obs_inject/gf_iox_obs_inject"
+INJ="${GF_BUILD_DIR:-${BUILD_SIL}}/apps/debug_bridge/iox_obs_inject/gf_iox_obs_inject"
 if [[ ! -x "${INJ}" ]]; then
-  echo "${TAG} ERROR: missing ${INJ} — vehicle-debug should compile tools/iox_obs_inject" >&2
+  echo "${TAG} ERROR: missing ${INJ} — vehicle-debug should compile debug_bridge/iox_obs_inject" >&2
   exit 1
 fi
 
@@ -58,7 +58,7 @@ echo "${TAG} run_sil inject B1 (no gateway) ..."
 GF_SKIP_COMPILE=1 GF_INJECT_SESSION="${SESSION}" GF_INJECT_SERVICES=EgoMotion \
   bash "${PROJECT_SCRIPTS}/run_sil.sh"
 
-LOG_DIR="${GF_BUILD_DIR:-${BUILD_SIL}}/iox_sil_logs"
+LOG_DIR="${GF_BUILD_DIR:-${BUILD_SIL}}/runtime/logs"
 if [[ ! -f "${LOG_DIR}/inject.log" ]]; then
   echo "${TAG} ERROR: missing inject.log" >&2
   exit 1

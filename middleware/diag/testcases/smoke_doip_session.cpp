@@ -36,7 +36,9 @@ std::vector<std::uint8_t> OtaRoutine(const std::vector<std::uint8_t>& uds) {
       info.id = spec.substr(0, bar);
       info.artifact_path = spec.substr(bar + 1);
     }
-    info.version = "test";
+    // Semver required: non-numeric versions parse as 0 and trip anti-downgrade
+    // against leftover PER (e.g. gf_ucm_package_manager_smoke → VER:pkg.demo=1.0.0).
+    info.version = "2.0.0";
     const bool ok = static_cast<bool>(gf_ara::ucm::OtaOrchestrator::RunPackage(info));
     return {0x71, 0x01, 0xF1, 0x00, static_cast<std::uint8_t>(ok ? 0x00 : 0x01)};
   }
@@ -91,7 +93,8 @@ int main() {
   }
   Pass("DOIP-S03", "TesterPresent over TCP");
 
-  std::string payload = "pkg.demo|/tmp/gf_ok.swu";
+  // Distinct id from package_manager smoke (pkg.demo) to avoid PER version crosstalk.
+  std::string payload = "pkg.doip.session|/tmp/gf_ok.swu";
   {
     std::ofstream f("/tmp/gf_ok.swu", std::ios::binary | std::ios::trunc);
     f.write("GFSW", 4);
@@ -111,7 +114,7 @@ int main() {
 
   gf_ara::collector::EventCollector::Instance().Clear();
   setenv("GF_UCM_FORCE_FAIL", "1", 1);
-  std::string bad = "pkg.bad|/tmp/FORCE_FAIL.swu";
+  std::string bad = "pkg.doip.session.bad|/tmp/FORCE_FAIL.swu";
   std::vector<std::uint8_t> uds2 = {0x31, 0x01, 0xF1, 0x00};
   uds2.insert(uds2.end(), bad.begin(), bad.end());
   auto fail = client.Transceive(uds2);

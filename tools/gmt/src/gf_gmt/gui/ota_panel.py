@@ -542,7 +542,15 @@ class OtaPanel(QWidget):
             st = int(rec.get("status") or 0)
             self._dem_table.setItem(i, 0, QTableWidgetItem(f"0x{code:06X}"))
             self._dem_table.setItem(i, 1, QTableWidgetItem(f"0x{st:02X}"))
-        self._dem_status.setText(t("已读取 {n} 条 DTC").format(n=len(rows)))
+        if rows:
+            self._dem_status.setText(t("已读取 {n} 条 DTC").format(n=len(rows)))
+        else:
+            self._dem_status.setText(
+                t(
+                    "0 条 DTC。需 SIL 先产生故障（如 PHM AliveMissed）且 "
+                    "GF_PER_DIR 与 DoIP 共享；也可用 Collector 看事件。"
+                )
+            )
 
     def _on_dem_clear(self) -> None:
         if self._client is None:

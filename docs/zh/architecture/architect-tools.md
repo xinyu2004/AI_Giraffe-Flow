@@ -32,7 +32,7 @@ Tag 持久化：`session.tags.json`（可改名/改窗/topics/备注）。
 
 ## 回灌
 
-见 [iox_obs_inject README](../../../apps/tools/iox_obs_inject/README.md)：
+见 [iox_obs_inject README](../../../tools/debug_bridge/iox_obs_inject/README.md)：
 
 - **拓扑 B1/B2**：`run_sil` 决定起哪些进程  
 - **灌法 continuous / playhead**：playhead 时 inject 等 GMT seek（tcp:8767）  

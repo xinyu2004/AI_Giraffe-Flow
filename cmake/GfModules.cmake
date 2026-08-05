@@ -18,7 +18,8 @@ endforeach()
 if(DEFINED GF_RUNTIME_MODULES)
   foreach(_gf_mod IN LISTS GF_RUNTIME_MODULES)
     if(_gf_mod STREQUAL "core" OR _gf_mod STREQUAL "com" OR _gf_mod STREQUAL "osal"
-       OR _gf_mod STREQUAL "trace")
+       OR _gf_mod STREQUAL "trace" OR _gf_mod STREQUAL "runtime")
+      # runtime is added after exec/phm/sm/collector/log (see below)
       continue()
     endif()
     set(_gf_path "${CMAKE_SOURCE_DIR}/middleware/${_gf_mod}")
@@ -43,13 +44,23 @@ foreach(_gf_extra IN ITEMS sm collector ucm log per tsync diag)
   endif()
 endforeach()
 
+# --- process bring-up (SIL/HIL shared; after exec/phm/sm/collector/log) ---
+if(NOT TARGET gf_ara_runtime)
+  if(TARGET gf_ara_exec AND TARGET gf_ara_phm AND TARGET gf_ara_sm
+     AND TARGET gf_ara_collector AND TARGET gf_ara_log
+     AND EXISTS "${CMAKE_SOURCE_DIR}/middleware/runtime/CMakeLists.txt")
+    add_subdirectory("${CMAKE_SOURCE_DIR}/middleware/runtime")
+    message(STATUS "Giraffe Flow: helper module runtime")
+  endif()
+endif()
+
 # DoIP OTA server + session / UCM-OTA smokes (diag may be added before ucm in runtime_modules).
 if(TARGET gf_ara_diag AND TARGET gf_ara_ucm AND TARGET gf_ara_sm AND TARGET gf_ara_collector)
   if(NOT TARGET gf_doip_ota_server)
     add_executable(gf_doip_ota_server
       "${CMAKE_SOURCE_DIR}/middleware/diag/src/doip_ota_server_main.cpp")
     target_link_libraries(gf_doip_ota_server PRIVATE gf_ara::diag gf_ara::ucm gf_ara::sm
-                                                     gf_ara::collector)
+        gf_ara::collector gf_ara::log)
   endif()
   if(GF_BUILD_TESTS AND NOT TARGET gf_doip_session_smoke)
     add_executable(gf_doip_session_smoke
@@ -87,12 +98,16 @@ gf_add_binding(GF_WITH_DDS dds)
 gf_add_binding(GF_WITH_CROSS_DOMAIN_IPC cross_domain_ipc)
 
 # --- apps from req.apps ---
-# Prefer projects/<oem>/<sku>/apps/<path> when GF_PROJECT_DIR is set (SKU stubs);
+# Prefer tools/<path> for debug_bridge/*; then projects/<oem>/<sku>/apps/<path>;
 # fall back to shared apps/<path>. Binary dir stays build/apps/<path> for run scripts.
 if(DEFINED GF_APPS)
   foreach(_gf_app IN LISTS GF_APPS)
     set(_gf_apath "")
-    if(DEFINED GF_PROJECT_DIR AND NOT GF_PROJECT_DIR STREQUAL "")
+    if(_gf_app MATCHES "^debug_bridge/"
+       AND EXISTS "${CMAKE_SOURCE_DIR}/tools/${_gf_app}/CMakeLists.txt")
+      set(_gf_apath "${CMAKE_SOURCE_DIR}/tools/${_gf_app}")
+    endif()
+    if(_gf_apath STREQUAL "" AND DEFINED GF_PROJECT_DIR AND NOT GF_PROJECT_DIR STREQUAL "")
       if(EXISTS "${GF_PROJECT_DIR}/apps/${_gf_app}/CMakeLists.txt")
         set(_gf_apath "${GF_PROJECT_DIR}/apps/${_gf_app}")
       endif()
@@ -112,8 +127,8 @@ if(DEFINED GF_APPS)
          OR _gf_app STREQUAL "perception/fcm"
          OR _gf_app STREQUAL "sensing/uss"
          OR _gf_app STREQUAL "planning/driving"
-         OR _gf_app STREQUAL "tools/iox_obs_tap"
-         OR _gf_app STREQUAL "tools/iox_obs_inject")
+         OR _gf_app STREQUAL "debug_bridge/iox_obs_tap"
+         OR _gf_app STREQUAL "debug_bridge/iox_obs_inject")
         message(STATUS "Giraffe Flow: skip app '${_gf_app}' (needs GF_WITH_ICEORYX)")
         continue()
       endif()

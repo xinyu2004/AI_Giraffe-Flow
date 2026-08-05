@@ -1,6 +1,6 @@
 # afc_with_uss apps (SKU stubs)
 
-Per-SKU SIL stubs for this product. Shared helpers stay in repo-root `apps/common/`.
+Per-SKU SIL stubs for this product. Process bring-up is [`middleware/runtime/`](../../../../middleware/runtime/) (`gf_ara::runtime`).
 
 | Path | Process |
 |------|---------|

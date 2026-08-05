@@ -55,7 +55,7 @@ class AnimDagView(QWidget):
         self._edge_items.clear()
         self._activity.setText(t("Current: —"))
         if not sor:
-            self._scene.addText("打开项目 SOR 后显示拓扑")
+            self._scene.addText(t("打开项目 SOR 后显示拓扑"))
             return
         dag = dag_from_sor(sor)
         nodes = [
@@ -71,7 +71,7 @@ class AnimDagView(QWidget):
                 if p and str(p) not in nodes:
                     nodes.append(str(p))
         if not nodes:
-            self._scene.addText("SOR 无 deployments/dataflows")
+            self._scene.addText(t("SOR 无 deployments/dataflows"))
             return
 
         cols = max(2, int(len(nodes) ** 0.5 + 0.9))

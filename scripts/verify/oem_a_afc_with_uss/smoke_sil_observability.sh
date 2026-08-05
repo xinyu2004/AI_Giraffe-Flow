@@ -15,7 +15,7 @@ source "${SCRIPT_DIR}/_verify_common.sh"
 gf_project_env
 
 OUT_DIR="${GF_OBS_OUT:-${ROOT}/build/observability}"
-LOG_DIR="${GF_BUILD_DIR:-${BUILD_SIL}}/iox_multiproc_logs"
+LOG_DIR="${GF_BUILD_DIR:-${BUILD_SIL}}/runtime/logs"
 mkdir -p "${OUT_DIR}"
 
 if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then

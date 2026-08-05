@@ -1,5 +1,5 @@
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
-#include "gf_demo/platform_sil.hpp"
+#include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/proxy/ego_motion_proxy.hpp"
 #include "gf_gen/skeleton/uss_zones_skeleton.hpp"
 
@@ -19,7 +19,7 @@ constexpr const char* kProcess = "sensing.uss";
 int main() {
   gf_ara::com::binding::iceoryx::InitRuntime("gf-sensing-uss");
 
-  gf::demo::platform_sil::ProcessSupervisor supervisor;
+  gf_ara::runtime::ProcessSupervisor supervisor;
   if (!supervisor.Start(kProcess)) {
     return EXIT_FAILURE;
   }

@@ -174,7 +174,12 @@ def serve_live_stdin(
     *,
     stream: TextIO | None = None,
 ) -> None:
-    """Read NDJSON from stdin; forward each line to a connected GMT GUI client."""
+    """Read NDJSON from stdin; forward each line to a connected GMT GUI client.
+
+    GMT GUI connect/disconnect must NOT stop this process — only tap stdin EOF
+    (or Ctrl+C) ends the bridge. Otherwise ``tee >(live) | foxglove`` collapses
+    when GMT closes and Foxglove dies with stdin EOF.
+    """
     inp = stream if stream is not None else sys.stdin
     srv = _listen(host, port)
 
@@ -210,7 +215,7 @@ def serve_live_stdin(
         peer_label = ""
 
     try:
-        while not stdin_eof or conn is not None:
+        while not stdin_eof:
             rlist: list[Any] = [srv]
             if fd >= 0 and not stdin_eof:
                 rlist.append(fd)
@@ -222,83 +227,97 @@ def serve_live_stdin(
             except InterruptedError:
                 continue
 
-            if conn is None and srv in ready:
-                try:
-                    new_conn, addr = srv.accept()
-                except OSError as exc:
-                    _status("err", f"accept error: {exc}")
-                else:
-                    who = f"{addr[0]}:{addr[1]}"
+            try:
+                if conn is None and srv in ready:
                     try:
-                        new_conn.setblocking(True)
-                        if not _ws_handshake(new_conn):
-                            _status("err", f"HANDSHAKE_FAIL peer={who}")
-                            new_conn.close()
-                        else:
-                            new_conn.setblocking(False)
-                            _ws_send_text(new_conn, json.dumps(hello_payload()))
-                            conn = new_conn
-                            peer_label = who
-                            _status("ok", f"CONNECTED peer={who} (listen :{port})")
-                    except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                        _status("err", f"handshake failed peer={who}: {exc}")
+                        new_conn, addr = srv.accept()
+                    except OSError as exc:
+                        _status("err", f"accept error: {exc}")
+                    else:
+                        who = f"{addr[0]}:{addr[1]}"
                         try:
-                            new_conn.close()
+                            new_conn.setblocking(True)
+                            if not _ws_handshake(new_conn):
+                                _status("err", f"HANDSHAKE_FAIL peer={who}")
+                                new_conn.close()
+                            else:
+                                new_conn.setblocking(False)
+                                _ws_send_text(new_conn, json.dumps(hello_payload()))
+                                conn = new_conn
+                                peer_label = who
+                                _status("ok", f"CONNECTED peer={who} (listen :{port})")
+                        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+                            _status("err", f"handshake failed peer={who}: {exc}")
+                            try:
+                                new_conn.close()
+                            except OSError:
+                                pass
+
+                if conn is not None and conn in ready:
+                    try:
+                        # Partial WS frames: briefly block so recv completes.
+                        conn.setblocking(True)
+                        conn.settimeout(0.5)
+                        frame = _ws_recv_frame(conn)
+                    except (BlockingIOError, TimeoutError, OSError):
+                        frame = None
+                    finally:
+                        try:
+                            conn.settimeout(None)
+                            conn.setblocking(False)
                         except OSError:
                             pass
+                    if frame is None:
+                        _close_client(reason="client closed")
+                    else:
+                        opcode, payload = frame
+                        if opcode == 0x8:
+                            _close_client(reason="ws close")
+                        elif opcode == 0x1:
+                            msg = _parse(payload.decode("utf-8", errors="replace"))
+                            if msg and msg.get("op") == "ping":
+                                try:
+                                    _ws_send_text(conn, json.dumps({"op": "pong"}))
+                                except OSError:
+                                    _close_client(reason="pong failed")
 
-            if conn is not None and conn in ready:
-                frame = _ws_recv_frame(conn)
-                if frame is None:
-                    _close_client(reason="client closed")
-                else:
-                    opcode, payload = frame
-                    if opcode == 0x8:
-                        _close_client(reason="ws close")
-                    elif opcode == 0x1:
-                        msg = _parse(payload.decode("utf-8", errors="replace"))
-                        if msg and msg.get("op") == "ping":
-                            try:
-                                _ws_send_text(conn, json.dumps({"op": "pong"}))
-                            except OSError:
-                                _close_client(reason="pong failed")
-
-            lines: list[str] = []
-            if fd >= 0 and fd in ready:
-                chunk = os_read_chunk(inp)
-                if chunk == "":
-                    if not buf:
+                lines: list[str] = []
+                if fd >= 0 and fd in ready:
+                    chunk = os_read_chunk(inp)
+                    if chunk == "":
+                        if not buf:
+                            stdin_eof = True
+                            _status("bye", "stdin EOF")
+                    else:
+                        buf += chunk
+                        while "\n" in buf:
+                            line, buf = buf.split("\n", 1)
+                            lines.append(line)
+                elif fd < 0 and not stdin_eof:
+                    line = inp.readline()
+                    if line == "":
                         stdin_eof = True
-                        _status("bye", "stdin EOF")
-                else:
-                    buf += chunk
-                    while "\n" in buf:
-                        line, buf = buf.split("\n", 1)
-                        lines.append(line)
-            elif fd < 0 and not stdin_eof:
-                line = inp.readline()
-                if line == "":
-                    stdin_eof = True
-                else:
-                    lines.append(line.rstrip("\n"))
+                    else:
+                        lines.append(line.rstrip("\n"))
 
-            for line in lines:
-                # forward only NDJSON objects; drop pipe noise
-                stripped = line.strip().lstrip("\ufeff")
-                if not stripped.startswith("{"):
-                    continue
-                if conn is None:
-                    continue
-                try:
-                    _ws_send_text(conn, stripped)
-                    forwarded += 1
-                    if forwarded % 100 == 0:
-                        _status("ok", f"forwarded {forwarded} lines")
-                except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                    _close_client(reason=f"send failed: {exc}")
-
-            if stdin_eof and conn is None:
-                break
+                for line in lines:
+                    # forward only NDJSON objects; drop pipe noise
+                    stripped = line.strip().lstrip("\ufeff")
+                    if not stripped.startswith("{"):
+                        continue
+                    if conn is None:
+                        continue
+                    try:
+                        _ws_send_text(conn, stripped)
+                        forwarded += 1
+                        if forwarded % 100 == 0:
+                            _status("ok", f"forwarded {forwarded} lines")
+                    except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+                        # GMT disconnect / close — keep listening for reconnect.
+                        _close_client(reason=f"send failed: {exc}")
+            except Exception as exc:  # noqa: BLE001 — stay up for GMT reconnect
+                _status("err", f"client cycle error (bridge stays up): {exc}")
+                _close_client(reason=f"error: {exc}")
     except KeyboardInterrupt:
         _status("bye", "stopped")
     finally:
@@ -307,6 +326,7 @@ def serve_live_stdin(
             srv.close()
         except OSError:
             pass
+        _status("bye", f"exit forwarded={forwarded}")
 
 
 def main_live_bridge(argv: list[str] | None = None) -> int:
@@ -328,7 +348,11 @@ def main_live_bridge(argv: list[str] | None = None) -> int:
         serve_live_stdin(args.host, args.port)
     except KeyboardInterrupt:
         print("\n[live-bridge] stopped", flush=True)
+        return 0
     except OSError as exc:
         print(f"[live-bridge] FATAL: {exc}", flush=True)
         return 1
+    except Exception as exc:  # noqa: BLE001
+        print(f"[live-bridge] FATAL: {exc}", flush=True)
+        return 2
     return 0

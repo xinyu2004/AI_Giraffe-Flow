@@ -44,6 +44,7 @@ AI_Giraffe-Flow/
 ├── middleware/                   # board / SIL runtime (product core)
 │   ├── core/ com/ bindings/ osal/
 │   ├── exec/ phm/ sm/ collector/ diag/ ucm/ log/ per/ tsync/
+│   ├── runtime/                  # process bring-up (SIL/HIL shared)
 │   ├── trace/                    # timing → VCD / GMT (debug-path adjacent)
 │   ├── hal/
 │   ├── third_party/              # WHERE sources land (gitignore)
@@ -51,8 +52,8 @@ AI_Giraffe-Flow/
 │       ├── unit/                 # per-module (core, com, phm, …)
 │       └── component/            # multi-module in-process
 │
-├── apps/                         # ONLY true platform-common
-│   ├── common/                   # SIL helpers (platform_sil, …)
+├── apps/                         # ONLY true platform-common / demos
+│   ├── common/                   # shared demo headers (e.g. uss_zones_topic)
 │   └── README.md                 # what may live here (see §Apps policy)
 │
 ├── projects/<oem>/<sku>/         # one vehicle / trim
@@ -65,6 +66,7 @@ AI_Giraffe-Flow/
 │   ├── apps/                     # SKU stubs (gateway, uss, fcm, planning.*)
 │   ├── scenarios/
 │   ├── scripts/                  # compile_sil|hil, run_sil|hil
+│   ├── build-sil/ · build-hil/   # default cmake trees (gitignore)
 │   ├── generated/                # compose/generate (gitignore or local)
 │   ├── golden/                   # optional SOR golden
 │   └── tests/                    # this SKU’s integration / smoke fixtures
@@ -73,6 +75,7 @@ AI_Giraffe-Flow/
 │   ├── gf-config/                # author GUI (was tools/config)
 │   ├── gf-codegen/               # compose/lint/generate (was tools/codegen)
 │   ├── gmt/                      # observe / inject / OTA sheet (no config write)
+│   ├── debug_bridge/             # iox_obs_tap / iox_obs_inject
 │   ├── bridge/                   # Foxglove etc.
 │   └── tests/                    # tool unit tests (pytest per package also OK)
 │
@@ -121,9 +124,9 @@ AI_Giraffe-Flow/
 
 | Keep shared | Move under project |
 |-------------|-------------------|
-| `apps/common/` | `vehicle_can_gateway`, `sensing.*`, `perception.*`, `planning.*` stubs |
+| `middleware/runtime/` (bring-up lib) | `vehicle_can_gateway`, `sensing.*`, `perception.*`, `planning.*` stubs |
 | Optional: ultra-thin demo_pipeline / feeds | MCU payload↔semantic **mapping** (if today inside gateway) |
-| Generic obs **binary** (after codegen tap) | Allowlists stay in `req` / GMT focus |
+| `tools/debug_bridge/` tap/inject | Allowlists stay in `req` / GMT focus |
 
 ---
 

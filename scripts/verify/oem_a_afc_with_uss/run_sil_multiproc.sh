@@ -20,6 +20,10 @@ export GF_PLATFORM_DIR="${GF_PLATFORM_DIR:-${PROJECT_DIR}/platform}"
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-400}"
 
 export LD_LIBRARY_PATH="${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+_COLLECTOR_DEFAULT="${BUILD}/runtime/collector/events.ndjson"
+mkdir -p "${BUILD}/runtime/logs" "${BUILD}/runtime/collector" "${BUILD}/runtime/per"
+export GF_COLLECTOR_STORE="${GF_COLLECTOR_STORE:-${_COLLECTOR_DEFAULT}}"
+export GF_PER_DIR="${GF_PER_DIR:-${BUILD}/runtime/per}"
 
 ROUDI="${BUILD}/iox-roudi"
 GW="${BUILD}/apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway"
@@ -40,7 +44,7 @@ if [[ ! -f "${GF_PLATFORM_DIR}/exec.yaml" && ! -f "${GF_PLATFORM_DIR}/platform/e
   exit 1
 fi
 
-LOG_DIR="${BUILD}/iox_multiproc_logs"
+LOG_DIR="${BUILD}/runtime/logs"
 mkdir -p "${LOG_DIR}"
 
 cleanup() {

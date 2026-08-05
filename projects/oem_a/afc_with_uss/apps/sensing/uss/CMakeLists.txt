@@ -1,19 +1,11 @@
-# sensing.uss — SIL stub + platform_sil (exec/phm)
+# sensing.uss — SIL stub + process bring-up (exec/phm)
 
 add_executable(gf_sensing_uss
   src/main.cpp
-  ${CMAKE_SOURCE_DIR}/apps/common/src/platform_sil.cpp
-)
-target_include_directories(gf_sensing_uss PRIVATE
-  ${CMAKE_SOURCE_DIR}/apps/common/include
 )
 target_link_libraries(gf_sensing_uss PRIVATE
   gf_ara::com_iceoryx
-  gf_ara::exec
-  gf_ara::phm
-  gf_ara::sm
-  gf_ara::collector
-  gf_ara::log
+  gf_ara::runtime
 )
 add_dependencies(gf_sensing_uss iox-roudi)
 

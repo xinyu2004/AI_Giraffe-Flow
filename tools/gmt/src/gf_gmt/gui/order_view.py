@@ -31,8 +31,9 @@ class OrderRaceView(QWidget):
             ["#", t("Wall"), "t_ns", "Δt_ns", "topic", "from → to", "seq"]
         )
         self._table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
+            QHeaderView.ResizeMode.Interactive
         )
+        self._table.horizontalHeader().setStretchLastSection(True)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.cellClicked.connect(self._on_cell_clicked)
@@ -44,11 +45,17 @@ class OrderRaceView(QWidget):
         self._table.setRowCount(0)
         if model is None or model.empty:
             return
-        # mark concurrent timestamps (race hint)
+        self.append_events(model, from_index=0)
+
+    def append_events(self, model: SessionModel, *, from_index: int = 0) -> None:
+        """Append rows for events[from_index:] without clearing the table."""
+        if model.empty or from_index >= len(model.events):
+            return
+        # mark concurrent timestamps (race hint) for the new slice only
         counts: dict[int, int] = {}
         for ev in model.events:
             counts[ev.t_ns] = counts.get(ev.t_ns, 0) + 1
-        for ev in model.events:
+        for ev in model.events[from_index:]:
             r = self._table.rowCount()
             self._table.insertRow(r)
             route = ""

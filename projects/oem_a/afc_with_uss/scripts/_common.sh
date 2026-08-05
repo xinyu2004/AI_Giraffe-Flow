@@ -11,8 +11,9 @@ TAG="[afc_with_uss]"
 
 DEPS_PREFIX="${GF_DEPS_PREFIX:-${ROOT}/middleware/.deps-prefix}"
 THIRD_PARTY="${ROOT}/middleware/third_party"
-BUILD_SIL="${GF_BUILD_DIR:-${ROOT}/build}"
-BUILD_HIL="${GF_BUILD_DIR_HIL:-${ROOT}/build-hil}"
+# Default per-SKU trees; GF_BUILD_DIR / GF_BUILD_DIR_HIL are reserved overrides only.
+BUILD_SIL="${GF_BUILD_DIR:-${PROJECT_DIR}/build-sil}"
+BUILD_HIL="${GF_BUILD_DIR_HIL:-${PROJECT_DIR}/build-hil}"
 
 gf_project_env() {
   cd "${ROOT}"

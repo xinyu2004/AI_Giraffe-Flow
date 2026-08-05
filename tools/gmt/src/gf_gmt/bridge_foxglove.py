@@ -585,7 +585,9 @@ def live_stdin_ws(
             _status("ok", f"published {published} msgs")
 
     try:
-        while not stdin_eof or conn is not None:
+        # Stay alive across Studio disconnects; only tap stdin EOF ends the bridge.
+        # (GMT Live is a sibling process — its exit must not reach here via pipe break.)
+        while not stdin_eof:
             rlist: list[Any] = [srv]
             if fd >= 0 and not stdin_eof:
                 rlist.append(fd)
@@ -597,91 +599,92 @@ def live_stdin_ws(
             except InterruptedError:
                 continue
 
-            # Accept Studio anytime (single client; new accept after disconnect)
-            if conn is None and srv in ready:
-                try:
-                    new_conn, addr = srv.accept()
-                except OSError as exc:
-                    _status("err", f"accept error: {exc}")
-                else:
-                    who = f"{addr[0]}:{addr[1]}"
-                    new_state = SessionState()
+            try:
+                # Accept Studio anytime (single client; new accept after disconnect)
+                if conn is None and srv in ready:
                     try:
-                        if not _ws_handshake(new_conn):
-                            _status("err", f"HANDSHAKE_FAIL peer={who}")
-                            new_conn.close()
-                        else:
-                            _send_json(new_conn, server_info_payload("gf_gmt-bridge-live"))
-                            seed = [
-                                "/gf/EgoMotion",
-                                "/gf/Trajectory",
-                                "/gf/camera/front/compressed",
-                            ]
-                            new_state.advertise_topics(new_conn, seed)
-                            conn = new_conn
-                            state = new_state
-                            peer_label = who
-                            _status("ok", f"CONNECTED peer={who} (listen :{port})")
-                    except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                        _status("err", f"handshake failed peer={who}: {exc}")
+                        new_conn, addr = srv.accept()
+                    except OSError as exc:
+                        _status("err", f"accept error: {exc}")
+                    else:
+                        who = f"{addr[0]}:{addr[1]}"
+                        new_state = SessionState()
                         try:
-                            new_conn.close()
-                        except OSError:
-                            pass
+                            if not _ws_handshake(new_conn):
+                                _status("err", f"HANDSHAKE_FAIL peer={who}")
+                                new_conn.close()
+                            else:
+                                _send_json(new_conn, server_info_payload("gf_gmt-bridge-live"))
+                                seed = [
+                                    "/gf/EgoMotion",
+                                    "/gf/Trajectory",
+                                    "/gf/camera/front/compressed",
+                                ]
+                                new_state.advertise_topics(new_conn, seed)
+                                conn = new_conn
+                                state = new_state
+                                peer_label = who
+                                _status("ok", f"CONNECTED peer={who} (listen :{port})")
+                        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+                            _status("err", f"handshake failed peer={who}: {exc}")
+                            try:
+                                new_conn.close()
+                            except OSError:
+                                pass
 
-            # Poll client control frames (subscribe / close)
-            if conn is not None and state is not None:
-                try:
-                    if not state.poll_client(conn):
-                        _close_client(reason="client closed")
-                except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                    _close_client(reason=f"client gone: {exc}")
+                # Poll client control frames (subscribe / close)
+                if conn is not None and state is not None:
+                    try:
+                        if not state.poll_client(conn):
+                            _close_client(reason="client closed")
+                    except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+                        _close_client(reason=f"client gone: {exc}")
 
-            # Always drain stdin so the tap pipe never backs up
-            lines: list[str] = []
-            if fd >= 0 and fd in ready:
-                chunk = os_read_chunk(inp)
-                if chunk == "":
-                    if not buf:
+                # Always drain stdin so the tap pipe never backs up
+                lines: list[str] = []
+                if fd >= 0 and fd in ready:
+                    chunk = os_read_chunk(inp)
+                    if chunk == "":
+                        if not buf:
+                            stdin_eof = True
+                            _status("bye", "stdin EOF")
+                    else:
+                        buf += chunk
+                        while "\n" in buf:
+                            line, buf = buf.split("\n", 1)
+                            lines.append(line)
+                elif fd < 0 and not stdin_eof:
+                    # Non-selectable stream (tests): blocking readline with short idle
+                    line = inp.readline()
+                    if line == "":
                         stdin_eof = True
-                        _status("bye", "stdin EOF")
-                else:
-                    buf += chunk
-                    while "\n" in buf:
-                        line, buf = buf.split("\n", 1)
-                        lines.append(line)
-            elif fd < 0 and not stdin_eof:
-                # Non-selectable stream (tests): blocking readline with short idle
-                line = inp.readline()
-                if line == "":
-                    stdin_eof = True
-                else:
-                    lines.append(line.rstrip("\n"))
+                    else:
+                        lines.append(line.rstrip("\n"))
 
-            for line in lines:
-                row = parse_ndjson_row(line)
-                if row is None:
-                    stripped = line.strip()
-                    if stripped.startswith("{") and len(stripped) > 1:
-                        _status("err", f"bad json (skipped): {stripped[:80]!r}")
-                    continue
-                topic = str(row.get("topic") or "/gf/stub")
-                t_ns = int(row.get("t_ns") or 0)
-                data = row.get("data", row)
-                # AdasDemo is script-only: feed BEV, never publish to Studio.
-                if not is_adas_demo_topic(topic):
-                    _publish_row(topic, t_ns, data)
-                if bev is not None:
-                    cam = bev.update(row)
-                    if cam is not None:
-                        _publish_row(
-                            str(cam["topic"]),
-                            int(cam["t_ns"]),
-                            cam["data"],
-                        )
-
-            if stdin_eof and conn is None:
-                break
+                for line in lines:
+                    row = parse_ndjson_row(line)
+                    if row is None:
+                        stripped = line.strip()
+                        if stripped.startswith("{") and len(stripped) > 1:
+                            _status("err", f"bad json (skipped): {stripped[:80]!r}")
+                        continue
+                    topic = str(row.get("topic") or "/gf/stub")
+                    t_ns = int(row.get("t_ns") or 0)
+                    data = row.get("data", row)
+                    # AdasDemo is script-only: feed BEV, never publish to Studio.
+                    if not is_adas_demo_topic(topic):
+                        _publish_row(topic, t_ns, data)
+                    if bev is not None:
+                        cam = bev.update(row)
+                        if cam is not None:
+                            _publish_row(
+                                str(cam["topic"]),
+                                int(cam["t_ns"]),
+                                cam["data"],
+                            )
+            except Exception as exc:  # noqa: BLE001 — Studio disconnect must not kill bridge
+                _status("err", f"client cycle error (bridge stays up): {exc}")
+                _close_client(reason=f"error: {exc}")
     except KeyboardInterrupt:
         _status("bye", "stopped")
     finally:

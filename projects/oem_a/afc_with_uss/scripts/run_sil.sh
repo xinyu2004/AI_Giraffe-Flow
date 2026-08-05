@@ -18,7 +18,7 @@
 #     bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #
 # Env:
-#   GF_BUILD_DIR     default <repo>/build
+#   GF_BUILD_DIR     default projects/.../build-sil
 #   GF_WS_HOST       default 0.0.0.0
 #   GF_WS_PORT       default 8765
 #   GF_LIVE_PORT     default 8766 (GMT GUI live bridge)
@@ -63,6 +63,13 @@ PORT="${GF_WS_PORT:-8765}"
 export GF_PLATFORM_DIR="${GF_PLATFORM_DIR:-${PROJECT_DIR}/platform}"
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
 export LD_LIBRARY_PATH="${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+# Shared collector NDJSON + per (DEM DTC) for GMT OTA/UDS
+_COLLECTOR_DEFAULT="${BUILD}/runtime/collector/events.ndjson"
+mkdir -p "$(dirname "${_COLLECTOR_DEFAULT}")"
+export GF_COLLECTOR_STORE="${GF_COLLECTOR_STORE:-${_COLLECTOR_DEFAULT}}"
+_PER_DEFAULT="${BUILD}/runtime/per"
+mkdir -p "${_PER_DEFAULT}"
+export GF_PER_DIR="${GF_PER_DIR:-${_PER_DEFAULT}}"
 
 INJECT_SESSION="${GF_INJECT_SESSION:-}"
 INJECT_ON=0
@@ -346,8 +353,8 @@ GW="${BUILD}/apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway"
 FCM="${BUILD}/apps/perception/fcm/gf_perception_fcm"
 USS="${BUILD}/apps/sensing/uss/gf_sensing_uss"
 PLAN="${BUILD}/apps/planning/driving/gf_planning_driving"
-TAP="${BUILD}/apps/tools/iox_obs_tap/gf_iox_obs_tap"
-INJ="${BUILD}/apps/tools/iox_obs_inject/gf_iox_obs_inject"
+TAP="${BUILD}/apps/debug_bridge/iox_obs_tap/gf_iox_obs_tap"
+INJ="${BUILD}/apps/debug_bridge/iox_obs_inject/gf_iox_obs_inject"
 DOIP="${BUILD}/gf_doip_ota_server"
 
 NEED_BINS=("${ROUDI}")
@@ -390,7 +397,7 @@ for bin in "${NEED_BINS[@]}"; do
       echo "live_tap is on but tap binary missing — check profile=vehicle-debug + live in gf-config." >&2
     fi
     if [[ "${bin}" == "${INJ}" ]]; then
-      echo "inject binary missing — vehicle-debug compose should add tools/iox_obs_inject; re-run compile_sil." >&2
+      echo "inject binary missing — vehicle-debug compose should add debug_bridge/iox_obs_inject; re-run compile_sil." >&2
     fi
     if [[ "${bin}" == "${DOIP}" ]]; then
       echo "DoIP OTA server missing — rebuild (target gf_doip_ota_server) or set GF_DOIP=0." >&2
@@ -404,7 +411,7 @@ if [[ ! -f "${GF_PLATFORM_DIR}/exec.yaml" && ! -f "${GF_PLATFORM_DIR}/platform/e
   exit 1
 fi
 
-LOG_DIR="${BUILD}/iox_sil_logs"
+LOG_DIR="${BUILD}/runtime/logs"
 mkdir -p "${LOG_DIR}"
 
 LIVE_PORT="${GF_LIVE_PORT:-8766}"
@@ -776,15 +783,32 @@ if [[ "${INJECT_ON}" == "1" ]]; then
       mkdir -p "$(dirname "${LIVE_SESSION}")"
       : > "${LIVE_SESSION}"
     fi
+    # Same fan isolation as non-inject path: GMT close must not kill Foxglove.
+    _tee_fan() {
+      if tee --help 2>&1 | grep -q -- '--output-error'; then
+        tee --output-error=warn "$@"
+      else
+        tee "$@"
+      fi
+    }
+    _gmt_live_bridge() {
+      while true; do
+        GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}"
+        local ec=$?
+        [[ "${ec}" -eq 0 ]] && break
+        echo "${TAG} WARN: GMT live bridge exited ec=${ec}; restart in 0.3s" >&2
+        sleep 0.3
+      done
+    }
     (
       if [[ "${LIVE_TEE}" == "1" ]]; then
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
           | tee "${LIVE_SESSION}" \
-          | tee >(GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}") \
+          | _tee_fan >( _gmt_live_bridge ) \
           | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
       else
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
-          | tee >(GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}") \
+          | _tee_fan >( _gmt_live_bridge ) \
           | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
       fi
     ) &
@@ -868,17 +892,46 @@ if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
   fi
 fi
 
+# GNU tee: if GMT Live process-sub dies, do NOT collapse the pipe to Foxglove.
+_tee_fan() {
+  if tee --help 2>&1 | grep -q -- '--output-error'; then
+    tee --output-error=warn "$@"
+  else
+    tee "$@"
+  fi
+}
+
+# GMT GUI open/close must not kill this side-channel. Restart live bridge on crash;
+# exit 0 after clean stdin EOF (tap ended).
+_gmt_live_bridge() {
+  while true; do
+    GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}"
+    local ec=$?
+    if [[ "${ec}" -eq 0 ]]; then
+      break
+    fi
+    echo "${TAG} WARN: GMT live bridge exited ec=${ec}; restart in 0.3s (Foxglove kept)" >&2
+    sleep 0.3
+  done
+}
+
 _live_fan() {
   if [[ "${LIVE_TEE}" == "1" ]]; then
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
       | tee "${LIVE_SESSION}" \
-      | tee >(GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}") \
+      | _tee_fan >( _gmt_live_bridge ) \
       | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
   else
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
-      | tee >(GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}") \
+      | _tee_fan >( _gmt_live_bridge ) \
       | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_SCRIPT[@]}" --host "${HOST}" --port "${PORT}"
   fi
 }
 
-_live_fan
+# Obs fan is side-channel: must NOT be the foreground waiter.
+# Otherwise tap/bridge exit (or pipe break) would tear down the whole SIL via EXIT trap.
+_live_fan &
+LIVE_FAN_PID=$!
+echo "${TAG} live fan pid=${LIVE_FAN_PID} (apps keep running if fan dies; Ctrl+C stops all)"
+echo "${TAG} GMT GUI 可随时开关，不影响本 SIL"
+wait "${GW_PID}" || true
