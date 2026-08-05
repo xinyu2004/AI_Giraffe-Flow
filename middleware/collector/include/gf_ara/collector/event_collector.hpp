@@ -55,6 +55,8 @@ struct CollectorConfig {
   std::string forward{"local_store"};  // cp_dem | local_store | both
   bool local_enabled{true};
   std::uint32_t max_entries{256};
+  std::uint32_t debounce_max_keys{64};
+  std::uint32_t store_max_bytes{1024 * 1024};
   std::unordered_map<std::string, DtcMapEntry> dtc_map;  // event_id → map
   std::vector<std::uint16_t> freeze_dids;                // optional DID list for freeze
 };

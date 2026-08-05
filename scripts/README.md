@@ -19,7 +19,7 @@ bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 
 # 验证
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh
 ```
 
 ### Policy (board / cross)

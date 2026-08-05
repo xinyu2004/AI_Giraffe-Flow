@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Verify: finite multiproc trajectory + exec/phm assertions (not product path).
+# Verify: finite main-chain trajectory + exec/phm assertions (not product path).
 # Product run: projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #
 # Usage:
-#   bash scripts/verify/oem_a_afc_with_uss/run_sil_multiproc.sh
+#   bash scripts/verify/oem_a_afc_with_uss/run_sil_verify.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,18 +26,33 @@ export GF_COLLECTOR_STORE="${GF_COLLECTOR_STORE:-${_COLLECTOR_DEFAULT}}"
 export GF_PER_DIR="${GF_PER_DIR:-${BUILD}/runtime/per}"
 
 ROUDI="${BUILD}/iox-roudi"
+IOX_TOML="${PROJECT_DIR}/generated/iox_roudi.toml"
 GW="${BUILD}/apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway"
 FCM="${BUILD}/apps/perception/fcm/gf_perception_fcm"
 USS="${BUILD}/apps/sensing/uss/gf_sensing_uss"
 PLAN="${BUILD}/apps/planning/driving/gf_planning_driving"
 
-for bin in "${ROUDI}" "${GW}" "${FCM}" "${USS}" "${PLAN}"; do
+IOX_ON=0
+if [[ -f "${PROJECT_DIR}/req.yaml" ]] && grep -Eq '^[[:space:]]*-[[:space:]]*iceoryx[[:space:]]*$' "${PROJECT_DIR}/req.yaml"; then
+  IOX_ON=1
+fi
+
+NEED_BINS=("${GW}" "${FCM}" "${USS}" "${PLAN}")
+if [[ "${IOX_ON}" == "1" ]]; then
+  NEED_BINS=("${ROUDI}" "${NEED_BINS[@]}")
+fi
+for bin in "${NEED_BINS[@]}"; do
   if [[ ! -x "${bin}" ]]; then
     echo "Missing executable: ${bin}" >&2
     echo "Build first: bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh" >&2
     exit 1
   fi
 done
+
+if [[ "${IOX_ON}" == "1" && ! -f "${IOX_TOML}" ]]; then
+  echo "Missing ${IOX_TOML} — run compose (bounds.iceoryx.mempools)" >&2
+  exit 1
+fi
 
 if [[ ! -f "${GF_PLATFORM_DIR}/exec.yaml" && ! -f "${GF_PLATFORM_DIR}/platform/exec.yaml" ]]; then
   echo "Missing exec.yaml under ${GF_PLATFORM_DIR} (or …/platform/)" >&2
@@ -58,19 +73,25 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "[run_sil_multiproc] platform=${GF_PLATFORM_DIR} fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET:-planning}"
-echo "[run_sil_multiproc] RouDi ..."
-"${ROUDI}" >"${LOG_DIR}/roudi.log" 2>&1 &
-ROUDI_PID=$!
-sleep 1
-if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then
-  echo "[run_sil_multiproc] RouDi failed; see ${LOG_DIR}/roudi.log" >&2
-  cat "${LOG_DIR}/roudi.log" >&2 || true
+echo "[run_sil_verify] platform=${GF_PLATFORM_DIR} fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET:-planning}"
+ROUDI_PID=""
+if [[ "${IOX_ON}" == "1" ]]; then
+  echo "[run_sil_verify] RouDi (bounds → ${IOX_TOML}) ..."
+  echo "[run_sil_verify] NOTE: change iceoryx.mgmt → compose + cmake reconfigure + rebuild iceoryx"
+  "${ROUDI}" -c "${IOX_TOML}" >"${LOG_DIR}/roudi.log" 2>&1 &
+  ROUDI_PID=$!
+  sleep 1
+  if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then
+    echo "[run_sil_verify] RouDi failed; see ${LOG_DIR}/roudi.log" >&2
+    cat "${LOG_DIR}/roudi.log" >&2 || true
+    exit 1
+  fi
+else
+  echo "[run_sil_verify] RouDi skipped (req.bindings has no iceoryx)" >&2
   exit 1
 fi
 
 # Which process gets GF_PHM_FAULT_MS (others get 0). Default: planning (SG-02).
-# uss/fcm/gateway use on_failure: notify_sm (SG-03).
 FAULT_TARGET="${GF_PHM_FAULT_TARGET:-planning}"
 fault_env() {
   local proc="$1"
@@ -81,7 +102,7 @@ fault_env() {
   fi
 }
 
-echo "[run_sil_multiproc] fcm / uss / planning ..."
+echo "[run_sil_verify] fcm / uss / planning ..."
 GF_PHM_FAULT_MS="$(fault_env fcm)" "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
 FCM_PID=$!
 GF_PHM_FAULT_MS="$(fault_env uss)" "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
@@ -90,15 +111,15 @@ GF_PHM_FAULT_MS="$(fault_env planning)" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&
 PLAN_PID=$!
 sleep 0.5
 
-echo "[run_sil_multiproc] gateway (expect ${TRAJ_COUNT} Trajectory) ..."
+echo "[run_sil_verify] gateway (expect ${TRAJ_COUNT} Trajectory) ..."
 GF_PHM_FAULT_MS="$(fault_env gateway)" "${GW}" "${TRAJ_COUNT}" >"${LOG_DIR}/gateway.log" 2>&1 &
 GW_PID=$!
 
-echo "[run_sil_multiproc] waiting (timeout ${TIMEOUT_SEC}s) ..."
+echo "[run_sil_verify] waiting (timeout ${TIMEOUT_SEC}s) ..."
 SECONDS=0
 while kill -0 "${GW_PID}" 2>/dev/null; do
   if (( SECONDS >= TIMEOUT_SEC )); then
-    echo "[run_sil_multiproc] TIMEOUT" >&2
+    echo "[run_sil_verify] TIMEOUT" >&2
     for f in gateway planning fcm uss; do
       echo "--- ${f}.log ---" >&2
       cat "${LOG_DIR}/${f}.log" >&2 || true
@@ -112,7 +133,7 @@ done
 wait "${GW_PID}"
 GW_RC=$?
 if [[ "${GW_RC}" -ne 0 ]]; then
-  echo "[run_sil_multiproc] gateway exited ${GW_RC}" >&2
+  echo "[run_sil_verify] gateway exited ${GW_RC}" >&2
   cat "${LOG_DIR}/gateway.log" >&2 || true
   exit "${GW_RC}"
 fi
@@ -120,7 +141,7 @@ fi
 assert_log() {
   local file="$1" pat="$2" label="$3"
   if ! grep -qE "${pat}" "${file}"; then
-    echo "[run_sil_multiproc] FAIL ${label}: missing /${pat}/ in ${file}" >&2
+    echo "[run_sil_verify] FAIL ${label}: missing /${pat}/ in ${file}" >&2
     cat "${file}" >&2 || true
     exit 1
   fi
@@ -140,18 +161,17 @@ if [[ "${GF_PHM_FAULT_MS}" != "0" ]]; then
     uss) FAULT_LOG="${LOG_DIR}/uss.log" ;;
     fcm) FAULT_LOG="${LOG_DIR}/fcm.log" ;;
     *)
-      echo "[run_sil_multiproc] unknown GF_PHM_FAULT_TARGET=${FAULT_TARGET}" >&2
+      echo "[run_sil_verify] unknown GF_PHM_FAULT_TARGET=${FAULT_TARGET}" >&2
       exit 1
       ;;
   esac
   assert_log "${FAULT_LOG}" "FAULT inject|AliveMissed|DeadlineMissed" "X-3 fault (${FAULT_TARGET})"
-  # planning uses restart/soft recover; notify_sm targets may pause without "recovered"
   if [[ "${FAULT_TARGET}" == "planning" ]]; then
     assert_log "${FAULT_LOG}" "recovered|fault window ended" "X-3 recover"
   fi
 fi
 
-echo "[run_sil_multiproc] OK — Trajectory×${TRAJ_COUNT} + exec/phm checks"
+echo "[run_sil_verify] OK — Trajectory×${TRAJ_COUNT} + exec/phm checks"
 echo "logs: ${LOG_DIR}/"
 tail -20 "${LOG_DIR}/gateway.log" || true
 exit 0

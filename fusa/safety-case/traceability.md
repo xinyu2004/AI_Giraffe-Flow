@@ -154,7 +154,7 @@
 | SR | 需求句 | 验证 |
 |----|--------|------|
 | SR-05.1 | production-release 下 live_tap 关闭、record=off、无 tap/inject 应用 | SIL-T4 compose 断言 · L2 |
-| SR-05.2 | 同 profile 下 SIL-02（multiproc 主链）仍可通过 | SIL-T4（`build-prod`） |
+| SR-05.2 | 同 profile 下 SIL-02（主链 verify）仍可通过 | SIL-T4（`build-prod`） |
 
 门控：**发版必跑** `GF_FUSA_T4=1 bash fusa/scripts/run_cases.sh`（另编 `build-prod`，退出恢复 vehicle-debug；见 `devops/ci/README.md`）。
 

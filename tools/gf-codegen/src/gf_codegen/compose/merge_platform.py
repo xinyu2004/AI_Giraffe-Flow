@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 
 from gf_codegen.compose.load_project import PLATFORM_KEYS, ProjectPaths
+from gf_codegen.compose.mem_budget import estimate_mem_budget
 
 # runtime_modules that unlock each platform file
 _MODULE_UNLOCK: dict[str, frozenset[str]] = {
@@ -19,6 +20,9 @@ _MODULE_UNLOCK: dict[str, frozenset[str]] = {
     "log": frozenset({"log"}),
     "ucm": frozenset({"ucm"}),
     "collector": frozenset({"collector", "phm", "diag"}),
+    # bounds always load when any boundable module is on
+    "bounds": frozenset({"log", "collector", "diag", "com", "per"}),
+    "tsync": frozenset({"tsync"}),
 }
 
 
@@ -62,6 +66,8 @@ def validate_platform(
     loaded: dict[str, dict[str, Any]],
     *,
     ap_processes: set[str],
+    req: dict[str, Any] | None = None,
+    project_dir: Path | None = None,
 ) -> tuple[list[str], list[str], list[dict[str, Any]]]:
     """Return (errors, warnings, checks)."""
     errors: list[str] = []
@@ -182,6 +188,31 @@ def validate_platform(
         else:
             checks.append({"id": "platform_log_contexts", "status": "pass"})
 
+    # BL-MEM-BOUND / BL-MEM-ROUDI static estimate (formulas in mem_budget.py)
+    report_path = (
+        (project_dir / "generated" / "iox_shm_report.json") if project_dir else None
+    )
+    est = estimate_mem_budget(loaded, req=req, shm_report_path=report_path)
+    for e in est.get("errors") or []:
+        errors.append(f"platform.mem_budget: {e}")
+    for w in est.get("warnings") or []:
+        warnings.append(f"platform.mem_budget: {w}")
+    checks.append(
+        {
+            "id": "platform_mem_budget",
+            "status": "fail" if est.get("errors") else "pass",
+            "total_ram_bytes": est.get("total_ram_bytes"),
+            "total_disk_bytes": est.get("total_disk_bytes"),
+            "total_shm_bytes": est.get("total_shm_bytes"),
+            "lines": est.get("lines"),
+            "constants": est.get("constants"),
+            "formula_doc": est.get("formula_doc"),
+            "iceoryx_enabled": est.get("iceoryx_enabled"),
+            "roudi_mgmt_status": est.get("roudi_mgmt_status"),
+            "detail": est.get("errors") or est.get("warnings") or [],
+        }
+    )
+
     return errors, warnings, checks
 
 
@@ -244,7 +275,12 @@ def merge_platform(
         checks.append({"id": "platform_files", "status": "pass", "loaded": list(loaded.keys())})
 
     ap = wiring_ap_processes(wiring, sor=sor)
-    v_err, v_warn, v_checks = validate_platform(loaded, ap_processes=ap)
+    v_err, v_warn, v_checks = validate_platform(
+        loaded,
+        ap_processes=ap,
+        req=req,
+        project_dir=paths.project_dir,
+    )
     errors.extend(v_err)
     warnings.extend(v_warn)
     checks.extend(v_checks)

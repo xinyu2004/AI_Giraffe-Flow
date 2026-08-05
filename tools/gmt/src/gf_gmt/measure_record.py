@@ -40,7 +40,7 @@ _PLAN_RE = re.compile(
 
 
 def events_from_sil_logs(log_dir: Path) -> list[dict[str, Any]]:
-    """Parse multiproc SIL logs into session events (best-effort)."""
+    """Parse main-chain SIL logs into session events (best-effort)."""
     events: list[dict[str, Any]] = []
     gw = log_dir / "gateway.log"
     if gw.is_file():

@@ -35,5 +35,5 @@ bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 bash projects/oem_a/afc_with_uss/scripts/compile_hil.sh
 
 # 验证 smoke（非产品路径）
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh
 ```

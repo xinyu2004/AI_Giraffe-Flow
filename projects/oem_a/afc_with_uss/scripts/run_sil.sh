@@ -385,7 +385,21 @@ if [[ -n "${_LOG_YAML}" ]]; then
   fi
 fi
 
-NEED_BINS=("${ROUDI}")
+# RouDi: driven by req.bindings iceoryx (gf-config), same pattern as DLT.
+# Config truth = compose → generated/iox_roudi.toml (+ iox_mgmt.cmake at iceoryx build).
+IOX_ON=0
+IOX_TOML="${PROJECT_DIR}/generated/iox_roudi.toml"
+REQ_YAML="${PROJECT_DIR}/req.yaml"
+if [[ -f "${REQ_YAML}" ]]; then
+  if grep -Eq '^[[:space:]]*-[[:space:]]*iceoryx[[:space:]]*$' "${REQ_YAML}"; then
+    IOX_ON=1
+  fi
+fi
+
+NEED_BINS=()
+if [[ "${IOX_ON}" == "1" ]]; then
+  NEED_BINS+=("${ROUDI}")
+fi
 if [[ "${INJECT_ON}" == "1" ]]; then
   NEED_BINS+=("${INJ}")
   DRIVE_CHECK="${GF_INJECT_MODE:-continuous}"
@@ -430,9 +444,17 @@ for bin in "${NEED_BINS[@]}"; do
     if [[ "${bin}" == "${DOIP}" ]]; then
       echo "DoIP OTA server missing — rebuild (target gf_doip_ota_server) or set GF_DOIP=0." >&2
     fi
+    if [[ "${bin}" == "${ROUDI}" ]]; then
+      echo "iox-roudi missing — req.bindings has iceoryx; rebuild iceoryx (mgmt from generated/iox_mgmt.cmake)." >&2
+      echo "NOTE: change bounds.iceoryx.mgmt → compose → cmake reconfigure + rebuild iceoryx." >&2
+    fi
     exit 1
   fi
 done
+if [[ "${IOX_ON}" == "1" && ! -f "${IOX_TOML}" ]]; then
+  echo "${TAG} ERROR: missing ${IOX_TOML} (compose with req.bindings iceoryx → bounds.iceoryx.mempools)" >&2
+  exit 1
+fi
 
 if [[ ! -f "${GF_PLATFORM_DIR}/exec.yaml" && ! -f "${GF_PLATFORM_DIR}/platform/exec.yaml" ]]; then
   echo "Missing exec.yaml under ${GF_PLATFORM_DIR} (or …/platform/)" >&2
@@ -668,18 +690,55 @@ else
   host_info "dlt-daemon skipped (log.yaml sinks have no dlt — gf-config 日志)"
 fi
 
-host_info "start RouDi"
-echo "${TAG} RouDi ..."
-"${ROUDI}" >"${LOG_DIR}/roudi.log" 2>&1 &
-ROUDI_PID=$!
-sleep 1
-if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then
-  host_info "RouDi failed; see ${LOG_DIR}/roudi.log"
-  echo "${TAG} RouDi failed; see ${LOG_DIR}/roudi.log" >&2
-  cat "${LOG_DIR}/roudi.log" >&2 || true
-  exit 1
+ROUDI_PID=""
+if [[ "${IOX_ON}" == "1" ]]; then
+  # Config-driven: generated/iox_roudi.toml from bounds.iceoryx.mempools (no env kill-switch).
+  # mgmt size comes from iceoryx rebuild via generated/iox_mgmt.cmake.
+  host_info "start RouDi config=${IOX_TOML}"
+  echo "${TAG} RouDi (bounds → ${IOX_TOML}) ..."
+  echo "${TAG} NOTE: change iceoryx.mgmt → compose + cmake reconfigure + rebuild iceoryx"
+  : >"${LOG_DIR}/roudi.log"
+  "${ROUDI}" -c "${IOX_TOML}" >"${LOG_DIR}/roudi.log" 2>&1 &
+  ROUDI_PID=$!
+  sleep 1
+  if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then
+    host_info "RouDi failed; see ${LOG_DIR}/roudi.log"
+    echo "${TAG} RouDi failed; see ${LOG_DIR}/roudi.log" >&2
+    cat "${LOG_DIR}/roudi.log" >&2 || true
+    exit 1
+  fi
+  host_info "RouDi ok pid=${ROUDI_PID}"
+  # Best-effort: parse reserved SHM sizes into generated/iox_shm_report.json for Verify.
+  python - "${LOG_DIR}/roudi.log" "${PROJECT_DIR}/generated/iox_shm_report.json" "${IOX_TOML}" <<'PY' || true
+import json, re, sys
+from pathlib import Path
+log, out, toml = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
+mgmt = None
+payload = None
+for m in re.finditer(
+    r"(?:Trying to reserve|Acquired)\s+(\d+)\s+bytes.*?\[([^\]]+)\]",
+    text,
+    re.I,
+):
+    n, name = int(m.group(1)), m.group(2).lower()
+    if "mgmt" in name or name == "iceoryx_mgmt":
+        mgmt = n
+    elif "mgmt" not in name:
+        payload = n if payload is None else max(payload, n)
+report = {
+    "schema_version": "0.1",
+    "source": "roudi.log",
+    "toml": str(toml),
+    "mgmt_bytes": mgmt,
+    "payload_segment_bytes": payload,
+}
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+PY
+else
+  host_info "RouDi skipped (req.bindings has no iceoryx — gf-config)"
 fi
-host_info "RouDi ok pid=${ROUDI_PID}"
 
 if [[ "${DOIP_ON}" == "1" ]]; then
   # GMT DEM: real PHM AliveMissed in apps → PersistDtc → shared GF_PER_DIR;

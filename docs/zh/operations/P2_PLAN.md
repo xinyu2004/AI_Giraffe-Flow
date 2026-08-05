@@ -93,7 +93,7 @@ flowchart TD
 | 0 | **R0** | req/wiring/acceptance 与粗端口一致；lineage 绿 | 必做 · 很快 |
 | 1 | **Cfg** | **gf-config 定型**：A 瘦身 · B 巩固 · **C·平台五子页** · 菜单已齐 | **最先主轨** |
 | 2 | **P** | compose 读 `project.platform` → 校验 → `platform_manifest`；（可选）generate 常量表 | 紧随 Cfg |
-| 3 | **R** | 多进程 App + smoke_sil_multiproc | 配置闭环后 |
+| 3 | **R** | 多进程 App + smoke_sil_verify | 配置闭环后 |
 | 4 | **X** | 读 platform → Running + Alive；故障注入 1 例 | 随 R |
 | 5 | **O** | Record + Tag + MCAP | 并行加深 |
 | 6 | **B** | CycloneDDS 真收发 | 加深 |
@@ -183,8 +183,8 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 |---|--------|
 | R-1 | 主链可执行文件 + `GF_USE_GENERATED=ON` |
 | R-2 | CMake / `GF_APPS` / `gf_build.cmake` |
-| R-3 | `scripts/verify/oem_a_afc_with_uss/run_sil_multiproc.sh` |
-| R-4 | `scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh`（下游 N 帧断言） |
+| R-3 | `scripts/verify/oem_a_afc_with_uss/run_sil_verify.sh` |
+| R-4 | `scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh`（下游 N 帧断言） |
 | R-5 | 双进程回归说明 |
 
 ### 验收
@@ -273,7 +273,7 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 ```bash
 gf-config projects/oem_a/afc_with_uss/project.yaml   # 先把 A/B/C 配稳
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh
 ```
 
 ---

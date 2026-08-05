@@ -46,8 +46,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "${TAG} RouDi ..."
-"${ROUDI}" >"${GF_EM_LOG_DIR}/roudi.log" 2>&1 &
+IOX_TOML="${PROJECT_DIR}/generated/iox_roudi.toml"
+if [[ ! -f "${IOX_TOML}" ]]; then
+  echo "${TAG} ERROR: missing ${IOX_TOML} (compose with iceoryx)" >&2
+  exit 1
+fi
+echo "${TAG} RouDi (bounds → ${IOX_TOML}) ..."
+echo "${TAG} NOTE: change iceoryx.mgmt → compose + cmake reconfigure + rebuild iceoryx"
+"${ROUDI}" -c "${IOX_TOML}" >"${GF_EM_LOG_DIR}/roudi.log" 2>&1 &
 ROUDI_PID=$!
 sleep 1
 

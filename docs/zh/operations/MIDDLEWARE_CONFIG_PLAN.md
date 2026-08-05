@@ -287,7 +287,11 @@ projects/<oem>/<sku>/
     log.yaml
     ucm.yaml
     collector.yaml              # P3：或并入 diag.yaml（二选一冻结）
+    bounds.yaml                 # BL-MEM-BOUND / BL-MEM-ROUDI（含 iceoryx.mgmt + mempools）
   generated/
+    iox_roudi.toml              # compose 自 bounds.iceoryx.mempools
+    iox_mgmt.cmake              # compose 自 bounds.iceoryx.mgmt → IOX_MAX_*
+
 ```
 
 ---

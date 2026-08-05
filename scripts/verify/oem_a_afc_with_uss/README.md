@@ -13,9 +13,9 @@
 | Script | Purpose |
 |--------|---------|
 | [smoke_sil.sh](smoke_sil.sh) | compile + 双进程 `run_iox_demo` |
-| [run_sil_multiproc.sh](run_sil_multiproc.sh) | 有限帧主链 + exec/phm 断言 |
-| [smoke_sil_multiproc.sh](smoke_sil_multiproc.sh) | compile → multiproc |
-| [smoke_sil_observability.sh](smoke_sil_observability.sh) | multiproc → Tag → MCAP → `${BUILD}/observability/` |
+| [run_sil_verify.sh](run_sil_verify.sh) | 有限帧主链 + exec/phm 断言 |
+| [smoke_sil_verify.sh](smoke_sil_verify.sh) | compile → finite main-chain |
+| [smoke_sil_observability.sh](smoke_sil_observability.sh) | main-chain → Tag → MCAP → `${BUILD}/observability/` |
 | [smoke_phm_dem_doip.sh](smoke_phm_dem_doip.sh) | PHM fault → PER + NDJSON → DoIP 0x19 |
 | [smoke_sil_phm_fault.sh](smoke_sil_phm_fault.sh) | PHM miss→recover |
 | [smoke_sil_em_daemon.sh](smoke_sil_em_daemon.sh) | OS EM fork/exec + PHM restart relaunch |

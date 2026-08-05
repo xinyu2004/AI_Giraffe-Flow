@@ -10,6 +10,9 @@ sources:
 local:
   enabled: true
   max_entries: 256
+  # BL-MEM-BOUND: debounce maps + shared NDJSON file
+  debounce_max_keys: 64
+  store_max_bytes: 1048576
 # event_id → DTC（防抖 / FDC / 老化数值）
 dtc_map:
   - event: AliveMissed

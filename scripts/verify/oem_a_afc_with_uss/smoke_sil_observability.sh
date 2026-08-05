@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verify (not product path).
-# O-track: multiproc SIL → session JSONL → tag → MCAP (+ optional foxglove describe)
+# O-track: main-chain SIL → session JSONL → tag → MCAP (+ optional foxglove describe)
 #
 # Usage:
 #   bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
@@ -22,10 +22,10 @@ if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
   bash "${PROJECT_SCRIPTS}/compile_sil.sh"
 fi
 
-# Short multiproc for CI-ish runs
+# Short main-chain for CI-ish runs
 export GF_MP_TRAJ_COUNT="${GF_MP_TRAJ_COUNT:-8}"
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
-bash "${SCRIPT_DIR}/run_sil_multiproc.sh"
+bash "${SCRIPT_DIR}/run_sil_verify.sh"
 
 echo "${TAG} measure record from ${LOG_DIR} ..."
 OBS_JSON="${PROJECT_DIR}/generated/observability.json"
@@ -40,7 +40,7 @@ fi
 echo "${TAG} measure tag ..."
 # Keep all events; label the run
 GMT measure tag --in "${OUT_DIR}/session.jsonl" --out "${OUT_DIR}/session_tagged.jsonl" \
-  --label "afc_multiproc_smoke"
+  --label "afc_sil_verify_smoke"
 
 echo "${TAG} measure export → MCAP ..."
 GMT measure export --in "${OUT_DIR}/session_tagged.jsonl" --out "${OUT_DIR}/session.mcap"

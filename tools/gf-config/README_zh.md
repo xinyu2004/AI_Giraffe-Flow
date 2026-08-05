@@ -46,7 +46,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | 页签 | 作用 |
 |------|------|
 | **1 · 信号与应用**（默认） | **左侧薄 SKU 默认展开**；中央画布；**右侧连线/Lineage 默认收起**（点 ◀ 展开） |
-| **2 · 平台运行时** | 顶部 `runtime_modules`（含可裁剪 **per / tsync**）；子页：执行/FG · **EM 启动表** · PHM · 诊断 · **日志** · OTA · **事件收集** |
+| **2 · 平台运行时** | 顶部 `runtime_modules`（含可裁剪 **per / tsync**）；子页：执行/FG · **EM 启动表** · PHM · 诊断 · **日志** · OTA · **事件收集** · **有界内存** |
 
 快捷键：Ctrl+1 / Ctrl+2 切页。Verify / Generate 后自动回页 1 右侧 Lineage。  
 **编辑菜单：** 撤销 / 重做（Ctrl+Z / Ctrl+Y）— 跳到变更所在页（含平台子页），底栏提示中英 i18n。
@@ -59,10 +59,18 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 
 ### 页 2 · 日志（`log.yaml`）
 
-- **默认级别** + **输出 sinks**（`console` / `file` / `dlt`）+ **DLT app_id** + **按模块覆盖**表。
+- **默认级别** + **输出 sinks**（`console` / `file` / `dlt`）+ **DLT app_id** + **`file_max_bytes`** + **按模块覆盖**表。
 - 勾选 **dlt** → SIL/HIL 按配置起 `dlt-daemon`（不用环境变量关开）。
 - 新增行：模块默认可空；级别默认 `INFO`（枚举着色保留）。
 - Verify：同一 `context id` 重复则失败（勿在 `log.yaml` 写两条同名模块）。
+
+### 页 2 · 有界内存（`bounds.yaml` + BL-MEM-BOUND / BL-MEM-ROUDI）
+
+- 跨模块硬上限：DLT contexts · LoopbackBus · per KV · DoIP rx · DID map · 可选 budget。
+- **iceoryx / RouDi**：`mgmt`（→ `IOX_MAX_*`，改后须 rebuild iceoryx）+ `mempools`（→ `generated/iox_roudi.toml`）。
+- `req.bindings` 含 iceoryx 时 SIL 自动起 RouDi（配置驱动）。
+- 关联写回：`log.file_max_bytes`、`collector.local.*`、`diag.doip.rx_max_bytes`。
+- **只读预估**含 RAM/DISK/SHM 公式行；见 `gf_codegen.compose.mem_budget` FORMULAS。
 
 ## 页 1 画布日常四步
 

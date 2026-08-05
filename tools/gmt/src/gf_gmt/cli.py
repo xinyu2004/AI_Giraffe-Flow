@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     meas_sub = p_meas.add_subparsers(dest="meas_cmd", required=True)
 
     p_rec = meas_sub.add_parser(
-        "record", help="Build session JSONL from SIL multiproc logs (O-1)"
+        "record", help="Build session JSONL from SIL main-chain logs (O-1)"
     )
     p_rec.add_argument(
         "--from-logs",

@@ -76,7 +76,7 @@ def first_t(path, pat):
 report = {"stamp": STAMP, "git": GIT, "host": "SIL desktop"}
 
 run(
-    "bash scripts/verify/oem_a_afc_with_uss/run_sil_multiproc.sh",
+    "bash scripts/verify/oem_a_afc_with_uss/run_sil_verify.sh",
     {"GF_MP_TRAJ_COUNT": "30", "GF_PHM_FAULT_MS": "0"},
 )
 gw = BUILD / "runtime" / "logs" / "gateway.log"

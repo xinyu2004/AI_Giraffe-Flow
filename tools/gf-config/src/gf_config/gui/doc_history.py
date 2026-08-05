@@ -132,6 +132,7 @@ _PLATFORM_LABELS = {
     "log": "日志",
     "ucm": "OTA ucm",
     "collector": "事件收集",
+    "bounds": "有界内存",
 }
 
 

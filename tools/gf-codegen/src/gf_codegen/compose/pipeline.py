@@ -12,10 +12,12 @@ import yaml
 
 from gf_codegen.compose.apply_wiring import apply_wiring
 from gf_codegen.compose.emit_build_cmake import emit_build_cmake, emit_observability_json
+from gf_codegen.compose.emit_iox import emit_iox_assets
 from gf_codegen.compose.emit_platform_tables import emit_platform_tables
 from gf_codegen.compose.import_oem import import_oem
 from gf_codegen.compose.lineage import run_lineage
 from gf_codegen.compose.load_project import ProjectPaths, load_project
+from gf_codegen.compose.mem_budget import fmt_bytes
 from gf_codegen.compose.merge_platform import merge_platform
 from gf_codegen.compose.merge_req import merge_req
 from gf_codegen.compose.observability import validate_observability
@@ -117,17 +119,46 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     )
     obs_json = paths.project_dir / "generated" / "observability.json"
     emit_observability_json(req, obs_json, wiring=wiring)
+    gen_dir = paths.project_dir / "generated"
+    plat_loaded = sor.get("platform_manifest") if isinstance(sor.get("platform_manifest"), dict) else {}
+    iox_meta = emit_iox_assets(gen_dir, plat_loaded, req)
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)
     report.setdefault("outputs", {})["observability"] = str(obs_json)
+    if iox_meta:
+        report.setdefault("outputs", {})["iox_roudi_toml"] = iox_meta["toml"]
+        report.setdefault("outputs", {})["iox_mgmt_cmake"] = iox_meta["cmake"]
     write_lineage(paths.lineage_report, report)
 
     print(f"compose wrote: {paths.out_sor}")
     print(f"lineage wrote: {paths.lineage_report} (ok={report['ok']})")
     print(f"sku cmake wrote: {sku_cmake}")
     print(f"observability wrote: {obs_json}")
+    if iox_meta:
+        print(f"iox_roudi.toml wrote: {iox_meta['toml']}")
+        print(
+            f"iox_mgmt.cmake wrote: {iox_meta['cmake']} "
+            "(iceoryx.mgmt change → reconfigure + rebuild iceoryx)"
+        )
     if sor.get("platform_manifest"):
         keys = sorted(k for k in sor["platform_manifest"] if k != "schema_version")
         print(f"platform_manifest: {', '.join(keys)}")
+    for chk in plat_checks:
+        if chk.get("id") == "platform_mem_budget":
+            print(
+                f"mem_budget: RAM={fmt_bytes(chk.get('total_ram_bytes'))}  "
+                f"DISK={fmt_bytes(chk.get('total_disk_bytes'))}  "
+                f"SHM={fmt_bytes(chk.get('total_shm_bytes'))}  "
+                f"({chk.get('formula_doc')})"
+            )
+            print(
+                "  SHM = iceoryx/RouDi shared memory "
+                "(payload mempools + iceoryx_mgmt); not process heap RSS"
+            )
+            for ln in chk.get("lines") or []:
+                print(
+                    f"  [{ln.get('kind')}] {ln.get('name')}: "
+                    f"{fmt_bytes(ln.get('bytes'))}  ← {ln.get('formula')}"
+                )
     for w in report.get("warnings") or []:
         print(f"  warning: {w}")
     if not report["ok"]:

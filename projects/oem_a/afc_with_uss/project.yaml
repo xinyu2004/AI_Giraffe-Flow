@@ -25,6 +25,7 @@ platform:
   ucm: platform/ucm.yaml
   collector: platform/collector.yaml
   tsync: platform/tsync.yaml
+  bounds: platform/bounds.yaml
 
 delivery:
   req: req.yaml

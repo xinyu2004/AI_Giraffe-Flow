@@ -11,7 +11,17 @@ import yaml
 from gf_codegen.paths import find_repo_root, resolve_path
 
 
-PLATFORM_KEYS = ("exec", "em_launch", "phm", "diag", "log", "ucm", "collector", "tsync")
+PLATFORM_KEYS = (
+    "exec",
+    "em_launch",
+    "phm",
+    "diag",
+    "log",
+    "ucm",
+    "collector",
+    "tsync",
+    "bounds",
+)
 
 
 @dataclass

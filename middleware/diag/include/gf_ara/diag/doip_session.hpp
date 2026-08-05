@@ -20,6 +20,8 @@ struct DoipSessionConfig {
   std::uint16_t listen_port{13400};
   std::uint16_t entity_address{0x0E00};
   std::uint16_t expected_tester{0x0E80};
+  /// BL-MEM-BOUND: TCP rx accumulator (default 64 KiB).
+  std::uint32_t rx_max_bytes{65536};
 };
 
 /// TCP DoIP entity (SIL / fake board). One client at a time.
@@ -64,6 +66,10 @@ class DoipTcpClient {
                                      std::uint16_t tester_address = 0x0E80,
                                      std::uint16_t entity_address = 0x0E00);
 
+  void SetRxMaxBytes(std::uint32_t n) noexcept {
+    rx_max_bytes_ = n == 0 ? 65536 : n;
+  }
+
   void Close();
 
   gf_ara::core::Result<void> RoutingActivation();
@@ -80,6 +86,7 @@ class DoipTcpClient {
   int fd_{-1};
   std::uint16_t tester_{0x0E80};
   std::uint16_t entity_{0x0E00};
+  std::uint32_t rx_max_bytes_{65536};
   std::vector<std::uint8_t> rx_buf_;
 };
 

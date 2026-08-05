@@ -17,10 +17,22 @@
 namespace gf_ara::collector {
 namespace {
 
-void AppendSharedStore(const EventRecord& rec) {
+void AppendSharedStore(const EventRecord& rec, std::uint32_t store_max_bytes) {
   const char* path = std::getenv("GF_COLLECTOR_STORE");
   if (path == nullptr || path[0] == '\0') {
     return;
+  }
+  if (store_max_bytes > 0) {
+    const int sfd = ::open(path, O_RDONLY);
+    if (sfd >= 0) {
+      const off_t sz = ::lseek(sfd, 0, SEEK_END);
+      ::close(sfd);
+      if (sz >= 0 && static_cast<std::uint64_t>(sz) >= store_max_bytes) {
+        const std::string bak = std::string(path) + ".1";
+        ::unlink(bak.c_str());
+        ::rename(path, bak.c_str());
+      }
+    }
   }
   const int fd = ::open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
   if (fd < 0) {
@@ -134,6 +146,12 @@ void EventCollector::ConfigureFromYaml(std::string_view yaml_text) {
   }
   if (std::regex_search(text, m, std::regex(R"(max_entries:\s*(\d+))"))) {
     cfg.max_entries = static_cast<std::uint32_t>(std::stoul(m[1].str()));
+  }
+  if (std::regex_search(text, m, std::regex(R"(debounce_max_keys:\s*(\d+))"))) {
+    cfg.debounce_max_keys = static_cast<std::uint32_t>(std::stoul(m[1].str()));
+  }
+  if (std::regex_search(text, m, std::regex(R"(store_max_bytes:\s*(\d+))"))) {
+    cfg.store_max_bytes = static_cast<std::uint32_t>(std::stoul(m[1].str()));
   }
   // dtc_map entries: - event: phm/alive_timeout / dtc: 0x123456 / ...
   std::regex ent_re(
@@ -265,6 +283,14 @@ void EventCollector::ApplyFaultLocked(std::string_view event_id, std::string_vie
   const std::string eid(event_id);
   const std::uint64_t now = gf::osal::MonotonicNowNs();
 
+  if (cfg_.debounce_max_keys > 0 &&
+      debounce_hits_.find(eid) == debounce_hits_.end() &&
+      debounce_hits_.size() >= cfg_.debounce_max_keys) {
+    // Drop an arbitrary oldest-ish key (first map node) — bound map size.
+    const auto victim = debounce_hits_.begin()->first;
+    debounce_hits_.erase(victim);
+    debounce_first_ns_.erase(victim);
+  }
   auto& hits = debounce_hits_[eid];
   auto& first_ns = debounce_first_ns_[eid];
   if (hits == 0) {
@@ -327,7 +353,7 @@ void EventCollector::ReportEvent(std::string_view source, std::string_view event
     }
   }
 
-  AppendSharedStore(rec);
+  AppendSharedStore(rec, cfg_.store_max_bytes);
 
   std::cout << "collector: event source=" << rec.source << " id=" << rec.event_id
             << " detail=" << rec.detail;

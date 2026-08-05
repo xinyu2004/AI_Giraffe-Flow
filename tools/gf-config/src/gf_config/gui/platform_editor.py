@@ -30,6 +30,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from gf_codegen.compose.mem_budget import (
+    C_DEBOUNCE_ENTRY,
+    C_DLT_CTX,
+    C_EVENT_RECORD,
+    C_PER_KEY_OH,
+    estimate_mem_budget,
+    format_estimate_text,
+)
 
 from gf_config.core import ProjectSession
 from gf_config.gui.field_ux import (
@@ -197,6 +205,8 @@ _NAV = [
     ("ucm", "OTA ucm", frozenset({"ucm"})),
     # Collector 最小集：有 diag 或 phm 即可配（不要求单独 runtime 模块名）
     ("collector", "事件收集", frozenset({"diag", "phm", "collector"})),
+    # com/per always-on → 有界内存页常显；公式见 mem_budget.py FORMULAS
+    ("bounds", "有界内存", frozenset({"com", "per", "log", "collector", "diag"})),
 ]
 
 _LOG_LEVELS = ["FATAL", "ERROR", "WARN", "INFO", "DEBUG", "VERBOSE"]
@@ -343,6 +353,7 @@ class PlatformEditor(QWidget):
         self._pages["log"] = self._build_log_page()
         self._pages["ucm"] = self._build_ucm_page()
         self._pages["collector"] = self._build_collector_page()
+        self._pages["bounds"] = self._build_bounds_page()
         for key, _title, _mods in _NAV:
             self._stack.addWidget(self._pages[key])
 
@@ -764,6 +775,15 @@ class PlatformEditor(QWidget):
         tipify(self._log_dlt_app, t("DLT Application ID（4 字符）；多进程可由运行时覆盖"))
         self._log_dlt_app.textChanged.connect(self._on_log_changed)
         form.addRow(t("DLT app_id"), self._log_dlt_app)
+        self._log_file_max = QSpinBox()
+        self._log_file_max.setRange(4096, 2_147_483_647)
+        self._log_file_max.setValue(1_048_576)
+        tipify(
+            self._log_file_max,
+            t("file sink 软轮转上限（字节）；保留 path + path.1，计入 DISK 预估 ×2"),
+        )
+        self._log_file_max.valueChanged.connect(self._on_log_changed)
+        form.addRow("file_max_bytes", self._log_file_max)
         lay.addLayout(form)
 
         ctx_box = QGroupBox(t("按模块覆盖级别"))
@@ -874,11 +894,203 @@ class PlatformEditor(QWidget):
         self._col_max.setValue(256)
         tipify(self._col_max, T.COL_MAX)
         self._col_max.valueChanged.connect(self._on_collector_changed)
+        self._col_deb_keys = QSpinBox()
+        self._col_deb_keys.setRange(1, 100000)
+        self._col_deb_keys.setValue(64)
+        tipify(
+            self._col_deb_keys,
+            t("防抖 map 最大键数（BL-MEM-BOUND）；RAM ≈ keys × C_DEBOUNCE_ENTRY"),
+        )
+        self._col_deb_keys.valueChanged.connect(self._on_collector_changed)
+        self._col_store_max = QSpinBox()
+        self._col_store_max.setRange(4096, 2_147_483_647)
+        self._col_store_max.setValue(1_048_576)
+        tipify(
+            self._col_store_max,
+            t("共享 NDJSON 文件软上限；保留 ×2，计入 DISK 预估"),
+        )
+        self._col_store_max.valueChanged.connect(self._on_collector_changed)
         local_f.addRow("", self._col_local_en)
         local_f.addRow("max_entries", self._col_max)
+        local_f.addRow("debounce_max_keys", self._col_deb_keys)
+        local_f.addRow("store_max_bytes", self._col_store_max)
         lay.addWidget(local)
         lay.addStretch(1)
         return w
+
+    def _build_bounds_page(self) -> QWidget:
+        inner = QWidget()
+        lay = QVBoxLayout(inner)
+        hint = QLabel(
+            t(
+                "BL-MEM-BOUND：平台有界内存 / 磁盘上界。"
+                "下方预估为保守上界（非实测 RSS），公式与常量可 review："
+                "tools/gf-codegen/.../mem_budget.py 模块 docstring FORMULAS。"
+                "Verify / Generate 会跑同一套 estimate。"
+            )
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#666;")
+        lay.addWidget(hint)
+
+        const_lbl = QLabel(
+            t("公式常量（字节）")
+            + f":  C_EVENT_RECORD={C_EVENT_RECORD}  "
+            f"C_DEBOUNCE_ENTRY={C_DEBOUNCE_ENTRY}  "
+            f"C_DLT_CTX={C_DLT_CTX}  C_PER_KEY_OH={C_PER_KEY_OH}"
+        )
+        const_lbl.setWordWrap(True)
+        const_lbl.setStyleSheet(
+            "font-family: monospace; font-size: 11px; color:#333; "
+            "background:#f5f5f5; padding:6px;"
+        )
+        lay.addWidget(const_lbl)
+
+        def _spin(lo: int, hi: int, default: int) -> QSpinBox:
+            s = QSpinBox()
+            s.setRange(lo, hi)
+            s.setValue(default)
+            s.valueChanged.connect(self._on_bounds_changed)
+            return s
+
+        # ── bounds.yaml ──
+        b_box = QGroupBox(t("bounds.yaml（跨模块硬上限）"))
+        bf = QFormLayout(b_box)
+        self._bnd_dlt_ctx = _spin(1, 4096, 64)
+        tipify(self._bnd_dlt_ctx, t("DltSink context 表；log.contexts 数量不可超过此值"))
+        self._bnd_com_depth = _spin(1, 1024, 16)
+        tipify(self._bnd_com_depth, t("LoopbackBus 每 topic 队列深度"))
+        self._bnd_com_keys = _spin(1, 100000, 64)
+        tipify(self._bnd_com_keys, t("LoopbackBus topic 键上限"))
+        self._bnd_com_avg = _spin(1, 1_048_576, 256)
+        tipify(self._bnd_com_avg, t("仅预估用：队列中单样本平均字节"))
+        self._bnd_per_keys = _spin(1, 1_000_000, 1024)
+        tipify(self._bnd_per_keys, t("per KV 最大键数"))
+        self._bnd_per_val = _spin(1, 16_777_216, 65536)
+        tipify(self._bnd_per_val, t("per 单 value 最大字节"))
+        self._bnd_rx = _spin(1024, 16_777_216, 65536)
+        tipify(self._bnd_rx, t("DoIP TCP rx 累加器；同步写入 diag.doip.rx_max_bytes"))
+        self._bnd_did_n = _spin(1, 100000, 256)
+        tipify(self._bnd_did_n, t("UDS DID map 最大条目"))
+        self._bnd_did_pay = _spin(1, 1_048_576, 4096)
+        tipify(self._bnd_did_pay, t("单 DID payload 最大字节"))
+        self._bnd_bud_ram = _spin(0, 2_147_483_647, 0)
+        tipify(self._bnd_bud_ram, t("可选：total_ram 超过则 Verify warn；0=不警告"))
+        self._bnd_bud_disk = _spin(0, 2_147_483_647, 0)
+        tipify(self._bnd_bud_disk, t("可选：total_disk 超过则 Verify warn；0=不警告"))
+        bf.addRow("dlt.max_contexts", self._bnd_dlt_ctx)
+        bf.addRow("com.queue_depth", self._bnd_com_depth)
+        bf.addRow("com.max_topic_keys", self._bnd_com_keys)
+        bf.addRow("com.avg_payload_bytes", self._bnd_com_avg)
+        bf.addRow("per.max_keys", self._bnd_per_keys)
+        bf.addRow("per.max_value_bytes", self._bnd_per_val)
+        bf.addRow("diag.rx_max_bytes", self._bnd_rx)
+        bf.addRow("diag.dids.max_entries", self._bnd_did_n)
+        bf.addRow("diag.dids.max_payload", self._bnd_did_pay)
+        bf.addRow("budget.ram_bytes", self._bnd_bud_ram)
+        bf.addRow("budget.disk_bytes", self._bnd_bud_disk)
+        lay.addWidget(b_box)
+
+        # ── linked caps living in other yaml ──
+        link = QGroupBox(t("关联上限（写回 log / collector / diag）"))
+        lf = QFormLayout(link)
+        self._bnd_file_max = _spin(4096, 2_147_483_647, 1_048_576)
+        tipify(self._bnd_file_max, t("→ log.file_max_bytes；DISK = ×2（若启用 file sink）"))
+        self._bnd_col_max = _spin(1, 100000, 256)
+        tipify(self._bnd_col_max, t("→ collector.local.max_entries"))
+        self._bnd_col_deb = _spin(1, 100000, 64)
+        tipify(self._bnd_col_deb, t("→ collector.local.debounce_max_keys"))
+        self._bnd_col_store = _spin(4096, 2_147_483_647, 1_048_576)
+        tipify(self._bnd_col_store, t("→ collector.local.store_max_bytes；DISK = ×2"))
+        lf.addRow("log.file_max_bytes", self._bnd_file_max)
+        lf.addRow("collector.max_entries", self._bnd_col_max)
+        lf.addRow("collector.debounce_max_keys", self._bnd_col_deb)
+        lf.addRow("collector.store_max_bytes", self._bnd_col_store)
+        lay.addWidget(link)
+
+        # ── BL-MEM-ROUDI ──
+        iox_box = QGroupBox(t("iceoryx / RouDi（BL-MEM-ROUDI）"))
+        iox_l = QVBoxLayout(iox_box)
+        iox_warn = QLabel(
+            t(
+                "修改 iceoryx.mgmt（IOX_MAX_* / iceoryx_mgmt）后必须：compose → "
+                "cmake reconfigure + 重新编译 iceoryx。"
+                "仅改 mempools 时：compose 后重启 RouDi 即可。"
+                "req.bindings 含 iceoryx 时 SIL 自动起 RouDi（配置驱动，无环境变量关开）。"
+            )
+        )
+        iox_warn.setWordWrap(True)
+        iox_warn.setStyleSheet(
+            "color:#b71c1c; font-size:11px; background:#fff3e0; padding:6px;"
+        )
+        iox_l.addWidget(iox_warn)
+        mgmt_f = QFormLayout()
+        self._iox_pub = _spin(1, 4096, 32)
+        tipify(self._iox_pub, t("IOX_MAX_PUBLISHERS — iceoryx_mgmt 端口表"))
+        self._iox_sub = _spin(1, 8192, 64)
+        tipify(self._iox_sub, t("IOX_MAX_SUBSCRIBERS"))
+        self._iox_sub_per_pub = _spin(1, 1024, 8)
+        tipify(self._iox_sub_per_pub, t("IOX_MAX_SUBSCRIBERS_PER_PUBLISHER"))
+        self._iox_hist = _spin(1, 256, 4)
+        tipify(self._iox_hist, t("IOX_MAX_PUBLISHER_HISTORY"))
+        self._iox_chunk_pub = _spin(1, 256, 2)
+        tipify(self._iox_chunk_pub, t("IOX_MAX_CHUNKS_ALLOCATED_PER_PUBLISHER_SIMULTANEOUSLY"))
+        self._iox_chunk_sub = _spin(1, 4096, 16)
+        tipify(self._iox_chunk_sub, t("IOX_MAX_CHUNKS_HELD_PER_SUBSCRIBER_SIMULTANEOUSLY"))
+        self._iox_iface = _spin(1, 64, 2)
+        tipify(self._iox_iface, t("IOX_MAX_INTERFACE_NUMBER（gateway）"))
+        self._iox_bud_shm = _spin(0, 2_147_483_647, 0)
+        tipify(self._iox_bud_shm, t("可选：total_shm 超则 Verify warn；0=关"))
+        mgmt_f.addRow("mgmt.max_publishers", self._iox_pub)
+        mgmt_f.addRow("mgmt.max_subscribers", self._iox_sub)
+        mgmt_f.addRow("mgmt.max_subscribers_per_publisher", self._iox_sub_per_pub)
+        mgmt_f.addRow("mgmt.max_publisher_history", self._iox_hist)
+        mgmt_f.addRow("mgmt.max_chunks_allocated_per_publisher", self._iox_chunk_pub)
+        mgmt_f.addRow("mgmt.max_chunks_held_per_subscriber", self._iox_chunk_sub)
+        mgmt_f.addRow("mgmt.max_interface_number", self._iox_iface)
+        mgmt_f.addRow("budget_shm_bytes", self._iox_bud_shm)
+        iox_l.addLayout(mgmt_f)
+        self._iox_pool_table = QTableWidget(0, 2)
+        self._iox_pool_table.setHorizontalHeaderLabels(["size", "count"])
+        self._iox_pool_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        enable_table_row_selection(self._iox_pool_table)
+        self._iox_pool_table.itemChanged.connect(self._on_bounds_changed)
+        iox_l.addWidget(QLabel(t("mempools（→ generated/iox_roudi.toml）")))
+        iox_l.addWidget(self._iox_pool_table)
+        pool_btns = QHBoxLayout()
+        add_p = QPushButton(t("添加 mempool"))
+        add_p.clicked.connect(self._add_iox_pool_row)
+        del_p = QPushButton(t("删除选中"))
+        del_p.clicked.connect(
+            lambda: self._del_rows(self._iox_pool_table, self._on_bounds_changed)
+        )
+        pool_btns.addWidget(add_p)
+        pool_btns.addWidget(del_p)
+        pool_btns.addStretch(1)
+        iox_l.addLayout(pool_btns)
+        lay.addWidget(iox_box)
+
+        est_box = QGroupBox(t("静态上界预估（只读 · 含公式）"))
+        est_l = QVBoxLayout(est_box)
+        # Full height by content — no inner scrollbar (page scroll handles overflow).
+        self._bnd_estimate = QLabel()
+        self._bnd_estimate.setWordWrap(True)
+        self._bnd_estimate.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._bnd_estimate.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
+        )
+        self._bnd_estimate.setStyleSheet(
+            "font-family: monospace; font-size: 11px; background:#fafafa; "
+            "padding:8px; border:1px solid #e0e0e0;"
+        )
+        est_l.addWidget(self._bnd_estimate)
+        lay.addWidget(est_box)
+        lay.addStretch(1)
+        return _PlatformScrollPage(inner)
 
     # ── session / history ─────────────────────────────────
 
@@ -914,6 +1126,32 @@ class PlatformEditor(QWidget):
             self._ota_block,
             self._ucm_source,
             self._col_max,
+            self._col_deb_keys,
+            self._col_store_max,
+            self._log_file_max,
+            self._bnd_dlt_ctx,
+            self._bnd_com_depth,
+            self._bnd_com_keys,
+            self._bnd_com_avg,
+            self._bnd_per_keys,
+            self._bnd_per_val,
+            self._bnd_rx,
+            self._bnd_did_n,
+            self._bnd_did_pay,
+            self._bnd_bud_ram,
+            self._bnd_bud_disk,
+            self._bnd_file_max,
+            self._bnd_col_max,
+            self._bnd_col_deb,
+            self._bnd_col_store,
+            self._iox_pub,
+            self._iox_sub,
+            self._iox_sub_per_pub,
+            self._iox_hist,
+            self._iox_chunk_pub,
+            self._iox_chunk_sub,
+            self._iox_iface,
+            self._iox_bud_shm,
         ):
             w.editingFinished.connect(self._end_doc_edit)
 
@@ -942,8 +1180,10 @@ class PlatformEditor(QWidget):
         self._load_log(session.platform.get("log") or {})
         self._load_ucm(session.platform.get("ucm") or {})
         self._load_collector(session.platform.get("collector") or {})
+        self._load_bounds(session.platform.get("bounds") or {})
         self._loading = False
         self._rebuild_nav()
+        self._refresh_mem_estimate()
 
     def selected_modules(self) -> list[str]:
         # Preserve KNOWN_MODULES order; always-on forced in.
@@ -1086,6 +1326,8 @@ class PlatformEditor(QWidget):
         if page is not None:
             self._stack.setCurrentWidget(page)
             self._stack.updateGeometry()
+        if key == "bounds":
+            self._refresh_mem_estimate()
 
     def _process_names(self) -> list[str]:
         if not self._session:
@@ -1506,6 +1748,13 @@ class PlatformEditor(QWidget):
         self._log_dlt_app.blockSignals(True)
         self._log_dlt_app.setText(app_id or "GFAP")
         self._log_dlt_app.blockSignals(False)
+        try:
+            fmax = int(data.get("file_max_bytes") or 1_048_576)
+        except (TypeError, ValueError):
+            fmax = 1_048_576
+        self._log_file_max.blockSignals(True)
+        self._log_file_max.setValue(max(4096, fmax))
+        self._log_file_max.blockSignals(False)
 
         self._ctx_table.blockSignals(True)
         self._ctx_table.setRowCount(0)
@@ -1574,13 +1823,100 @@ class PlatformEditor(QWidget):
         local = data.get("local") if isinstance(data.get("local"), dict) else {}
         self._col_local_en.blockSignals(True)
         self._col_max.blockSignals(True)
+        self._col_deb_keys.blockSignals(True)
+        self._col_store_max.blockSignals(True)
         self._col_local_en.setChecked(bool(local.get("enabled", True)))
         try:
             self._col_max.setValue(int(local.get("max_entries") or 256))
         except (TypeError, ValueError):
             self._col_max.setValue(256)
+        try:
+            self._col_deb_keys.setValue(int(local.get("debounce_max_keys") or 64))
+        except (TypeError, ValueError):
+            self._col_deb_keys.setValue(64)
+        try:
+            self._col_store_max.setValue(int(local.get("store_max_bytes") or 1_048_576))
+        except (TypeError, ValueError):
+            self._col_store_max.setValue(1_048_576)
         self._col_local_en.blockSignals(False)
         self._col_max.blockSignals(False)
+        self._col_deb_keys.blockSignals(False)
+        self._col_store_max.blockSignals(False)
+
+    def _load_bounds(self, data: dict[str, Any]) -> None:
+        dlt = data.get("dlt") if isinstance(data.get("dlt"), dict) else {}
+        com = data.get("com") if isinstance(data.get("com"), dict) else {}
+        per = data.get("per") if isinstance(data.get("per"), dict) else {}
+        diag = data.get("diag") if isinstance(data.get("diag"), dict) else {}
+        dids = diag.get("dids") if isinstance(diag.get("dids"), dict) else {}
+        budget = data.get("budget") if isinstance(data.get("budget"), dict) else {}
+
+        def _set(spin: QSpinBox, val: object, default: int) -> None:
+            spin.blockSignals(True)
+            try:
+                spin.setValue(int(val if val is not None else default))
+            except (TypeError, ValueError):
+                spin.setValue(default)
+            spin.blockSignals(False)
+
+        _set(self._bnd_dlt_ctx, dlt.get("max_contexts"), 64)
+        _set(self._bnd_com_depth, com.get("queue_depth"), 16)
+        _set(self._bnd_com_keys, com.get("max_topic_keys"), 64)
+        _set(self._bnd_com_avg, com.get("avg_payload_bytes"), 256)
+        _set(self._bnd_per_keys, per.get("max_keys"), 1024)
+        _set(self._bnd_per_val, per.get("max_value_bytes"), 65536)
+        _set(self._bnd_rx, diag.get("rx_max_bytes"), 65536)
+        _set(self._bnd_did_n, dids.get("max_entries"), 256)
+        _set(self._bnd_did_pay, dids.get("max_payload"), 4096)
+        _set(self._bnd_bud_ram, budget.get("ram_bytes"), 0)
+        _set(self._bnd_bud_disk, budget.get("disk_bytes"), 0)
+
+        log = (self._session.platform.get("log") if self._session else {}) or {}
+        col = (self._session.platform.get("collector") if self._session else {}) or {}
+        local = col.get("local") if isinstance(col.get("local"), dict) else {}
+        diag_plat = (self._session.platform.get("diag") if self._session else {}) or {}
+        doip = diag_plat.get("doip") if isinstance(diag_plat.get("doip"), dict) else {}
+        _set(self._bnd_file_max, log.get("file_max_bytes"), 1_048_576)
+        _set(self._bnd_col_max, local.get("max_entries"), 256)
+        _set(self._bnd_col_deb, local.get("debounce_max_keys"), 64)
+        _set(self._bnd_col_store, local.get("store_max_bytes"), 1_048_576)
+        if doip.get("rx_max_bytes") is not None:
+            _set(self._bnd_rx, doip.get("rx_max_bytes"), 65536)
+
+        iox = data.get("iceoryx") if isinstance(data.get("iceoryx"), dict) else {}
+        mgmt = iox.get("mgmt") if isinstance(iox.get("mgmt"), dict) else {}
+        _set(self._iox_pub, mgmt.get("max_publishers"), 32)
+        _set(self._iox_sub, mgmt.get("max_subscribers"), 64)
+        _set(self._iox_sub_per_pub, mgmt.get("max_subscribers_per_publisher"), 8)
+        _set(self._iox_hist, mgmt.get("max_publisher_history"), 4)
+        _set(self._iox_chunk_pub, mgmt.get("max_chunks_allocated_per_publisher"), 2)
+        _set(self._iox_chunk_sub, mgmt.get("max_chunks_held_per_subscriber"), 16)
+        _set(self._iox_iface, mgmt.get("max_interface_number"), 2)
+        _set(self._iox_bud_shm, iox.get("budget_shm_bytes"), 0)
+        pools = iox.get("mempools") if isinstance(iox.get("mempools"), list) else []
+        self._iox_pool_table.blockSignals(True)
+        self._iox_pool_table.setRowCount(0)
+        if not pools:
+            pools = [
+                {"size": 256, "count": 128},
+                {"size": 1024, "count": 64},
+                {"size": 4096, "count": 32},
+            ]
+        for p in pools:
+            if not isinstance(p, dict):
+                continue
+            r = self._iox_pool_table.rowCount()
+            self._iox_pool_table.insertRow(r)
+            _set_cell(self._iox_pool_table, r, 0, str(p.get("size") or 256))
+            _set_cell(self._iox_pool_table, r, 1, str(p.get("count") or 1))
+        self._iox_pool_table.blockSignals(False)
+
+    def _refresh_mem_estimate(self) -> None:
+        if not self._session or not hasattr(self, "_bnd_estimate"):
+            return
+        est = estimate_mem_budget(self._session.platform)
+        self._bnd_estimate.setText(format_estimate_text(est))
+        self._bnd_estimate.adjustSize()
 
     # ── write-back ────────────────────────────────────────
 
@@ -1795,11 +2131,17 @@ class PlatformEditor(QWidget):
         }
         # 保留 GMT OTA 写入的 plugin 路径，本页不编辑
         data["security"] = {"plugin": getattr(self, "_sec_plugin_path", "") or ""}
+        # Preserve / sync BL-MEM-BOUND rx cap (edited on「有界内存」页)
+        prev_doip = data.get("doip") if isinstance(data.get("doip"), dict) else {}
+        rx_max = prev_doip.get("rx_max_bytes", 65536)
+        if hasattr(self, "_bnd_rx"):
+            rx_max = int(self._bnd_rx.value())
         data["doip"] = {
             "enabled": iso13400,
             "logical_address": addr,
             "tester_address": tester,
             "tcp_port": int(self._doip_port.value()),
+            "rx_max_bytes": int(rx_max),
         }
         data["timing"] = {
             "s3_server_ms": int(self._s3_ms.value()),
@@ -1819,6 +2161,7 @@ class PlatformEditor(QWidget):
         data["dids"] = dids
         data["rids"] = rids
         self._mark("diag")
+        self._refresh_mem_estimate()
         if not coalesce:
             self._end_doc_edit()
 
@@ -1852,7 +2195,13 @@ class PlatformEditor(QWidget):
         data["sinks"] = sinks
         app_id = (self._log_dlt_app.text().strip() or "GFAP")[:4]
         data["dlt"] = {"app_id": app_id}
+        data["file_max_bytes"] = int(self._log_file_max.value())
+        if hasattr(self, "_bnd_file_max") and not self._loading:
+            self._bnd_file_max.blockSignals(True)
+            self._bnd_file_max.setValue(int(self._log_file_max.value()))
+            self._bnd_file_max.blockSignals(False)
         self._mark("log")
+        self._refresh_mem_estimate()
         if not coalesce:
             self._end_doc_edit()
 
@@ -1883,10 +2232,124 @@ class PlatformEditor(QWidget):
         data["local"] = {
             "enabled": self._col_local_en.isChecked(),
             "max_entries": int(self._col_max.value()),
+            "debounce_max_keys": int(self._col_deb_keys.value()),
+            "store_max_bytes": int(self._col_store_max.value()),
         }
+        if hasattr(self, "_bnd_col_max") and not self._loading:
+            for spin, val in (
+                (self._bnd_col_max, self._col_max.value()),
+                (self._bnd_col_deb, self._col_deb_keys.value()),
+                (self._bnd_col_store, self._col_store_max.value()),
+            ):
+                spin.blockSignals(True)
+                spin.setValue(int(val))
+                spin.blockSignals(False)
         self._mark("collector")
+        self._refresh_mem_estimate()
         if not coalesce:
             self._end_doc_edit()
+
+    def _on_bounds_changed(self, *_a: object) -> None:
+        if self._loading or not self._session:
+            return
+        coalesce = self._coalesce_sender()
+        self._checkpoint(coalesce=coalesce)
+        data = self._session.platform.setdefault("bounds", {"schema_version": "0.1"})
+        data["schema_version"] = data.get("schema_version") or "0.1"
+        data["dlt"] = {"max_contexts": int(self._bnd_dlt_ctx.value())}
+        data["com"] = {
+            "queue_depth": int(self._bnd_com_depth.value()),
+            "max_topic_keys": int(self._bnd_com_keys.value()),
+            "avg_payload_bytes": int(self._bnd_com_avg.value()),
+        }
+        data["per"] = {
+            "max_keys": int(self._bnd_per_keys.value()),
+            "max_value_bytes": int(self._bnd_per_val.value()),
+        }
+        data["diag"] = {
+            "rx_max_bytes": int(self._bnd_rx.value()),
+            "dids": {
+                "max_entries": int(self._bnd_did_n.value()),
+                "max_payload": int(self._bnd_did_pay.value()),
+            },
+        }
+        data["budget"] = {
+            "ram_bytes": int(self._bnd_bud_ram.value()),
+            "disk_bytes": int(self._bnd_bud_disk.value()),
+        }
+        pools: list[dict[str, Any]] = []
+        for r in range(self._iox_pool_table.rowCount()):
+            try:
+                size = int(_cell(self._iox_pool_table, r, 0) or "0")
+                count = int(_cell(self._iox_pool_table, r, 1) or "0")
+            except ValueError:
+                continue
+            if size > 0 and count > 0:
+                pools.append({"size": size, "count": count})
+        data["iceoryx"] = {
+            "mgmt": {
+                "max_publishers": int(self._iox_pub.value()),
+                "max_subscribers": int(self._iox_sub.value()),
+                "max_subscribers_per_publisher": int(self._iox_sub_per_pub.value()),
+                "max_publisher_history": int(self._iox_hist.value()),
+                "max_chunks_allocated_per_publisher": int(self._iox_chunk_pub.value()),
+                "max_chunks_held_per_subscriber": int(self._iox_chunk_sub.value()),
+                "max_interface_number": int(self._iox_iface.value()),
+            },
+            "mempools": pools
+            or [
+                {"size": 256, "count": 128},
+                {"size": 1024, "count": 64},
+                {"size": 4096, "count": 32},
+            ],
+            "budget_shm_bytes": int(self._iox_bud_shm.value()),
+        }
+        self._mark("bounds")
+
+        # Linked yaml
+        log = self._session.platform.setdefault("log", {"schema_version": "0.1"})
+        log["file_max_bytes"] = int(self._bnd_file_max.value())
+        self._log_file_max.blockSignals(True)
+        self._log_file_max.setValue(int(self._bnd_file_max.value()))
+        self._log_file_max.blockSignals(False)
+        self._mark("log")
+
+        col = self._session.platform.setdefault("collector", {"schema_version": "0.1"})
+        local = col.setdefault("local", {})
+        if not isinstance(local, dict):
+            local = {}
+            col["local"] = local
+        local["max_entries"] = int(self._bnd_col_max.value())
+        local["debounce_max_keys"] = int(self._bnd_col_deb.value())
+        local["store_max_bytes"] = int(self._bnd_col_store.value())
+        for spin, val in (
+            (self._col_max, self._bnd_col_max.value()),
+            (self._col_deb_keys, self._bnd_col_deb.value()),
+            (self._col_store_max, self._bnd_col_store.value()),
+        ):
+            spin.blockSignals(True)
+            spin.setValue(int(val))
+            spin.blockSignals(False)
+        self._mark("collector")
+
+        diag = self._session.platform.setdefault("diag", {"schema_version": "0.1"})
+        doip = diag.setdefault("doip", {})
+        if isinstance(doip, dict):
+            doip["rx_max_bytes"] = int(self._bnd_rx.value())
+            self._mark("diag")
+
+        self._refresh_mem_estimate()
+        if not coalesce:
+            self._end_doc_edit()
+
+    def _add_iox_pool_row(self) -> None:
+        self._iox_pool_table.blockSignals(True)
+        r = self._iox_pool_table.rowCount()
+        self._iox_pool_table.insertRow(r)
+        _set_cell(self._iox_pool_table, r, 0, "256")
+        _set_cell(self._iox_pool_table, r, 1, "32")
+        self._iox_pool_table.blockSignals(False)
+        self._on_bounds_changed()
 
     # ── row helpers ───────────────────────────────────────
 

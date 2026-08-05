@@ -14,6 +14,8 @@ doip:
   logical_address: 0x0E00
   tester_address: 0x0E80
   tcp_port: 13400
+  # BL-MEM-BOUND: TCP frame accumulator (see also platform/bounds.yaml diag.*)
+  rx_max_bytes: 65536
 timing:
   # ISO 14229 S3Server: non-default session → default if no tester activity
   s3_server_ms: 5000

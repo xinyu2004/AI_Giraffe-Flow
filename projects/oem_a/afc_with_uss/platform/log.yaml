@@ -8,6 +8,8 @@ sinks:
 - file
 # Overridden at runtime by GF_LOG_FILE or GF_LOG_DIR/giraffe_modules.log (SIL only; not GMT).
 file_path: giraffe_modules.log
+# Soft rotate when file sink enabled (BL-MEM-BOUND); keeps path + path.1
+file_max_bytes: 1048576
 dlt:
   app_id: GFAP
 contexts:

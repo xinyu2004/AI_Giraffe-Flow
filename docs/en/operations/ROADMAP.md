@@ -4,7 +4,7 @@
 > Design: [DESIGN.md](../architecture/DESIGN.md)  
 > Config: [MIDDLEWARE_CONFIG_PLAN.md](../../zh/operations/MIDDLEWARE_CONFIG_PLAN.md)
 
-**P0–P2.5 closed** (desktop MVP: gf-config · multiproc SIL · GMT/Foxglove).  
+**P0–P2.5 closed** (desktop MVP: gf-config · main-chain SIL · GMT/Foxglove).  
 **Current: P3 deepen & expand** — config/middleware/cert-ready support/DoIP·OTA first; real board & real MCU are a late sprint gate.
 
 ## Summary

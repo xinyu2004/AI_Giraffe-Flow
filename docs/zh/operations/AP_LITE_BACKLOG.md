@@ -16,7 +16,8 @@
 | BL-UCM-SIGN | UCM 非对称验签 | deferred | 与 crypto 同波 | Verify 钩子预留 magic/manifest |
 | BL-RAUC | RAUC 真刷 A/B | deferred | P3z 真板 | 本轮留 adapter 接口 |
 | BL-DLT | DLT（libdlt + daemon + GMT 客户端） | **done** | 见 [DLT_PLAN.md](DLT_PLAN.md) | `gmt_export` 已清；真板 = rootfs 手验 |
-| BL-MEM-BOUND | **全模块有界内存**（环缓/配额；禁无界 `vector` 增长） | deferred | 平台硬化波 | log/DLT 子集已有界；collector/com 等仍待审 |
+| BL-MEM-BOUND | **全模块有界内存**（环缓/配额；禁无界 `vector` 增长） | **done** | 平台硬化波 | `bounds.yaml` + gf-config「有界内存」+ Verify `mem_budget`（公式见 `mem_budget.py` FORMULAS）；运行时强制 log/collector/com/per/DoIP/DID |
+| BL-MEM-ROUDI | **RouDi / iceoryx SHM 有界**（mgmt IOX_* + mempool TOML） | **done** | 平台硬化波 | `bounds.iceoryx` → `iox_mgmt.cmake` + `iox_roudi.toml`；`req.bindings` 含 iceoryx 才起 RouDi；改 mgmt 需 rebuild iceoryx |
 | BL-SQLITE | SQLite per | deferred | 仅强查询需求 | 默认双槽文件 KV |
 | BL-ISOTP-AP | ISO-TP on AP | deferred | 仅「AP 直挂 CAN」SKU | 默认战略不做；CAN 在 MCU |
 | BL-CLASSIC | Classic DEM/DCM | wontfix | — | 用 collector DEM-lite + diag DCM-lite |

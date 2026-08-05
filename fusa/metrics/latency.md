@@ -11,7 +11,7 @@
 |----|------|
 | 时钟 | OSAL monotonic（日志前缀 `t_ms=`）；Trajectory 用消息内 `timestamp_ns` |
 | 环境 | SIL：`projects/oem_a/afc_with_uss` + iceoryx；主机 Linux |
-| 样本 | multiproc：`GF_MP_TRAJ_COUNT=30`；PHM/EM 各跑对应 smoke 一次 |
+| 样本 | 主链 verify：`GF_MP_TRAJ_COUNT=30`；PHM/EM 各跑对应 smoke 一次 |
 | 产物 | `fusa/runs/measure_summary_*.json`（gitignore）；本表填汇总 |
 | 脚本 | `bash fusa/scripts/measure_latency.sh`（**不**调用 `run_cases` / pack） |
 
@@ -27,7 +27,7 @@
 
 | 路径 | 指标 | 目标（SIL 参考） | 测量方法 | 最近值 | 备注 |
 |------|------|------------------|----------|--------|------|
-| sensing→…→gateway | Trajectory **采样周期** p50 / p99 | p50 ∈ [90, 110] ms；p99 ≤ 120 ms（SKU period≈100 ms） | `run_sil_multiproc.sh` + `GF_MP_TRAJ_COUNT=30` | **100.6 / 100.8 ms**（n=30） | **不是** hop e2e |
+| sensing→…→gateway | Trajectory **采样周期** p50 / p99 | p50 ∈ [90, 110] ms；p99 ≤ 120 ms（SKU period≈100 ms） | `run_sil_verify.sh` + `GF_MP_TRAJ_COUNT=30` | **100.6 / 100.8 ms**（n=30） | **不是** hop e2e |
 | PHM Alive | 配置 period / timeout | = `phm.yaml`（100 ms / 300 ms） | `phm.yaml` + SIL-03 log | 与配置一致 | |
 | PHM 故障检测 | FAULT begin → `DeadlineMissed` | ≤ timeout（**300 ms**） | `smoke_sil_phm_fault.sh` · `t_ms=` | **287 ms** | 必须 ≤ timeout |
 | PHM 恢复（soft） | miss → `phm recovered` | ≤ **100 ms** | 同上（非 EM exit75） | **20 ms** | begin→recover **307 ms**（含检测窗） |

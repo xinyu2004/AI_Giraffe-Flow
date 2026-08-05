@@ -1,7 +1,9 @@
 #include "gf_ara/runtime/process_bringup.hpp"
 
 #include <gf_ara/collector/event_collector.hpp>
+#include <gf_ara/com/event.hpp>
 #include <gf_ara/log/logger.hpp>
+#include <gf_ara/per/key_value_storage.hpp>
 
 #include <chrono>
 #include <cstdlib>
@@ -206,10 +208,57 @@ void LoadLogConfig() {
                (log.Config().file_path.empty() ? "" : " file=" + log.Config().file_path));
 }
 
+void LoadMemoryBounds() {
+  const std::string dir = PlatformDir();
+  if (dir.empty()) {
+    return;
+  }
+  const std::string text = ReadFile(dir + "/bounds.yaml");
+  if (text.empty()) {
+    return;
+  }
+  std::uint32_t com_depth = 16;
+  std::uint32_t com_keys = 64;
+  std::uint32_t per_keys = 1024;
+  std::uint32_t per_val = 65536;
+  std::uint32_t dlt_ctx = 0;
+  std::smatch m;
+  if (std::regex_search(text, m, std::regex(R"(com:\s*[\s\S]*?queue_depth:\s*(\d+))"))) {
+    com_depth = static_cast<std::uint32_t>(std::stoul(m[1].str()));
+  }
+  if (std::regex_search(text, m, std::regex(R"(com:\s*[\s\S]*?max_topic_keys:\s*(\d+))"))) {
+    com_keys = static_cast<std::uint32_t>(std::stoul(m[1].str()));
+  }
+  if (std::regex_search(text, m, std::regex(R"(per:\s*[\s\S]*?max_keys:\s*(\d+))"))) {
+    per_keys = static_cast<std::uint32_t>(std::stoul(m[1].str()));
+  }
+  if (std::regex_search(text, m, std::regex(R"(per:\s*[\s\S]*?max_value_bytes:\s*(\d+))"))) {
+    per_val = static_cast<std::uint32_t>(std::stoul(m[1].str()));
+  }
+  if (std::regex_search(text, m, std::regex(R"(dlt:\s*[\s\S]*?max_contexts:\s*(\d+))"))) {
+    dlt_ctx = static_cast<std::uint32_t>(std::stoul(m[1].str()));
+  }
+  gf_ara::com::LoopbackBus::Instance().ConfigureBounds(com_depth, com_keys);
+  gf_ara::per::KeyValueStorage::Instance().ConfigureBounds(per_keys, per_val);
+  if (dlt_ctx > 0) {
+    auto& log = gf_ara::log::Logger::Instance();
+    auto cfg = log.Config();
+    cfg.dlt_max_contexts = dlt_ctx;
+    log.Configure(cfg);
+  }
+  gf_ara::log::Logger::Instance().Info(
+      "runtime",
+      "mem bounds com_depth=" + std::to_string(com_depth) +
+          " com_keys=" + std::to_string(com_keys) + " per_keys=" + std::to_string(per_keys) +
+          " per_val=" + std::to_string(per_val) +
+          (dlt_ctx ? " dlt_ctx=" + std::to_string(dlt_ctx) : ""));
+}
+
 bool ProcessSupervisor::Start(std::string_view process_name) {
   process_ = std::string(process_name);
   // Log first so subsequent bring-up steps use Logger sinks (incl. shared file).
   LoadLogConfig();
+  LoadMemoryBounds();
   auto& log = gf_ara::log::Logger::Instance();
   log.Info("runtime", "bring-up begin process=" + process_);
   LoadCollectorConfig();

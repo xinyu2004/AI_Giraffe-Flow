@@ -15,4 +15,6 @@ target_link_libraries(gf_ara_runtime PUBLIC
   gf_ara::sm
   gf_ara::collector
   gf_ara::log
+  gf_ara::com
+  gf_ara::per
 )

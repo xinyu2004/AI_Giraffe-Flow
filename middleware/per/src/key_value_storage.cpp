@@ -182,6 +182,12 @@ gf_ara::core::Result<void> KeyValueStorage::ReloadFromDisk() {
   return gf_ara::core::Result<void>::Ok();
 }
 
+void KeyValueStorage::ConfigureBounds(std::uint32_t max_keys, std::uint32_t max_value_bytes) {
+  std::lock_guard lock(mu_);
+  max_keys_ = max_keys == 0 ? 1024 : max_keys;
+  max_value_bytes_ = max_value_bytes == 0 ? 65536 : max_value_bytes;
+}
+
 gf_ara::core::Result<void> KeyValueStorage::SetValue(std::string_view key,
                                                      std::string_view value) {
   std::lock_guard lock(mu_);
@@ -191,7 +197,14 @@ gf_ara::core::Result<void> KeyValueStorage::SetValue(std::string_view key,
   if (key.empty()) {
     return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kInvalidArgument);
   }
-  store_[std::string(key)] = std::string(value);
+  if (value.size() > max_value_bytes_) {
+    return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kInvalidArgument);
+  }
+  const std::string k(key);
+  if (store_.find(k) == store_.end() && store_.size() >= max_keys_) {
+    return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kInvalidArgument);
+  }
+  store_[k] = std::string(value);
   if (!PersistLocked()) {
     return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kNotAvailable);
   }

@@ -155,9 +155,36 @@ int main() {
     return EXIT_FAILURE;
   }
   gf_ara::diag::UdsDispatcher::Instance().Configure(ucfg);
+
+  // BL-MEM-BOUND: DID map + DoIP rx from bounds.yaml / diag.yaml
+  std::uint32_t did_entries = 256;
+  std::uint32_t did_payload = 4096;
+  std::uint32_t rx_max = 65536;
+  const auto bounds_yaml = ReadFile(PlatformPath("bounds.yaml"));
+  if (!bounds_yaml.empty()) {
+    std::smatch bm;
+    if (std::regex_search(bounds_yaml, bm,
+                          std::regex(R"(dids:\s*[\s\S]*?max_entries:\s*(\d+))"))) {
+      did_entries = static_cast<std::uint32_t>(std::stoul(bm[1].str()));
+    }
+    if (std::regex_search(bounds_yaml, bm,
+                          std::regex(R"(dids:\s*[\s\S]*?max_payload:\s*(\d+))"))) {
+      did_payload = static_cast<std::uint32_t>(std::stoul(bm[1].str()));
+    }
+    if (std::regex_search(bounds_yaml, bm,
+                          std::regex(R"(diag:\s*[\s\S]*?rx_max_bytes:\s*(\d+))"))) {
+      rx_max = static_cast<std::uint32_t>(std::stoul(bm[1].str()));
+    }
+  }
+  gf_ara::diag::UdsDispatcher::Instance().ConfigureDidBounds(did_entries, did_payload);
+
   // Optional DID seed from diag.yaml (id: 0xF191 style lines)
   const auto diag_yaml = ReadFile(PlatformPath("diag.yaml"));
   if (!diag_yaml.empty()) {
+    std::smatch dm;
+    if (std::regex_search(diag_yaml, dm, std::regex(R"(rx_max_bytes:\s*(\d+))"))) {
+      rx_max = static_cast<std::uint32_t>(std::stoul(dm[1].str()));
+    }
     std::regex did_re(R"(-?\s*id:\s*(0x[0-9A-Fa-f]+|\d+)[\s\S]*?name:\s*(\S+))");
     for (auto it = std::sregex_iterator(diag_yaml.begin(), diag_yaml.end(), did_re);
          it != std::sregex_iterator(); ++it) {
@@ -203,6 +230,7 @@ int main() {
   scfg.listen_port = dcfg.tcp_port;
   scfg.entity_address = dcfg.source_address;
   scfg.expected_tester = EnvU16("GF_DOIP_TESTER_ADDR", 0x0E80);
+  scfg.rx_max_bytes = rx_max;
   auto port = server.Start(scfg);
   if (!port) {
     std::cerr << "DoipTcpServer::Start failed\n";

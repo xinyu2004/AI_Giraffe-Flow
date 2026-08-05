@@ -112,7 +112,7 @@ if [[ "${GF_FUSA_SIL:-0}" == "1" ]]; then
     } >>"${LOG}" 2>&1
   }
   run_sil "SIL-01" scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
-  run_sil "SIL-02" scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
+  run_sil "SIL-02" scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh
   run_sil "SIL-03" scripts/verify/oem_a_afc_with_uss/smoke_sil_phm_fault.sh
   run_sil "SIL-SM-01" scripts/verify/oem_a_afc_with_uss/smoke_sil_sm_fg.sh
   run_sil "SIL-EM-02" scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh

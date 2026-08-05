@@ -46,7 +46,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | Tab | Role |
 |-----|------|
 | **1 · Signals & apps** (default) | **Left thin SKU open**; canvas; **right Lineage collapsed** (◀ to expand) |
-| **2 · Platform runtime** | Top `runtime_modules` (incl. trimable **per / tsync**); subpages: exec/FG · **EM launch map** · PHM · diag · **log** · OTA · **Event collector** |
+| **2 · Platform runtime** | Top `runtime_modules` (incl. trimable **per / tsync**); subpages: exec/FG · **EM launch map** · PHM · diag · **log** · OTA · **Event collector** · **Memory bounds** |
 
 Shortcuts: Ctrl+1 / Ctrl+2. Verify / Generate returns to tab 1 Lineage.  
 **Edit menu:** Undo / Redo (Ctrl+Z / Ctrl+Y) — jumps to the changed page (incl. platform subpages); status-bar tip is i18n’d.
@@ -59,10 +59,17 @@ Daily: tab 1 graph / thin SKU → tab 2 modules → **Save** → **Verify** → 
 
 ### Tab 2 · Logging (`log.yaml`)
 
-- **Default level** + **sinks** (`console` / `file` / `dlt`) + **DLT app_id** + per-module **contexts[]**.
+- **Default level** + **sinks** (`console` / `file` / `dlt`) + **DLT app_id** + **`file_max_bytes`** + per-module **contexts[]**.
 - Check **dlt** → SIL/HIL starts `dlt-daemon` from config (no env kill-switch).
 - New row: module may be empty; level defaults to `INFO` (enum tint kept).
 - Verify fails on duplicate `context id` in `log.yaml`.
+
+### Tab 2 · Memory bounds (`bounds.yaml` · BL-MEM-BOUND / BL-MEM-ROUDI)
+
+- Cross-module caps: DLT · LoopbackBus · per · DoIP · DID · optional budget.
+- **iceoryx / RouDi**: `mgmt` (→ `IOX_MAX_*`, rebuild iceoryx after change) + `mempools` (→ `generated/iox_roudi.toml`).
+- SIL starts RouDi when `req.bindings` includes iceoryx (config-driven).
+- Read-only estimate includes RAM/DISK/SHM formula lines (`gf_codegen.compose.mem_budget`).
 
 ## Tab 1 canvas — four steps
 

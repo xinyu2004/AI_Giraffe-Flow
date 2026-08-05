@@ -42,10 +42,10 @@
 - 状态: active
 - 最近: **PASS**（2026-07-31）
 
-### SIL-02 — 多进程主链
+### SIL-02 — 主链 verify（有限帧）
 - 类别: fusa
-- 脚本: `scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh`
-- 步骤: compile_sil → run_sil_multiproc
+- 脚本: `scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh`
+- 步骤: compile_sil → run_sil_verify
 - 期望: 有限帧 Trajectory / exec·phm 断言（脚本内）
 - 状态: active
 - 最近: **PASS**（2026-07-31）
@@ -70,7 +70,7 @@
 - 类别: fusa（SG-05 / ROADMAP T4）
 - 脚本: `scripts/verify/oem_a_afc_with_uss/smoke_production_profile.sh`
 - 环境: 临时 `profile: production-release` → compose；`GF_BUILD_DIR=build-prod`；`GF_FUSA_T4_SKIP_COMPILE=1` 可只跑 compose 断言
-- 期望: `observability.json` live_tap off / record off；无 tap/inject 二进制；SIL-02 multiproc PASS；退出时恢复 `vehicle-debug`
+- 期望: `observability.json` live_tap off / record off；无 tap/inject 二进制；SIL-02 主链 verify PASS；退出时恢复 `vehicle-debug`
 - 状态: active
 - 门控: `GF_FUSA_T4=1 bash fusa/scripts/run_cases.sh`
 

@@ -36,8 +36,8 @@ if [[ "${GF_FUSA_PACK_UPDATE_GOLDEN:-0}" == "1" ]]; then
 fi
 
 if [[ "${GF_FUSA_PACK_RUN_SMOKE:-0}" == "1" ]]; then
-  echo "${TAG} smoke_sil_multiproc ..."
-  bash "${ROOT}/scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh" | tee "${PACK}/smoke/multiproc.txt"
+  echo "${TAG} smoke_sil_verify ..."
+  bash "${ROOT}/scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh" | tee "${PACK}/smoke/sil_verify.txt"
   echo "${TAG} smoke_sil_observability ..."
   GF_SKIP_COMPILE=1 bash "${ROOT}/scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh" | tee "${PACK}/smoke/observability.txt"
 fi
@@ -77,7 +77,7 @@ TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "|------|--------|"
   for rel in compose/gf.sor.json lineage/signal_lineage_report.yaml mcap/session.mcap \
              logs/gateway.log logs/fcm.log logs/uss.log logs/planning.log \
-             smoke/multiproc.txt smoke/observability.txt runs/cases_latest.log; do
+             smoke/sil_verify.txt smoke/observability.txt runs/cases_latest.log; do
     if [[ -f "${PACK}/${rel}" ]]; then
       echo "| \`${rel}\` | present |"
     else

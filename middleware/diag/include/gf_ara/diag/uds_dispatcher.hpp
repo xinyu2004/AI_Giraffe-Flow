@@ -71,7 +71,10 @@ class UdsDispatcher {
   void SetRoutineHook(RoutineHook hook);
   void SetTransferCompleteHook(TransferCompleteHook hook);
 
-  /** Register DID value for 0x22 / 0x2E (in-memory). */
+  /// BL-MEM-BOUND (defaults: 256 entries, 4096 B payload).
+  void ConfigureDidBounds(std::uint32_t max_entries, std::uint32_t max_payload);
+
+  /** Register DID value for 0x22 / 0x2E (in-memory). Ignores oversize / over-cap. */
   void SetDid(std::uint16_t did, std::vector<std::uint8_t> data);
   [[nodiscard]] bool GetDid(std::uint16_t did, std::vector<std::uint8_t>& out);
 
@@ -100,6 +103,8 @@ class UdsDispatcher {
   std::uint8_t pending_seed_level_{0};
   std::vector<std::uint8_t> pending_seed_;
   std::unordered_map<std::uint16_t, std::vector<std::uint8_t>> dids_;
+  std::uint32_t did_max_entries_{256};
+  std::uint32_t did_max_payload_{4096};
   McuPduHandoff mcu_;
   RoutineHook routine_;
   TransferCompleteHook xfer_done_;

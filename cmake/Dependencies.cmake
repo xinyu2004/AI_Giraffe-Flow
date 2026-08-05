@@ -56,6 +56,22 @@ if(GF_WITH_ICEORYX)
       "Cross: GF_CROSS_PREFIX=aarch64-linux-gnu bash scripts/bootstrap_deps.sh")
   endif()
 
+  # BL-MEM-ROUDI: bounds.iceoryx.mgmt → IOX_MAX_* (compose writes generated/iox_mgmt.cmake).
+  # Changing mgmt requires cmake reconfigure + rebuild of iceoryx (and dependents).
+  if(GF_SKU_CMAKE AND NOT GF_SKU_CMAKE STREQUAL "")
+    get_filename_component(_gf_sku_gen_dir "${GF_SKU_CMAKE}" DIRECTORY)
+    set(_gf_iox_mgmt_cmake "${_gf_sku_gen_dir}/iox_mgmt.cmake")
+    if(EXISTS "${_gf_iox_mgmt_cmake}")
+      include("${_gf_iox_mgmt_cmake}")
+      message(STATUS "Giraffe Flow: iceoryx mgmt from ${_gf_iox_mgmt_cmake} (bounds → IOX_MAX_*)")
+      message(STATUS "  NOTE: change iceoryx.mgmt in bounds.yaml → compose → reconfigure + rebuild iceoryx")
+    else()
+      message(STATUS
+        "Giraffe Flow: ${_gf_iox_mgmt_cmake} missing — iceoryx default IOX_MAX_* "
+        "(run compose with req.bindings iceoryx)")
+    endif()
+  endif()
+
   set(EXAMPLES OFF CACHE BOOL "" FORCE)
   set(BUILD_TEST OFF CACHE BOOL "" FORCE)
   set(INTROSPECTION OFF CACHE BOOL "" FORCE)

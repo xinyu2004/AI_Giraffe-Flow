@@ -26,11 +26,29 @@ class LoopbackBus {
     return bus;
   }
 
+  /// BL-MEM-BOUND (defaults: depth=16, keys=64).
+  void ConfigureBounds(std::size_t queue_depth, std::size_t max_topic_keys) {
+    std::lock_guard<std::mutex> lock(mu_);
+    max_depth_ = queue_depth == 0 ? 16 : queue_depth;
+    max_keys_ = max_topic_keys == 0 ? 64 : max_topic_keys;
+  }
+
   void Publish(const std::string& key, std::vector<std::uint8_t> bytes) {
     std::lock_guard<std::mutex> lock(mu_);
+    if (queues_.find(key) == queues_.end() && queues_.size() >= max_keys_) {
+      // Drop an empty or arbitrary topic to stay bounded.
+      for (auto it = queues_.begin(); it != queues_.end(); ++it) {
+        if (it->second.empty()) {
+          queues_.erase(it);
+          break;
+        }
+      }
+      if (queues_.size() >= max_keys_) {
+        queues_.erase(queues_.begin());
+      }
+    }
     auto& q = queues_[key];
-    constexpr std::size_t kMaxDepth = 16;
-    if (q.size() >= kMaxDepth) {
+    if (q.size() >= max_depth_) {
       q.pop();
     }
     q.push(std::move(bytes));
@@ -55,6 +73,8 @@ class LoopbackBus {
  private:
   LoopbackBus() = default;
   std::mutex mu_;
+  std::size_t max_depth_{16};
+  std::size_t max_keys_{64};
   std::unordered_map<std::string, std::queue<std::vector<std::uint8_t>>> queues_;
 };
 

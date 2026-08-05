@@ -43,6 +43,8 @@ struct PhmEntityConfig {
 [[nodiscard]] ExecProcessConfig LoadExecProcess(std::string_view process_name);
 [[nodiscard]] PhmEntityConfig LoadPhmEntity(std::string_view process_name);
 void LoadCollectorConfig();
+/// BL-MEM-BOUND: apply platform/bounds.yaml → LoopbackBus + KeyValueStorage (+ DLT ctx cap).
+void LoadMemoryBounds();
 
 /// Offer + Running + SM Ensure; SupervisedEntity when phm.yaml lists process.
 class ProcessSupervisor {

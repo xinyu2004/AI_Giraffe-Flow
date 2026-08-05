@@ -335,7 +335,7 @@ _EN: dict[str, str] = {
     '连 playhead inject（TCP JSON）；需 GF_INJECT_MODE=playhead': (
         'playhead inject (TCP); needs GF_INJECT_MODE=playhead'
     ),
-    '选择 SIL multiproc / iox_*_logs 目录': 'Pick SIL multiproc / iox_*_logs folder',
+    '选择 SIL main-chain / iox_*_logs 目录': 'Pick SIL main-chain / iox_*_logs folder',
     '选择项目目录（备选）': 'Pick project folder (alt)',
     '（不跟播）': '(no follow)',
     '（旁观模式未改时间轴）': '(observe mode)',

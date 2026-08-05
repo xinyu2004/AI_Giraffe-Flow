@@ -20,6 +20,9 @@ class KeyValueStorage {
   gf_ara::core::Result<void> Open(std::string_view instance);
   [[nodiscard]] bool IsOpen() const noexcept;
 
+  /// BL-MEM-BOUND (defaults: 1024 keys, 64 KiB value).
+  void ConfigureBounds(std::uint32_t max_keys, std::uint32_t max_value_bytes);
+
   /// Re-read newest slot from disk (cross-process writers). Instance must be open.
   gf_ara::core::Result<void> ReloadFromDisk();
 
@@ -45,6 +48,8 @@ class KeyValueStorage {
   bool open_{false};
   std::uint64_t generation_{0};
   char active_slot_{'a'};
+  std::uint32_t max_keys_{1024};
+  std::uint32_t max_value_bytes_{65536};
   mutable std::mutex mu_;
   std::unordered_map<std::string, std::string> store_;
 };

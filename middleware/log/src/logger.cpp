@@ -3,6 +3,7 @@
 #include "gf_ara/log/dlt_sink.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <regex>
@@ -103,10 +104,16 @@ void Logger::ConfigureFromYaml(std::string_view yaml_text) {
   if (std::regex_search(text, m, std::regex(R"(file_path:\s*(\S+))"))) {
     cfg.file_path = m[1].str();
   }
+  if (std::regex_search(text, m, std::regex(R"(file_max_bytes:\s*(\d+))"))) {
+    cfg.file_max_bytes = static_cast<std::uint32_t>(std::stoul(m[1].str()));
+  }
   if (std::regex_search(text, m, std::regex(R"(dlt:\s*[\s\S]*?app_id:\s*(\S+))"))) {
     cfg.dlt_app_id = m[1].str();
   } else if (std::regex_search(text, m, std::regex(R"(dlt_app_id:\s*(\S+))"))) {
     cfg.dlt_app_id = m[1].str();
+  }
+  if (std::regex_search(text, m, std::regex(R"(dlt:\s*[\s\S]*?max_contexts:\s*(\d+))"))) {
+    cfg.dlt_max_contexts = static_cast<std::uint32_t>(std::stoul(m[1].str()));
   }
   std::regex sink_re(R"(sinks:\s*\[([^\]]*)\])");
   if (std::regex_search(text, m, sink_re)) {
@@ -179,6 +186,17 @@ void Logger::WriteFile(std::string_view line) {
   if (cfg_.file_path.empty()) {
     return;
   }
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  if (cfg_.file_max_bytes > 0 && fs::exists(cfg_.file_path, ec)) {
+    const auto sz = fs::file_size(cfg_.file_path, ec);
+    if (!ec && sz >= cfg_.file_max_bytes) {
+      const fs::path cur(cfg_.file_path);
+      const fs::path bak = fs::path(cfg_.file_path + ".1");
+      fs::remove(bak, ec);
+      fs::rename(cur, bak, ec);
+    }
+  }
   std::ofstream out(cfg_.file_path, std::ios::app);
   if (out) {
     out << line << '\n';
@@ -204,6 +222,7 @@ void Logger::EnsureDlt() {
   if (!WantSink("dlt")) {
     return;
   }
+  DltSink::Instance().SetMaxContexts(cfg_.dlt_max_contexts);
   DltSink::Instance().Configure(cfg_.dlt_app_id, "Giraffe Flow");
 }
 

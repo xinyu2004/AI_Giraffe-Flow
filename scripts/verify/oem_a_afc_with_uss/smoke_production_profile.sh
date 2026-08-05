@@ -103,8 +103,8 @@ if cmake --build "${PROD_BUILD}" --target gf_iox_obs_inject 2>/tmp/gf_t4_inj.err
 fi
 echo "${TAG} OK: tap/inject not in production build graph"
 
-echo "${TAG} SIL-02 multiproc on production build ..."
+echo "${TAG} SIL-02 main-chain verify on production build ..."
 GF_BUILD_DIR="${PROD_BUILD}" GF_PHM_FAULT_MS=0 GF_MP_TRAJ_COUNT=8 \
-  bash "${SCRIPT_DIR}/run_sil_multiproc.sh"
+  bash "${SCRIPT_DIR}/run_sil_verify.sh"
 
 echo "${TAG} smoke_production_profile OK (debug-path closed + SIL-02 PASS)"

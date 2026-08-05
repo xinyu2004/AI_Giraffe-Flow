@@ -16,7 +16,7 @@ export GF_MP_TRAJ_COUNT="${GF_MP_TRAJ_COUNT:-8}"
 export GF_MP_TIMEOUT_SEC="${GF_MP_TIMEOUT_SEC:-60}"
 
 echo "${TAG} PHM fault inject GF_PHM_FAULT_MS=${GF_PHM_FAULT_MS} (planning)"
-bash "${SCRIPT_DIR}/run_sil_multiproc.sh"
+bash "${SCRIPT_DIR}/run_sil_verify.sh"
 
 # Fault is injected on planning (gateway keeps GF_PHM_FAULT_MS=0 for e2e).
 LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/runtime/logs/planning.log"

@@ -26,7 +26,7 @@ export GF_SM_ENTER_UPDATING_ON_FAULT="${GF_SM_ENTER_UPDATING_ON_FAULT:-1}"
 export GF_COLLECTOR_STORE="${STORE}"
 
 echo "${TAG} SM FG + PHM notify_sm target=uss fault_ms=${GF_PHM_FAULT_MS} store=${STORE}"
-bash "${SCRIPT_DIR}/run_sil_multiproc.sh"
+bash "${SCRIPT_DIR}/run_sil_verify.sh"
 
 USS_LOG="${LOG_DIR}/uss.log"
 GW_LOG="${LOG_DIR}/gateway.log"

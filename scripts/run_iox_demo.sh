@@ -43,8 +43,15 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "[run_iox_demo] starting RouDi ..."
-"${ROUDI}" >"${ROUDI_LOG}" 2>&1 &
+# Config-driven: compose → generated/iox_roudi.toml (BL-MEM-ROUDI); no env override.
+IOX_TOML="${ROOT}/projects/oem_a/afc_with_uss/generated/iox_roudi.toml"
+if [[ ! -f "${IOX_TOML}" ]]; then
+  echo "[run_iox_demo] ERROR: missing ${IOX_TOML} — compose SKU with req.bindings iceoryx" >&2
+  exit 1
+fi
+echo "[run_iox_demo] starting RouDi (bounds → ${IOX_TOML}) ..."
+echo "[run_iox_demo] NOTE: change iceoryx.mgmt → compose + cmake reconfigure + rebuild iceoryx"
+"${ROUDI}" -c "${IOX_TOML}" >"${ROUDI_LOG}" 2>&1 &
 ROUDI_PID=$!
 sleep 1
 if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then

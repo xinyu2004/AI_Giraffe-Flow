@@ -146,8 +146,21 @@ void UdsDispatcher::SetTransferCompleteHook(TransferCompleteHook hook) {
   xfer_done_ = std::move(hook);
 }
 
+void UdsDispatcher::ConfigureDidBounds(std::uint32_t max_entries,
+                                       std::uint32_t max_payload) {
+  std::lock_guard lock(Mu());
+  did_max_entries_ = max_entries == 0 ? 256 : max_entries;
+  did_max_payload_ = max_payload == 0 ? 4096 : max_payload;
+}
+
 void UdsDispatcher::SetDid(std::uint16_t did, std::vector<std::uint8_t> data) {
   std::lock_guard lock(Mu());
+  if (data.size() > did_max_payload_) {
+    return;
+  }
+  if (dids_.find(did) == dids_.end() && dids_.size() >= did_max_entries_) {
+    return;
+  }
   dids_[did] = std::move(data);
 }
 
@@ -640,7 +653,14 @@ std::vector<std::uint8_t> UdsDispatcher::Handle(const std::vector<std::uint8_t>&
         return finish(MakeNrc(0x2E, UdsNrc::kSecurityAccessDenied));
       }
       const auto did = Be16(request.data() + 1);
-      dids_[did] = std::vector<std::uint8_t>(request.begin() + 3, request.end());
+      const std::vector<std::uint8_t> payload(request.begin() + 3, request.end());
+      if (payload.size() > did_max_payload_) {
+        return finish(MakeNrc(0x2E, UdsNrc::kIncorrectMessageLength));
+      }
+      if (dids_.find(did) == dids_.end() && dids_.size() >= did_max_entries_) {
+        return finish(MakeNrc(0x2E, UdsNrc::kGeneralReject));
+      }
+      dids_[did] = payload;
       return finish({0x6E, request[1], request[2]});
     }
     case 0x27:

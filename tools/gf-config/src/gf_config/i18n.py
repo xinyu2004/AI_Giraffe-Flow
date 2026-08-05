@@ -205,6 +205,46 @@ _EN: dict[str, str] = {
     "日志": "Logging",
     "OTA ucm": "OTA (ucm)",
     "事件收集": "Event collector",
+    "有界内存": "Memory bounds",
+    "BL-MEM-BOUND：平台有界内存 / 磁盘上界。"
+    "下方预估为保守上界（非实测 RSS），公式与常量可 review："
+    "tools/gf-codegen/.../mem_budget.py 模块 docstring FORMULAS。"
+    "Verify / Generate 会跑同一套 estimate。": (
+        "BL-MEM-BOUND: platform RAM/disk upper bounds. "
+        "Estimate below is conservative (not measured RSS). Reviewable formulas: "
+        "tools/gf-codegen/.../mem_budget.py FORMULAS docstring. "
+        "Verify/Generate uses the same estimate."
+    ),
+    "公式常量（字节）": "Formula constants (bytes)",
+    "bounds.yaml（跨模块硬上限）": "bounds.yaml (cross-module hard caps)",
+    "关联上限（写回 log / collector / diag）": (
+        "Linked caps (write back to log / collector / diag)"
+    ),
+    "静态上界预估（只读 · 含公式）": "Static upper-bound estimate (read-only · with formulas)",
+    "iceoryx / RouDi（BL-MEM-ROUDI）": "iceoryx / RouDi (BL-MEM-ROUDI)",
+    "修改 iceoryx.mgmt（IOX_MAX_* / iceoryx_mgmt）后必须：compose → "
+    "cmake reconfigure + 重新编译 iceoryx。"
+    "仅改 mempools 时：compose 后重启 RouDi 即可。"
+    "req.bindings 含 iceoryx 时 SIL 自动起 RouDi（配置驱动，无环境变量关开）。": (
+        "After changing iceoryx.mgmt (IOX_MAX_* / iceoryx_mgmt): compose → "
+        "cmake reconfigure + rebuild iceoryx. "
+        "Mempools only: compose then restart RouDi. "
+        "When req.bindings includes iceoryx, SIL starts RouDi from config (no env kill-switch)."
+    ),
+    "mempools（→ generated/iox_roudi.toml）": "mempools (→ generated/iox_roudi.toml)",
+    "添加 mempool": "Add mempool",
+    "IOX_MAX_PUBLISHERS — iceoryx_mgmt 端口表": (
+        "IOX_MAX_PUBLISHERS — iceoryx_mgmt port table"
+    ),
+    "file sink 软轮转上限（字节）；保留 path + path.1，计入 DISK 预估 ×2": (
+        "File sink soft rotate (bytes); keeps path + path.1; DISK estimate ×2"
+    ),
+    "防抖 map 最大键数（BL-MEM-BOUND）；RAM ≈ keys × C_DEBOUNCE_ENTRY": (
+        "Debounce map max keys (BL-MEM-BOUND); RAM ≈ keys × C_DEBOUNCE_ENTRY"
+    ),
+    "共享 NDJSON 文件软上限；保留 ×2，计入 DISK 预估": (
+        "Shared NDJSON soft cap; ×2 retained; counted in DISK estimate"
+    ),
     "gf_ara::core — Result / ErrorCode（常开）": (
         "gf_ara::core — Result / ErrorCode (usually on)"
     ),

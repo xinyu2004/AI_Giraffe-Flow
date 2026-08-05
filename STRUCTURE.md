@@ -137,7 +137,7 @@ AI_Giraffe-Flow/
 | **Unit** | `middleware/<mod>/testcases/` next to code *or* `middleware/tests/unit/<mod>/` | Result, PHM timer math；FuSa `CASE` 行 |
 | **Middleware component** | `middleware/tests/component/` | com+iceoryx in-proc |
 | **Tool unit** | `tools/gf-codegen/tests/`、`tools/gf-config/…`（主机；codegen 见 FuSa L2） | compose, observability |
-| **SKU integration / smoke** | `projects/.../tests/` + `scripts/verify/...` | multiproc SIL（FuSa L3） |
+| **SKU integration / smoke** | `projects/.../tests/` + `scripts/verify/...` | main-chain SIL（FuSa L3） |
 | **Bench / golden** | `projects/.../golden/` + codegen tests | SOR golden |
 | **Manual / FuSa runs** | `fusa/runs/` (local) | CASE logs, soak |
 

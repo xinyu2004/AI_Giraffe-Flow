@@ -59,7 +59,7 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
 
 | 文件 | 说明 |
 |------|------|
-| `session.jsonl` | 从 multiproc 日志解析的事件 |
+| `session.jsonl` | 从主链 SIL 日志解析的事件 |
 | `session_tagged.jsonl` | Tag 窗 |
 | `session.mcap` | 多 topic MCAP |
 

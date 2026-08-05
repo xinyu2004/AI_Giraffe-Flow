@@ -28,8 +28,9 @@ struct LogConfig {
   /// console(=stdout+stderr) | stdout | stderr | file | serial | dlt
   std::vector<std::string> sinks{"stdout", "stderr"};
   std::string file_path;
-  std::uint32_t file_max_bytes{1024 * 1024};  // soft hint; file sink appends (rotate later)
+  std::uint32_t file_max_bytes{1024 * 1024};  // rotate when exceeded (keeps path.1)
   std::string dlt_app_id{"GFAP"};
+  std::uint32_t dlt_max_contexts{64};
 };
 
 /// Log lite with optional COVESA DLT sink (see docs/zh/operations/DLT_PLAN.md).

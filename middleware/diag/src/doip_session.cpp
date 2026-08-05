@@ -219,6 +219,10 @@ void DoipTcpServer::ServeClient(int client_fd) {
     if (n <= 0) {
       break;
     }
+    const auto rx_cap = cfg_.rx_max_bytes == 0 ? 65536u : cfg_.rx_max_bytes;
+    if (buf.size() + static_cast<std::size_t>(n) > rx_cap) {
+      break;  // BL-MEM-BOUND: close client on oversize stream
+    }
     buf.insert(buf.end(), tmp, tmp + n);
     for (;;) {
       std::size_t consumed = 0;
@@ -370,6 +374,10 @@ gf_ara::core::Result<std::vector<std::uint8_t>> DoipTcpClient::RecvFramePayload(
     if (n <= 0) {
       return gf_ara::core::Result<std::vector<std::uint8_t>>::Err(
           gf_ara::core::ErrorCode::kNotAvailable);
+    }
+    if (rx_buf_.size() + static_cast<std::size_t>(n) > rx_max_bytes_) {
+      return gf_ara::core::Result<std::vector<std::uint8_t>>::Err(
+          gf_ara::core::ErrorCode::kInvalidArgument);
     }
     rx_buf_.insert(rx_buf_.end(), tmp, tmp + n);
   }

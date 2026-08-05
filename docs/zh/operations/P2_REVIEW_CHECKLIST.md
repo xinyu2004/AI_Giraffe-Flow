@@ -57,7 +57,7 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R.1 | 多进程 smoke | `bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh` | □ | □ | □ | |
+| R.1 | 多进程 smoke | `bash scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh` | □ | □ | □ | |
 | R.2 | 端到端计数 | 日志可见 Trajectory / 各进程存活 | □ | □ | □ | |
 | R.3 | 双进程回归 | `bash …/smoke_sil.sh` 仍绿 | □ | □ | □ | |
 
@@ -67,7 +67,7 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| X.1 | Offer→Running | multiproc 设 `GF_PLATFORM_DIR=…/platform`；日志有 Running | □ | □ | □ | |
+| X.1 | Offer→Running | 主链 verify 设 `GF_PLATFORM_DIR=…/platform`；日志有 Running | □ | □ | □ | |
 | X.2 | Alive | 读 `phm.yaml`；周期 ReportAlive | □ | □ | □ | |
 | X.3 | 故障注入 | `GF_PHM_FAULT_MS=…` → AliveMiss 可观测后恢复 | □ | □ | □ | |
 | X.4 | OTA Pause 文档 | [PHM_OTA_PAUSE.md](PHM_OTA_PAUSE.md) / [OTA_SPIKE.md](OTA_SPIKE.md) 可读 | □ | □ | □ | |
@@ -115,7 +115,7 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 | 1 | R0 + 不做清单 | 读文档 | 10–15 min |
 | 2 | Cfg | 手开 GUI | 25–40 min |
 | 3 | P + G.2 | pytest | 5–10 min |
-| 4 | R + X | multiproc smoke | 15–25 min |
+| 4 | R + X | main-chain smoke | 15–25 min |
 | 5 | O/F | observability + Studio | 15–20 min |
 | 6 | B | cyclone + stub | 15–30 min（含 bootstrap） |
 | 7 | G.3 | collect evidence | 5–15 min |
@@ -131,7 +131,7 @@ pip install -e "tools/gf-codegen[dev]" -e "tools/gmt[dev]"
 pytest tools/gf-codegen/tests/test_merge_platform.py \
        tools/gf-codegen/tests/test_afc_bench_golden.py -q
 
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_multiproc.sh
+bash scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh
 GF_SKIP_COMPILE=1 bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
 bash scripts/smoke_bd_cyclone.sh
 

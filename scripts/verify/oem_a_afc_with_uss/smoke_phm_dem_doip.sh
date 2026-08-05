@@ -67,7 +67,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-bash "${SCRIPT_DIR}/run_sil_multiproc.sh"
+bash "${SCRIPT_DIR}/run_sil_verify.sh"
 
 USS_LOG="${LOG_DIR}/uss.log"
 if [[ ! -f "${USS_LOG}" ]]; then

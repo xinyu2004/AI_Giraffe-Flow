@@ -14,7 +14,6 @@
 namespace gf_ara::log {
 namespace {
 
-constexpr std::size_t kMaxContexts = 64;
 
 #if defined(GF_HAVE_DLT) && GF_HAVE_DLT
 // Our dlt-daemon build uses FIFO IPC at /tmp/dlt (see daemon log "FIFO").
@@ -69,6 +68,10 @@ DltSink& DltSink::Instance() {
   return inst;
 }
 
+void DltSink::SetMaxContexts(std::size_t n) noexcept {
+  max_contexts_ = (n == 0) ? 64 : n;
+}
+
 void DltSink::Configure(std::string_view app_id, std::string_view description) {
 #if defined(GF_HAVE_DLT) && GF_HAVE_DLT
   static std::mutex mu;
@@ -117,7 +120,7 @@ void DltSink::Write(std::string_view ctx, LogLevel level, std::string_view msg) 
   const std::string key(ctx);
   auto it = contexts.find(key);
   if (it == contexts.end()) {
-    if (contexts.size() >= kMaxContexts) {
+    if (contexts.size() >= max_contexts_) {
       it = contexts.find("__ov");
       if (it == contexts.end()) {
         DltContext ov{};
