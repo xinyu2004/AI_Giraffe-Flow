@@ -33,4 +33,4 @@ bash fusa/scripts/measure_latency.sh
 bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
 ```
 
-CI/CD 分层见 [devops/README.md](../devops/README.md)。SIL 场景脚本仍在 `scripts/verify/`。
+CI/CD 分层见 [devops/README.md](../devops/README.md)。SIL 场景脚本在各演示工程 `projects/.../scripts/verify/`。

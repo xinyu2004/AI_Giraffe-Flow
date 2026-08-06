@@ -91,7 +91,7 @@ GMT gui --project projects/oem_a/afc_with_uss \
 ### GTKWave（离线时序）
 
 ```bash
-bash scripts/verify/oem_a_afc_with_uss/smoke_gmt_vcd.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_gmt_vcd.sh
 # 或：GMT measure export --format vcd --in …jsonl --out …vcd
 ```
 
@@ -101,7 +101,7 @@ CLI 入口：**`GMT`**。GMT GUI **不写 wiring**（配置只经 gf-config）�
 
 ```bash
 # 种 Collector / DEM / 多级日志（SIL + DoIP），再开 GMT
-bash scripts/verify/oem_a_afc_with_uss/smoke_phm_dem_doip.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_phm_dem_doip.sh
 # 或交互：
 export GF_COLLECTOR_STORE=$PWD/projects/oem_a/afc_with_uss/build-sil/runtime/collector/events.ndjson
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh

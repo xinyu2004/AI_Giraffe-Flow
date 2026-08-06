@@ -708,16 +708,17 @@ if [[ "${IOX_ON}" == "1" ]]; then
     exit 1
   fi
   host_info "RouDi ok pid=${ROUDI_PID}"
-  # Best-effort: parse reserved SHM sizes into generated/iox_shm_report.json for Verify.
-  python - "${LOG_DIR}/roudi.log" "${PROJECT_DIR}/generated/iox_shm_report.json" "${IOX_TOML}" <<'PY' || true
+  # Best-effort: parse reserved SHM sizes into reports/iox_shm_report.json (not generated/).
+  python - "${LOG_DIR}/roudi.log" "${PROJECT_DIR}/reports/iox_shm_report.json" "${IOX_TOML}" \
+    "${PROJECT_DIR}/generated/iox_mgmt.cmake" <<'PY' || true
 import json, re, sys
 from pathlib import Path
-log, out, toml = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+log, out, toml, cmake = (Path(sys.argv[i]) for i in range(1, 5))
 text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
 mgmt = None
 payload = None
 for m in re.finditer(
-    r"(?:Trying to reserve|Acquired)\s+(\d+)\s+bytes.*?\[([^\]]+)\]",
+    r"(?:Trying to reserve|Acquired|Reserving)\s+(\d+)\s+bytes.*?\[([^\]]+)\]",
     text,
     re.I,
 ):
@@ -726,12 +727,33 @@ for m in re.finditer(
         mgmt = n
     elif "mgmt" not in name:
         payload = n if payload is None else max(payload, n)
+# bounds.iceoryx.mgmt.* keys (same as gf-config / mem_budget)
+cmake_to_bounds = {
+    "IOX_MAX_PUBLISHERS": "max_publishers",
+    "IOX_MAX_SUBSCRIBERS": "max_subscribers",
+    "IOX_MAX_SUBSCRIBERS_PER_PUBLISHER": "max_subscribers_per_publisher",
+    "IOX_MAX_PUBLISHER_HISTORY": "max_publisher_history",
+    "IOX_MAX_CHUNKS_ALLOCATED_PER_PUBLISHER_SIMULTANEOUSLY": "max_chunks_allocated_per_publisher",
+    "IOX_MAX_CHUNKS_HELD_PER_SUBSCRIBER_SIMULTANEOUSLY": "max_chunks_held_per_subscriber",
+    "IOX_MAX_INTERFACE_NUMBER": "max_interface_number",
+}
+iox_mgmt = {}
+if cmake.is_file():
+    for m in re.finditer(
+        r"set\s*\(\s*(IOX_MAX_[A-Z0-9_]+)\s+(\d+)\s*CACHE\s+STRING",
+        cmake.read_text(encoding="utf-8", errors="replace"),
+        re.I,
+    ):
+        bk = cmake_to_bounds.get(m.group(1).upper())
+        if bk:
+            iox_mgmt[bk] = int(m.group(2))
 report = {
-    "schema_version": "0.1",
+    "schema_version": "0.2",
     "source": "roudi.log",
     "toml": str(toml),
     "mgmt_bytes": mgmt,
     "payload_segment_bytes": payload,
+    "mgmt": iox_mgmt,
 }
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

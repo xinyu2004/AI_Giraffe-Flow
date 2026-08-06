@@ -53,6 +53,44 @@ int main() {
               << ")\n";
   }
 
+  // BL-COLL-FILTER: sources allowlist
+  col.Clear();
+  CollectorConfig filt;
+  filt.forward = "local_store";
+  filt.max_entries = 16;
+  filt.sources = {"phm", "ucm"};
+  col.Configure(filt);
+  col.ReportEvent("phm", "AliveMissed", "ok", EventSeverity::kError);
+  col.ReportEvent("com", "Timeout", "drop", EventSeverity::kWarn);
+  col.ReportEvent("ucm", "ota_failed", "ok", EventSeverity::kError);
+  col.ReportEvent("process", "Exit", "drop", EventSeverity::kError);
+  if (col.Size() != 2) {
+    return Fail("COLL-FILTER-01", "only phm+ucm should pass");
+  }
+  {
+    const auto fs = col.Snapshot();
+    if (fs.size() != 2 || fs[0].source != "phm" || fs[1].source != "ucm") {
+      return Fail("COLL-FILTER-01", "unexpected snapshot after filter");
+    }
+  }
+  Pass("COLL-FILTER-01", "sources allowlist drops com/process");
+
+  col.Clear();
+  col.ConfigureFromYaml(R"(
+forward: local_store
+sources:
+  - phm
+local:
+  enabled: true
+  max_entries: 8
+)");
+  col.ReportEvent("phm", "AliveMissed", "yaml", EventSeverity::kError);
+  col.ReportEvent("ucm", "ota_failed", "no", EventSeverity::kError);
+  if (col.Size() != 1 || col.Snapshot().front().source != "phm") {
+    return Fail("COLL-FILTER-02", "ConfigureFromYaml sources");
+  }
+  Pass("COLL-FILTER-02", "ConfigureFromYaml sources allowlist");
+
   std::cout << "gf_collector_smoke OK entries=" << col.Size() << "\n";
   return 0;
 }

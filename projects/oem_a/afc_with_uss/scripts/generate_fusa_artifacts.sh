@@ -37,9 +37,9 @@ fi
 
 if [[ "${GF_FUSA_PACK_RUN_SMOKE:-0}" == "1" ]]; then
   echo "${TAG} smoke_sil_verify ..."
-  bash "${ROOT}/scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh" | tee "${PACK}/smoke/sil_verify.txt"
+  bash "${ROOT}/projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh" | tee "${PACK}/smoke/sil_verify.txt"
   echo "${TAG} smoke_sil_observability ..."
-  GF_SKIP_COMPILE=1 bash "${ROOT}/scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh" | tee "${PACK}/smoke/observability.txt"
+  GF_SKIP_COMPILE=1 bash "${ROOT}/projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_observability.sh" | tee "${PACK}/smoke/observability.txt"
 fi
 
 if [[ -f "${OBS}/session.mcap" ]]; then

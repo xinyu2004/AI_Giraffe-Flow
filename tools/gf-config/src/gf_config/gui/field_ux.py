@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -130,6 +131,77 @@ def tipify(widget: QWidget, tip: str) -> None:
     if tip:
         widget.setToolTip(t(tip))
     widget.setCursor(_hand_cursor())
+
+
+# Amber wash when spin value ≠ baseline (loaded / last-saved snapshot).
+_SPIN_DIRTY_SS = (
+    "QSpinBox { background-color: #FFF3E0; color: #E65100; }"
+    "QSpinBox:focus { background-color: #FFE0B2; }"
+)
+
+
+def bind_dirty_spin(spin: QSpinBox) -> QSpinBox:
+    """Highlight spin while its value differs from the tracked baseline.
+
+    Call **after** setRange/setValue defaults — setRange can clamp 0→minimum and
+    would otherwise leave a false dirty tint before any user edit.
+    """
+    if getattr(spin, "_gf_dirty_bound", False):
+        return spin
+    setattr(spin, "_gf_dirty_bound", True)
+    setattr(spin, "_gf_baseline", int(spin.value()))
+
+    def _refresh(*_a: object) -> None:
+        base = getattr(spin, "_gf_baseline", None)
+        dirty = base is not None and int(spin.value()) != int(base)
+        spin.setStyleSheet(_SPIN_DIRTY_SS if dirty else "")
+
+    setattr(spin, "_gf_dirty_refresh", _refresh)
+    spin.valueChanged.connect(_refresh)
+    _refresh()
+    return spin
+
+
+def refresh_spin_dirty(spin: QSpinBox) -> None:
+    """Recompute dirty tint (use after setValue with signals blocked)."""
+    refresh = getattr(spin, "_gf_dirty_refresh", None)
+    if callable(refresh):
+        refresh()
+
+
+def set_spin_baseline(spin: QSpinBox, value: int | None = None) -> None:
+    """Treat current (or given) value as clean baseline; clear dirty tint."""
+    if value is not None:
+        v = int(value)
+        if int(spin.value()) != v:
+            prev = spin.signalsBlocked()
+            spin.blockSignals(True)
+            try:
+                spin.setValue(v)
+            finally:
+                spin.blockSignals(prev)
+        setattr(spin, "_gf_baseline", v)
+    else:
+        setattr(spin, "_gf_baseline", int(spin.value()))
+    refresh_spin_dirty(spin)
+    if not getattr(spin, "_gf_dirty_bound", False):
+        spin.setStyleSheet("")
+
+
+def apply_spin_value(
+    spin: QSpinBox, value: int, *, as_baseline: bool = False
+) -> None:
+    """Programmatic setValue; as_baseline=True for load/save (not a user edit)."""
+    prev = spin.signalsBlocked()
+    spin.blockSignals(True)
+    try:
+        spin.setValue(int(value))
+    finally:
+        spin.blockSignals(prev)
+    if as_baseline:
+        set_spin_baseline(spin)
+    else:
+        refresh_spin_dirty(spin)
 
 
 def tipify_item(item: QTableWidgetItem, tip: str) -> None:

@@ -269,10 +269,89 @@ COL_SOURCE = (
     "勾选后，该来源会写入 collector.yaml 的 sources。"
     "当前运行时会 ReportEvent 的有：phm（健康）、process（进程退出）、"
     "com（通信超时等）、ucm（OTA）。不是只能这三个；后续还可扩展。"
-    "注意：runtime 暂未按 sources 过滤，勾选主要用于配置意图与文档。"
+    "运行时按 sources 白名单过滤：未勾选的来源在 ReportEvent 时丢弃"
+    "（列表为空则不过滤，兼容旧配置）。"
 )
 COL_LOCAL_EN = "是否启用本地 DEM-lite 存储；关则只转发、不在本机留历史。"
 COL_MAX = "本地最多保留多少条事件；超出按策略丢弃最旧条目，防止磁盘涨满。"
+
+# ── bounds / iceoryx ────────────────────────────────────────
+BND_DLT_CTX = (
+    "DLT context 表容量上限；log.contexts 条数不能超过此值，否则 Verify 报错。"
+)
+BND_COM_DEPTH = "LoopbackBus 每个 topic 的队列深度（仅 SIL loopback 路径的 RAM 上界）。"
+BND_COM_KEYS = "LoopbackBus 允许的 topic 键数量上限。"
+BND_COM_AVG = (
+    "仅用于内存预估：假设队列里每条样本的平均字节数，不写进运行时配置。"
+)
+BND_PER_KEYS = "per（持久化 KV）最多允许多少个键。"
+BND_PER_VAL = "per 单个 value 的最大字节数。"
+BND_RX = (
+    "DoIP TCP 接收累加器上限；保存时同步写入 diag.doip.rx_max_bytes。"
+)
+BND_DID_N = "UDS DID 表最多条目数。"
+BND_DID_PAY = "单个 DID payload 最大字节数。"
+BND_BUD_RAM = "可选门禁：预估 total_ram 超过此值则 Verify 警告；0=不检查。"
+BND_BUD_DISK = "可选门禁：预估 total_disk 超过此值则 Verify 警告；0=不检查。"
+BND_FILE_MAX = (
+    "写回 log.file_max_bytes：file sink 单文件软上限；"
+    "预估 DISK 按 path + path.1 计 ×2（仅当启用 file sink）。"
+)
+BND_COL_MAX = "写回 collector.local.max_entries：本地事件环最大条数。"
+BND_COL_DEB = "写回 collector.local.debounce_max_keys：防抖 map 最大键数。"
+BND_COL_STORE = (
+    "写回 collector.local.store_max_bytes：共享 NDJSON 软上限；"
+    "预估 DISK 按双文件计 ×2。"
+)
+
+IOX_WARN = (
+    "两类配置、两套生效方式：\n"
+    "• mgmt.*（IOX_MAX_*）：决定 iceoryx_mgmt 端口表大小，必须 "
+    "compose → cmake 重配并重编 iceoryx（如 compile_sil）后才生效。\n"
+    "• mempools：决定用户数据块共享内存（payload），compose 写出 "
+    "iox_roudi.toml 后重启 RouDi 即可，不必重编。\n"
+    "req.bindings 含 iceoryx 时 SIL 会自动起 RouDi。"
+)
+IOX_PUB = (
+    "全局最多同时存在的 Publisher 端口数（编译进 iceoryx，对应 IOX_MAX_PUBLISHERS）。"
+    "增大是拉高 iceoryx_mgmt 的主要因素；改后需重编 iceoryx。"
+)
+IOX_SUB = (
+    "全局最多同时存在的 Subscriber 端口数（IOX_MAX_SUBSCRIBERS）。"
+    "增大也会明显增加 iceoryx_mgmt；改后需重编 iceoryx。"
+)
+IOX_SUB_PER_PUB = (
+    "每个 Publisher 最多挂多少个 Subscriber（IOX_MAX_SUBSCRIBERS_PER_PUBLISHER）。"
+    "影响分发器表；相对 pub/sub 总数，对 mgmt 体积影响较小。"
+)
+IOX_HIST = (
+    "Publisher 历史缓存深度（IOX_MAX_PUBLISHER_HISTORY）："
+    "晚订阅者可拿到的最近样本数。对 mgmt 体积影响很小。"
+)
+IOX_CHUNK_PUB = (
+    "每个 Publisher 可同时占用的 chunk 数上限"
+    "（IOX_MAX_CHUNKS_ALLOCATED_PER_PUBLISHER_*）。对 mgmt 体积影响很小。"
+)
+IOX_CHUNK_SUB = (
+    "每个 Subscriber 可同时持有的 chunk 数 / 队列容量"
+    "（IOX_MAX_CHUNKS_HELD_PER_SUBSCRIBER_*）。中等影响 mgmt 体积。"
+)
+IOX_IFACE = (
+    "Interface 端口数（IOX_MAX_INTERFACE_NUMBER），gateway / 跨进程发现常用。"
+    "改后需重编 iceoryx。"
+)
+IOX_BUD_SHM = "可选门禁：预估 total_shm 超过则 Verify 警告；0=不检查。"
+IOX_MEMPOOLS = (
+    "用户数据内存池（不是 iceoryx_mgmt）：\n"
+    "• size = 单块可放的最大字节（选能装下你最大消息的一档）\n"
+    "• count = 该档同时可借出的块数\n"
+    "写入 generated/iox_roudi.toml，构成 payload 共享内存（预估里的 roudi_payload）。\n"
+    "改完：保存/compose 后重启 RouDi 即可，无需重编 iceoryx。\n"
+    "块越多/越大 → payload SHM 越大；与上方 mgmt.* 是两回事。"
+)
+IOX_POOL_SIZE = "该档每个 chunk 的字节容量（应 ≥ 该档要传的最大消息）。"
+IOX_POOL_COUNT = "该档同时可分配的 chunk 个数（并发 in-flight 样本数）。"
+IOX_ADD_POOL = "新增一档 mempool（size/count）。"
 
 # ── SKU / req ───────────────────────────────────────────────
 SKU_VARIANT = "变体名，区分同一产品下的配置分支（写入 req.variant，参与 compose 标识）。"

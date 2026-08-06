@@ -85,7 +85,7 @@ bash scripts/make_sil_swu.sh /tmp/gf_demo.swu
 #    默认写 GF_COLLECTOR_STORE=${BUILD}/runtime/collector/events.ndjson
 
 # 3) 自动化冒烟
-bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
 
 # 4) 或开 GMT → 加载 project.yaml → OTA/UDS → 连接 → Start OTA
 #    （同页可切 DEM 读/清 DTC，或 Collector 读环缓）
@@ -98,7 +98,7 @@ bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
 
 ```bash
 # 断言：uss AliveMissed → NDJSON + PER → UDS 0x19 读到 0xC01234
-bash scripts/verify/oem_a_afc_with_uss/smoke_phm_dem_doip.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_phm_dem_doip.sh
 
 # 交互：DoIP 开时默认对 uss 短注 PHM（GF_PHM_FAULT_MS=500）
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh

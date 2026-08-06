@@ -6,9 +6,9 @@ Host-side / repo-wide helpers. **SKU 产品主路径**在各 `projects/.../scrip
 |--------|---------|
 | [bootstrap_deps.sh](bootstrap_deps.sh) | toolchains；attr/acl → deps-prefix；iceoryx / cyclonedds |
 | [run_iox_demo.sh](run_iox_demo.sh) | 双进程 RouDi demo（验证用） |
-| [verify/](verify/) | **模块/功能 smoke**（非产品路径） |
+| [verify/](verify/) | deprecated shim → `projects/.../scripts/verify/` |
 | [cross_link_smoke.sh](cross_link_smoke.sh) | optional aarch64 link |
-| [run_ab_loop.sh](run_ab_loop.sh) | Deprecated → `verify/.../smoke_sil.sh` |
+| [run_ab_loop.sh](run_ab_loop.sh) | Deprecated → project `scripts/verify/smoke_sil.sh` |
 | [smoke_bd_stub.sh](smoke_bd_stub.sh) | DDS/SOMEIP stub smoke |
 | [smoke_bd_cyclone.sh](smoke_bd_cyclone.sh) | CycloneDDS 真收发 |
 | FuSa | [fusa/scripts/run_cases.sh](../fusa/scripts/run_cases.sh)；SKU pack → `projects/.../generate_fusa_artifacts.sh` |
@@ -19,7 +19,7 @@ bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 
 # 验证
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh
 ```
 
 ### Policy (board / cross)

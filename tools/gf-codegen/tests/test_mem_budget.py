@@ -97,7 +97,10 @@ def test_budget_warn() -> None:
 
 
 def test_roudi_payload_formula() -> None:
-    from gf_codegen.compose.mem_budget import C_CHUNK_HDR
+    from gf_codegen.compose.mem_budget import (
+        C_CHUNK_HDR,
+        approx_roudi_mgmt_bytes,
+    )
 
     plat = {
         "bounds": {
@@ -113,5 +116,70 @@ def test_roudi_payload_formula() -> None:
     est = estimate_mem_budget(plat, req={"bindings": ["iceoryx"]})
     by = {ln["name"]: ln["bytes"] for ln in est["lines"]}
     assert by["roudi_payload"] == (256 + C_CHUNK_HDR) * 10 + (1024 + C_CHUNK_HDR) * 2
-    assert est["roudi_mgmt_status"] == "pending_measure"
+    assert est["roudi_mgmt_status"] == "approx"
     assert "roudi_mgmt" in by
+    approx_b, _ = approx_roudi_mgmt_bytes(est["iceoryx_mgmt"])
+    assert by["roudi_mgmt"] == approx_b
+    assert by["roudi_mgmt"] > 0
+    assert any("approximate" in w for w in est["warnings"])
+
+
+def test_roudi_mgmt_model_matches_sil_default() -> None:
+    from gf_codegen.compose.emit_iox import DEFAULT_MGMT
+    from gf_codegen.compose.mem_budget import IOX_MGMT_REF_BYTES, model_roudi_mgmt_bytes
+
+    # SIL-measured DEF within ~100 B of fit (rounding).
+    assert abs(model_roudi_mgmt_bytes(DEFAULT_MGMT) - IOX_MGMT_REF_BYTES) < 100
+
+
+def test_roudi_mgmt_model_tracks_publisher_doubling() -> None:
+    from gf_codegen.compose.emit_iox import DEFAULT_MGMT
+    from gf_codegen.compose.mem_budget import model_roudi_mgmt_bytes
+
+    # Measured: P 32→64 → 22980216
+    m = {**DEFAULT_MGMT, "max_publishers": 64}
+    assert abs(model_roudi_mgmt_bytes(m) - 22_980_216) < 100
+
+
+def test_roudi_mgmt_measured_when_report_matches(tmp_path) -> None:
+    import json
+
+    from gf_codegen.compose.emit_iox import DEFAULT_MGMT
+    from gf_codegen.compose.mem_budget import IOX_MGMT_REF_BYTES
+
+    report = {
+        "schema_version": "0.2",
+        "mgmt_bytes": IOX_MGMT_REF_BYTES,
+        "mgmt": dict(DEFAULT_MGMT),
+    }
+    path = tmp_path / "iox_shm_report.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    plat = {"bounds": {"iceoryx": {"mgmt": dict(DEFAULT_MGMT), "mempools": [{"size": 256, "count": 1}]}}}
+    est = estimate_mem_budget(plat, req={"bindings": ["iceoryx"]}, shm_report_path=path)
+    by = {ln["name"]: ln["bytes"] for ln in est["lines"]}
+    assert est["roudi_mgmt_status"] == "measured"
+    assert by["roudi_mgmt"] == IOX_MGMT_REF_BYTES
+
+
+def test_roudi_mgmt_approx_scales_when_knobs_change(tmp_path) -> None:
+    import json
+
+    from gf_codegen.compose.emit_iox import DEFAULT_MGMT
+    from gf_codegen.compose.mem_budget import IOX_MGMT_REF_BYTES, approx_roudi_mgmt_bytes
+
+    report = {
+        "mgmt_bytes": IOX_MGMT_REF_BYTES,
+        "mgmt": dict(DEFAULT_MGMT),
+    }
+    path = tmp_path / "iox_shm_report.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    changed = {**DEFAULT_MGMT, "max_publishers": 64}
+    plat = {"bounds": {"iceoryx": {"mgmt": changed, "mempools": [{"size": 256, "count": 1}]}}}
+    est = estimate_mem_budget(plat, req={"bindings": ["iceoryx"]}, shm_report_path=path)
+    by = {ln["name"]: ln["bytes"] for ln in est["lines"]}
+    expect, _ = approx_roudi_mgmt_bytes(
+        changed, calibrate_mgmt=DEFAULT_MGMT, calibrate_bytes=IOX_MGMT_REF_BYTES
+    )
+    assert est["roudi_mgmt_status"] == "approx"
+    assert by["roudi_mgmt"] == expect
+    assert by["roudi_mgmt"] != IOX_MGMT_REF_BYTES

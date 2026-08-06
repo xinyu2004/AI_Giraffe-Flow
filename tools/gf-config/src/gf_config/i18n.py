@@ -221,21 +221,19 @@ _EN: dict[str, str] = {
         "Linked caps (write back to log / collector / diag)"
     ),
     "静态上界预估（只读 · 含公式）": "Static upper-bound estimate (read-only · with formulas)",
+    "载入实测 SHM": "Load measured SHM",
+    "iox SHM 报告 (*.json);;所有文件 (*)": "iox SHM report (*.json);;All files (*)",
+    "清除实测": "Clear measured",
+    "SHM 实测：已指定 {path}，但报告无效或未含 mgmt_bytes": (
+        "SHM measured: path set to {path}, but report invalid or missing mgmt_bytes"
+    ),
+    "未找到 {path}\n"
+    "请先跑 SIL / smoke_sil_verify（RouDi 会写出该报告），再载入。": (
+        "Not found: {path}\n"
+        "Run SIL / smoke_sil_verify first (RouDi writes the report), then load."
+    ),
     "iceoryx / RouDi（BL-MEM-ROUDI）": "iceoryx / RouDi (BL-MEM-ROUDI)",
-    "修改 iceoryx.mgmt（IOX_MAX_* / iceoryx_mgmt）后必须：compose → "
-    "cmake reconfigure + 重新编译 iceoryx。"
-    "仅改 mempools 时：compose 后重启 RouDi 即可。"
-    "req.bindings 含 iceoryx 时 SIL 自动起 RouDi（配置驱动，无环境变量关开）。": (
-        "After changing iceoryx.mgmt (IOX_MAX_* / iceoryx_mgmt): compose → "
-        "cmake reconfigure + rebuild iceoryx. "
-        "Mempools only: compose then restart RouDi. "
-        "When req.bindings includes iceoryx, SIL starts RouDi from config (no env kill-switch)."
-    ),
-    "mempools（→ generated/iox_roudi.toml）": "mempools (→ generated/iox_roudi.toml)",
     "添加 mempool": "Add mempool",
-    "IOX_MAX_PUBLISHERS — iceoryx_mgmt 端口表": (
-        "IOX_MAX_PUBLISHERS — iceoryx_mgmt port table"
-    ),
     "file sink 软轮转上限（字节）；保留 path + path.1，计入 DISK 预估 ×2": (
         "File sink soft rotate (bytes); keeps path + path.1; DISK estimate ×2"
     ),
@@ -569,6 +567,64 @@ _EN: dict[str, str] = {
         "Verify exit {rc} — see red items in Lineage"
     ),
     "Generate OK → {out}/include/gf_gen/": "Generate OK → {out}/include/gf_gen/",
+    # Memory bounds / SHM (BL-MEM-ROUDI) — keep in sync with platform_editor
+    "SHM 实测：未载入（roudi_mgmt 用近似值，非精确）": (
+        "SHM measured: not loaded (roudi_mgmt uses approximate value, not exact)"
+    ),
+    "SHM 合计 = roudi_payload（mempool 用户数据）+ roudi_mgmt（iceoryx_mgmt 端口表）。"
+    "未载入实测时 mgmt 用 SIL 拟合近似值（非精确，以实测为准）。"
+    "改 mgmt.* → 保存/compose → 重编 iceoryx → 跑 SIL →「载入实测 SHM」。": (
+        "SHM total = roudi_payload (mempool user data) + roudi_mgmt (iceoryx_mgmt port tables). "
+        "Without a measurement, mgmt uses a SIL-fitted approx (not exact — prefer measure). "
+        "After mgmt.* change: save/compose → rebuild iceoryx → run SIL → Load measured SHM."
+    ),
+    "弹出文件选择；默认指向 reports/iox_shm_report.json。"
+    "报告内 mgmt 与当前 bounds 一致则用实测；不一致则用模型+偏移近似。"
+    "打开工程时不自动读盘。": (
+        "Opens a file picker; default is reports/iox_shm_report.json. "
+        "If report mgmt matches current bounds, use measured; else model+offset approx. "
+        "Opening a project never auto-loads from disk."
+    ),
+    "回到未载入状态；roudi_mgmt 改回模型近似。": (
+        "Back to unloaded; roudi_mgmt falls back to the model approx."
+    ),
+    "SHM 实测：已载入 {path} · mgmt={mgmt} · payload={payload}（与当前 IOX 一致）": (
+        "SHM measured: loaded {path} · mgmt={mgmt} · payload={payload} (matches current IOX)"
+    ),
+    "SHM：已载入 {path}，但 IOX 与报告不一致 → mgmt≈{mgmt}（近似，以重编实测为准）": (
+        "SHM: loaded {path}, but IOX differs from report → mgmt≈{mgmt} "
+        "(approx; rebuild + re-measure for truth)"
+    ),
+    "SHM 实测：未载入 · roudi_mgmt≈{mgmt}（近似，缺依据，以实测为准）": (
+        "SHM measured: not loaded · roudi_mgmt≈{mgmt} (approx; prefer SIL measure)"
+    ),
+    "payload+mgmt 实测": "payload+mgmt measured",
+    "mgmt 近似 — 非精确，以 SIL 实测为准": (
+        "mgmt approx — not exact; prefer SIL measure"
+    ),
+    "说明：roudi_mgmt 为近似值（非精确）。"
+    "改 mgmt.* → compose → 重编 iceoryx（如 compile_sil）→ "
+    "跑 SIL → 载入 iox_shm_report.json。"
+    "仅改 mempool → compose + 重启 RouDi。": (
+        "Note: roudi_mgmt is approximate (not exact). "
+        "After mgmt.*: compose → rebuild iceoryx (e.g. compile_sil) → "
+        "run SIL → load iox_shm_report.json. "
+        "Mempools only: compose + restart RouDi."
+    ),
+    "说明：roudi_mgmt 来自实测报告（与当前 IOX 配置一致）。"
+    "仅改 mempool → compose + 重启 RouDi（无需重编 iceoryx）。": (
+        "Note: roudi_mgmt from measured report (matches current IOX). "
+        "Mempools only: compose + restart RouDi (no iceoryx rebuild)."
+    ),
+    "保存": "Save",
+    "Verify 失败": "Verify failed",
+    "Generate 失败": "Generate failed",
+    "导出": "Export",
+    "导出失败": "Export failed",
+    "退出码 {rc}。请查看右侧 Lineage 红项。": (
+        "Exit code {rc}. See red items in the Lineage panel."
+    ),
+    "已写入：\n{path}": "Wrote:\n{path}",
 }
 
 # Authoritative field tips (gf_config.gui.tips) — purpose/effect, not enum noise.

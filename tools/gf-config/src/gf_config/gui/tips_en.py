@@ -356,11 +356,13 @@ TIP_EN: dict[str, str] = {
     "勾选后，该来源会写入 collector.yaml 的 sources。"
     "当前运行时会 ReportEvent 的有：phm（健康）、process（进程退出）、"
     "com（通信超时等）、ucm（OTA）。不是只能这三个；后续还可扩展。"
-    "注意：runtime 暂未按 sources 过滤，勾选主要用于配置意图与文档。": (
+    "运行时按 sources 白名单过滤：未勾选的来源在 ReportEvent 时丢弃"
+    "（列表为空则不过滤，兼容旧配置）。": (
         "When checked, this source is listed in collector.yaml sources. "
         "Today ReportEvent producers are: phm, process, com, ucm — not only "
-        "three; more can be added later. Runtime does not filter by sources yet "
-        "(checkbox is config intent / docs)."
+        "three; more can be added later. Runtime allowlists by sources: "
+        "unchecked sources are dropped in ReportEvent "
+        "(empty list = no filter, legacy-compatible)."
     ),
     "是否启用本地 DEM-lite 存储；关则只转发、不在本机留历史。": (
         "Enable local DEM-lite storage; off = forward only, no local history."
@@ -495,4 +497,119 @@ TIP_EN: dict[str, str] = {
     ),
     "新增一个诊断 DID 定义。": "Add a diagnostic DID definition.",
     "新增一个日志 context 覆盖项。": "Add a log-context level override.",
+    # bounds / iceoryx
+    "DLT context 表容量上限；log.contexts 条数不能超过此值，否则 Verify 报错。": (
+        "Max DLT context table size; log.contexts count must not exceed this "
+        "or Verify fails."
+    ),
+    "LoopbackBus 每个 topic 的队列深度（仅 SIL loopback 路径的 RAM 上界）。": (
+        "LoopbackBus queue depth per topic (RAM upper bound for SIL loopback only)."
+    ),
+    "LoopbackBus 允许的 topic 键数量上限。": (
+        "Max number of LoopbackBus topic keys."
+    ),
+    "仅用于内存预估：假设队列里每条样本的平均字节数，不写进运行时配置。": (
+        "Estimate-only: assumed average sample bytes in the queue; not a runtime knob."
+    ),
+    "per（持久化 KV）最多允许多少个键。": "Max keys in per (persistence KV).",
+    "per 单个 value 的最大字节数。": "Max bytes per per-value.",
+    "DoIP TCP 接收累加器上限；保存时同步写入 diag.doip.rx_max_bytes。": (
+        "DoIP TCP rx accumulator cap; saved also to diag.doip.rx_max_bytes."
+    ),
+    "UDS DID 表最多条目数。": "Max entries in the UDS DID map.",
+    "单个 DID payload 最大字节数。": "Max bytes for one DID payload.",
+    "可选门禁：预估 total_ram 超过此值则 Verify 警告；0=不检查。": (
+        "Optional gate: Verify warns if estimated total_ram exceeds this; 0=off."
+    ),
+    "可选门禁：预估 total_disk 超过此值则 Verify 警告；0=不检查。": (
+        "Optional gate: Verify warns if estimated total_disk exceeds this; 0=off."
+    ),
+    "写回 log.file_max_bytes：file sink 单文件软上限；"
+    "预估 DISK 按 path + path.1 计 ×2（仅当启用 file sink）。": (
+        "Writes log.file_max_bytes: file-sink soft cap; "
+        "DISK estimate counts path + path.1 (×2) when file sink is on."
+    ),
+    "写回 collector.local.max_entries：本地事件环最大条数。": (
+        "Writes collector.local.max_entries: max local event-ring entries."
+    ),
+    "写回 collector.local.debounce_max_keys：防抖 map 最大键数。": (
+        "Writes collector.local.debounce_max_keys: max debounce-map keys."
+    ),
+    "写回 collector.local.store_max_bytes：共享 NDJSON 软上限；"
+    "预估 DISK 按双文件计 ×2。": (
+        "Writes collector.local.store_max_bytes: shared NDJSON soft cap; "
+        "DISK estimate ×2 for the dual files."
+    ),
+    "两类配置、两套生效方式：\n"
+    "• mgmt.*（IOX_MAX_*）：决定 iceoryx_mgmt 端口表大小，必须 "
+    "compose → cmake 重配并重编 iceoryx（如 compile_sil）后才生效。\n"
+    "• mempools：决定用户数据块共享内存（payload），compose 写出 "
+    "iox_roudi.toml 后重启 RouDi 即可，不必重编。\n"
+    "req.bindings 含 iceoryx 时 SIL 会自动起 RouDi。": (
+        "Two knobs, two apply paths:\n"
+        "• mgmt.* (IOX_MAX_*): sizes iceoryx_mgmt port tables — needs "
+        "compose → cmake reconfigure + rebuild iceoryx (e.g. compile_sil).\n"
+        "• mempools: user payload shared memory — compose writes "
+        "iox_roudi.toml, then restart RouDi (no rebuild).\n"
+        "When req.bindings includes iceoryx, SIL starts RouDi automatically."
+    ),
+    "全局最多同时存在的 Publisher 端口数（编译进 iceoryx，对应 IOX_MAX_PUBLISHERS）。"
+    "增大是拉高 iceoryx_mgmt 的主要因素；改后需重编 iceoryx。": (
+        "Max concurrent Publisher ports (baked into iceoryx as IOX_MAX_PUBLISHERS). "
+        "Main driver of iceoryx_mgmt size; rebuild iceoryx after change."
+    ),
+    "全局最多同时存在的 Subscriber 端口数（IOX_MAX_SUBSCRIBERS）。"
+    "增大也会明显增加 iceoryx_mgmt；改后需重编 iceoryx。": (
+        "Max concurrent Subscriber ports (IOX_MAX_SUBSCRIBERS). "
+        "Also grows iceoryx_mgmt a lot; rebuild iceoryx after change."
+    ),
+    "每个 Publisher 最多挂多少个 Subscriber（IOX_MAX_SUBSCRIBERS_PER_PUBLISHER）。"
+    "影响分发器表；相对 pub/sub 总数，对 mgmt 体积影响较小。": (
+        "Max subscribers per publisher (IOX_MAX_SUBSCRIBERS_PER_PUBLISHER). "
+        "Affects distributor tables; smaller mgmt impact than pub/sub totals."
+    ),
+    "Publisher 历史缓存深度（IOX_MAX_PUBLISHER_HISTORY）："
+    "晚订阅者可拿到的最近样本数。对 mgmt 体积影响很小。": (
+        "Publisher history depth (IOX_MAX_PUBLISHER_HISTORY): recent samples "
+        "for late joiners. Tiny effect on mgmt size."
+    ),
+    "每个 Publisher 可同时占用的 chunk 数上限"
+    "（IOX_MAX_CHUNKS_ALLOCATED_PER_PUBLISHER_*）。对 mgmt 体积影响很小。": (
+        "Max chunks a publisher may hold at once "
+        "(IOX_MAX_CHUNKS_ALLOCATED_PER_PUBLISHER_*). Tiny mgmt impact."
+    ),
+    "每个 Subscriber 可同时持有的 chunk 数 / 队列容量"
+    "（IOX_MAX_CHUNKS_HELD_PER_SUBSCRIBER_*）。中等影响 mgmt 体积。": (
+        "Max chunks held / queue capacity per subscriber "
+        "(IOX_MAX_CHUNKS_HELD_PER_SUBSCRIBER_*). Moderate mgmt impact."
+    ),
+    "Interface 端口数（IOX_MAX_INTERFACE_NUMBER），gateway / 跨进程发现常用。"
+    "改后需重编 iceoryx。": (
+        "Interface port count (IOX_MAX_INTERFACE_NUMBER); used by gateway / "
+        "discovery. Rebuild iceoryx after change."
+    ),
+    "可选门禁：预估 total_shm 超过则 Verify 警告；0=不检查。": (
+        "Optional gate: Verify warns if estimated total_shm exceeds this; 0=off."
+    ),
+    "用户数据内存池（不是 iceoryx_mgmt）：\n"
+    "• size = 单块可放的最大字节（选能装下你最大消息的一档）\n"
+    "• count = 该档同时可借出的块数\n"
+    "写入 generated/iox_roudi.toml，构成 payload 共享内存（预估里的 roudi_payload）。\n"
+    "改完：保存/compose 后重启 RouDi 即可，无需重编 iceoryx。\n"
+    "块越多/越大 → payload SHM 越大；与上方 mgmt.* 是两回事。": (
+        "User data mempools (not iceoryx_mgmt):\n"
+        "• size = max bytes per chunk (pick a tier that fits your largest message)\n"
+        "• count = how many chunks of that tier can be loaned at once\n"
+        "Written to generated/iox_roudi.toml as payload shared memory "
+        "(roudi_payload in the estimate).\n"
+        "After change: save/compose then restart RouDi — no iceoryx rebuild.\n"
+        "More/larger chunks → larger payload SHM; separate from mgmt.* above."
+    ),
+    "该档每个 chunk 的字节容量（应 ≥ 该档要传的最大消息）。": (
+        "Byte capacity of each chunk in this tier (≥ largest message for the tier)."
+    ),
+    "该档同时可分配的 chunk 个数（并发 in-flight 样本数）。": (
+        "How many chunks of this tier may be allocated at once (in-flight samples)."
+    ),
+    "新增一档 mempool（size/count）。": "Add a mempool tier (size/count).",
 }

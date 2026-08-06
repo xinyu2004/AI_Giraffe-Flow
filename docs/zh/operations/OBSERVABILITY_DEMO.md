@@ -52,7 +52,7 @@ GMT gui --project projects/oem_a/afc_with_uss
 ## 2. 事后录 session → MCAP（验证脚本）
 
 ```bash
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_observability.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_observability.sh
 ```
 
 产物默认在 `${BUILD}/observability/`（即 `projects/.../build-sil/observability/`）：
@@ -120,7 +120,7 @@ GMT gui --project projects/oem_a/afc_with_uss \
 
 ```bash
 # 尖刺（stub fixture → VCD）
-bash scripts/verify/oem_a_afc_with_uss/smoke_gmt_vcd.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_gmt_vcd.sh
 
 # 或手工：
 GMT measure export --format vcd \
@@ -137,10 +137,10 @@ gtkwave projects/oem_a/afc_with_uss/build-sil/observability/session_stub.vcd   #
 
 ```bash
 # B1：替 gateway，全链消费者
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_inject.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_inject.sh
 
 # B2：单模块 DUT（例 sensing.uss）
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_inject_b2.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_inject_b2.sh
 
 # 或手工 B1：
 GF_SKIP_COMPILE=1 GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \

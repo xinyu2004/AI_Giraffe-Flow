@@ -53,6 +53,8 @@ struct DtcMapEntry {
 
 struct CollectorConfig {
   std::string forward{"local_store"};  // cp_dem | local_store | both
+  /// Empty = accept all sources (legacy / tests). Non-empty = allowlist (BL-COLL-FILTER).
+  std::vector<std::string> sources;
   bool local_enabled{true};
   std::uint32_t max_entries{256};
   std::uint32_t debounce_max_keys{64};

@@ -90,7 +90,7 @@ GMT gui --project projects/oem_a/afc_with_uss \
 ### GTKWave (offline timing)
 
 ```bash
-bash scripts/verify/oem_a_afc_with_uss/smoke_gmt_vcd.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_gmt_vcd.sh
 # or: GMT measure export --format vcd --in …jsonl --out …vcd
 ```
 
@@ -99,7 +99,7 @@ CLI entry: **`GMT`**. GMT GUI **does not write wiring** (authoring stays in gf-c
 ### OTA/UDS demo data (Collector / DEM / log levels)
 
 ```bash
-bash scripts/verify/oem_a_afc_with_uss/smoke_phm_dem_doip.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_phm_dem_doip.sh
 # Interactive:
 export GF_COLLECTOR_STORE=$PWD/projects/oem_a/afc_with_uss/build-sil/runtime/collector/events.ndjson
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh

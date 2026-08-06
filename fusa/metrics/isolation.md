@@ -19,9 +19,9 @@
 GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
 
 # 单场景
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_phm_fault.sh
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_sm_fg.sh
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_phm_fault.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_sm_fg.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_em_daemon.sh
 
 # 延时数字（可选，独立脚本）
 bash fusa/scripts/measure_latency.sh

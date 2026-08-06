@@ -24,7 +24,7 @@
 | BL-UDS-11 | 0x11 真复位 | deferred | 板级策略 | SIL：正响应 + 事件 |
 | BL-UDS-19FULL | 全量 0x19 子功能 | deferred | 按 OEM 增量 | 本轮最小集 + 冻结帧读 |
 | BL-GMT-COLL-LIVE | GMT Collector 真·live（ws 推送，非轮询） | deferred | 观测波 | 现：文件 + UDS RID F201 |
-| BL-COLL-FILTER | runtime 按 collector.yaml `sources` 过滤 ReportEvent | deferred | 平台波 | 配置意图已有；运行时尚未滤 |
+| BL-COLL-FILTER | runtime 按 collector.yaml `sources` 过滤 ReportEvent | **done** | 平台波 | 非空 `sources` 白名单；空=不过滤；YAML/`Configure` 均生效 |
 
 ## 本轮已纳入（对照，非后置）
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import Qt, Signal, QSize
@@ -9,6 +11,7 @@ from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -36,7 +39,7 @@ from gf_codegen.compose.mem_budget import (
     C_EVENT_RECORD,
     C_PER_KEY_OH,
     estimate_mem_budget,
-    format_estimate_text,
+    fmt_bytes,
 )
 
 from gf_config.core import ProjectSession
@@ -47,14 +50,18 @@ from gf_config.gui.field_ux import (
     COLORS_LOG_LEVEL,
     COLORS_ON_FAILURE,
     ColorPair,
+    apply_spin_value,
+    bind_dirty_spin,
     combo_text,
     enable_table_row_selection,
     multi_selected,
     refresh_enum_combo_style,
+    refresh_spin_dirty,
     set_cell,
     set_combo,
     set_header_tips,
     set_multi_check,
+    set_spin_baseline,
     TintedComboBox,
     style_enum_combo,
     tipify,
@@ -283,6 +290,8 @@ class PlatformEditor(QWidget):
         self._src_boxes: dict[str, QCheckBox] = {}
         self._checkpoint_fn: Callable[..., None] | None = None
         self._end_edit_fn: Callable[[], None] | None = None
+        # Explicit only — do not auto-read reports/iox_shm_report.json on open.
+        self._iox_shm_report_path: Path | None = None
 
         root = QVBoxLayout(self)
 
@@ -588,6 +597,7 @@ class PlatformEditor(QWidget):
         self._doip_port = QSpinBox()
         self._doip_port.setRange(1, 65535)
         self._doip_port.setValue(13400)
+        bind_dirty_spin(self._doip_port)
         tipify(self._doip_port, T.DIAG_DOIP_PORT)
         self._doip_port.valueChanged.connect(self._on_diag_changed)
         doip_f.addRow("", self._doip_enabled)
@@ -604,30 +614,35 @@ class PlatformEditor(QWidget):
         self._s3_ms = QSpinBox()
         self._s3_ms.setRange(100, 600000)
         self._s3_ms.setValue(5000)
+        bind_dirty_spin(self._s3_ms)
         self._s3_ms.setSuffix(" ms")
         tipify(self._s3_ms, T.DIAG_S3)
         self._s3_ms.valueChanged.connect(self._on_diag_changed)
         self._tp_ms = QSpinBox()
         self._tp_ms.setRange(50, 300000)
         self._tp_ms.setValue(2000)
+        bind_dirty_spin(self._tp_ms)
         self._tp_ms.setSuffix(" ms")
         tipify(self._tp_ms, T.DIAG_TP_PERIOD)
         self._tp_ms.valueChanged.connect(self._on_diag_changed)
         self._p2_ms = QSpinBox()
         self._p2_ms.setRange(1, 60000)
         self._p2_ms.setValue(50)
+        bind_dirty_spin(self._p2_ms)
         self._p2_ms.setSuffix(" ms")
         tipify(self._p2_ms, T.DIAG_P2)
         self._p2_ms.valueChanged.connect(self._on_diag_changed)
         self._p2star_ms = QSpinBox()
         self._p2star_ms.setRange(1, 600000)
         self._p2star_ms.setValue(5000)
+        bind_dirty_spin(self._p2star_ms)
         self._p2star_ms.setSuffix(" ms")
         tipify(self._p2star_ms, T.DIAG_P2STAR)
         self._p2star_ms.valueChanged.connect(self._on_diag_changed)
         self._sec_delay_ms = QSpinBox()
         self._sec_delay_ms.setRange(0, 600000)
         self._sec_delay_ms.setValue(10000)
+        bind_dirty_spin(self._sec_delay_ms)
         self._sec_delay_ms.setSuffix(" ms")
         tipify(self._sec_delay_ms, T.DIAG_SEC_DELAY)
         self._sec_delay_ms.valueChanged.connect(self._on_diag_changed)
@@ -667,6 +682,7 @@ class PlatformEditor(QWidget):
         self._ota_block = QSpinBox()
         self._ota_block.setRange(8, 65535)
         self._ota_block.setValue(1024)
+        bind_dirty_spin(self._ota_block)
         tipify(self._ota_block, T.DIAG_OTA_BLOCK)
         self._ota_block.valueChanged.connect(self._on_diag_changed)
         ota_f.addRow(t("下载 SID"), self._ota_mode)
@@ -760,9 +776,9 @@ class PlatformEditor(QWidget):
         self._log_sink_dlt = QCheckBox(t("dlt（remote）"))
         self._log_sink_console.setChecked(True)
         self._log_sink_dlt.setChecked(True)
-        tipify(self._log_sink_console, t("终端 stdout/stderr（SIL 本机）"))
-        tipify(self._log_sink_file, t("落盘 file_path；仅本机调试，非 GMT 路径"))
-        tipify(self._log_sink_dlt, t("COVESA DLT → dlt-daemon；标准协议给 viewer/GMT"))
+        tipify(self._log_sink_console, "终端 stdout/stderr（SIL 本机）")
+        tipify(self._log_sink_file, "落盘 file_path；仅本机调试，非 GMT 路径")
+        tipify(self._log_sink_dlt, "COVESA DLT → dlt-daemon；标准协议给 viewer/GMT")
         for cb in (self._log_sink_console, self._log_sink_file, self._log_sink_dlt):
             cb.toggled.connect(self._on_log_changed)
             sink_row.addWidget(cb)
@@ -772,16 +788,14 @@ class PlatformEditor(QWidget):
         self._log_dlt_app = QLineEdit("GFAP")
         self._log_dlt_app.setMaxLength(4)
         self._log_dlt_app.setMaximumWidth(80)
-        tipify(self._log_dlt_app, t("DLT Application ID（4 字符）；多进程可由运行时覆盖"))
+        tipify(self._log_dlt_app, "DLT Application ID（4 字符）；多进程可由运行时覆盖")
         self._log_dlt_app.textChanged.connect(self._on_log_changed)
         form.addRow(t("DLT app_id"), self._log_dlt_app)
         self._log_file_max = QSpinBox()
         self._log_file_max.setRange(4096, 2_147_483_647)
         self._log_file_max.setValue(1_048_576)
-        tipify(
-            self._log_file_max,
-            t("file sink 软轮转上限（字节）；保留 path + path.1，计入 DISK 预估 ×2"),
-        )
+        bind_dirty_spin(self._log_file_max)
+        tipify(self._log_file_max, "file sink 软轮转上限（字节）；保留 path + path.1，计入 DISK 预估 ×2")
         self._log_file_max.valueChanged.connect(self._on_log_changed)
         form.addRow("file_max_bytes", self._log_file_max)
         lay.addLayout(form)
@@ -892,23 +906,20 @@ class PlatformEditor(QWidget):
         self._col_max = QSpinBox()
         self._col_max.setRange(1, 100000)
         self._col_max.setValue(256)
+        bind_dirty_spin(self._col_max)
         tipify(self._col_max, T.COL_MAX)
         self._col_max.valueChanged.connect(self._on_collector_changed)
         self._col_deb_keys = QSpinBox()
         self._col_deb_keys.setRange(1, 100000)
         self._col_deb_keys.setValue(64)
-        tipify(
-            self._col_deb_keys,
-            t("防抖 map 最大键数（BL-MEM-BOUND）；RAM ≈ keys × C_DEBOUNCE_ENTRY"),
-        )
+        bind_dirty_spin(self._col_deb_keys)
+        tipify(self._col_deb_keys, "防抖 map 最大键数（BL-MEM-BOUND）；RAM ≈ keys × C_DEBOUNCE_ENTRY")
         self._col_deb_keys.valueChanged.connect(self._on_collector_changed)
         self._col_store_max = QSpinBox()
         self._col_store_max.setRange(4096, 2_147_483_647)
         self._col_store_max.setValue(1_048_576)
-        tipify(
-            self._col_store_max,
-            t("共享 NDJSON 文件软上限；保留 ×2，计入 DISK 预估"),
-        )
+        bind_dirty_spin(self._col_store_max)
+        tipify(self._col_store_max, "共享 NDJSON 文件软上限；保留 ×2，计入 DISK 预估")
         self._col_store_max.valueChanged.connect(self._on_collector_changed)
         local_f.addRow("", self._col_local_en)
         local_f.addRow("max_entries", self._col_max)
@@ -946,79 +957,85 @@ class PlatformEditor(QWidget):
         )
         lay.addWidget(const_lbl)
 
+        def _narrow(w: QWidget) -> QWidget:
+            """~4/5 width + empty gutter: page wheel less likely to hit editors."""
+            wrap = QWidget()
+            h = QHBoxLayout(wrap)
+            h.setContentsMargins(0, 0, 0, 0)
+            h.setSpacing(0)
+            h.addWidget(w, 4)
+            h.addStretch(1)
+            return wrap
+
         def _spin(lo: int, hi: int, default: int) -> QSpinBox:
             s = QSpinBox()
             s.setRange(lo, hi)
             s.setValue(default)
+            s.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+            )
             s.valueChanged.connect(self._on_bounds_changed)
-            return s
+            return bind_dirty_spin(s)
 
         # ── bounds.yaml ──
         b_box = QGroupBox(t("bounds.yaml（跨模块硬上限）"))
         bf = QFormLayout(b_box)
         self._bnd_dlt_ctx = _spin(1, 4096, 64)
-        tipify(self._bnd_dlt_ctx, t("DltSink context 表；log.contexts 数量不可超过此值"))
+        tipify(self._bnd_dlt_ctx, T.BND_DLT_CTX)
         self._bnd_com_depth = _spin(1, 1024, 16)
-        tipify(self._bnd_com_depth, t("LoopbackBus 每 topic 队列深度"))
+        tipify(self._bnd_com_depth, T.BND_COM_DEPTH)
         self._bnd_com_keys = _spin(1, 100000, 64)
-        tipify(self._bnd_com_keys, t("LoopbackBus topic 键上限"))
+        tipify(self._bnd_com_keys, T.BND_COM_KEYS)
         self._bnd_com_avg = _spin(1, 1_048_576, 256)
-        tipify(self._bnd_com_avg, t("仅预估用：队列中单样本平均字节"))
+        tipify(self._bnd_com_avg, T.BND_COM_AVG)
         self._bnd_per_keys = _spin(1, 1_000_000, 1024)
-        tipify(self._bnd_per_keys, t("per KV 最大键数"))
+        tipify(self._bnd_per_keys, T.BND_PER_KEYS)
         self._bnd_per_val = _spin(1, 16_777_216, 65536)
-        tipify(self._bnd_per_val, t("per 单 value 最大字节"))
+        tipify(self._bnd_per_val, T.BND_PER_VAL)
         self._bnd_rx = _spin(1024, 16_777_216, 65536)
-        tipify(self._bnd_rx, t("DoIP TCP rx 累加器；同步写入 diag.doip.rx_max_bytes"))
+        tipify(self._bnd_rx, T.BND_RX)
         self._bnd_did_n = _spin(1, 100000, 256)
-        tipify(self._bnd_did_n, t("UDS DID map 最大条目"))
+        tipify(self._bnd_did_n, T.BND_DID_N)
         self._bnd_did_pay = _spin(1, 1_048_576, 4096)
-        tipify(self._bnd_did_pay, t("单 DID payload 最大字节"))
+        tipify(self._bnd_did_pay, T.BND_DID_PAY)
         self._bnd_bud_ram = _spin(0, 2_147_483_647, 0)
-        tipify(self._bnd_bud_ram, t("可选：total_ram 超过则 Verify warn；0=不警告"))
+        tipify(self._bnd_bud_ram, T.BND_BUD_RAM)
         self._bnd_bud_disk = _spin(0, 2_147_483_647, 0)
-        tipify(self._bnd_bud_disk, t("可选：total_disk 超过则 Verify warn；0=不警告"))
-        bf.addRow("dlt.max_contexts", self._bnd_dlt_ctx)
-        bf.addRow("com.queue_depth", self._bnd_com_depth)
-        bf.addRow("com.max_topic_keys", self._bnd_com_keys)
-        bf.addRow("com.avg_payload_bytes", self._bnd_com_avg)
-        bf.addRow("per.max_keys", self._bnd_per_keys)
-        bf.addRow("per.max_value_bytes", self._bnd_per_val)
-        bf.addRow("diag.rx_max_bytes", self._bnd_rx)
-        bf.addRow("diag.dids.max_entries", self._bnd_did_n)
-        bf.addRow("diag.dids.max_payload", self._bnd_did_pay)
-        bf.addRow("budget.ram_bytes", self._bnd_bud_ram)
-        bf.addRow("budget.disk_bytes", self._bnd_bud_disk)
+        tipify(self._bnd_bud_disk, T.BND_BUD_DISK)
+        bf.addRow("dlt.max_contexts", _narrow(self._bnd_dlt_ctx))
+        bf.addRow("com.queue_depth", _narrow(self._bnd_com_depth))
+        bf.addRow("com.max_topic_keys", _narrow(self._bnd_com_keys))
+        bf.addRow("com.avg_payload_bytes", _narrow(self._bnd_com_avg))
+        bf.addRow("per.max_keys", _narrow(self._bnd_per_keys))
+        bf.addRow("per.max_value_bytes", _narrow(self._bnd_per_val))
+        bf.addRow("diag.rx_max_bytes", _narrow(self._bnd_rx))
+        bf.addRow("diag.dids.max_entries", _narrow(self._bnd_did_n))
+        bf.addRow("diag.dids.max_payload", _narrow(self._bnd_did_pay))
+        bf.addRow("budget.ram_bytes", _narrow(self._bnd_bud_ram))
+        bf.addRow("budget.disk_bytes", _narrow(self._bnd_bud_disk))
         lay.addWidget(b_box)
 
         # ── linked caps living in other yaml ──
         link = QGroupBox(t("关联上限（写回 log / collector / diag）"))
         lf = QFormLayout(link)
         self._bnd_file_max = _spin(4096, 2_147_483_647, 1_048_576)
-        tipify(self._bnd_file_max, t("→ log.file_max_bytes；DISK = ×2（若启用 file sink）"))
+        tipify(self._bnd_file_max, T.BND_FILE_MAX)
         self._bnd_col_max = _spin(1, 100000, 256)
-        tipify(self._bnd_col_max, t("→ collector.local.max_entries"))
+        tipify(self._bnd_col_max, T.BND_COL_MAX)
         self._bnd_col_deb = _spin(1, 100000, 64)
-        tipify(self._bnd_col_deb, t("→ collector.local.debounce_max_keys"))
+        tipify(self._bnd_col_deb, T.BND_COL_DEB)
         self._bnd_col_store = _spin(4096, 2_147_483_647, 1_048_576)
-        tipify(self._bnd_col_store, t("→ collector.local.store_max_bytes；DISK = ×2"))
-        lf.addRow("log.file_max_bytes", self._bnd_file_max)
-        lf.addRow("collector.max_entries", self._bnd_col_max)
-        lf.addRow("collector.debounce_max_keys", self._bnd_col_deb)
-        lf.addRow("collector.store_max_bytes", self._bnd_col_store)
+        tipify(self._bnd_col_store, T.BND_COL_STORE)
+        lf.addRow("log.file_max_bytes", _narrow(self._bnd_file_max))
+        lf.addRow("collector.max_entries", _narrow(self._bnd_col_max))
+        lf.addRow("collector.debounce_max_keys", _narrow(self._bnd_col_deb))
+        lf.addRow("collector.store_max_bytes", _narrow(self._bnd_col_store))
         lay.addWidget(link)
 
         # ── BL-MEM-ROUDI ──
         iox_box = QGroupBox(t("iceoryx / RouDi（BL-MEM-ROUDI）"))
         iox_l = QVBoxLayout(iox_box)
-        iox_warn = QLabel(
-            t(
-                "修改 iceoryx.mgmt（IOX_MAX_* / iceoryx_mgmt）后必须：compose → "
-                "cmake reconfigure + 重新编译 iceoryx。"
-                "仅改 mempools 时：compose 后重启 RouDi 即可。"
-                "req.bindings 含 iceoryx 时 SIL 自动起 RouDi（配置驱动，无环境变量关开）。"
-            )
-        )
+        iox_warn = QLabel(t(T.IOX_WARN))
         iox_warn.setWordWrap(True)
         iox_warn.setStyleSheet(
             "color:#b71c1c; font-size:11px; background:#fff3e0; padding:6px;"
@@ -1026,67 +1043,116 @@ class PlatformEditor(QWidget):
         iox_l.addWidget(iox_warn)
         mgmt_f = QFormLayout()
         self._iox_pub = _spin(1, 4096, 32)
-        tipify(self._iox_pub, t("IOX_MAX_PUBLISHERS — iceoryx_mgmt 端口表"))
+        tipify(self._iox_pub, T.IOX_PUB)
         self._iox_sub = _spin(1, 8192, 64)
-        tipify(self._iox_sub, t("IOX_MAX_SUBSCRIBERS"))
+        tipify(self._iox_sub, T.IOX_SUB)
         self._iox_sub_per_pub = _spin(1, 1024, 8)
-        tipify(self._iox_sub_per_pub, t("IOX_MAX_SUBSCRIBERS_PER_PUBLISHER"))
+        tipify(self._iox_sub_per_pub, T.IOX_SUB_PER_PUB)
         self._iox_hist = _spin(1, 256, 4)
-        tipify(self._iox_hist, t("IOX_MAX_PUBLISHER_HISTORY"))
+        tipify(self._iox_hist, T.IOX_HIST)
         self._iox_chunk_pub = _spin(1, 256, 2)
-        tipify(self._iox_chunk_pub, t("IOX_MAX_CHUNKS_ALLOCATED_PER_PUBLISHER_SIMULTANEOUSLY"))
+        tipify(self._iox_chunk_pub, T.IOX_CHUNK_PUB)
         self._iox_chunk_sub = _spin(1, 4096, 16)
-        tipify(self._iox_chunk_sub, t("IOX_MAX_CHUNKS_HELD_PER_SUBSCRIBER_SIMULTANEOUSLY"))
+        tipify(self._iox_chunk_sub, T.IOX_CHUNK_SUB)
         self._iox_iface = _spin(1, 64, 2)
-        tipify(self._iox_iface, t("IOX_MAX_INTERFACE_NUMBER（gateway）"))
+        tipify(self._iox_iface, T.IOX_IFACE)
         self._iox_bud_shm = _spin(0, 2_147_483_647, 0)
-        tipify(self._iox_bud_shm, t("可选：total_shm 超则 Verify warn；0=关"))
-        mgmt_f.addRow("mgmt.max_publishers", self._iox_pub)
-        mgmt_f.addRow("mgmt.max_subscribers", self._iox_sub)
-        mgmt_f.addRow("mgmt.max_subscribers_per_publisher", self._iox_sub_per_pub)
-        mgmt_f.addRow("mgmt.max_publisher_history", self._iox_hist)
-        mgmt_f.addRow("mgmt.max_chunks_allocated_per_publisher", self._iox_chunk_pub)
-        mgmt_f.addRow("mgmt.max_chunks_held_per_subscriber", self._iox_chunk_sub)
-        mgmt_f.addRow("mgmt.max_interface_number", self._iox_iface)
-        mgmt_f.addRow("budget_shm_bytes", self._iox_bud_shm)
-        iox_l.addLayout(mgmt_f)
+        tipify(self._iox_bud_shm, T.IOX_BUD_SHM)
+        mgmt_f.addRow("mgmt.max_publishers", _narrow(self._iox_pub))
+        mgmt_f.addRow("mgmt.max_subscribers", _narrow(self._iox_sub))
+        mgmt_f.addRow(
+            "mgmt.max_subscribers_per_publisher", _narrow(self._iox_sub_per_pub)
+        )
+        mgmt_f.addRow("mgmt.max_publisher_history", _narrow(self._iox_hist))
+        mgmt_f.addRow(
+            "mgmt.max_chunks_allocated_per_publisher", _narrow(self._iox_chunk_pub)
+        )
+        mgmt_f.addRow(
+            "mgmt.max_chunks_held_per_subscriber", _narrow(self._iox_chunk_sub)
+        )
+        mgmt_f.addRow("mgmt.max_interface_number", _narrow(self._iox_iface))
+        mgmt_f.addRow("budget_shm_bytes", _narrow(self._iox_bud_shm))
+        # mempools: same FormLayout label column as mgmt spins → field aligns with _narrow.
         self._iox_pool_table = QTableWidget(0, 2)
         self._iox_pool_table.setHorizontalHeaderLabels(["size", "count"])
         self._iox_pool_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch
         )
+        self._iox_pool_table.setMinimumHeight(120)
         enable_table_row_selection(self._iox_pool_table)
+        set_header_tips(self._iox_pool_table, [T.IOX_POOL_SIZE, T.IOX_POOL_COUNT])
         self._iox_pool_table.itemChanged.connect(self._on_bounds_changed)
-        iox_l.addWidget(QLabel(t("mempools（→ generated/iox_roudi.toml）")))
-        iox_l.addWidget(self._iox_pool_table)
-        pool_btns = QHBoxLayout()
+        tipify(self._iox_pool_table, T.IOX_MEMPOOLS)
+        mgmt_f.addRow("mempools", _narrow(self._iox_pool_table))
+        pool_btns_w = QWidget()
+        pool_btns = QHBoxLayout(pool_btns_w)
+        pool_btns.setContentsMargins(0, 0, 0, 0)
         add_p = QPushButton(t("添加 mempool"))
+        tipify(add_p, T.IOX_ADD_POOL)
         add_p.clicked.connect(self._add_iox_pool_row)
         del_p = QPushButton(t("删除选中"))
+        tipify(del_p, T.BTN_DEL_ROW)
         del_p.clicked.connect(
             lambda: self._del_rows(self._iox_pool_table, self._on_bounds_changed)
         )
         pool_btns.addWidget(add_p)
         pool_btns.addWidget(del_p)
         pool_btns.addStretch(1)
-        iox_l.addLayout(pool_btns)
+        mgmt_f.addRow("", _narrow(pool_btns_w))
+        iox_l.addLayout(mgmt_f)
         lay.addWidget(iox_box)
 
         est_box = QGroupBox(t("静态上界预估（只读 · 含公式）"))
         est_l = QVBoxLayout(est_box)
-        # Full height by content — no inner scrollbar (page scroll handles overflow).
+        shm_bar = QHBoxLayout()
+        self._bnd_shm_status = QLabel(
+            t("SHM 实测：未载入（roudi_mgmt 用近似值，非精确）")
+        )
+        self._bnd_shm_status.setWordWrap(True)
+        self._bnd_shm_status.setStyleSheet("color:#666; font-size:12px;")
+        tipify(self._bnd_shm_status, "SHM 合计 = roudi_payload（mempool 用户数据）+ roudi_mgmt（iceoryx_mgmt 端口表）。未载入实测时 mgmt 用 SIL 拟合近似值（非精确，以实测为准）。改 mgmt.* → 保存/compose → 重编 iceoryx → 跑 SIL →「载入实测 SHM」。")
+        load_shm = QPushButton(t("载入实测 SHM"))
+        tipify(load_shm, "弹出文件选择；默认指向 reports/iox_shm_report.json。报告内 mgmt 与当前 bounds 一致则用实测；不一致则用模型+偏移近似。打开工程时不自动读盘。")
+        load_shm.clicked.connect(self._load_iox_shm_report)
+        clear_shm = QPushButton(t("清除实测"))
+        tipify(clear_shm, "回到未载入状态；roudi_mgmt 改回模型近似。")
+        clear_shm.clicked.connect(self._clear_iox_shm_report)
+        shm_bar.addWidget(self._bnd_shm_status, 1)
+        shm_bar.addWidget(load_shm)
+        shm_bar.addWidget(clear_shm)
+        est_l.addLayout(shm_bar)
+        # Conclusion line (full width) — larger + RAM/DISK/SHM colors.
+        self._bnd_estimate_summary = QLabel()
+        self._bnd_estimate_summary.setWordWrap(True)
+        self._bnd_estimate_summary.setTextFormat(Qt.TextFormat.RichText)
+        self._bnd_estimate_summary.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._bnd_estimate_summary.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        self._bnd_estimate_summary.setStyleSheet(
+            "font-size: 15px; background:#fafafa; padding:10px 8px 6px 8px; "
+            "border:1px solid #e0e0e0; border-bottom: none;"
+        )
+        # Detail lines — full width (not narrowed).
         self._bnd_estimate = QLabel()
         self._bnd_estimate.setWordWrap(True)
+        self._bnd_estimate.setTextFormat(Qt.TextFormat.RichText)
         self._bnd_estimate.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
         self._bnd_estimate.setAlignment(
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
         )
+        self._bnd_estimate.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
         self._bnd_estimate.setStyleSheet(
             "font-family: monospace; font-size: 11px; background:#fafafa; "
-            "padding:8px; border:1px solid #e0e0e0;"
+            "padding:4px 8px 8px 8px; border:1px solid #e0e0e0; border-top: none;"
         )
+        est_l.addWidget(self._bnd_estimate_summary)
         est_l.addWidget(self._bnd_estimate)
         lay.addWidget(est_box)
         lay.addStretch(1)
@@ -1157,6 +1223,7 @@ class PlatformEditor(QWidget):
 
     def set_session(self, session: ProjectSession | None) -> None:
         self._session = session
+        self._iox_shm_report_path = None  # never auto-load report on open
         if session is None:
             return
         self._loading = True
@@ -1182,6 +1249,7 @@ class PlatformEditor(QWidget):
         self._load_collector(session.platform.get("collector") or {})
         self._load_bounds(session.platform.get("bounds") or {})
         self._loading = False
+        self.rebaseline_spins()
         self._rebuild_nav()
         self._refresh_mem_estimate()
 
@@ -1630,17 +1698,34 @@ class PlatformEditor(QWidget):
         else:
             self._doip_tester.setText(str(tester or "0x0E80"))
         try:
-            self._doip_port.setValue(int(doip.get("tcp_port") or 13400))
+            doip_port = int(doip.get("tcp_port") or 13400)
         except (TypeError, ValueError):
-            self._doip_port.setValue(13400)
+            doip_port = 13400
+        apply_spin_value(self._doip_port, doip_port, as_baseline=True)
         timing = data.get("timing") if isinstance(data.get("timing"), dict) else {}
         xfer = data.get("ota_transfer") if isinstance(data.get("ota_transfer"), dict) else {}
         try:
-            self._s3_ms.setValue(int(timing.get("s3_server_ms") or 5000))
-            self._tp_ms.setValue(int(timing.get("tester_present_period_ms") or 2000))
-            self._p2_ms.setValue(int(timing.get("p2_server_ms") or 50))
-            self._p2star_ms.setValue(int(timing.get("p2_star_server_ms") or 5000))
-            self._sec_delay_ms.setValue(int(timing.get("security_delay_ms") or 10000))
+            apply_spin_value(
+                self._s3_ms, int(timing.get("s3_server_ms") or 5000), as_baseline=True
+            )
+            apply_spin_value(
+                self._tp_ms,
+                int(timing.get("tester_present_period_ms") or 2000),
+                as_baseline=True,
+            )
+            apply_spin_value(
+                self._p2_ms, int(timing.get("p2_server_ms") or 50), as_baseline=True
+            )
+            apply_spin_value(
+                self._p2star_ms,
+                int(timing.get("p2_star_server_ms") or 5000),
+                as_baseline=True,
+            )
+            apply_spin_value(
+                self._sec_delay_ms,
+                int(timing.get("security_delay_ms") or 10000),
+                as_baseline=True,
+            )
         except (TypeError, ValueError):
             pass
         mode = str(xfer.get("mode") or "request_file_transfer")
@@ -1651,9 +1736,10 @@ class PlatformEditor(QWidget):
         self._ota_prog.setChecked(bool(xfer.get("require_programming_session", True)))
         self._ota_sec.setChecked(bool(xfer.get("require_security", True)))
         try:
-            self._ota_block.setValue(int(xfer.get("max_block_length") or 1024))
+            ota_block = int(xfer.get("max_block_length") or 1024)
         except (TypeError, ValueError):
-            self._ota_block.setValue(1024)
+            ota_block = 1024
+        apply_spin_value(self._ota_block, ota_block, as_baseline=True)
         self._iso_14229.blockSignals(False)
         self._iso_13400.blockSignals(False)
         self._doip_enabled.blockSignals(False)
@@ -1752,9 +1838,7 @@ class PlatformEditor(QWidget):
             fmax = int(data.get("file_max_bytes") or 1_048_576)
         except (TypeError, ValueError):
             fmax = 1_048_576
-        self._log_file_max.blockSignals(True)
-        self._log_file_max.setValue(max(4096, fmax))
-        self._log_file_max.blockSignals(False)
+        apply_spin_value(self._log_file_max, max(4096, fmax), as_baseline=True)
 
         self._ctx_table.blockSignals(True)
         self._ctx_table.setRowCount(0)
@@ -1822,26 +1906,23 @@ class PlatformEditor(QWidget):
             cb.blockSignals(False)
         local = data.get("local") if isinstance(data.get("local"), dict) else {}
         self._col_local_en.blockSignals(True)
-        self._col_max.blockSignals(True)
-        self._col_deb_keys.blockSignals(True)
-        self._col_store_max.blockSignals(True)
         self._col_local_en.setChecked(bool(local.get("enabled", True)))
-        try:
-            self._col_max.setValue(int(local.get("max_entries") or 256))
-        except (TypeError, ValueError):
-            self._col_max.setValue(256)
-        try:
-            self._col_deb_keys.setValue(int(local.get("debounce_max_keys") or 64))
-        except (TypeError, ValueError):
-            self._col_deb_keys.setValue(64)
-        try:
-            self._col_store_max.setValue(int(local.get("store_max_bytes") or 1_048_576))
-        except (TypeError, ValueError):
-            self._col_store_max.setValue(1_048_576)
         self._col_local_en.blockSignals(False)
-        self._col_max.blockSignals(False)
-        self._col_deb_keys.blockSignals(False)
-        self._col_store_max.blockSignals(False)
+        try:
+            col_max = int(local.get("max_entries") or 256)
+        except (TypeError, ValueError):
+            col_max = 256
+        try:
+            col_deb = int(local.get("debounce_max_keys") or 64)
+        except (TypeError, ValueError):
+            col_deb = 64
+        try:
+            col_store = int(local.get("store_max_bytes") or 1_048_576)
+        except (TypeError, ValueError):
+            col_store = 1_048_576
+        apply_spin_value(self._col_max, col_max, as_baseline=True)
+        apply_spin_value(self._col_deb_keys, col_deb, as_baseline=True)
+        apply_spin_value(self._col_store_max, col_store, as_baseline=True)
 
     def _load_bounds(self, data: dict[str, Any]) -> None:
         dlt = data.get("dlt") if isinstance(data.get("dlt"), dict) else {}
@@ -1852,12 +1933,11 @@ class PlatformEditor(QWidget):
         budget = data.get("budget") if isinstance(data.get("budget"), dict) else {}
 
         def _set(spin: QSpinBox, val: object, default: int) -> None:
-            spin.blockSignals(True)
             try:
-                spin.setValue(int(val if val is not None else default))
+                v = int(val if val is not None else default)
             except (TypeError, ValueError):
-                spin.setValue(default)
-            spin.blockSignals(False)
+                v = default
+            apply_spin_value(spin, v, as_baseline=True)
 
         _set(self._bnd_dlt_ctx, dlt.get("max_contexts"), 64)
         _set(self._bnd_com_depth, com.get("queue_depth"), 16)
@@ -1911,14 +1991,225 @@ class PlatformEditor(QWidget):
             _set_cell(self._iox_pool_table, r, 1, str(p.get("count") or 1))
         self._iox_pool_table.blockSignals(False)
 
+    def _iox_shm_report_default_path(self) -> Path | None:
+        if not self._session:
+            return None
+        return self._session.paths.project_dir / "reports" / "iox_shm_report.json"
+
+    def _load_iox_shm_report(self) -> None:
+        default = self._iox_shm_report_default_path()
+        start = ""
+        if default is not None:
+            # Prefer full default file path so the dialog lands on reports/iox_shm_report.json
+            start = str(default)
+        elif self._session is not None:
+            start = str(self._session.paths.project_dir / "reports")
+        path_str, _ = QFileDialog.getOpenFileName(
+            self,
+            t("载入实测 SHM"),
+            start,
+            t("iox SHM 报告 (*.json);;所有文件 (*)"),
+        )
+        if not path_str:
+            return
+        path = Path(path_str)
+        if not path.is_file():
+            QMessageBox.warning(
+                self,
+                t("载入实测 SHM"),
+                t(
+                    "未找到 {path}\n"
+                    "请先跑 SIL / smoke_sil_verify（RouDi 会写出该报告），再载入。"
+                ).format(path=path),
+            )
+            return
+        self._iox_shm_report_path = path
+        self._refresh_mem_estimate()
+
+    def _clear_iox_shm_report(self) -> None:
+        self._iox_shm_report_path = None
+        self._refresh_mem_estimate()
+
     def _refresh_mem_estimate(self) -> None:
         if not self._session or not hasattr(self, "_bnd_estimate"):
             return
-        est = estimate_mem_budget(self._session.platform)
-        self._bnd_estimate.setText(format_estimate_text(est))
-        self._bnd_estimate.adjustSize()
+        est = estimate_mem_budget(
+            self._session.platform,
+            req=self._session.req,
+            shm_report_path=self._iox_shm_report_path,
+        )
+        ram_b = int(est.get("total_ram_bytes") or 0)
+        disk_b = int(est.get("total_disk_bytes") or 0)
+        shm_b = int(est.get("total_shm_bytes") or 0)
+        mgmt_st = str(est.get("roudi_mgmt_status") or "n/a")
+        payload_b = 0
+        mgmt_b = 0
+        for ln in est.get("lines") or []:
+            if ln.get("kind") != "shm":
+                continue
+            if ln.get("name") == "roudi_payload":
+                payload_b = int(ln.get("bytes") or 0)
+            elif ln.get("name") == "roudi_mgmt":
+                mgmt_b = int(ln.get("bytes") or 0)
+        if hasattr(self, "_bnd_shm_status"):
+            if self._iox_shm_report_path is not None and mgmt_st == "measured":
+                self._bnd_shm_status.setText(
+                    t(
+                        "SHM 实测：已载入 {path} · mgmt={mgmt} · payload={payload}（与当前 IOX 一致）"
+                    ).format(
+                        path=self._iox_shm_report_path.name,
+                        mgmt=fmt_bytes(mgmt_b),
+                        payload=fmt_bytes(payload_b),
+                    )
+                )
+                self._bnd_shm_status.setStyleSheet("color:#E65100; font-size:12px;")
+            elif self._iox_shm_report_path is not None and mgmt_st == "approx":
+                self._bnd_shm_status.setText(
+                    t(
+                        "SHM：已载入 {path}，但 IOX 与报告不一致 → mgmt≈{mgmt}（近似，以重编实测为准）"
+                    ).format(
+                        path=self._iox_shm_report_path.name,
+                        mgmt=fmt_bytes(mgmt_b),
+                    )
+                )
+                self._bnd_shm_status.setStyleSheet("color:#E65100; font-size:12px;")
+            elif self._iox_shm_report_path is not None:
+                self._bnd_shm_status.setText(
+                    t("SHM 实测：已指定 {path}，但报告无效或未含 mgmt_bytes").format(
+                        path=self._iox_shm_report_path
+                    )
+                )
+                self._bnd_shm_status.setStyleSheet("color:#b71c1c; font-size:12px;")
+            else:
+                self._bnd_shm_status.setText(
+                    t(
+                        "SHM 实测：未载入 · roudi_mgmt≈{mgmt}（近似，缺依据，以实测为准）"
+                    ).format(mgmt=fmt_bytes(mgmt_b))
+                )
+                self._bnd_shm_status.setStyleSheet("color:#666; font-size:12px;")
+        # Conclusion colors: RAM blue · DISK green · SHM amber (distinct kinds).
+        shm_note = ""
+        if mgmt_st == "measured":
+            shm_note = (
+                "&nbsp;<span style='color:#E65100;font-size:12px;'>"
+                f"({html.escape(t('payload+mgmt 实测'))})</span>"
+            )
+        elif mgmt_st == "approx" and est.get("iceoryx_enabled"):
+            shm_note = (
+                "&nbsp;<span style='color:#999;font-size:12px;'>"
+                f"({html.escape(t('mgmt 近似 — 非精确，以 SIL 实测为准'))})</span>"
+            )
+        if hasattr(self, "_bnd_estimate_summary"):
+            self._bnd_estimate_summary.setText(
+                "BL-MEM-BOUND estimate&nbsp;&nbsp;"
+                f'<span style="color:#1565C0;font-weight:700;">'
+                f"RAM={html.escape(fmt_bytes(ram_b))}</span>"
+                "&nbsp;&nbsp;"
+                f'<span style="color:#2E7D32;font-weight:700;">'
+                f"DISK={html.escape(fmt_bytes(disk_b))}</span>"
+                "&nbsp;&nbsp;"
+                f'<span style="color:#E65100;font-weight:700;">'
+                f"SHM={html.escape(fmt_bytes(shm_b))}</span>"
+                f"{shm_note}"
+            )
+        self._bnd_estimate.setText(self._mem_estimate_body_html(est))
+
+    @staticmethod
+    def _mem_estimate_body_html(est: dict[str, Any]) -> str:
+        """Detail lines: color+pct on value before ←; formula after ← unchanged."""
+        colors = {"ram": "#1565C0", "disk": "#2E7D32", "shm": "#E65100"}
+        totals = {
+            "ram": int(est.get("total_ram_bytes") or 0),
+            "disk": int(est.get("total_disk_bytes") or 0),
+            "shm": int(est.get("total_shm_bytes") or 0),
+        }
+
+        def pct(n: int, total: int) -> str:
+            if total <= 0:
+                return "0.0%"
+            return f"{100.0 * n / total:.1f}%"
+
+        def value_span(kind: str, n: int) -> str:
+            c = colors.get(kind, "#333")
+            return (
+                f'<span style="color:{c};font-weight:600;">'
+                f"{html.escape(fmt_bytes(n))} ({pct(n, totals.get(kind, 0))})"
+                f"</span>"
+            )
+
+        lines_out: list[str] = [
+            html.escape(
+                "SHM = iceoryx/RouDi POSIX shared memory "
+                "(roudi_payload mempools + iceoryx_mgmt); not process heap RSS."
+            ),
+            html.escape(f"(constants: {est.get('constants')})"),
+            html.escape("RAM lines (process-local upper bound):"),
+        ]
+        for ln in est.get("lines") or []:
+            if ln.get("kind") != "ram":
+                continue
+            lines_out.append(
+                f"&nbsp;&nbsp;{html.escape(str(ln.get('name')))}: "
+                f"{value_span('ram', int(ln.get('bytes') or 0))}"
+                f"&nbsp;&nbsp;← {html.escape(str(ln.get('formula') or ''))}"
+            )
+        lines_out.append(html.escape("DISK lines:"))
+        for ln in est.get("lines") or []:
+            if ln.get("kind") != "disk":
+                continue
+            lines_out.append(
+                f"&nbsp;&nbsp;{html.escape(str(ln.get('name')))}: "
+                f"{value_span('disk', int(ln.get('bytes') or 0))}"
+                f"&nbsp;&nbsp;← {html.escape(str(ln.get('formula') or ''))}"
+            )
+        shm_lines = [ln for ln in (est.get("lines") or []) if ln.get("kind") == "shm"]
+        if shm_lines:
+            lines_out.append(
+                html.escape("SHM lines (iceoryx / RouDi shared memory):")
+            )
+            for ln in shm_lines:
+                lines_out.append(
+                    f"&nbsp;&nbsp;{html.escape(str(ln.get('name')))}: "
+                    f"{value_span('shm', int(ln.get('bytes') or 0))}"
+                    f"&nbsp;&nbsp;← {html.escape(str(ln.get('formula') or ''))}"
+                )
+            if est.get("roudi_mgmt_status") == "approx":
+                lines_out.append(
+                    html.escape(
+                        t(
+                            "说明：roudi_mgmt 为近似值（非精确）。"
+                            "改 mgmt.* → compose → 重编 iceoryx（如 compile_sil）→ "
+                            "跑 SIL → 载入 iox_shm_report.json。"
+                            "仅改 mempool → compose + 重启 RouDi。"
+                        )
+                    )
+                )
+            elif est.get("roudi_mgmt_status") == "measured":
+                lines_out.append(
+                    html.escape(
+                        t(
+                            "说明：roudi_mgmt 来自实测报告（与当前 IOX 配置一致）。"
+                            "仅改 mempool → compose + 重启 RouDi（无需重编 iceoryx）。"
+                        )
+                    )
+                )
+        for e in est.get("errors") or []:
+            lines_out.append(
+                f'<span style="color:#b71c1c;">ERROR: {html.escape(str(e))}</span>'
+            )
+        for w in est.get("warnings") or []:
+            lines_out.append(
+                f'<span style="color:#e65100;">WARN: {html.escape(str(w))}</span>'
+            )
+        return "<br/>".join(lines_out)
 
     # ── write-back ────────────────────────────────────────
+
+    def rebaseline_spins(self) -> None:
+        """After save: clear amber dirty tint on numeric fields."""
+        for spin in self.findChildren(QSpinBox):
+            if getattr(spin, "_gf_dirty_bound", False):
+                set_spin_baseline(spin)
 
     def _mark(self, key: str) -> None:
         if self._loading or not self._session:
@@ -2197,9 +2488,8 @@ class PlatformEditor(QWidget):
         data["dlt"] = {"app_id": app_id}
         data["file_max_bytes"] = int(self._log_file_max.value())
         if hasattr(self, "_bnd_file_max") and not self._loading:
-            self._bnd_file_max.blockSignals(True)
-            self._bnd_file_max.setValue(int(self._log_file_max.value()))
-            self._bnd_file_max.blockSignals(False)
+            # Twin sync: refresh dirty tint (signals blocked → no auto refresh).
+            apply_spin_value(self._bnd_file_max, int(self._log_file_max.value()))
         self._mark("log")
         self._refresh_mem_estimate()
         if not coalesce:
@@ -2236,14 +2526,9 @@ class PlatformEditor(QWidget):
             "store_max_bytes": int(self._col_store_max.value()),
         }
         if hasattr(self, "_bnd_col_max") and not self._loading:
-            for spin, val in (
-                (self._bnd_col_max, self._col_max.value()),
-                (self._bnd_col_deb, self._col_deb_keys.value()),
-                (self._bnd_col_store, self._col_store_max.value()),
-            ):
-                spin.blockSignals(True)
-                spin.setValue(int(val))
-                spin.blockSignals(False)
+            apply_spin_value(self._bnd_col_max, int(self._col_max.value()))
+            apply_spin_value(self._bnd_col_deb, int(self._col_deb_keys.value()))
+            apply_spin_value(self._bnd_col_store, int(self._col_store_max.value()))
         self._mark("collector")
         self._refresh_mem_estimate()
         if not coalesce:
@@ -2309,9 +2594,7 @@ class PlatformEditor(QWidget):
         # Linked yaml
         log = self._session.platform.setdefault("log", {"schema_version": "0.1"})
         log["file_max_bytes"] = int(self._bnd_file_max.value())
-        self._log_file_max.blockSignals(True)
-        self._log_file_max.setValue(int(self._bnd_file_max.value()))
-        self._log_file_max.blockSignals(False)
+        apply_spin_value(self._log_file_max, int(self._bnd_file_max.value()))
         self._mark("log")
 
         col = self._session.platform.setdefault("collector", {"schema_version": "0.1"})
@@ -2322,14 +2605,9 @@ class PlatformEditor(QWidget):
         local["max_entries"] = int(self._bnd_col_max.value())
         local["debounce_max_keys"] = int(self._bnd_col_deb.value())
         local["store_max_bytes"] = int(self._bnd_col_store.value())
-        for spin, val in (
-            (self._col_max, self._bnd_col_max.value()),
-            (self._col_deb_keys, self._bnd_col_deb.value()),
-            (self._col_store_max, self._bnd_col_store.value()),
-        ):
-            spin.blockSignals(True)
-            spin.setValue(int(val))
-            spin.blockSignals(False)
+        apply_spin_value(self._col_max, int(self._bnd_col_max.value()))
+        apply_spin_value(self._col_deb_keys, int(self._bnd_col_deb.value()))
+        apply_spin_value(self._col_store_max, int(self._bnd_col_store.value()))
         self._mark("collector")
 
         diag = self._session.platform.setdefault("diag", {"schema_version": "0.1"})

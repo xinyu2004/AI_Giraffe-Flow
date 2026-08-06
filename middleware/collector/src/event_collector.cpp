@@ -153,6 +153,31 @@ void EventCollector::ConfigureFromYaml(std::string_view yaml_text) {
   if (std::regex_search(text, m, std::regex(R"(store_max_bytes:\s*(\d+))"))) {
     cfg.store_max_bytes = static_cast<std::uint32_t>(std::stoul(m[1].str()));
   }
+  // BL-COLL-FILTER: sources: list under top-level key (empty / missing → allow all).
+  {
+    const std::size_t key = text.find("sources:");
+    if (key != std::string::npos) {
+      cfg.sources.clear();
+      std::size_t line = text.find('\n', key);
+      const std::regex item_re(R"(^[ \t]*-[ \t]*([A-Za-z0-9_./]+))");
+      while (line != std::string::npos && line + 1 < text.size()) {
+        const std::size_t begin = line + 1;
+        const std::size_t end = text.find('\n', begin);
+        const std::string row =
+            (end == std::string::npos) ? text.substr(begin) : text.substr(begin, end - begin);
+        if (!row.empty() && row[0] != ' ' && row[0] != '\t' && row[0] != '#') {
+          break;  // next top-level key
+        }
+        if (std::regex_search(row, m, item_re)) {
+          cfg.sources.emplace_back(m[1].str());
+        }
+        if (end == std::string::npos) {
+          break;
+        }
+        line = end;
+      }
+    }
+  }
   // dtc_map entries: - event: phm/alive_timeout / dtc: 0x123456 / ...
   std::regex ent_re(
       R"(-?\s*event:\s*(\S+)[\s\S]*?dtc:\s*(\S+)(?:[\s\S]*?debounce_count:\s*(\d+))?(?:[\s\S]*?fdc_threshold:\s*(-?\d+))?(?:[\s\S]*?aging_cycles:\s*(\d+))?)");
@@ -329,6 +354,20 @@ void EventCollector::ApplyFaultLocked(std::string_view event_id, std::string_vie
 
 void EventCollector::ReportEvent(std::string_view source, std::string_view event_id,
                                  std::string_view detail, EventSeverity severity) {
+  // BL-COLL-FILTER: non-empty sources = allowlist; empty = accept all.
+  if (!cfg_.sources.empty()) {
+    bool allowed = false;
+    for (const auto& s : cfg_.sources) {
+      if (s == source) {
+        allowed = true;
+        break;
+      }
+    }
+    if (!allowed) {
+      return;
+    }
+  }
+
   EventRecord rec;
   rec.t_ns = gf::osal::MonotonicNowNs();
   rec.source = std::string(source);

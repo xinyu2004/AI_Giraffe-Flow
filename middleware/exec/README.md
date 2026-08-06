@@ -42,7 +42,7 @@ flowchart TD
 ```bash
 ctest -R 'gf_exec_|gf_em_daemon' --output-on-failure
 # SIL:
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_em_daemon.sh
 ```
 
 Parent: [middleware/README.md](../README.md)

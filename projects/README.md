@@ -24,8 +24,9 @@
 ```text
 projects/<oem>/<product>/
   project.yaml  req.yaml  oem/  interfaces/  integration/
-  scripts/         # 仅四入口：compile_sil|hil + run_sil|hil（验证 → scripts/verify/）
-  reports/  [golden/]
+  scripts/         # 四入口 compile|run × sil|hil；验收 smoke → scripts/verify/
+  reports/         # lineage、iox_shm_report 等（非 generated）
+  [golden/]
 ```
 
 **`req.yaml` 跟车型走：** SKU 契约（binding、runtime、acceptance）与部署裁剪（observability、apps）写在同一文件。SIL/HIL 只换编译与运行脚本。改款复制整个产品目录。

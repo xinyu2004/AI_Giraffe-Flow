@@ -49,6 +49,7 @@ venv/
 projects/**/gf.sor.json
 projects/**/golden/gf.sor.json
 projects/**/reports/signal_lineage_report.yaml
+projects/**/reports/iox_shm_report.json
 
 # Local IDE / agent
 .cursor/

@@ -1,6 +1,7 @@
-# adc_full scripts
+# oem_b / adc_full — scripts
 
-本 SKU 尚未落地四入口（`compile_sil` / `run_sil` / …）。  
-MCU desktop 验证脚本已迁至：
+验收 / smoke：[`verify/`](verify/)
 
-`scripts/verify/oem_b_adc_full/smoke_mcu_desktop.sh`
+```bash
+bash projects/oem_b/adc_full/scripts/verify/smoke_mcu_desktop.sh
+```

@@ -49,7 +49,7 @@ GF_CC=clang GF_CXX=clang++ GF_BUILD_DIR=$PWD/build-clang \
 | `GF_LIVE_TEE` | live_tap 时 tee NDJSON→session（默认 `1`；`0` 关闭） |
 | `GF_LIVE_SESSION` | tee 目标（默认 `${BUILD}/observability/session_live.jsonl`） |
 
-**验证 / smoke**（非产品路径）→ [`scripts/verify/oem_a_afc_with_uss/`](../../../../scripts/verify/oem_a_afc_with_uss/)
+**验证 / smoke**（非产品路径）→ [`verify/`](verify/)（与工程同树；仓根 `scripts/verify/oem_a_*` 仅为 deprecated shim）
 
 | gf-config | compile_sil | run_sil |
 |-----------|-------------|---------|
@@ -60,10 +60,10 @@ GF_CC=clang GF_CXX=clang++ GF_BUILD_DIR=$PWD/build-clang \
 
 ```bash
 # B1 回灌（验证）：全消费者链，无 gateway
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_inject.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_inject.sh
 
 # B2 单模块（验证）：只起 sensing.uss + inject
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_inject_b2.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_inject_b2.sh
 # 或手工：
 # GF_SKIP_COMPILE=1 GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
 #   GF_INJECT_DUT=sensing.uss bash projects/oem_a/afc_with_uss/scripts/run_sil.sh

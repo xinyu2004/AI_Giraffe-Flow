@@ -190,7 +190,7 @@ def validate_platform(
 
     # BL-MEM-BOUND / BL-MEM-ROUDI static estimate (formulas in mem_budget.py)
     report_path = (
-        (project_dir / "generated" / "iox_shm_report.json") if project_dir else None
+        (project_dir / "reports" / "iox_shm_report.json") if project_dir else None
     )
     est = estimate_mem_budget(loaded, req=req, shm_report_path=report_path)
     for e in est.get("errors") or []:

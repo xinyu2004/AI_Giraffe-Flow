@@ -361,7 +361,7 @@ class MainWindow(QMainWindow):
             try:
                 self.open_project(Path(path))
             except Exception as exc:  # noqa: BLE001
-                QMessageBox.critical(self, "打开失败", str(exc))
+                QMessageBox.critical(self, t("打开失败"), str(exc))
 
     def open_project(self, project_file: Path) -> None:
         self._history.clear()
@@ -430,15 +430,16 @@ class MainWindow(QMainWindow):
     def _save(self) -> None:
         """写盘 only — flush 页1+页2；不跑 lineage。"""
         if not self._session:
-            QMessageBox.information(self, "保存", "请先打开项目")
+            QMessageBox.information(self, t("保存"), t("请先打开项目"))
             return
         self._graph.flush_canvas()
         had_dirty = self._session.is_dirty()
         try:
             self._session.save_all()
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "保存失败", str(exc))
+            QMessageBox.critical(self, t("保存失败"), str(exc))
             return
+        self._platform.rebaseline_spins()
         if had_dirty:
             self._path_label.setText(
                 f"{self._session.paths.project_file}  ·  {t('✓ 已保存')}"
@@ -461,18 +462,19 @@ class MainWindow(QMainWindow):
             return
         self._graph.flush_canvas()
         self._session.save_all()
+        self._platform.rebaseline_spins()
         self.statusBar().showMessage(t("已保存，正在 Verify…"), 2000)
         self._verify(show_dialog=False)
 
     def _verify(self, *, show_dialog: bool = False) -> bool:
         """GUI 名 Verify；底层仍调用 session.compose()（CI 命令不变）。"""
         if not self._session:
-            QMessageBox.information(self, "Verify", "请先打开项目")
+            QMessageBox.information(self, "Verify", t("请先打开项目"))
             return False
         try:
             rc, report = self._session.compose()
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "Verify 失败", str(exc))
+            QMessageBox.critical(self, t("Verify 失败"), str(exc))
             return False
         self._graph.set_lineage_report(report or "")
         self._graph.rebuild()
@@ -496,18 +498,18 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             t("Verify 退出码 {rc} — 见右侧 Lineage 红项").format(rc=rc), 8000
         )
-        QMessageBox.warning(self, "Verify", f"退出码 {rc}。请查看右侧 Lineage 红项。")
+        QMessageBox.warning(self, "Verify", t("退出码 {rc}。请查看右侧 Lineage 红项。").format(rc=rc))
         return False
 
     def _generate(self) -> None:
         if not self._session:
-            QMessageBox.information(self, "Generate", "请先打开项目")
+            QMessageBox.information(self, "Generate", t("请先打开项目"))
             return
         out = self._session.paths.project_dir / "generated"
         try:
             rc, report = self._session.generate(out)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "Generate 失败", str(exc))
+            QMessageBox.critical(self, t("Generate 失败"), str(exc))
             return
         self._graph.set_lineage_report(report or "")
         self._graph.rebuild()
@@ -533,7 +535,7 @@ class MainWindow(QMainWindow):
     def _export_graph(self, *, kind: str) -> None:
         """Export SOR topology as Graphviz .dot or SVG (no in-app DAG page)."""
         if not self._session:
-            QMessageBox.information(self, "导出", "请先打开项目")
+            QMessageBox.information(self, t("导出"), t("请先打开项目"))
             return
         sor = self._session.paths.out_sor
         if not sor.is_file():
@@ -561,10 +563,10 @@ class MainWindow(QMainWindow):
             try:
                 export_sor_graph(sor, dot_out=out)
             except Exception as exc:  # noqa: BLE001
-                QMessageBox.critical(self, "导出失败", str(exc))
+                QMessageBox.critical(self, t("导出失败"), str(exc))
                 return
             self.statusBar().showMessage(f"已导出 {out}", 8000)
-            QMessageBox.information(self, "导出", f"已写入：\n{out}")
+            QMessageBox.information(self, t("导出"), t("已写入：\n{path}").format(path=out))
             return
 
         path, _ = QFileDialog.getSaveFileName(
@@ -581,7 +583,7 @@ class MainWindow(QMainWindow):
         try:
             export_sor_graph(sor, svg_out=out)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "导出失败", str(exc))
+            QMessageBox.critical(self, t("导出失败"), str(exc))
             return
         self.statusBar().showMessage(f"已导出 {out}", 8000)
-        QMessageBox.information(self, "导出", f"已写入：\n{out}")
+        QMessageBox.information(self, t("导出"), t("已写入：\n{path}").format(path=out))

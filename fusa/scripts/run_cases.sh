@@ -111,13 +111,13 @@ if [[ "${GF_FUSA_SIL:-0}" == "1" ]]; then
       echo
     } >>"${LOG}" 2>&1
   }
-  run_sil "SIL-01" scripts/verify/oem_a_afc_with_uss/smoke_sil.sh
-  run_sil "SIL-02" scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh
-  run_sil "SIL-03" scripts/verify/oem_a_afc_with_uss/smoke_sil_phm_fault.sh
-  run_sil "SIL-SM-01" scripts/verify/oem_a_afc_with_uss/smoke_sil_sm_fg.sh
-  run_sil "SIL-EM-02" scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh
+  run_sil "SIL-01" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh
+  run_sil "SIL-02" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh
+  run_sil "SIL-03" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_phm_fault.sh
+  run_sil "SIL-SM-01" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_sm_fg.sh
+  run_sil "SIL-EM-02" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_em_daemon.sh
   if [[ "${GF_FUSA_SIL_MCU:-1}" == "1" ]]; then
-    run_sil "SIL-06" scripts/verify/oem_b_adc_full/smoke_mcu_desktop.sh
+    run_sil "SIL-06" projects/oem_b/adc_full/scripts/verify/smoke_mcu_desktop.sh
   else
     echo "${TAG} SKIP SIL-06 (GF_FUSA_SIL_MCU=0)"
     echo "# SKIP SIL-06" >>"${LOG}"
@@ -128,7 +128,7 @@ if [[ "${GF_FUSA_T4:-0}" == "1" ]]; then
   echo "${TAG} T4 production-release profile"
   {
     echo "===== L3 SIL-T4 / SG-05 ====="
-    bash scripts/verify/oem_a_afc_with_uss/smoke_production_profile.sh
+    bash projects/oem_a/afc_with_uss/scripts/verify/smoke_production_profile.sh
     echo "# SIL-T4 OK"
     echo
   } >>"${LOG}" 2>&1

@@ -141,7 +141,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ✅ SIL 预算已填；文档标明主机 SIL ≠ ECU ASIL；板端 soak → P3z |
 | T3 | 本机 runs / packs 流程（默认不进仓） | ✅ `fusa/scripts/run_cases.sh` → `fusa/runs/`；SKU `generate_fusa_artifacts.sh` → `fusa/packs/`（互不调用） |
 | T3b | Safety Case 追溯（SG → SR → 验证） | ✅ [traceability.md](../../../fusa/safety-case/traceability.md)：SG-01…05 + OTA/DoIP/UDS；缺口 → P3z / assumptions |
-| T4 | `production` profile：关 Record/ROS/调试路径 | ✅ [`smoke_production_profile.sh`](../../../scripts/verify/oem_a_afc_with_uss/smoke_production_profile.sh)；**发版必跑** `GF_FUSA_T4=1`（`devops/ci/README.md`） |
+| T4 | `production` profile：关 Record/ROS/调试路径 | ✅ [`smoke_production_profile.sh`](../../../projects/oem_a/afc_with_uss/scripts/verify/smoke_production_profile.sh)；**发版必跑** `GF_FUSA_T4=1`（`devops/ci/README.md`） |
 
 **目标：** 完整 Safety Case（骨架：[fusa/safety-case/](../../../fusa/safety-case/)）。**当前不声称**证书已取得；仓内持续积累可引用证据（不含把 GMT/stub 当板级 ASIL 证据）。
 
@@ -154,7 +154,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | D3 | UCM 编排（+ SM Pause）；后端可 stub→RAUC | ✅ `OtaOrchestrator`；0x27/0x29 插件 ABI（`.so/.dll`） |
 | D4 | OTA/升级失败路径上 Collector 事件可观测 | ✅ `ucm/ota_failed` |
 
-操作说明：[DOIP_OTA.md](DOIP_OTA.md) · 验收：`bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh`  
+操作说明：[DOIP_OTA.md](DOIP_OTA.md) · 验收：`bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh`  
 **2026-08-04：** gf-config 日志表 UX / 重复 context Verify / 撤销跳页；GMT 独立 Collector 页并入 OTA/UDS。
 
 ### P3-5 Sim spike — 场景演示（未开工；弃 VP）

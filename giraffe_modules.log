@@ -1,0 +1,99 @@
+log: [INFO] runtime log configured default_level=INFO file=giraffe_modules.log
+log: [INFO] runtime log configured default_level=INFO file=giraffe_modules.log
+log: [INFO] runtime log configured default_level=INFO file=giraffe_modules.log
+log: [INFO] runtime bring-up begin process=perception.fcm
+log: [INFO] runtime bring-up begin process=planning.driving
+log: [INFO] runtime bring-up begin process=sensing.uss
+log: [INFO] collector configured forward=local_store max_entries=256 dtc_map=3
+log: [INFO] collector configured forward=local_store max_entries=256 dtc_map=3
+log: [INFO] collector configured forward=local_store max_entries=256 dtc_map=3
+log: [INFO] sm EnsureGroup MachineFG → Running
+log: [INFO] sm EnsureGroup MachineFG → Running
+log: [INFO] sm sm: ensure fg=MachineFG initial=Running
+log: [INFO] sm sm: ensure fg=MachineFG initial=Running
+log: [INFO] sm state=Running fg=MachineFG
+log: [INFO] exec StartProcess/Offer process=perception.fcm
+log: [INFO] sm state=Running fg=MachineFG
+log: [INFO] sm EnsureGroup MachineFG → Running
+log: [INFO] exec StartProcess/Offer process=sensing.uss
+log: [INFO] exec start_process name=perception.fcm (desired=Running)
+log: [INFO] exec start_process name=sensing.uss (desired=Running)
+log: [INFO] runtime t_ms=0 Offer→Running process=perception.fcm fg=MachineFG sm=Running
+log: [INFO] sm sm: ensure fg=MachineFG initial=Running
+log: [INFO] runtime t_ms=0 Offer→Running process=sensing.uss fg=MachineFG sm=Running
+log: [INFO] sm state=Running fg=MachineFG
+log: [INFO] exec StartProcess/Offer process=planning.driving
+log: [INFO] exec start_process name=planning.driving (desired=Running)
+log: [INFO] runtime t_ms=0 Offer→Running process=planning.driving fg=MachineFG sm=Running
+log: [INFO] phm entity=fcm_alive period_ms=100 timeout_ms=300 on_failure=notify_sm
+log: [INFO] runtime bring-up done process=perception.fcm
+log: [INFO] phm entity=uss_alive period_ms=100 timeout_ms=300 on_failure=notify_sm
+log: [INFO] runtime bring-up done process=sensing.uss
+log: [INFO] phm entity=planning_alive period_ms=100 timeout_ms=300 on_failure=restart
+log: [INFO] phm t_ms=0 FAULT inject armed for 400 ms after first Alive
+log: [INFO] runtime bring-up done process=planning.driving
+log: [INFO] runtime log configured default_level=INFO file=giraffe_modules.log
+log: [INFO] runtime bring-up begin process=adapter.vehicle_can_gateway
+log: [INFO] collector configured forward=local_store max_entries=256 dtc_map=3
+log: [INFO] sm EnsureGroup MachineFG → Running
+log: [INFO] sm sm: ensure fg=MachineFG initial=Running
+log: [INFO] sm state=Running fg=MachineFG
+log: [INFO] exec StartProcess/Offer process=adapter.vehicle_can_gateway
+log: [INFO] exec start_process name=adapter.vehicle_can_gateway (desired=Running)
+log: [INFO] runtime t_ms=0 Offer→Running process=adapter.vehicle_can_gateway fg=MachineFG sm=Running
+log: [INFO] phm entity=gateway_alive period_ms=100 timeout_ms=300 on_failure=notify_sm
+log: [INFO] runtime bring-up done process=adapter.vehicle_can_gateway
+log: [INFO] runtime log configured default_level=INFO file=giraffe_modules.log
+log: [INFO] runtime log configured default_level=INFO file=giraffe_modules.log
+log: [INFO] runtime log configured default_level=INFO file=giraffe_modules.log
+log: [INFO] runtime mem bounds com_depth=16 com_keys=64 per_keys=1024 per_val=65536 dlt_ctx=64
+log: [INFO] runtime mem bounds com_depth=16 com_keys=64 per_keys=1024 per_val=65536 dlt_ctx=64
+log: [INFO] runtime mem bounds com_depth=16 com_keys=64 per_keys=1024 per_val=65536 dlt_ctx=64
+log: [INFO] runtime bring-up begin process=perception.fcm
+log: [INFO] runtime bring-up begin process=sensing.uss
+log: [INFO] runtime bring-up begin process=planning.driving
+log: [INFO] collector configured forward=local_store max_entries=256 dtc_map=3
+log: [INFO] collector configured forward=local_store max_entries=256 dtc_map=3
+log: [INFO] collector configured forward=local_store max_entries=256 dtc_map=3
+log: [INFO] sm EnsureGroup MachineFG → Running
+log: [INFO] sm EnsureGroup MachineFG → Running
+log: [INFO] sm EnsureGroup MachineFG → Running
+log: [INFO] sm sm: ensure fg=MachineFG initial=Running
+log: [INFO] sm sm: ensure fg=MachineFG initial=Running
+log: [INFO] sm sm: ensure fg=MachineFG initial=Running
+log: [INFO] sm state=Running fg=MachineFG
+log: [INFO] sm state=Running fg=MachineFG
+log: [INFO] sm state=Running fg=MachineFG
+log: [INFO] exec StartProcess/Offer process=sensing.uss
+log: [INFO] exec StartProcess/Offer process=perception.fcm
+log: [INFO] exec StartProcess/Offer process=planning.driving
+log: [INFO] exec start_process name=perception.fcm (desired=Running)
+log: [INFO] exec start_process name=sensing.uss (desired=Running)
+log: [INFO] exec start_process name=planning.driving (desired=Running)
+log: [INFO] runtime t_ms=0 Offer→Running process=perception.fcm fg=MachineFG sm=Running
+log: [INFO] runtime t_ms=0 Offer→Running process=sensing.uss fg=MachineFG sm=Running
+log: [INFO] runtime t_ms=0 Offer→Running process=planning.driving fg=MachineFG sm=Running
+log: [INFO] phm entity=fcm_alive period_ms=100 timeout_ms=300 on_failure=notify_sm
+log: [INFO] phm entity=uss_alive period_ms=100 timeout_ms=300 on_failure=notify_sm
+log: [INFO] phm entity=planning_alive period_ms=100 timeout_ms=300 on_failure=restart
+log: [INFO] runtime bring-up done process=perception.fcm
+log: [INFO] runtime bring-up done process=sensing.uss
+log: [INFO] phm t_ms=0 FAULT inject armed for 400 ms after first Alive
+log: [INFO] runtime bring-up done process=planning.driving
+log: [INFO] phm t_ms=21 FAULT inject begin entity=planning_alive
+log: [ERROR] phm t_ms=306 DeadlineMissed entity=planning_alive
+log: [INFO] exec restart_request name=planning.driving reason=DeadlineMissed count=1
+log: [INFO] exec t_ms=307 em soft_restart process=planning.driving count=1
+log: [INFO] phm t_ms=327 phm recovered entity=planning_alive
+log: [INFO] runtime log configured default_level=INFO file=giraffe_modules.log
+log: [INFO] runtime mem bounds com_depth=16 com_keys=64 per_keys=1024 per_val=65536 dlt_ctx=64
+log: [INFO] runtime bring-up begin process=adapter.vehicle_can_gateway
+log: [INFO] collector configured forward=local_store max_entries=256 dtc_map=3
+log: [INFO] sm EnsureGroup MachineFG → Running
+log: [INFO] sm sm: ensure fg=MachineFG initial=Running
+log: [INFO] sm state=Running fg=MachineFG
+log: [INFO] exec StartProcess/Offer process=adapter.vehicle_can_gateway
+log: [INFO] exec start_process name=adapter.vehicle_can_gateway (desired=Running)
+log: [INFO] runtime t_ms=0 Offer→Running process=adapter.vehicle_can_gateway fg=MachineFG sm=Running
+log: [INFO] phm entity=gateway_alive period_ms=100 timeout_ms=300 on_failure=notify_sm
+log: [INFO] runtime bring-up done process=adapter.vehicle_can_gateway

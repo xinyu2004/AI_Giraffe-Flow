@@ -17,7 +17,7 @@ ARA-inspired **Update and Configuration Management** (`gf_ara::ucm`).
 
 ```bash
 ctest --test-dir build -R 'gf_ucm_' --output-on-failure
-bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
 ```
 
 Parent: [middleware/README.md](../README.md) · FuSa: [ucm_cases.md](../../fusa/cases/ucm_cases.md).

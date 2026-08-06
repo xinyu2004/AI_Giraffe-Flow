@@ -25,7 +25,7 @@ Flow today:
 ```text
 bash scripts/bootstrap_deps.sh   # → dep-manifest/bootstrap.sh
 → projects/<oem>/<sku>/scripts/compile_sil.sh | run_sil.sh
-→ scripts/verify/…/smoke_*.sh
+→ projects/<oem>/<sku>/scripts/verify/smoke_*.sh
 ```
 
 ---
@@ -81,9 +81,9 @@ AI_Giraffe-Flow/
 │
 ├── schemas/                      # gf.sor contract + examples
 ├── cmake/                        # profiles, toolchain
-├── scripts/                      # thin wrappers + verify orchestration
+├── scripts/                      # repo-wide helpers（SKU smoke 在 project 内）
 │   ├── bootstrap_deps.sh         # → dep-manifest/bootstrap.sh
-│   └── verify/<oem>/<sku>/       # CI/smoke entrypoints
+│   └── verify/                   # deprecated shims → projects/.../scripts/verify/
 ├── devops/
 │   ├── ci/                       # smoke 门禁 · 云 CI 样例
 │   └── cd/                       # 交付占位（package stub）
@@ -137,7 +137,7 @@ AI_Giraffe-Flow/
 | **Unit** | `middleware/<mod>/testcases/` next to code *or* `middleware/tests/unit/<mod>/` | Result, PHM timer math；FuSa `CASE` 行 |
 | **Middleware component** | `middleware/tests/component/` | com+iceoryx in-proc |
 | **Tool unit** | `tools/gf-codegen/tests/`、`tools/gf-config/…`（主机；codegen 见 FuSa L2） | compose, observability |
-| **SKU integration / smoke** | `projects/.../tests/` + `scripts/verify/...` | main-chain SIL（FuSa L3） |
+| **SKU integration / smoke** | `projects/<oem>/<sku>/scripts/verify/` | main-chain SIL（FuSa L3） |
 | **Bench / golden** | `projects/.../golden/` + codegen tests | SOR golden |
 | **Manual / FuSa runs** | `fusa/runs/` (local) | CASE logs, soak |
 
@@ -198,7 +198,7 @@ Naming: prefer `test_*.py` / `*_test.cpp` already used; don’t invent a second 
 bash scripts/bootstrap_deps.sh          # → dep-manifest/bootstrap.sh
 bash projects/<oem>/<sku>/scripts/compile_sil.sh
 bash projects/<oem>/<sku>/scripts/run_sil.sh
-bash scripts/verify/<oem>/<sku>/smoke_sil.sh
+bash projects/<oem>/<sku>/scripts/verify/smoke_sil.sh
 
 project → gf-config (tab1 graph → tab2 platform) → compose/generate
         → SIL / GMT (focus filter) / Foxglove

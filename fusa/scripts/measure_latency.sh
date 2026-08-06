@@ -76,7 +76,7 @@ def first_t(path, pat):
 report = {"stamp": STAMP, "git": GIT, "host": "SIL desktop"}
 
 run(
-    "bash scripts/verify/oem_a_afc_with_uss/run_sil_verify.sh",
+    "bash projects/oem_a/afc_with_uss/scripts/verify/run_sil_verify.sh",
     {"GF_MP_TRAJ_COUNT": "30", "GF_PHM_FAULT_MS": "0"},
 )
 gw = BUILD / "runtime" / "logs" / "gateway.log"
@@ -94,7 +94,7 @@ report["traj"] = {
     "note": "Trajectory.timestamp_ns inter-arrival at gateway (pipeline cadence; not hop e2e)",
 }
 
-run("bash scripts/verify/oem_a_afc_with_uss/smoke_sil_phm_fault.sh")
+run("bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_phm_fault.sh")
 pl = BUILD / "runtime" / "logs" / "planning.log"
 t_begin, _ = first_t(pl, r"FAULT inject begin")
 t_miss, miss_line = first_t(pl, r"(AliveMissed|DeadlineMissed)")
@@ -118,7 +118,7 @@ report["phm"] = {
     "pass": t_begin is not None and t_miss is not None and t_rec is not None,
 }
 
-run("bash scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh")
+run("bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_em_daemon.sh")
 em = BUILD / "em_daemon_logs" / "em_daemon.stdout"
 t_exit_d, _ = first_t(em, r"child exit name=planning")
 t_rel, _ = first_t(em, r"relaunch name=planning")

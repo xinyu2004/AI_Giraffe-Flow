@@ -183,8 +183,8 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 |---|--------|
 | R-1 | 主链可执行文件 + `GF_USE_GENERATED=ON` |
 | R-2 | CMake / `GF_APPS` / `gf_build.cmake` |
-| R-3 | `scripts/verify/oem_a_afc_with_uss/run_sil_verify.sh` |
-| R-4 | `scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh`（下游 N 帧断言） |
+| R-3 | `projects/oem_a/afc_with_uss/scripts/verify/run_sil_verify.sh` |
+| R-4 | `projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh`（下游 N 帧断言） |
 | R-5 | 双进程回归说明 |
 
 ### 验收
@@ -273,7 +273,7 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 ```bash
 gf-config projects/oem_a/afc_with_uss/project.yaml   # 先把 A/B/C 配稳
 python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-bash scripts/verify/oem_a_afc_with_uss/smoke_sil_verify.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh
 ```
 
 ---

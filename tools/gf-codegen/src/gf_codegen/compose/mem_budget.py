@@ -38,13 +38,25 @@ SHM — iceoryx / RouDi (BL-MEM-ROUDI; when req.bindings includes iceoryx)
   roudi_payload = Σ_i (mempool[i].size + C_CHUNK_HDR) × mempool[i].count
                 (same numbers as generated/iox_roudi.toml)
 
-  roudi_mgmt    = measured bytes from generated/iox_shm_report.json after
-                RouDi/build (iceoryx_mgmt has no closed-form formula).
-                Until measured: status pending_measure, bytes=0 in sum.
-                Config intent is bounds.iceoryx.mgmt.* → CMake IOX_MAX_*
-                (change requires reconfigure + rebuild iceoryx).
+  roudi_mgmt    = iceoryx_mgmt SHM (port tables / metadata; NOT user payload).
+                Prefer measured bytes from reports/iox_shm_report.json when
+                the report's mgmt snapshot matches current bounds.
+                Otherwise SIL-calibrated bilinear approx (iceoryx classic 2.x):
 
-  total_shm = roudi_payload + roudi_mgmt(measured)
+                  approx(m) = B0 + Bp·P + Bs·S + Bsp·P·SP + Bh·P·H
+                            + Ba·P·A + Bch·S·CH + Bi·I + Bip·I·P
+                  (coeffs from RouDi "Reserving … iceoryx_mgmt" sweep;
+                   see IOX_MGMT_* constants. Mempool TOML also adds a small
+                   segment-manager term — not modeled; re-measure after rebuild.)
+
+                  With a loaded report for a *different* mgmt: apply offset
+                  calibrate_bytes − approx(calibrate_mgmt).
+
+                status: measured | approx
+                Config intent bounds.iceoryx.mgmt.* → generated/iox_mgmt.cmake
+                → cmake reconfigure + rebuild iceoryx (e.g. compile_sil).
+
+  total_shm = roudi_payload + roudi_mgmt(measured or approx)
 
 Notes
 -----
@@ -65,7 +77,16 @@ import json
 from pathlib import Path
 from typing import Any
 
-from gf_codegen.compose.emit_iox import DEFAULT_MEMPOOLS, DEFAULT_MGMT, extract_iox, iceoryx_enabled
+from gf_codegen.compose.emit_iox import (
+    DEFAULT_MEMPOOLS,
+    DEFAULT_MGMT,
+    MGMT_TO_CMAKE,
+    extract_iox,
+    iceoryx_enabled,
+)
+
+# CMake IOX_MAX_* → bounds.iceoryx.mgmt.* (reports may store either form)
+_CMAKE_TO_MGMT = {v: k for k, v in MGMT_TO_CMAKE.items()}
 
 # --- formula constants (bytes) — change only with middleware review ---
 C_EVENT_RECORD = 256
@@ -73,6 +94,99 @@ C_DEBOUNCE_ENTRY = 48
 C_DLT_CTX = 64
 C_PER_KEY_OH = 32
 C_CHUNK_HDR = 64
+
+# iceoryx_mgmt approx: fit to RouDi "Reserving N bytes … [iceoryx_mgmt]" on
+# afc_with_uss default mempools / iceoryx classic 2.x (SIL sweep 2026-08).
+# Dominated by fixed PortPool/introspection (~19.4 MiB) + per-publisher /
+# per-subscriber tables; product terms match ChunkDistributor / queue layout.
+IOX_MGMT_REF_BYTES = 21_511_288  # measured at DEFAULT_MGMT
+IOX_MGMT_B0 = 19_450_163
+IOX_MGMT_BP = 44_955
+IOX_MGMT_BS = 8_528
+IOX_MGMT_BSP = 16
+IOX_MGMT_BH = 8
+IOX_MGMT_BA = 12
+IOX_MGMT_BCH = 44
+IOX_MGMT_BI = 675
+IOX_MGMT_BIP = 383
+
+
+def model_roudi_mgmt_bytes(mgmt: dict[str, int]) -> int:
+    """Bilinear approx of iceoryx_mgmt size from IOX_MAX_* intent (not exact)."""
+    m = {**DEFAULT_MGMT, **{k: int(v) for k, v in mgmt.items() if k in DEFAULT_MGMT}}
+    p = m["max_publishers"]
+    s = m["max_subscribers"]
+    sp = m["max_subscribers_per_publisher"]
+    h = m["max_publisher_history"]
+    a = m["max_chunks_allocated_per_publisher"]
+    ch = m["max_chunks_held_per_subscriber"]
+    i = m["max_interface_number"]
+    return int(
+        IOX_MGMT_B0
+        + IOX_MGMT_BP * p
+        + IOX_MGMT_BS * s
+        + IOX_MGMT_BSP * p * sp
+        + IOX_MGMT_BH * p * h
+        + IOX_MGMT_BA * p * a
+        + IOX_MGMT_BCH * s * ch
+        + IOX_MGMT_BI * i
+        + IOX_MGMT_BIP * i * p
+    )
+
+
+def _mgmt_dict_from_report(report: dict[str, Any] | None) -> dict[str, int] | None:
+    if not report:
+        return None
+    raw = report.get("mgmt")
+    if not isinstance(raw, dict):
+        return None
+    normalized: dict[str, int] = {}
+    for k, v in raw.items():
+        key = str(k)
+        if key in DEFAULT_MGMT:
+            bounds_key = key
+        elif key in _CMAKE_TO_MGMT:
+            bounds_key = _CMAKE_TO_MGMT[key]
+        else:
+            continue
+        try:
+            normalized[bounds_key] = int(v)
+        except (TypeError, ValueError):
+            return None
+    out: dict[str, int] = {}
+    for k in DEFAULT_MGMT:
+        if k not in normalized:
+            return None
+        out[k] = normalized[k]
+    return out
+
+
+def approx_roudi_mgmt_bytes(
+    mgmt: dict[str, int],
+    *,
+    calibrate_mgmt: dict[str, int] | None = None,
+    calibrate_bytes: int | None = None,
+) -> tuple[int, str]:
+    """Approximate iceoryx_mgmt SHM. Returns (bytes, note). Not exact."""
+    approx = model_roudi_mgmt_bytes(mgmt)
+    if (
+        calibrate_mgmt is not None
+        and calibrate_bytes is not None
+        and calibrate_bytes > 0
+    ):
+        # Offset correction: absorb mempool / build skew from a known measure.
+        delta = int(calibrate_bytes) - model_roudi_mgmt_bytes(calibrate_mgmt)
+        approx = approx + delta
+        note = (
+            f"approx bilinear model + offset from measured={calibrate_bytes} B "
+            f"(Δ={delta:+d} B); not exact — re-measure after rebuild"
+        )
+        return max(approx, 0), note
+    note = (
+        f"approx SIL-fit bilinear model (REF@DEFAULT≈{IOX_MGMT_REF_BYTES} B); "
+        "not exact — prefer SIL measure after rebuild"
+    )
+    return max(approx, 0), note
 
 DEFAULTS: dict[str, int] = {
     "max_entries": 256,
@@ -300,21 +414,43 @@ def estimate_mem_budget(
             kind="shm",
         )
         report = load_iox_shm_report(shm_report_path)
+        measured_bytes: int | None = None
         if report and report.get("mgmt_bytes") is not None:
             try:
-                mgmt_bytes = int(report["mgmt_bytes"])
-                mgmt_status = "measured"
+                measured_bytes = int(report["mgmt_bytes"])
             except (TypeError, ValueError):
-                mgmt_status = "pending_measure"
-                mgmt_bytes = 0
+                measured_bytes = None
+        cal_mgmt = _mgmt_dict_from_report(report)
+        if measured_bytes is not None and measured_bytes > 0 and cal_mgmt == iox_mgmt:
+            mgmt_bytes = measured_bytes
+            mgmt_status = "measured"
+            mgmt_formula = (
+                f"status=measured; IOX intent matches report; "
+                f"measured={measured_bytes} B"
+            )
         else:
-            mgmt_status = "pending_measure"
-            mgmt_bytes = 0
+            # Prefer scaling from a known measurement; legacy reports lack mgmt→assume DEFAULT.
+            use_cal_m = cal_mgmt
+            use_cal_b = measured_bytes if measured_bytes and measured_bytes > 0 else None
+            if use_cal_b is not None and use_cal_m is None:
+                use_cal_m = dict(DEFAULT_MGMT)
+            approx_b, approx_note = approx_roudi_mgmt_bytes(
+                iox_mgmt,
+                calibrate_mgmt=use_cal_m if use_cal_b else None,
+                calibrate_bytes=use_cal_b if use_cal_m else None,
+            )
+            mgmt_bytes = approx_b
+            mgmt_status = "approx"
+            mgmt_formula = f"status=approx; {approx_note}"
+            if use_cal_b is not None and (cal_mgmt is None or cal_mgmt != iox_mgmt):
+                mgmt_formula += (
+                    f"; last_measured={use_cal_b} B "
+                    "(rebuild iceoryx + re-measure for truth)"
+                )
         iox_list = ", ".join(f"{k}={v}" for k, v in sorted(iox_mgmt.items()))
         add(
             "roudi_mgmt",
-            f"status={mgmt_status}; IOX intent: {iox_list}"
-            + (f"; measured={mgmt_bytes} B" if mgmt_status == "measured" else ""),
+            f"{mgmt_formula}; IOX intent: {iox_list}",
             mgmt_bytes,
             kind="shm",
         )
@@ -342,10 +478,11 @@ def estimate_mem_budget(
         warnings.append(
             f"total_shm ({total_shm}) > iceoryx.budget_shm_bytes ({budget_shm})"
         )
-    if iox_on and mgmt_status == "pending_measure":
+    if iox_on and mgmt_status == "approx":
         warnings.append(
-            "roudi_mgmt pending_measure — run SIL once (or rebuild iceoryx) to fill "
-            "generated/iox_shm_report.json; changing iceoryx.mgmt requires reconfigure+rebuild iceoryx"
+            "roudi_mgmt is approximate (no closed-form); after changing iceoryx.mgmt: "
+            "compose → cmake reconfigure + rebuild iceoryx (compile_sil) → run SIL → "
+            "load reports/iox_shm_report.json for measured truth"
         )
 
     return {
@@ -405,10 +542,17 @@ def format_estimate_text(est: dict[str, Any]) -> str:
         out.append("SHM lines (iceoryx / RouDi shared memory):")
         for ln in shm_lines:
             out.append(f"  {ln['name']}: {fmt_bytes(ln['bytes'])}  ← {ln['formula']}")
-        if est.get("roudi_mgmt_status") == "pending_measure":
+        if est.get("roudi_mgmt_status") == "approx":
             out.append(
-                "  NOTE: change iceoryx.mgmt.* → reconfigure + rebuild iceoryx; "
-                "mempool changes → compose + restart RouDi"
+                "  NOTE: roudi_mgmt is APPROXIMATE (not exact). "
+                "After iceoryx.mgmt.* change: compose → cmake reconfigure + rebuild "
+                "iceoryx (e.g. compile_sil) → run SIL → load iox_shm_report.json. "
+                "Mempool-only changes: compose + restart RouDi."
+            )
+        elif est.get("roudi_mgmt_status") == "measured":
+            out.append(
+                "  NOTE: roudi_mgmt from measured report (IOX intent matches). "
+                "Mempool changes: compose + restart RouDi (no iceoryx rebuild)."
             )
     for e in est.get("errors") or []:
         out.append(f"ERROR: {e}")

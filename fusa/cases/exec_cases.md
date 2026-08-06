@@ -33,4 +33,4 @@ Smokes:
 | EMD-03 | EMD-02 | StartAll | 子进程 spawn | 同上 |
 | EMD-04 | EMD-03 | child exit 75 | relaunch；launches≥2 | 同上 |
 
-SIL：`scripts/verify/oem_a_afc_with_uss/smoke_sil_em_daemon.sh`（RouDi + `gf_em_daemon` + PHM fault→exit 75→relaunch）。
+SIL：`projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_em_daemon.sh`（RouDi + `gf_em_daemon` + PHM fault→exit 75→relaunch）。

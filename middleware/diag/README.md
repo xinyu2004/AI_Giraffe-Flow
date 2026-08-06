@@ -14,7 +14,7 @@ ARA-inspired **Diagnostics** (`gf_ara::diag`).
 
 ```bash
 ctest --test-dir build -R 'gf_diag_doip_smoke|gf_uds_nrc_smoke|gf_doip_session_smoke' --output-on-failure
-bash scripts/verify/oem_a_afc_with_uss/smoke_doip_ota.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
 ```
 
 假包（SIL）：`bash scripts/make_sil_swu.sh /tmp/gf_demo.swu`
