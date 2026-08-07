@@ -1,31 +1,59 @@
-# OEM A — AFC 前视（无 USS）
-schema_version: "0.1"
+# OEM A — AFC 前视（无 USS）· P3-5 Perception_* SIL
+schema_version: '0.1'
+profile: vehicle-debug
 variant: afc_front_camera
 topology: ap_only
 product: AFC
-
 capabilities:
-  - front_camera
-  - driving
-
+- front_camera
+- driving
 runtime_modules:
-  - core
-  - com
-  - log
-
+- core
+- com
+- osal
+- log
+- exec
+- phm
+- sm
+- collector
+- ucm
+- diag
+- per
+- tsync
 bindings:
-  - iceoryx
-
+- iceoryx
 observability:
-  record: full
-
+  live_tap:
+    enabled: true
+    mode: wiring_all
+  record:
+    mode: minimal
+    services:
+    - services.semantic.EgoMotion
+    - services.semantic.Perception_MESSAGE_Out_St
+    - services.semantic.Trajectory
+# Behavior freeze (gf-config → compose → compile). Not a runtime tip JSON.
+frame_ingest:
+  frame_source: carla_file
+  perception_backend: stub
+  bridge:
+    enabled: true
+    dry_run: true
+    demo_lane_change: true
+    demo_lane_change_sec: 8
+  paths:
+    frame: /tmp/gf_front.rgb
+    cmd: /tmp/gf_carla_cmd.json
 apps:
-  - demo_pipeline
-
+- adapters/vehicle_can_gateway
+- perception/fcm
+- planning/driving
 acceptance:
-  description: "AFC 无 USS — 前视 + 行车规划"
+  description: AFC 无 USS — Perception_* + Trajectory + frame_ingest（默认 C dry-run）
   lineage_required: true
   required_services:
-    - services.semantic.EgoMotion
-    - services.semantic.FrontObjectList
-    - services.semantic.Trajectory
+  - services.semantic.EgoMotion
+  - services.semantic.Perception_In_St
+  - services.semantic.Perception_MESSAGE_Out_St
+  - services.semantic.Trajectory
+  - services.semantic.VehicleBus

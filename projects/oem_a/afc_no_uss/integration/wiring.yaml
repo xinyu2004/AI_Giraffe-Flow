@@ -1,47 +1,118 @@
-# AFC 无 USS — 集成工程师连线草稿
-# SOA Apps: perception.front, planning.driving
-# Adapter: adapter.vehicle_can_gateway
-schema_version: "0.1"
+# AFC 无 USS — Perception_* + Trajectory（P3-5 wave A）
+# gateway → Perception_In_St → fcm → Perception_MESSAGE_Out_St → planning → Trajectory → gateway
+schema_version: '0.1'
 project_id: afc_no_uss
 variant: afc_front_camera
 topology: ap_only
-
 modules:
-  - id: perception.front
-    hpp: projects/oem_a/afc_no_uss/interfaces/perception_front/io_types.hpp
-    package: customer/perception-front
-
+- id: adapter.vehicle_can_gateway
+  hpp: projects/oem_a/afc_no_uss/interfaces/vehicle_gateway/io_types.hpp
+- id: perception.fcm
+  hpp: projects/oem_a/afc_no_uss/interfaces/fcm_perception/io_ports.hpp
+  package: customer/fcm-perception
+- id: planning.driving
+  hpp: projects/oem_a/afc_no_uss/interfaces/planning_driving/io_types.hpp
+  package: customer/planning-driving
 deployments:
-  - process: adapter.vehicle_can_gateway
-    compute_domain: ap_linux
-    provides:
-      - services.semantic.EgoMotion
-    requires: []
-
-  - process: perception.front
-    compute_domain: ap_linux
-    provides:
-      - services.semantic.FrontObjectList
-    requires:
-      - services.semantic.EgoMotion
-
-  - process: planning.driving
-    compute_domain: ap_linux
-    package: customer/planning-driving
-    provides:
-      - services.semantic.Trajectory
-    requires:
-      - services.semantic.FrontObjectList
-      - services.semantic.EgoMotion
-
+- process: external.vehicle_mcu
+  compute_domain: external
+  provides:
+  - services.semantic.VehicleBus
+  requires:
+  - services.semantic.Trajectory
+- process: adapter.vehicle_can_gateway
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.EgoMotion
+  - services.semantic.Perception_In_St
+  - services.semantic.Trajectory
+  requires:
+  - services.semantic.VehicleBus
+  - services.semantic.Trajectory
+- process: perception.fcm
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.Perception_MESSAGE_Out_St
+  requires:
+  - services.semantic.Perception_In_St
+- process: planning.driving
+  compute_domain: ap_linux
+  package: customer/planning-driving
+  provides:
+  - services.semantic.Trajectory
+  requires:
+  - services.semantic.Perception_MESSAGE_Out_St
+  - services.semantic.EgoMotion
 bindings:
-  - module: perception.front
-    inputs:
-      - { service: semantic.EgoMotion, type: EgoMotion }
-    outputs:
-      - { service: semantic.FrontObjectList, type: FrontObjectList }
-
+- module: adapter.vehicle_can_gateway
+  inputs:
+  - service: semantic.VehicleBus
+    type: VehicleBus
+  - service: semantic.Trajectory
+    type: Trajectory
+  outputs:
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  - service: semantic.Perception_In_St
+    type: Perception_In_St
+  - service: semantic.Trajectory
+    type: Trajectory
+- module: perception.fcm
+  inputs:
+  - service: semantic.Perception_In_St
+    type: Perception_In_St
+  outputs:
+  - service: semantic.Perception_MESSAGE_Out_St
+    type: Perception_MESSAGE_Out_St
+- module: planning.driving
+  inputs:
+  - service: semantic.Perception_MESSAGE_Out_St
+    type: Perception_MESSAGE_Out_St
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  outputs:
+  - service: semantic.Trajectory
+    type: Trajectory
 dataflows:
-  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: perception.front }
-  - { from: adapter.vehicle_can_gateway, service: services.semantic.EgoMotion, to: planning.driving }
-  - { from: perception.front, service: services.semantic.FrontObjectList, to: planning.driving }
+- from: external.vehicle_mcu
+  service: services.semantic.VehicleBus
+  to: adapter.vehicle_can_gateway
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.Perception_In_St
+  to: perception.fcm
+- from: perception.fcm
+  service: services.semantic.Perception_MESSAGE_Out_St
+  to: planning.driving
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: planning.driving
+- from: planning.driving
+  service: services.semantic.Trajectory
+  to: adapter.vehicle_can_gateway
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.Trajectory
+  to: external.vehicle_mcu
+canvas:
+  nodes:
+    external.vehicle_mcu:
+      kind: external
+      label: MCU
+      out_side: right
+      in_side: top
+      x: -200
+      y: -180
+    adapter.vehicle_can_gateway:
+      out_side: right
+      in_side: bottom
+      x: 110
+      y: -40
+    perception.fcm:
+      out_side: right
+      in_side: left
+      x: 730
+      y: -320
+    planning.driving:
+      out_side: bottom
+      in_side: left
+      x: 1200
+      y: -20

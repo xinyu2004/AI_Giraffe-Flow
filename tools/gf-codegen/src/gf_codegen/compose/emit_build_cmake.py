@@ -103,6 +103,12 @@ def emit_build_cmake(
         "",
         f"# live_tap services: {', '.join(live_svcs) if live_svcs else '(none)'}",
         "",
+        "# Behavior freeze headers under ${GF_GENERATED_DIR}/include:",
+        "# deploy_config / frame_ingest / log_config / platform_tables (no .env).",
+        'if(DEFINED GF_PROJECT_DIR)',
+        '  file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/runtime")',
+        "endif()",
+        "",
     ]
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

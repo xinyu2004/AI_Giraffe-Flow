@@ -213,7 +213,7 @@ Manifests may **colocate** light services into one OS process without changing s
 
 Phases: T0 desktop → T1 board+host → T2 HIL → T3 vehicle debug → T4 production trim.
 
-**On-board boot:** `systemd/init` → **HOST** daemons (`dlt-daemon` if `log.yaml` sinks include `dlt` → RouDi → **`gf_em_daemon`**) → EM topo-sorts `exec.yaml` and **`gf::osal::SpawnProcess`** apps. See Chinese DESIGN §8.1 and [`middleware/exec/README.md`](../../../middleware/exec/README.md).
+**On-board boot:** `systemd/init` / `run_sil` start **EM only** (`gf_em_daemon`); EM then Spawns optional platform daemons (dlt / RouDi / … via gf-config) and SOA apps per `em_launch` + `exec` topo (**`gf::osal::SpawnProcess`**). See Chinese DESIGN §8.1 and [`middleware/exec/README.md`](../../../middleware/exec/README.md).
 
 ---
 

@@ -1,12 +1,18 @@
 # OS EM launch map — binaries relative to $GF_BUILD_DIR
-# args / max_restarts: always explicit (no omitted fields).
-# gateway argv[1] = max Trajectory samples before exit (15 ≈ SIL smoke; 0 = run forever).
-# other apps ignore argv today — still write ["0"] so the table is never blank.
+# Product freeze (compose) forces gateway args ["0"].
 schema_version: "0.1"
 processes:
+  - name: host.dlt_daemon
+    binary: _dep-manifest/dlt-daemon/src/daemon/dlt-daemon
+    args: []
+    max_restarts: 3
+  - name: host.iox_roudi
+    binary: iox-roudi
+    args: ["-c", "$GF_IOX_TOML"]
+    max_restarts: 3
   - name: adapter.vehicle_can_gateway
     binary: apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway
-    args: ["15"]
+    args: ["0"]
     max_restarts: 3
   - name: perception.fcm
     binary: apps/perception/fcm/gf_perception_fcm

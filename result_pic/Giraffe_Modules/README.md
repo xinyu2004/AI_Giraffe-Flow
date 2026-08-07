@@ -20,27 +20,18 @@
 │  TITLE: Giraffe Modules · 中间件如何起来、如何协作              │
 └──────────────────────────────────────────────────────────────┘
 
-  ┌─────────────┐
-  │ systemd/init│  系统侧 · 非 Giraffe（虚线框；高度≈HOST 一半）
-  │ 系统侧守护   │
-  └──────┬──────┘
-         │
-         ▼
-       〔 HOST  ┌─ 平台守护（非 SOA）──────────────┐
-               │  dlt-daemon（按需 · log.yaml sinks）│
-               │       ↓                            │
-               │  RouDi (iceoryx)                   │
-               │       ↓                            │
-               │  EM (gf_em_daemon)                 │
-               └──────────────┬─────────────────────┘
-                              │ OSAL Spawn（em_launch 拓扑）
+  ┌──────────┐         ┌─────────────┐         ┌─────────────────────────────┐
+  │systemd/  │ ──────► │     EM      │ ──────► │ daemons（按 gf-config）     │
+  │init 虚线 │         │ gf_em_daemon│         │ · dlt-daemon?              │
+  └──────────┘         │   · 入口    │         │ · RouDi? (iceoryx)         │
+                       └──────┬──────┘         │ · SOME/IP daemon?          │
+                              │ OSAL Spawn     │ · DDS?                     │
+                              ▼                └─────────────────────────────┘
+                       ┌────────────┐
+                       │  SOA apps  │
+                       └──────┬─────┘
+                              │ runtime bring-up
                               ▼
-                 ┌────────────────────────────┐
-                 │   SOA apps（业务进程）        │
-                 │   gateway · sensing · …    │
-                 └─────────────┬──────────────┘
-                               │ 每进程内：runtime bring-up
-                               ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                 进程内中间件环（本图主体）                        │
 │                                                              │
@@ -75,10 +66,9 @@
 
 | 模块 | 一句话 | 关键协作 |
 |------|--------|----------|
-| **systemd/init** | 系统侧守护（**非 Giraffe**）；同级拉起 HOST | 虚线框 = OS 所有；脚本或 unit |
-| **HOST · dlt-daemon** | COVESA DLT（**按需**：`log.yaml` sinks 含 `dlt`） | 上位机 dlt-viewer / GMT Logging |
-| **HOST · RouDi** | iceoryx 通信底座 | com binding 依赖 |
-| **HOST · EM** | `gf_em_daemon` | 拓扑 OSAL Spawn SOA apps |
+| **systemd/init** | 系统侧保护层（**非 Giraffe**）；单一 service 只拉 EM | 虚线框 = OS |
+| **EM** | `gf_em_daemon`（**入口**） | 按配置 Spawn 平台守护 + SOA apps |
+| **daemons（按 gf-config）** | dlt / RouDi / SOME/IP / DDS? | EM 各拉一份；无则不起 |
 | **OSAL** | 时钟 / 线程 / **process** Spawn·Wait·Kill | EM 唯一用它起停进程 |
 | **exec / EM** | `ExecutionClient` + daemon | 读 em_launch；失败可 relaunch |
 | **sm** | 功能组 Off ↔ Running ↔ Updating | runtime EnsureGroup；PHM 故障通知；UCM 进 Updating |
@@ -143,19 +133,20 @@ App ──服务名──► com ──► bindings ──► iceoryx | SOME/IP 
 
 ## 明确不画进本图
 
-- CARLA / Foxglove / GMT / gf-config（→ **Giraffe_Flow**）
+- CARLA / Foxglove / GMT / gf-config UI（→ **Giraffe_Flow**；本图只写「按 gf-config」）
 - 具体 OEM 算法细节、某条测试话题名
 - 主机 GUI、离线 MCAP 工具链
+- 已取消的 HOST 三件套并列（入口就是 EM）
 
 ---
 
 ## 出图注意
 
-1. 主体 = 中间件环 + EM 启动箭头；不要再画一整圈外设。
+1. 主体 = 中间件环 + EM 分叉（右 `daemons（按 gf-config）` / 下 apps）。
 2. 芯片名与 Flow 板内一致：`com · EM · exec · phm · sm · collector · OSAL · diag · ucm · log · dlt · per`（tsync 在环内）。
-3. 箭头标动作（Spawn / Alive / NotifyFault / DoIP），不要只画框。
-4. HOST 框 = 平台守护；SOA apps 在框外。`dlt-daemon` 副标写清按需配置。
-5. 括号在左，**HOST 文字在括号右侧**（靠守护框）；`systemd/init` 虚线芯片高度≈HOST 一半。
+3. 箭头标动作（Spawn / Alive / NotifyFault / DoIP）。
+4. 右框标题用 `daemons（按 gf-config）`，**不要**再加副标。
+5. `systemd/init` 虚线；高度约等于 EM 芯片量级。
 6. 环底单行对齐：`log → DLT` · `tsync` · `OSAL`。
 7. 中文定稿后再画；EN 跟 `README.en.md`。
 

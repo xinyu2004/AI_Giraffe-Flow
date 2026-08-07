@@ -1,0 +1,25 @@
+# OS EM launch map — binaries relative to $GF_BUILD_DIR
+# Product freeze (compose → generated/em_launch.yaml) forces gateway args ["0"].
+# Smoke/CI may use a dedicated fixture with short-run args — not this product table.
+schema_version: "0.1"
+processes:
+  - name: host.dlt_daemon
+    binary: _dep-manifest/dlt-daemon/src/daemon/dlt-daemon
+    args: []
+    max_restarts: 3
+  - name: host.iox_roudi
+    binary: iox-roudi
+    args: ["-c", "$GF_IOX_TOML"]
+    max_restarts: 3
+  - name: adapter.vehicle_can_gateway
+    binary: apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway
+    args: ["0"]
+    max_restarts: 3
+  - name: perception.fcm
+    binary: apps/perception/fcm/gf_perception_fcm
+    args: ["0"]
+    max_restarts: 3
+  - name: planning.driving
+    binary: apps/planning/driving/gf_planning_driving
+    args: ["0"]
+    max_restarts: 2

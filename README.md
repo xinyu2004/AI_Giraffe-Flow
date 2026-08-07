@@ -131,7 +131,7 @@ Scenarios: [scenarios/README.md](projects/oem_a/afc_with_uss/scenarios/README.md
 | Giraffe modules own | Toolchain owns |
 |---------------------|----------------|
 | In-process I/O, real pub/sub on iceoryx | wiring / SKU trim → gf-config |
-| SIL: systemd/init → HOST (dlt? · RouDi · EM) → apps + tap/inject | Studio / Tag / MCAP; Logging via DLT |
+| SIL: systemd/init → EM → daemons + apps; tap/inject/frame bridge = Flow/GMT (not EM) | Studio / Tag / MCAP; Logging via DLT |
 | Semantic contract on target | DBC / lineage gates → compose |
 | FuSa evidence (`fusa/`) | GMT remains **debug-path** (not board ASIL evidence) |
 

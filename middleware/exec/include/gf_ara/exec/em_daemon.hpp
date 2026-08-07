@@ -32,7 +32,11 @@ struct EmDaemonConfig {
 class EmDaemon {
  public:
   bool Configure(EmDaemonConfig cfg);
-  /// Load exec.yaml (deps) + em_launch.yaml (binaries) + phm.yaml (restart flags).
+  /// Product path: load Spawn table from compose-frozen deploy_config.hpp.
+  /// Requires GF_HAS_DEPLOY_CONFIG at compile time; otherwise returns false.
+  bool LoadFromDeployConfig(std::string_view platform_dir, std::string_view build_dir,
+                            std::string_view log_dir);
+  /// Opt-in / smoke: Load exec.yaml + em_launch.yaml + phm.yaml.
   bool Load(std::string_view platform_dir, std::string_view launch_yaml,
             std::string_view build_dir, std::string_view log_dir);
 

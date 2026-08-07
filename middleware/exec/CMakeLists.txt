@@ -11,6 +11,13 @@ target_include_directories(gf_ara_exec PUBLIC
 )
 target_link_libraries(gf_ara_exec PUBLIC gf_ara::core gf::osal gf_ara::log)
 
+# SKU compose freezes Spawn table into deploy_config.hpp (product EM path).
+if(DEFINED GF_GENERATED_DIR AND EXISTS
+   "${GF_GENERATED_DIR}/include/gf_gen/deploy_config.hpp")
+  target_include_directories(gf_ara_exec PUBLIC "${GF_GENERATED_DIR}/include")
+  target_compile_definitions(gf_ara_exec PUBLIC GF_HAS_DEPLOY_CONFIG=1)
+endif()
+
 add_executable(gf_em_daemon src/em_daemon_main.cpp)
 target_link_libraries(gf_em_daemon PRIVATE gf_ara::exec)
 

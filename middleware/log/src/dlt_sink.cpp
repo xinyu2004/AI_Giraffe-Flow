@@ -8,6 +8,7 @@
 #if defined(GF_HAVE_DLT) && GF_HAVE_DLT
 // COVESA BUILD_INTERFACE exports …/include/dlt (legacy path); use <dlt.h> not <dlt/dlt.h>.
 #include <dlt.h>
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -19,8 +20,16 @@ namespace {
 // Our dlt-daemon build uses FIFO IPC at /tmp/dlt (see daemon log "FIFO").
 constexpr const char* kDltUserFifo = "/tmp/dlt";
 
+/// True only if a reader (dlt-daemon) is attached.
+/// F_OK alone is wrong: stale FIFO after dead daemon still exists, and
+/// dlt_register_app then blocks ~10s inside libdlt.
 bool DaemonIpcPresent() {
-  return ::access(kDltUserFifo, F_OK) == 0;
+  const int fd = ::open(kDltUserFifo, O_WRONLY | O_NONBLOCK);
+  if (fd < 0) {
+    return false;
+  }
+  ::close(fd);
+  return true;
 }
 #endif
 
@@ -85,8 +94,8 @@ void DltSink::Configure(std::string_view app_id, std::string_view description) {
   if (ready_) {
     return;
   }
-  // Root fix for ctest hang: never call dlt_register_app when daemon FIFO is missing
-  // (libdlt otherwise blocks ~10s retrying the user↔daemon pipe).
+  // Never call dlt_register_app unless a live daemon holds the FIFO
+  // (libdlt otherwise blocks ~10s on stale /tmp/dlt).
   if (!DaemonIpcPresent()) {
     ready_ = false;
     return;

@@ -1,4 +1,4 @@
-# OEM 导入策略 — AFC 无 USS（仅车身运动进 gateway）
+# OEM 导入策略 — AFC 无 USS（车身运动 + Perception_In 进 gateway）
 schema_version: "0.1.0"
 project_id: afc_no_uss
 topology_default: ap_only
@@ -13,6 +13,7 @@ sources:
       process: adapter.vehicle_can_gateway
       provides:
         - services.semantic.EgoMotion
+        - services.semantic.Perception_In_St
 
 extraction:
   dbc:

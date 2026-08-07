@@ -42,12 +42,13 @@
 #   GF_INJECT_LOOP     continuous: 1 = replay from start until signal; playhead uses GMT UI loop
 #   GF_SIL_KILL_STALE  default 1 — 启动前释放被旧 SIL/GMT 占用的 8765/8766/8767/13400
 #                      设 0 则端口忙时直接失败并提示如何手动停
-#   GF_DOIP            default auto — 1/0 强制开/关 DoIP OTA（gf_doip_ota_server）
-#                      auto = diag.yaml iso_13400_doip / doip.enabled
-#   GF_DOIP_PORT       default from diag.yaml tcp_port（通常 13400）；GMT OTA 连此端口
+#   GF_DOIP            default auto — 1/0 强制开/关；auto = deploy_config kDoip
+#   GF_DOIP_PORT       default from deploy_config kDoipTcpPort（通常 13400）
 #   GF_PHM_FAULT_MS    DoIP 开且未显式设置时默认 500 — 真实 AliveMissed → GF_PER_DIR → DEM 0x19
 #   GF_PHM_FAULT_TARGET  默认 uss（fcm|uss|planning|gateway）；其它进程 fault=0
 #                      关闭 PHM 注入：GF_PHM_FAULT_MS=0
+#   frame_ingest（行为）：compose→frame_ingest_config.hpp（勿手改 JSON）
+#   调试覆盖仍可用 GF_FRAME_SOURCE / GF_START_CARLA_BRIDGE / GF_CARLA_*（见 SIM_SPIKE.md）
 #   # playhead (GMT stream; session file optional):
 #   GF_INJECT_MODE=playhead bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 #   # then GMT gui → open session → 回灌 tab → connect 127.0.0.1:8767
@@ -112,9 +113,93 @@ if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
   bash "${SCRIPT_DIR}/compile_sil.sh"
 fi
 
+# Behavior freeze from compose hpp (not tip JSON / .env).
+DEPLOY_HPP="${PROJECT_DIR}/generated/include/gf_gen/deploy_config.hpp"
+FRAME_HPP="${PROJECT_DIR}/generated/include/gf_gen/frame_ingest_config.hpp"
+_gf_hpp_bool() {
+  local hpp="$1" key="$2" default="$3"
+  if [[ -f "${hpp}" ]] && grep -qE "inline constexpr bool ${key} = true" "${hpp}"; then
+    echo 1
+  elif [[ -f "${hpp}" ]] && grep -qE "inline constexpr bool ${key} = false" "${hpp}"; then
+    echo 0
+  else
+    echo "${default}"
+  fi
+}
+_gf_hpp_cstr() {
+  local hpp="$1" key="$2" default="$3"
+  if [[ -f "${hpp}" ]]; then
+    local v
+    v="$(sed -nE "s/.*inline constexpr const char\* ${key} = \"([^\"]*)\".*/\1/p" "${hpp}" | head -1)"
+    if [[ -n "${v}" ]]; then
+      echo "${v}"
+      return
+    fi
+  fi
+  echo "${default}"
+}
+_gf_hpp_u32() {
+  local hpp="$1" key="$2" default="$3"
+  if [[ -f "${hpp}" ]]; then
+    local v
+    v="$(sed -nE "s/.*inline constexpr std::uint32_t ${key} = ([0-9]+)u?.*/\1/p" "${hpp}" | head -1)"
+    if [[ -n "${v}" ]]; then
+      echo "${v}"
+      return
+    fi
+  fi
+  echo "${default}"
+}
+# frame_ingest → export GF_* for carla_bridge child; user-set GF_* wins (debug).
+if [[ ! -f "${FRAME_HPP}" ]]; then
+  echo "${TAG} WARN: missing ${FRAME_HPP} — run compose so frame_ingest is frozen" >&2
+fi
+if [[ -z "${GF_START_CARLA_BRIDGE+x}" ]]; then
+  export GF_START_CARLA_BRIDGE="$(_gf_hpp_bool "${FRAME_HPP}" kBridgeEnabled 0)"
+fi
+if [[ -z "${GF_CARLA_BRIDGE_DRY_RUN+x}" ]]; then
+  export GF_CARLA_BRIDGE_DRY_RUN="$(_gf_hpp_bool "${FRAME_HPP}" kBridgeDryRun 1)"
+fi
+if [[ -z "${GF_CARLA_DEMO_LC+x}" ]]; then
+  export GF_CARLA_DEMO_LC="$(_gf_hpp_bool "${FRAME_HPP}" kDemoLaneChange 0)"
+fi
+if [[ -z "${GF_FRAME_SOURCE+x}" ]]; then
+  export GF_FRAME_SOURCE="$(_gf_hpp_cstr "${FRAME_HPP}" kFrameSource none)"
+fi
+if [[ -z "${GF_PERCEPTION_BACKEND+x}" ]]; then
+  export GF_PERCEPTION_BACKEND="$(_gf_hpp_cstr "${FRAME_HPP}" kPerceptionBackend stub)"
+fi
+if [[ -z "${GF_CARLA_FRAME_PATH+x}" ]]; then
+  export GF_CARLA_FRAME_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kFramePath /tmp/gf_front.rgb)"
+fi
+if [[ -z "${GF_CARLA_CMD_PATH+x}" ]]; then
+  export GF_CARLA_CMD_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kCmdPath /tmp/gf_carla_cmd.json)"
+fi
+if [[ -z "${GF_CARLA_DEMO_LC_SEC+x}" ]]; then
+  export GF_CARLA_DEMO_LC_SEC="$(_gf_hpp_u32 "${FRAME_HPP}" kDemoLaneChangeSec 8)"
+fi
+echo "${TAG} frame_ingest: hpp source=${GF_FRAME_SOURCE} bridge=${GF_START_CARLA_BRIDGE} dry=${GF_CARLA_BRIDGE_DRY_RUN}"
+
+# Flow/EM hints from deploy_config.hpp (soft for Flow; EM uses compiled table).
+_gf_deploy_bool() {
+  _gf_hpp_bool "${DEPLOY_HPP}" "$1" "$2"
+}
+if [[ ! -f "${DEPLOY_HPP}" ]]; then
+  echo "${TAG} WARN: missing ${DEPLOY_HPP} — run compose + compile_sil (EM needs GF_HAS_DEPLOY_CONFIG)" >&2
+fi
+EM_ON="$(_gf_deploy_bool kEm 1)"
+DLT_ON="$(_gf_deploy_bool kDlt 0)"
+IOX_ON="$(_gf_deploy_bool kRouDi 0)"
+LIVE_ON="$(_gf_deploy_bool kLiveTap 0)"
+DOIP_ON="$(_gf_deploy_bool kDoip 0)"
+# Soft Flow overrides (debug only; not product acceptance).
+if [[ "${GF_LIVE_TAP:-}" == "0" || "${GF_LIVE_TAP:-}" == "off" ]]; then LIVE_ON=0; fi
+if [[ "${GF_LIVE_TAP:-}" == "1" || "${GF_LIVE_TAP:-}" == "on" ]]; then LIVE_ON=1; fi
+echo "${TAG} deploy_config: em=${EM_ON} dlt=${DLT_ON} roudi=${IOX_ON} live=${LIVE_ON} doip=${DOIP_ON}"
+
 OBS_JSON="${PROJECT_DIR}/generated/observability.json"
 SOR_JSON="${PROJECT_DIR}/gf.sor.json"
-LIVE_ON=0
+# Whitelist services from observability.json (OK — not behavior enablement).
 LIVE_SVCS=""
 if [[ -f "${OBS_JSON}" ]]; then
   export GF_OBS_JSON="${OBS_JSON}"
@@ -125,76 +210,40 @@ import os
 obs = Path(os.environ["GF_OBS_JSON"])
 d = json.loads(obs.read_text(encoding="utf-8"))
 live = d.get("live_tap") or {}
-en = bool(live.get("enabled"))
 svcs = [str(x).strip() for x in (live.get("services") or []) if str(x).strip()]
-print("LIVE_ON=%s" % ("1" if en and svcs else "0"))
 print("LIVE_SVCS=%s" % ",".join(svcs))
 PY
 )"
 else
-  echo "${TAG} WARN: missing ${OBS_JSON} — run compile_sil first; live Foxglove off" >&2
+  echo "${TAG} WARN: missing ${OBS_JSON} — live service whitelist empty" >&2
+fi
+if [[ "${LIVE_ON}" == "1" && -z "${LIVE_SVCS}" ]]; then
+  echo "${TAG} WARN: live_tap frozen ON but services list empty — Foxglove may be idle" >&2
 fi
 
-# DoIP OTA server for GMT「OTA」Tab (TCP → UDS → UCM). Independent of iceoryx chain.
-DOIP_ON=0
-DOIP_PORT="${GF_DOIP_PORT:-}"
-export GF_PROJECT_DIR_FOR_DOIP="${PROJECT_DIR}"
-export GF_DOIP_HINT="${GF_DOIP:-auto}"
-eval "$(python - <<'PY'
-import os
-from pathlib import Path
-
-try:
-    import yaml
-except ImportError:
-    yaml = None
-
-proj = Path(os.environ["GF_PROJECT_DIR_FOR_DOIP"])
-hint = (os.environ.get("GF_DOIP_HINT") or "auto").strip().lower()
-port_env = (os.environ.get("GF_DOIP_PORT") or "").strip()
-diag_path = proj / "platform" / "diag.yaml"
-# project.yaml may remap platform.diag
-pyaml = proj / "project.yaml"
-if yaml and pyaml.is_file():
-    try:
-        raw = yaml.safe_load(pyaml.read_text(encoding="utf-8")) or {}
-        plat = raw.get("platform") if isinstance(raw, dict) else None
-        if isinstance(plat, dict) and plat.get("diag"):
-            diag_path = proj / str(plat["diag"]).strip()
-    except Exception:
-        pass
-
-enabled = False
-port = 13400
-if yaml and diag_path.is_file():
-    try:
-        data = yaml.safe_load(diag_path.read_text(encoding="utf-8")) or {}
-        standards = data.get("standards") if isinstance(data.get("standards"), dict) else {}
-        doip = data.get("doip") if isinstance(data.get("doip"), dict) else {}
-        iso14229 = bool(standards.get("iso_14229_uds", True))
-        iso13400 = bool(standards.get("iso_13400_doip", doip.get("enabled", False)))
-        enabled = bool(iso13400 and iso14229 and doip.get("enabled", iso13400))
-        if doip.get("tcp_port") is not None:
-            port = int(doip["tcp_port"])
-    except Exception:
-        enabled = False
-
-if hint in ("0", "off", "false", "no"):
-    enabled = False
-elif hint in ("1", "on", "true", "yes"):
-    enabled = True
-
-if port_env:
-    try:
-        port = int(port_env)
-    except ValueError:
-        pass
-
-print("DOIP_ON=%s" % ("1" if enabled else "0"))
-print("DOIP_PORT=%s" % port)
-PY
-)"
-export GF_DOIP_PORT="${DOIP_PORT}"
+# DoIP: enable + params from deploy_config.hpp (debug GF_DOIP / GF_DOIP_* still allowed).
+if [[ "${GF_DOIP:-}" == "0" || "${GF_DOIP:-}" == "off" ]]; then
+  DOIP_ON=0
+elif [[ "${GF_DOIP:-}" == "1" || "${GF_DOIP:-}" == "on" ]]; then
+  DOIP_ON=1
+fi
+_gf_hpp_int() {
+  local hpp="$1" key="$2" default="$3"
+  if [[ -f "${hpp}" ]]; then
+    local v
+    v="$(sed -nE "s/.*inline constexpr std::uint(16|32)_t ${key} = (0[xX][0-9A-Fa-f]+|[0-9]+)u?.*/\2/p" "${hpp}" | head -1)"
+    if [[ -n "${v}" ]]; then
+      printf '%d\n' "${v}"
+      return
+    fi
+  fi
+  echo "${default}"
+}
+if [[ -z "${GF_DOIP_PORT+x}" ]]; then
+  export GF_DOIP_PORT="$(_gf_hpp_int "${DEPLOY_HPP}" kDoipTcpPort 13400)"
+fi
+DOIP_PORT="${GF_DOIP_PORT}"
+export GF_DOIP_PORT
 
 # Inject replaces gateway. Live tap may stay on.
 if [[ "${INJECT_ON}" == "1" ]]; then
@@ -331,7 +380,7 @@ elif dut:
     requires = [short(str(x)) for x in (hit.get("requires") or []) if str(x).strip()]
 else:
     # B1: full consumer chain
-    apps = ["fcm", "uss", "planning"]
+    apps = ["fcm", "planning"]
 
 # services: explicit env wins; else DUT requires ∩ injectable; else EgoMotion
 if svcs_env:
@@ -371,34 +420,19 @@ INJ="${BUILD}/apps/debug_bridge/iox_obs_inject/gf_iox_obs_inject"
 DOIP="${BUILD}/gf_doip_ota_server"
 DLT_DAEMON="${BUILD}/_dep-manifest/dlt-daemon/src/daemon/dlt-daemon"
 DLT_RECEIVE="${BUILD}/_dep-manifest/dlt-daemon/src/console/dlt-receive"
-# Whether to start dlt-daemon: driven by platform/log.yaml sinks (gf-config), not GF_DLT=0.
-DLT_ON=0
-_LOG_YAML=""
-if [[ -f "${GF_PLATFORM_DIR}/log.yaml" ]]; then
-  _LOG_YAML="${GF_PLATFORM_DIR}/log.yaml"
-elif [[ -f "${GF_PLATFORM_DIR}/platform/log.yaml" ]]; then
-  _LOG_YAML="${GF_PLATFORM_DIR}/platform/log.yaml"
-fi
-if [[ -n "${_LOG_YAML}" ]]; then
-  if grep -Eq '^[[:space:]]*-[[:space:]]*dlt[[:space:]]*$|[[:space:]]dlt[[:space:]]*(,|\])' "${_LOG_YAML}"; then
-    DLT_ON=1
-  fi
-fi
-
-# RouDi: driven by req.bindings iceoryx (gf-config), same pattern as DLT.
-# Config truth = compose → generated/iox_roudi.toml (+ iox_mgmt.cmake at iceoryx build).
-IOX_ON=0
+EM_BIN="${BUILD}/middleware/exec/gf_em_daemon"
+# EM/Flow flags already from deploy_config.hpp. Script starts EM only.
 IOX_TOML="${PROJECT_DIR}/generated/iox_roudi.toml"
-REQ_YAML="${PROJECT_DIR}/req.yaml"
-if [[ -f "${REQ_YAML}" ]]; then
-  if grep -Eq '^[[:space:]]*-[[:space:]]*iceoryx[[:space:]]*$' "${REQ_YAML}"; then
-    IOX_ON=1
-  fi
-fi
 
 NEED_BINS=()
-if [[ "${IOX_ON}" == "1" ]]; then
-  NEED_BINS+=("${ROUDI}")
+if [[ "${EM_ON}" == "1" ]]; then
+  NEED_BINS+=("${EM_BIN}")
+  [[ "${IOX_ON}" == "1" ]] && NEED_BINS+=("${ROUDI}")
+  [[ "${DLT_ON}" == "1" ]] && NEED_BINS+=("${DLT_DAEMON}")
+  NEED_BINS+=("${GW}" "${FCM}" "${USS}" "${PLAN}")
+else
+  echo "${TAG} ERROR: kEm=false — product SIL requires exec/EM (gf-config runtime_modules)" >&2
+  exit 1
 fi
 if [[ "${INJECT_ON}" == "1" ]]; then
   NEED_BINS+=("${INJ}")
@@ -413,17 +447,6 @@ if [[ "${INJECT_ON}" == "1" ]]; then
     echo "${TAG} ERROR: GF_INJECT_SESSION not a file: ${INJECT_SESSION}" >&2
     exit 1
   fi
-  IFS=',' read -r -a _apps_arr <<< "${RUN_APPS}"
-  for a in "${_apps_arr[@]}"; do
-    case "${a}" in
-      uss) NEED_BINS+=("${USS}") ;;
-      fcm) NEED_BINS+=("${FCM}") ;;
-      planning) NEED_BINS+=("${PLAN}") ;;
-      *) echo "${TAG} ERROR: bad RUN_APPS entry: ${a}" >&2; exit 1 ;;
-    esac
-  done
-else
-  NEED_BINS+=("${GW}" "${FCM}" "${USS}" "${PLAN}")
 fi
 if [[ "${LIVE_ON}" == "1" ]]; then
   NEED_BINS+=("${TAP}")
@@ -445,19 +468,20 @@ for bin in "${NEED_BINS[@]}"; do
       echo "DoIP OTA server missing — rebuild (target gf_doip_ota_server) or set GF_DOIP=0." >&2
     fi
     if [[ "${bin}" == "${ROUDI}" ]]; then
-      echo "iox-roudi missing — req.bindings has iceoryx; rebuild iceoryx (mgmt from generated/iox_mgmt.cmake)." >&2
-      echo "NOTE: change bounds.iceoryx.mgmt → compose → cmake reconfigure + rebuild iceoryx." >&2
+      echo "iox-roudi missing — req.bindings has iceoryx; rebuild iceoryx." >&2
+    fi
+    if [[ "${bin}" == "${EM_BIN}" ]]; then
+      echo "gf_em_daemon missing — rebuild middleware/exec." >&2
     fi
     exit 1
   fi
 done
 if [[ "${IOX_ON}" == "1" && ! -f "${IOX_TOML}" ]]; then
-  echo "${TAG} ERROR: missing ${IOX_TOML} (compose with req.bindings iceoryx → bounds.iceoryx.mempools)" >&2
+  echo "${TAG} ERROR: missing ${IOX_TOML} (compose with req.bindings iceoryx)" >&2
   exit 1
 fi
-
-if [[ ! -f "${GF_PLATFORM_DIR}/exec.yaml" && ! -f "${GF_PLATFORM_DIR}/platform/exec.yaml" ]]; then
-  echo "Missing exec.yaml under ${GF_PLATFORM_DIR} (or …/platform/)" >&2
+if [[ ! -f "${DEPLOY_HPP}" ]]; then
+  echo "${TAG} ERROR: missing ${DEPLOY_HPP} (compose) — EM needs compile-time deploy_config" >&2
   exit 1
 fi
 
@@ -471,6 +495,7 @@ export GF_LOG_FILE="${GF_LOG_FILE:-${LOG_DIR}/giraffe_modules.log}"
 GF_DLT_LOG="${BUILD}/middleware/log/gf_dlt_log"
 
 # Host-phase Info → stdout + host.log + file；若 dlt-daemon 已起则再经 gf_dlt_log → DLT
+# Never block SIL boot on DLT: gf_dlt_log can futex-hang on /tmp/dlt after apps attach.
 host_info() {
   local msg="$*"
   local line="log: [INFO] host ${msg}"
@@ -478,9 +503,15 @@ host_info() {
   echo "${line}" >>"${LOG_DIR}/host.log"
   echo "${line}" >>"${GF_LOG_FILE}"
   if [[ "${DLT_ON}" == "1" && -x "${GF_DLT_LOG}" && -n "${DLT_PID:-}" ]] && kill -0 "${DLT_PID}" 2>/dev/null; then
-    GF_DLT_APP_ID=HOST GF_PLATFORM_DIR="${GF_PLATFORM_DIR}" \
-      GF_LOG_DIR="${GF_LOG_DIR}" GF_LOG_FILE="${GF_LOG_FILE}" \
-      "${GF_DLT_LOG}" -a HOST -c host "${msg}" >/dev/null 2>&1 || true
+    if command -v timeout >/dev/null 2>&1; then
+      timeout 0.8 env GF_DLT_APP_ID=HOST GF_PLATFORM_DIR="${GF_PLATFORM_DIR}" \
+        GF_LOG_DIR="${GF_LOG_DIR}" GF_LOG_FILE="${GF_LOG_FILE}" \
+        "${GF_DLT_LOG}" -a HOST -c host "${msg}" >/dev/null 2>&1 || true
+    else
+      GF_DLT_APP_ID=HOST GF_PLATFORM_DIR="${GF_PLATFORM_DIR}" \
+        GF_LOG_DIR="${GF_LOG_DIR}" GF_LOG_FILE="${GF_LOG_FILE}" \
+        "${GF_DLT_LOG}" -a HOST -c host "${msg}" >/dev/null 2>&1 &
+    fi
   fi
 }
 
@@ -525,12 +556,31 @@ def ss_listeners():
             rows.append((port, name, int(pid)))
     return rows
 
+def ancestor_pids(start: int) -> set[int]:
+    """Exclude self + parents (e.g. bash run_sil / timeout wrapping this python)."""
+    seen: set[int] = set()
+    pid = start
+    while pid > 1 and pid not in seen:
+        seen.add(pid)
+        try:
+            with open(f"/proc/{pid}/stat", "r", encoding="utf-8") as f:
+                # pid (comm) state ppid ... — comm may contain spaces/parens
+                body = f.read()
+            rparen = body.rfind(")")
+            if rparen < 0:
+                break
+            parts = body[rparen + 2 :].split()
+            pid = int(parts[1])  # ppid
+        except (OSError, ValueError, IndexError):
+            break
+    return seen
+
 def pids_matching(pattern: str) -> list[int]:
     try:
         out = subprocess.check_output(["pgrep", "-f", pattern], text=True)
     except (FileNotFoundError, subprocess.CalledProcessError):
         return []
-    me = {os.getpid(), os.getppid()}
+    me = ancestor_pids(os.getpid())
     return [int(x) for x in out.split() if int(x) not in me]
 
 wanted = set()
@@ -640,9 +690,13 @@ gf_sil_preflight_ports
 
 cleanup() {
   set +e
-  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}" "${DLT_PID:-}"; do
+  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${CARLA_BRIDGE_PID:-}" "${EM_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}" "${DLT_PID:-}"; do
     [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null
   done
+  # EM children (dlt/RouDi/apps) may outlive the daemon briefly
+  if [[ -n "${EM_PID:-}" ]]; then
+    pkill -P "${EM_PID}" >/dev/null 2>&1 || true
+  fi
   # process-substitution GMT bridges may outlive the fan pipeline
   if [[ "${LIVE_ON}" == "1" ]]; then
     fuser -k "${PORT}/tcp" >/dev/null 2>&1 || true
@@ -660,107 +714,73 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} apps=${RUN_APPS:-full}"
+echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
 
-# Boot order: dlt-daemon → host_info(DLT) → RouDi → apps
-# (log.yaml sinks include dlt from gf-config; no env kill-switch)
+# =============================================================================
+# --- EM (entry) -----------------------------------------------------------------
+# EM scope: Giraffe platform daemons (dlt?/RouDi?/…) + SOA apps (deploy_config.hpp).
+# NOT EM: tap / Foxglove / GMT inject / frame_ingest / carla_bridge / DoIP — those
+# are run_sil Flow/GMT segments (or app compile-time freeze), not em_launch rows.
+# systemd (board) is only a protection layer around the same EM entry.
+# =============================================================================
 DLT_PID=""
-if [[ "${DLT_ON}" == "1" ]]; then
-  if [[ -x "${DLT_DAEMON}" ]]; then
-    echo "${TAG} dlt-daemon ..."
-    : >"${LOG_DIR}/dlt_daemon.log"
-    "${DLT_DAEMON}" >"${LOG_DIR}/dlt_daemon.log" 2>&1 &
-    DLT_PID=$!
-    sleep 0.4
-    if ! kill -0 "${DLT_PID}" 2>/dev/null; then
-      echo "${TAG} WARN: dlt-daemon failed; see ${LOG_DIR}/dlt_daemon.log" >&2
-      DLT_PID=""
-    fi
-  else
-    echo "${TAG} WARN: log.yaml sinks include dlt but ${DLT_DAEMON} not built" >&2
-  fi
-fi
-
-host_info "run_sil begin platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} apps=${RUN_APPS:-full}"
-if [[ -n "${DLT_PID}" ]]; then
-  host_info "dlt-daemon ok pid=${DLT_PID} (viewer/GMT → TCP 3490)"
-elif [[ "${DLT_ON}" == "1" ]]; then
-  host_info "dlt-daemon unavailable — console/file only"
-else
-  host_info "dlt-daemon skipped (log.yaml sinks have no dlt — gf-config 日志)"
-fi
-
 ROUDI_PID=""
-if [[ "${IOX_ON}" == "1" ]]; then
-  # Config-driven: generated/iox_roudi.toml from bounds.iceoryx.mempools (no env kill-switch).
-  # mgmt size comes from iceoryx rebuild via generated/iox_mgmt.cmake.
-  host_info "start RouDi config=${IOX_TOML}"
-  echo "${TAG} RouDi (bounds → ${IOX_TOML}) ..."
-  echo "${TAG} NOTE: change iceoryx.mgmt → compose + cmake reconfigure + rebuild iceoryx"
-  : >"${LOG_DIR}/roudi.log"
-  "${ROUDI}" -c "${IOX_TOML}" >"${LOG_DIR}/roudi.log" 2>&1 &
-  ROUDI_PID=$!
-  sleep 1
-  if ! kill -0 "${ROUDI_PID}" 2>/dev/null; then
-    host_info "RouDi failed; see ${LOG_DIR}/roudi.log"
-    echo "${TAG} RouDi failed; see ${LOG_DIR}/roudi.log" >&2
-    cat "${LOG_DIR}/roudi.log" >&2 || true
+EM_PID=""
+host_info "run_sil begin platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
+
+# Stale dlt/RouDi + IPC reclaim is inside EM StartAll (before Spawn host.*).
+
+export GF_IOX_TOML="${IOX_TOML}"
+export GF_EM_LOG_DIR="${LOG_DIR}/em"
+mkdir -p "${GF_EM_LOG_DIR}"
+# PHM fault defaults must be in env *before* EM spawns apps (children inherit).
+if [[ "${DOIP_ON}" == "1" && -z "${_PHM_FAULT_USER}" ]]; then
+  export GF_PHM_FAULT_MS=500
+  export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-uss}"
+fi
+host_info "start EM mode=deploy_config dlt=${DLT_ON} roudi=${IOX_ON}"
+echo "${TAG} [EM] gf_em_daemon (deploy_config.hpp) → dlt?=${DLT_ON} RouDi?=${IOX_ON} → apps"
+: >"${LOG_DIR}/em_daemon.stdout"
+"${EM_BIN}" \
+  --platform "${GF_PLATFORM_DIR}" \
+  --build-dir "${BUILD}" \
+  --log-dir "${GF_EM_LOG_DIR}" \
+  --deadline-ms 0 \
+  >"${LOG_DIR}/em_daemon.stdout" 2>&1 &
+EM_PID=$!
+# Wait until EM has spawned planning (or timeout)
+_em_ready=0
+for _i in $(seq 1 50); do
+  if ! kill -0 "${EM_PID}" 2>/dev/null; then
+    host_info "EM exited early; see ${LOG_DIR}/em_daemon.stdout"
+    echo "${TAG} EM failed; see ${LOG_DIR}/em_daemon.stdout" >&2
+    cat "${LOG_DIR}/em_daemon.stdout" >&2 || true
     exit 1
   fi
-  host_info "RouDi ok pid=${ROUDI_PID}"
-  # Best-effort: parse reserved SHM sizes into reports/iox_shm_report.json (not generated/).
-  python - "${LOG_DIR}/roudi.log" "${PROJECT_DIR}/reports/iox_shm_report.json" "${IOX_TOML}" \
-    "${PROJECT_DIR}/generated/iox_mgmt.cmake" <<'PY' || true
-import json, re, sys
-from pathlib import Path
-log, out, toml, cmake = (Path(sys.argv[i]) for i in range(1, 5))
-text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
-mgmt = None
-payload = None
-for m in re.finditer(
-    r"(?:Trying to reserve|Acquired|Reserving)\s+(\d+)\s+bytes.*?\[([^\]]+)\]",
-    text,
-    re.I,
-):
-    n, name = int(m.group(1)), m.group(2).lower()
-    if "mgmt" in name or name == "iceoryx_mgmt":
-        mgmt = n
-    elif "mgmt" not in name:
-        payload = n if payload is None else max(payload, n)
-# bounds.iceoryx.mgmt.* keys (same as gf-config / mem_budget)
-cmake_to_bounds = {
-    "IOX_MAX_PUBLISHERS": "max_publishers",
-    "IOX_MAX_SUBSCRIBERS": "max_subscribers",
-    "IOX_MAX_SUBSCRIBERS_PER_PUBLISHER": "max_subscribers_per_publisher",
-    "IOX_MAX_PUBLISHER_HISTORY": "max_publisher_history",
-    "IOX_MAX_CHUNKS_ALLOCATED_PER_PUBLISHER_SIMULTANEOUSLY": "max_chunks_allocated_per_publisher",
-    "IOX_MAX_CHUNKS_HELD_PER_SUBSCRIBER_SIMULTANEOUSLY": "max_chunks_held_per_subscriber",
-    "IOX_MAX_INTERFACE_NUMBER": "max_interface_number",
-}
-iox_mgmt = {}
-if cmake.is_file():
-    for m in re.finditer(
-        r"set\s*\(\s*(IOX_MAX_[A-Z0-9_]+)\s+(\d+)\s*CACHE\s+STRING",
-        cmake.read_text(encoding="utf-8", errors="replace"),
-        re.I,
-    ):
-        bk = cmake_to_bounds.get(m.group(1).upper())
-        if bk:
-            iox_mgmt[bk] = int(m.group(2))
-report = {
-    "schema_version": "0.2",
-    "source": "roudi.log",
-    "toml": str(toml),
-    "mgmt_bytes": mgmt,
-    "payload_segment_bytes": payload,
-    "mgmt": iox_mgmt,
-}
-out.parent.mkdir(parents=True, exist_ok=True)
-out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-PY
-else
-  host_info "RouDi skipped (req.bindings has no iceoryx — gf-config)"
+  if grep -q 'em_daemon: spawned name=planning.driving' "${LOG_DIR}/em_daemon.stdout" 2>/dev/null \
+    || grep -q 'em_daemon: spawned name=planning.driving' "${GF_EM_LOG_DIR}/giraffe_modules.log" 2>/dev/null; then
+    _em_ready=1
+    break
+  fi
+  sleep 0.2
+done
+if [[ "${_em_ready}" != "1" ]]; then
+  # Accept StartAll done as weaker ready signal
+  if grep -q 'StartAll done' "${LOG_DIR}/em_daemon.stdout" 2>/dev/null \
+    || grep -q 'StartAll done' "${GF_EM_LOG_DIR}/giraffe_modules.log" 2>/dev/null; then
+    _em_ready=1
+  fi
 fi
+if [[ "${_em_ready}" != "1" ]]; then
+  host_info "EM spawn timeout; see ${LOG_DIR}/em_daemon.stdout"
+  echo "${TAG} EM spawn timeout; see ${LOG_DIR}/em_daemon.stdout / ${GF_EM_LOG_DIR}" >&2
+  tail -n 80 "${LOG_DIR}/em_daemon.stdout" >&2 || true
+  exit 1
+fi
+host_info "EM ok pid=${EM_PID} (dlt/RouDi/apps via deploy_config)"
+# =============================================================================
+# --- Flow / GMT (not EM) — DoIP / carla_bridge / live Foxglove -----------------
+# =============================================================================
 
 if [[ "${DOIP_ON}" == "1" ]]; then
   # GMT DEM: real PHM AliveMissed in apps → PersistDtc → shared GF_PER_DIR;
@@ -774,55 +794,40 @@ if [[ "${DOIP_ON}" == "1" ]]; then
   echo "${TAG} DEM: PHM fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET} per=${GF_PER_DIR}"
   host_info "start DoIP OTA server port=${DOIP_PORT} per=${GF_PER_DIR} phm_fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET}"
   : >"${LOG_DIR}/doip_ota.log"
-  # Export diag.yaml timing / ota_transfer into env for gf_doip_ota_server
-  export GF_PROJECT_DIR_FOR_DOIP="${PROJECT_DIR}"
-  eval "$(python - <<'PY'
-import os
-from pathlib import Path
-try:
-    import yaml
-except ImportError:
-    raise SystemExit(0)
-proj = Path(os.environ["GF_PROJECT_DIR_FOR_DOIP"])
-diag = proj / "platform" / "diag.yaml"
-pyaml = proj / "project.yaml"
-if pyaml.is_file():
-    raw = yaml.safe_load(pyaml.read_text(encoding="utf-8")) or {}
-    plat = raw.get("platform") if isinstance(raw, dict) else None
-    if isinstance(plat, dict) and plat.get("diag"):
-        diag = proj / str(plat["diag"]).strip()
-if not diag.is_file():
-    raise SystemExit(0)
-data = yaml.safe_load(diag.read_text(encoding="utf-8")) or {}
-doip = data.get("doip") if isinstance(data.get("doip"), dict) else {}
-timing = data.get("timing") if isinstance(data.get("timing"), dict) else {}
-xfer = data.get("ota_transfer") if isinstance(data.get("ota_transfer"), dict) else {}
-
-def u(v, d):
-    try:
-        return int(str(v), 0) if v is not None else d
-    except Exception:
-        return d
-
-def emit(k, v):
-    print(f"export {k}={v}")
-
-emit("GF_DIAG_S3_SERVER_MS", u(timing.get("s3_server_ms"), 5000))
-emit("GF_DIAG_TP_PERIOD_MS", u(timing.get("tester_present_period_ms"), 2000))
-emit("GF_DIAG_P2_SERVER_MS", u(timing.get("p2_server_ms"), 50))
-emit("GF_DIAG_P2STAR_SERVER_MS", u(timing.get("p2_star_server_ms"), 5000))
-emit("GF_DIAG_SECURITY_DELAY_MS", u(timing.get("security_delay_ms"), 10000))
-mode = str(xfer.get("mode") or "request_file_transfer")
-print(f"export GF_OTA_TRANSFER_MODE={mode}")
-req_p = 1 if bool(xfer.get("require_programming_session", True)) else 0
-req_s = 1 if bool(xfer.get("require_security", True)) else 0
-emit("GF_OTA_REQUIRE_PROG_SESSION", req_p)
-emit("GF_OTA_REQUIRE_SECURITY", req_s)
-emit("GF_OTA_MAX_BLOCK", u(xfer.get("max_block_length"), 1024))
-emit("GF_DOIP_LOGICAL_ADDR", u(doip.get("logical_address"), 0x0E00))
-emit("GF_DOIP_TESTER_ADDR", u(doip.get("tester_address"), 0x0E80))
-PY
-)" || true
+  # DoIP/UDS params from deploy_config.hpp (export for gf_doip_ota_server).
+  if [[ -z "${GF_DIAG_S3_SERVER_MS+x}" ]]; then
+    export GF_DIAG_S3_SERVER_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagS3ServerMs 5000)"
+  fi
+  if [[ -z "${GF_DIAG_TP_PERIOD_MS+x}" ]]; then
+    export GF_DIAG_TP_PERIOD_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagTesterPresentPeriodMs 2000)"
+  fi
+  if [[ -z "${GF_DIAG_P2_SERVER_MS+x}" ]]; then
+    export GF_DIAG_P2_SERVER_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagP2ServerMs 50)"
+  fi
+  if [[ -z "${GF_DIAG_P2STAR_SERVER_MS+x}" ]]; then
+    export GF_DIAG_P2STAR_SERVER_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagP2StarServerMs 5000)"
+  fi
+  if [[ -z "${GF_DIAG_SECURITY_DELAY_MS+x}" ]]; then
+    export GF_DIAG_SECURITY_DELAY_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagSecurityDelayMs 10000)"
+  fi
+  if [[ -z "${GF_OTA_TRANSFER_MODE+x}" ]]; then
+    export GF_OTA_TRANSFER_MODE="$(_gf_hpp_cstr "${DEPLOY_HPP}" kOtaTransferMode request_file_transfer)"
+  fi
+  if [[ -z "${GF_OTA_REQUIRE_PROG_SESSION+x}" ]]; then
+    export GF_OTA_REQUIRE_PROG_SESSION="$(_gf_hpp_bool "${DEPLOY_HPP}" kOtaRequireProgSession 1)"
+  fi
+  if [[ -z "${GF_OTA_REQUIRE_SECURITY+x}" ]]; then
+    export GF_OTA_REQUIRE_SECURITY="$(_gf_hpp_bool "${DEPLOY_HPP}" kOtaRequireSecurity 1)"
+  fi
+  if [[ -z "${GF_OTA_MAX_BLOCK+x}" ]]; then
+    export GF_OTA_MAX_BLOCK="$(_gf_hpp_int "${DEPLOY_HPP}" kOtaMaxBlockLength 1024)"
+  fi
+  if [[ -z "${GF_DOIP_LOGICAL_ADDR+x}" ]]; then
+    export GF_DOIP_LOGICAL_ADDR="$(_gf_hpp_int "${DEPLOY_HPP}" kDoipLogicalAddr 3584)"
+  fi
+  if [[ -z "${GF_DOIP_TESTER_ADDR+x}" ]]; then
+    export GF_DOIP_TESTER_ADDR="$(_gf_hpp_int "${DEPLOY_HPP}" kDoipTesterAddr 3712)"
+  fi
   # Mirror UDS steps to terminal (same lines as GMT OTA log) + keep file
   (
     if command -v stdbuf >/dev/null 2>&1; then
@@ -855,7 +860,7 @@ _fault_ms_for() {
 }
 
 start_consumers() {
-  local apps="${1:-fcm,uss,planning}"
+  local apps="${1:-fcm,planning}"
   local a
   host_info "spawn apps (direct, no EM) apps=${apps}"
   IFS=',' read -r -a _arr <<< "${apps}"
@@ -864,19 +869,32 @@ start_consumers() {
       fcm)
         echo "${TAG} start fcm (PHM fault_ms=$(_fault_ms_for fcm))"
         host_info "start app=fcm fault_ms=$(_fault_ms_for fcm)"
-        GF_DLT_APP_ID=FCM_ GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
+        # stdbuf: line-buffer stdout so smoke/timeout kill still leaves Trajectory lines on disk
+        if command -v stdbuf >/dev/null 2>&1; then
+          GF_DLT_APP_ID=FCM_ GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" stdbuf -oL -eL "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
+        else
+          GF_DLT_APP_ID=FCM_ GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
+        fi
         FCM_PID=$!
         ;;
       uss)
         echo "${TAG} start uss (PHM fault_ms=$(_fault_ms_for uss))"
         host_info "start app=uss fault_ms=$(_fault_ms_for uss)"
-        GF_DLT_APP_ID=USS_ GF_PHM_FAULT_MS="$(_fault_ms_for uss)" "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
+        if command -v stdbuf >/dev/null 2>&1; then
+          GF_DLT_APP_ID=USS_ GF_PHM_FAULT_MS="$(_fault_ms_for uss)" stdbuf -oL -eL "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
+        else
+          GF_DLT_APP_ID=USS_ GF_PHM_FAULT_MS="$(_fault_ms_for uss)" "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
+        fi
         USS_PID=$!
         ;;
       planning)
         echo "${TAG} start planning (PHM fault_ms=$(_fault_ms_for planning))"
         host_info "start app=planning fault_ms=$(_fault_ms_for planning)"
-        GF_DLT_APP_ID=PLAN GF_PHM_FAULT_MS="$(_fault_ms_for planning)" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
+        if command -v stdbuf >/dev/null 2>&1; then
+          GF_DLT_APP_ID=PLAN GF_PHM_FAULT_MS="$(_fault_ms_for planning)" stdbuf -oL -eL "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
+        else
+          GF_DLT_APP_ID=PLAN GF_PHM_FAULT_MS="$(_fault_ms_for planning)" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
+        fi
         PLAN_PID=$!
         ;;
     esac
@@ -885,6 +903,21 @@ start_consumers() {
 }
 
 if [[ "${INJECT_ON}" == "1" ]]; then
+  # GMT inject is not EM scope (no inject/tap in em_launch). Stop EM so product
+  # gateway does not dual-publish with inject; Flow starts RouDi+consumers+inject.
+  echo "${TAG} GMT inject (Flow, not EM): stop EM; RouDi+consumers+inject"
+  if [[ -n "${EM_PID:-}" ]]; then
+    kill "${EM_PID}" 2>/dev/null || true
+    pkill -P "${EM_PID}" >/dev/null 2>&1 || true
+    wait "${EM_PID}" 2>/dev/null || true
+    EM_PID=""
+  fi
+  if [[ "${IOX_ON}" == "1" ]]; then
+    : >"${LOG_DIR}/roudi.log"
+    "${ROUDI}" -c "${IOX_TOML}" >"${LOG_DIR}/roudi.log" 2>&1 &
+    ROUDI_PID=$!
+    sleep 0.8
+  fi
   start_consumers "${RUN_APPS}"
   DRIVE_MODE="${GF_INJECT_MODE:-continuous}"
   INJ_PORT="${GF_INJECT_PORT:-8767}"
@@ -1009,21 +1042,41 @@ if [[ "${INJECT_ON}" == "1" ]]; then
   exit 0
 fi
 
-echo "${TAG} fcm / uss / planning ..."
-start_consumers "fcm,uss,planning"
+# Optional CARLA / dry-run bridge — enabled by frame_ingest_config.hpp (or debug GF_*).
+CARLA_BRIDGE_PID=""
+if [[ "${GF_START_CARLA_BRIDGE:-0}" == "1" ]]; then
+  export GF_CARLA_FRAME_PATH="${GF_CARLA_FRAME_PATH:-/tmp/gf_front.rgb}"
+  export GF_CARLA_CMD_PATH="${GF_CARLA_CMD_PATH:-/tmp/gf_carla_cmd.json}"
+  export GF_FRAME_SOURCE="${GF_FRAME_SOURCE:-carla_file}"
+  export CARLA_HOST="${CARLA_HOST:-127.0.0.1}"
+  export CARLA_PORT="${CARLA_PORT:-2000}"
+  BRIDGE_PY="${PROJECT_DIR}/tools/carla_bridge/carla_bridge.py"
+  PY="${GF_CARLA_PYTHON:-python3}"
+  echo "${TAG} carla_bridge → frame=${GF_CARLA_FRAME_PATH} cmd=${GF_CARLA_CMD_PATH} source=${GF_FRAME_SOURCE} dry=${GF_CARLA_BRIDGE_DRY_RUN:-0}"
+  : >"${LOG_DIR}/carla_bridge.log"
+  if [[ -f "${BRIDGE_PY}" ]]; then
+    "${PY}" "${BRIDGE_PY}" >"${LOG_DIR}/carla_bridge.log" 2>&1 &
+    CARLA_BRIDGE_PID=$!
+    sleep 0.4
+    if ! kill -0 "${CARLA_BRIDGE_PID}" 2>/dev/null; then
+      echo "${TAG} WARN: carla_bridge exited early; see ${LOG_DIR}/carla_bridge.log (SIL continues)" >&2
+      CARLA_BRIDGE_PID=""
+    else
+      host_info "carla_bridge ok pid=${CARLA_BRIDGE_PID} dry=${GF_CARLA_BRIDGE_DRY_RUN:-0}"
+    fi
+  else
+    echo "${TAG} WARN: missing ${BRIDGE_PY}" >&2
+  fi
+fi
 
-# max_traj=0 → run forever
-echo "${TAG} start gateway (PHM fault_ms=$(_fault_ms_for gateway))"
-host_info "start app=gateway fault_ms=$(_fault_ms_for gateway)"
-GF_DLT_APP_ID=GATE GF_PHM_FAULT_MS="$(_fault_ms_for gateway)" "${GW}" 0 >"${LOG_DIR}/gateway.log" 2>&1 &
-GW_PID=$!
-sleep 0.5
-host_info "apps launched (direct) — bring-up Info in per-app *.log and ${GF_LOG_FILE}"
+# SOA apps already under EM. Do not direct-spawn gateway/fcm/planning.
+host_info "apps under EM — logs: ${GF_EM_LOG_DIR}/ and ${LOG_DIR}/em_daemon.stdout"
+echo "${TAG} [EM] apps managed by EM pid=${EM_PID} (no direct spawn)"
 
 if [[ "${LIVE_ON}" != "1" ]]; then
-  echo "${TAG} live_tap off — main chain only. logs: ${LOG_DIR}/"
-  echo "${TAG} (enable live_tap in gf-config A → Verify/compile → re-run for Foxglove)"
-  wait "${GW_PID}" || true
+  echo "${TAG} live_tap off — EM only. logs: ${LOG_DIR}/ ${GF_EM_LOG_DIR}/"
+  echo "${TAG} (enable live_tap in gf-config → Verify/compile → re-run for Foxglove)"
+  wait "${EM_PID}" || true
   exit 0
 fi
 
@@ -1096,4 +1149,4 @@ _live_fan &
 LIVE_FAN_PID=$!
 echo "${TAG} live fan pid=${LIVE_FAN_PID} (apps keep running if fan dies; Ctrl+C stops all)"
 echo "${TAG} GMT GUI can open/close anytime; this SIL keeps running"
-wait "${GW_PID}" || true
+wait "${EM_PID}" || true

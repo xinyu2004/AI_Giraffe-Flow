@@ -51,13 +51,33 @@ if [[ ! -f "${IOX_TOML}" ]]; then
   echo "${TAG} ERROR: missing ${IOX_TOML} (compose with iceoryx)" >&2
   exit 1
 fi
-echo "${TAG} RouDi (bounds → ${IOX_TOML}) ..."
-echo "${TAG} NOTE: change iceoryx.mgmt → compose + cmake reconfigure + rebuild iceoryx"
-"${ROUDI}" -c "${IOX_TOML}" >"${GF_EM_LOG_DIR}/roudi.log" 2>&1 &
-ROUDI_PID=$!
-sleep 1
-
-echo "${TAG} gf_em_daemon (fault_ms=${GF_PHM_FAULT_MS}) ..."
+# CI module smoke (≠ product acceptance). Product launch uses gateway forever ["0"];
+# rewrite a temp launch with args ["15"] so this smoke can terminate.
+export GF_IOX_TOML="${IOX_TOML}"
+export GF_EM_EXEC="${GF_EM_EXEC:-${PROJECT_DIR}/generated/exec.yaml}"
+_SRC_LAUNCH="${PROJECT_DIR}/generated/em_launch.yaml"
+if [[ ! -f "${_SRC_LAUNCH}" ]]; then
+  _SRC_LAUNCH="${GF_PLATFORM_DIR}/em_launch.yaml"
+fi
+SMOKE_LAUNCH="${GF_EM_LOG_DIR}/em_launch.smoke.yaml"
+python3 - "${_SRC_LAUNCH}" "${SMOKE_LAUNCH}" <<'PY'
+import sys, yaml
+from pathlib import Path
+src, dst = Path(sys.argv[1]), Path(sys.argv[2])
+doc = yaml.safe_load(src.read_text(encoding="utf-8")) or {}
+for p in doc.get("processes") or []:
+    if isinstance(p, dict) and p.get("name") == "adapter.vehicle_can_gateway":
+        p["args"] = ["15"]
+dst.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+PY
+export GF_EM_LAUNCH="${SMOKE_LAUNCH}"
+echo "${TAG} gf_em_daemon first (HOST); launch=${GF_EM_LAUNCH} (fault_ms=${GF_PHM_FAULT_MS}) ..."
+if ! grep -q 'host.iox_roudi' "${GF_EM_LAUNCH}" 2>/dev/null; then
+  echo "${TAG} RouDi (legacy pre-start; launch has no host.iox_roudi) ..."
+  "${ROUDI}" -c "${IOX_TOML}" >"${GF_EM_LOG_DIR}/roudi.log" 2>&1 &
+  ROUDI_PID=$!
+  sleep 1
+fi
 GF_EM_DEADLINE_MS="${GF_EM_DEADLINE_MS:-90000}" \
   "${EM}" \
   --platform "${GF_PLATFORM_DIR}" \

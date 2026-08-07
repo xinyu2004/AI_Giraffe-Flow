@@ -153,6 +153,29 @@ def test_validate_rejects_duplicate_phm() -> None:
     assert any("duplicate process" in e for e in errors2)
 
 
+def test_validate_rejects_daemon_execution_client_true() -> None:
+    errors, _warnings, checks = validate_platform(
+        {
+            "exec": {
+                "function_groups": [{"id": "MachineFG", "initial": "Running"}],
+                "processes": [
+                    {
+                        "name": "host.iox_roudi",
+                        "function_group": "MachineFG",
+                        "depends_on": [],
+                        "execution_client": True,
+                    }
+                ],
+            }
+        },
+        ap_processes=set(),
+    )
+    assert any("execution_client must be false" in e for e in errors)
+    assert any(
+        c.get("id") == "platform_exec_processes" and c.get("status") == "fail" for c in checks
+    )
+
+
 def test_validate_rejects_external_process() -> None:
     errors, _warnings, checks = validate_platform(
         {

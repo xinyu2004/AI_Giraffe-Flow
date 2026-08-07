@@ -40,6 +40,8 @@ class Logger {
 
   void Configure(LogConfig cfg);
   void ConfigureFromYaml(std::string_view yaml_text);
+  /// Product path: load gf_gen/log_config.hpp (GF_HAS_LOG_CONFIG). Returns false if absent.
+  bool ConfigureFromGenerated();
   /// After Configure*: honor GF_LOG_FILE or GF_LOG_DIR/giraffe_modules.log (file sink).
   void ApplyEnvFileSink();
   [[nodiscard]] const LogConfig& Config() const noexcept { return cfg_; }

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -210,6 +211,67 @@ class ReqEditor(QWidget):
         stage_l.addWidget(self._obs_hint)
         root.addWidget(stage)
 
+        # frame_ingest — behavior freeze (compose→compile); not a live JSON tip
+        fi = QGroupBox(t("帧摄入 frame_ingest"))
+        fi_l = QVBoxLayout(fi)
+        fi_l.setContentsMargins(4, 4, 4, 4)
+        fi_l.setSpacing(2)
+        tipify(fi, T.SKU_FRAME_INGEST)
+        fi_f = _form()
+        self._fi_source = TintedComboBox()
+        tipify(self._fi_source, T.SKU_FI_SOURCE)
+        for value, label in (
+            ("none", "none（无帧 SIL）"),
+            ("synth", "synth"),
+            ("file", "file"),
+            ("carla_file", "carla_file"),
+        ):
+            self._fi_source.addItem(t(label), value)
+        self._fi_source.currentIndexChanged.connect(self._on_any)
+        self._fi_backend = TintedComboBox()
+        tipify(self._fi_backend, T.SKU_FI_BACKEND)
+        self._fi_backend.addItem(t("stub"), "stub")
+        self._fi_backend.addItem(t("onnx"), "onnx")
+        self._fi_backend.currentIndexChanged.connect(self._on_any)
+        self._fi_bridge = QCheckBox(t("启动 carla_bridge"))
+        tipify(self._fi_bridge, T.SKU_FI_BRIDGE)
+        self._fi_bridge.toggled.connect(self._on_fi_bridge_or_any)
+        self._fi_dry = QCheckBox(t("dry_run（无 CARLA UE）"))
+        tipify(self._fi_dry, T.SKU_FI_DRY)
+        self._fi_dry.toggled.connect(self._on_any)
+        self._fi_demo = QCheckBox(t("demo 强制变道"))
+        tipify(self._fi_demo, T.SKU_FI_DEMO)
+        self._fi_demo.toggled.connect(self._on_fi_bridge_or_any)
+        self._fi_demo_sec = QSpinBox()
+        tipify(self._fi_demo_sec, T.SKU_FI_DEMO_SEC)
+        self._fi_demo_sec.setRange(1, 120)
+        self._fi_demo_sec.setValue(8)
+        self._fi_demo_sec.valueChanged.connect(self._on_any)
+        self._fi_path_frame = QLineEdit()
+        tipify(self._fi_path_frame, T.SKU_FI_PATH_FRAME)
+        self._fi_path_frame.textChanged.connect(self._on_any)
+        self._fi_path_frame.editingFinished.connect(self._end_doc_edit)
+        self._fi_path_cmd = QLineEdit()
+        tipify(self._fi_path_cmd, T.SKU_FI_PATH_CMD)
+        self._fi_path_cmd.textChanged.connect(self._on_any)
+        self._fi_path_cmd.editingFinished.connect(self._end_doc_edit)
+        fi_f.addRow(t("帧源"), self._fi_source)
+        fi_f.addRow(t("感知后端"), self._fi_backend)
+        fi_f.addRow("", self._fi_bridge)
+        fi_f.addRow("", self._fi_dry)
+        fi_f.addRow("", self._fi_demo)
+        fi_f.addRow(t("demo 秒"), self._fi_demo_sec)
+        fi_f.addRow(t("帧路径"), self._fi_path_frame)
+        fi_f.addRow(t("cmd 路径"), self._fi_path_cmd)
+        fi_l.addLayout(fi_f)
+        self._fi_hint = QLabel(
+            t("改此处 → Save/Verify → compile → run_sil（行为编译冻结，勿手改 tip JSON）")
+        )
+        self._fi_hint.setWordWrap(True)
+        self._fi_hint.setStyleSheet("color:#666; font-size:10px;")
+        fi_l.addWidget(self._fi_hint)
+        root.addWidget(fi)
+
         binds = QGroupBox(t("通信绑定"))
         binds_l = QVBoxLayout(binds)
         binds_l.setContentsMargins(4, 4, 4, 4)
@@ -323,6 +385,23 @@ class ReqEditor(QWidget):
             self._set_combo_data(self._record_mode, str(rec or "minimal"))
             self._record_svcs.set_selected([])
 
+        fi = req.get("frame_ingest") if isinstance(req.get("frame_ingest"), dict) else {}
+        br = fi.get("bridge") if isinstance(fi.get("bridge"), dict) else {}
+        paths = fi.get("paths") if isinstance(fi.get("paths"), dict) else {}
+        self._set_combo_data(
+            self._fi_source, str(fi.get("frame_source") or "none")
+        )
+        self._set_combo_data(
+            self._fi_backend, str(fi.get("perception_backend") or "stub")
+        )
+        self._fi_bridge.setChecked(bool(br.get("enabled", False)))
+        self._fi_dry.setChecked(bool(br.get("dry_run", True)))
+        self._fi_demo.setChecked(bool(br.get("demo_lane_change", False)))
+        self._fi_demo_sec.setValue(int(br.get("demo_lane_change_sec") or 8))
+        self._fi_path_frame.setText(str(paths.get("frame") or "/tmp/gf_front.rgb"))
+        self._fi_path_cmd.setText(str(paths.get("cmd") or "/tmp/gf_carla_cmd.json"))
+        self._apply_fi_ui()
+
         acc = req.get("acceptance") or {}
         if isinstance(acc, dict):
             self._acc_desc.setText(str(acc.get("description") or ""))
@@ -399,6 +478,17 @@ class ReqEditor(QWidget):
             self._obs_hint.setText(" · ".join(bits) if bits else "")
             self._obs_hint.setStyleSheet("color:#666; font-size:10px;")
 
+    def _apply_fi_ui(self) -> None:
+        on = self._fi_bridge.isChecked()
+        self._fi_dry.setEnabled(on)
+        self._fi_demo.setEnabled(on)
+        self._fi_demo_sec.setEnabled(on and self._fi_demo.isChecked())
+
+    def _on_fi_bridge_or_any(self, *_args: object) -> None:
+        if not self._loading:
+            self._apply_fi_ui()
+        self._on_any()
+
     def _on_profile_or_any(self, *_args: object) -> None:
         if not self._loading:
             self._apply_profile_ui()
@@ -408,7 +498,7 @@ class ReqEditor(QWidget):
         if self._loading or not self._session:
             return
         src = self.sender()
-        coalesce = isinstance(src, QLineEdit)
+        coalesce = isinstance(src, (QLineEdit, QSpinBox))
         self._checkpoint(coalesce=coalesce)
         req = self._session.req
         prof = self._profile.currentData()
@@ -439,6 +529,20 @@ class ReqEditor(QWidget):
             "record": {
                 "mode": str(self._record_mode.currentData() or "minimal"),
                 "services": self._record_svcs.selected(),
+            },
+        }
+        req["frame_ingest"] = {
+            "frame_source": str(self._fi_source.currentData() or "none"),
+            "perception_backend": str(self._fi_backend.currentData() or "stub"),
+            "bridge": {
+                "enabled": self._fi_bridge.isChecked(),
+                "dry_run": self._fi_dry.isChecked(),
+                "demo_lane_change": self._fi_demo.isChecked(),
+                "demo_lane_change_sec": int(self._fi_demo_sec.value()),
+            },
+            "paths": {
+                "frame": self._fi_path_frame.text().strip() or "/tmp/gf_front.rgb",
+                "cmd": self._fi_path_cmd.text().strip() or "/tmp/gf_carla_cmd.json",
             },
         }
         prev_acc = req.get("acceptance") if isinstance(req.get("acceptance"), dict) else {}

@@ -2,6 +2,10 @@
 
 #include "gf_ara/log/dlt_sink.hpp"
 
+#if defined(GF_HAS_LOG_CONFIG) && GF_HAS_LOG_CONFIG
+#include <gf_gen/log_config.hpp>
+#endif
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -139,6 +143,49 @@ void Logger::ConfigureFromYaml(std::string_view yaml_text) {
     cfg.contexts[(*it)[1].str()] = ParseLevel((*it)[2].str(), cfg.default_level);
   }
   Configure(std::move(cfg));
+}
+
+bool Logger::ConfigureFromGenerated() {
+#if defined(GF_HAS_LOG_CONFIG) && GF_HAS_LOG_CONFIG
+  LogConfig cfg;
+  cfg.default_level = ParseLevel(gf_gen::log::kDefaultLevel, LogLevel::kInfo);
+  const std::string color = gf_gen::log::kColor ? gf_gen::log::kColor : "auto";
+  if (color == "on") {
+    cfg.color = ColorMode::kOn;
+  } else if (color == "off") {
+    cfg.color = ColorMode::kOff;
+  } else {
+    cfg.color = ColorMode::kAuto;
+  }
+  cfg.sinks.clear();
+  for (std::size_t i = 0; i < gf_gen::log::kSinkCount; ++i) {
+    if (gf_gen::log::kSinks[i] != nullptr) {
+      cfg.sinks.emplace_back(gf_gen::log::kSinks[i]);
+    }
+  }
+  if (cfg.sinks.empty()) {
+    cfg.sinks = {"stdout", "stderr"};
+  }
+  if (gf_gen::log::kFilePath != nullptr) {
+    cfg.file_path = gf_gen::log::kFilePath;
+  }
+  cfg.file_max_bytes = gf_gen::log::kFileMaxBytes;
+  if (gf_gen::log::kDltAppId != nullptr) {
+    cfg.dlt_app_id = gf_gen::log::kDltAppId;
+  }
+  cfg.dlt_max_contexts = gf_gen::log::kDltMaxContexts;
+  for (std::size_t i = 0; i < gf_gen::log::kContextCount; ++i) {
+    const auto& c = gf_gen::log::kContexts[i];
+    if (c.id == nullptr || !*c.id) {
+      continue;
+    }
+    cfg.contexts[c.id] = ParseLevel(c.level ? c.level : "INFO", cfg.default_level);
+  }
+  Configure(std::move(cfg));
+  return true;
+#else
+  return false;
+#endif
 }
 
 void Logger::ApplyEnvFileSink() {

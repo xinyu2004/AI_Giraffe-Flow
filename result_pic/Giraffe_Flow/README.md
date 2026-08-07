@@ -23,4 +23,4 @@ python3 result_pic/Giraffe_Flow/scripts/render_gif.py
 - GMT：Logging（DLT :3490）· dlt-viewer / receive
 - 左：CARLA → 板（漏斗箭头：左粗右细 = 视频/大数据入）
 - 右：板 → Foxglove（比 GMT tap 线粗，比 CARLA 漏斗克制）
-- HOST 启动叙事见 [Giraffe_Modules](../Giraffe_Modules/README.md)（systemd/init → dlt? · RouDi · EM）
+- 启动叙事见 [Giraffe_Modules](../Giraffe_Modules/README.md)（systemd/init → EM → daemons via gf-config + SOA apps）

@@ -1,13 +1,23 @@
-# exec + SM（function_groups → middleware/sm StateClient）
+# exec + SM — EM entry; optional host.dlt / host.iox_roudi are EM-managed daemons.
+# Product freeze → generated/exec.yaml (compose).
 schema_version: "0.1"
 function_groups:
   - id: MachineFG
     initial: Running
-    # implied states: Off | Running | Updating (M1)
 processes:
-  - name: adapter.vehicle_can_gateway
+  - name: host.dlt_daemon
     function_group: MachineFG
     depends_on: []
+    execution_client: false
+  - name: host.iox_roudi
+    function_group: MachineFG
+    depends_on:
+      - host.dlt_daemon
+    execution_client: false
+  - name: adapter.vehicle_can_gateway
+    function_group: MachineFG
+    depends_on:
+      - host.iox_roudi
     execution_client: true
   - name: perception.fcm
     function_group: MachineFG

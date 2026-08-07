@@ -1,0 +1,24 @@
+# Deprecated name — use giraffe-em.service.example (EM is the only entry).
+# Kept so old copy paths still open; content matches EM unit.
+
+[Unit]
+Description=Giraffe Flow EM (gf_em_daemon) — see giraffe-em.service.example
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=giraffe
+Group=giraffe
+WorkingDirectory=/opt/giraffe/current
+Environment=GF_PLATFORM_DIR=/opt/giraffe/current/platform
+Environment=GF_BUILD_DIR=/opt/giraffe/current/build
+Environment=GF_IOX_TOML=/opt/giraffe/current/generated/iox_roudi.toml
+Environment=GF_EM_LOG_DIR=/var/log/giraffe/em
+Environment=LD_LIBRARY_PATH=/opt/giraffe/current/middleware/.deps-prefix/lib
+ExecStart=/opt/giraffe/current/build/middleware/exec/gf_em_daemon --platform ${GF_PLATFORM_DIR} --build-dir ${GF_BUILD_DIR} --log-dir ${GF_EM_LOG_DIR} --deadline-ms 0
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

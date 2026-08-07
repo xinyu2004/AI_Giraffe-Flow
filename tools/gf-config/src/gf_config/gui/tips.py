@@ -79,9 +79,14 @@ PROC_DEPS = (
     "用来保证例如 gateway 先于感知/规划就绪。"
 )
 PROC_EC = (
-    "ExecutionClient：进程是否主动向 EM 汇报 Running/Terminating。\n"
+    "ExecutionClient：仅 SOA 应用可选。进程是否主动向 EM 汇报 Running/Terminating。\n"
     "• true：期望进程内 ExecutionClient 握手（规范路径）\n"
-    "• false：EM 只按 Spawn/退出码管理，不期待客户端状态上报"
+    "• false：EM 只按 Spawn/退出码管理，不期待客户端状态上报\n"
+    "host.* platform daemons 固定 n/a（不可选 true）。"
+)
+PROC_EC_DAEMON = (
+    "platform daemon（host.*）：外部二进制，无 ExecutionClient。"
+    "EM 只按 Spawn/退出码管理；Verify 会拒绝 execution_client=true。"
 )
 PROC_EC_ITEMS: dict[str, str] = {
     "true": "进程会通过 ExecutionClient 向 EM 汇报状态（推荐，贴近 ara::exec）。",
@@ -310,7 +315,7 @@ IOX_WARN = (
     "compose → cmake 重配并重编 iceoryx（如 compile_sil）后才生效。\n"
     "• mempools：决定用户数据块共享内存（payload），compose 写出 "
     "iox_roudi.toml 后重启 RouDi 即可，不必重编。\n"
-    "req.bindings 含 iceoryx 时 SIL 会自动起 RouDi。"
+    "req.bindings 含 iceoryx 时由 EM 拉起 RouDi（platform daemon，非与 EM 并列）。"
 )
 IOX_PUB = (
     "全局最多同时存在的 Publisher 端口数（编译进 iceoryx，对应 IOX_MAX_PUBLISHERS）。"
@@ -388,6 +393,25 @@ SKU_LIVE_MODE_ITEMS: dict[str, str] = {
     "explicit": "只镜像白名单服务；必须至少选一项，否则 Verify 失败。",
 }
 SKU_LIVE_SVCS = "explicit 模式下要镜像的服务；从 wiring 多选，避免手打拼写错误。"
+SKU_FRAME_INGEST = (
+    "帧摄入（frame_ingest）：CARLA / 文件 / 未来 ISP·摄像头的 RGB 入口。"
+    "与 live_tap 白名单不同——这里是行为轨迹，经 compose 冻结为 "
+    "frame_ingest_config.hpp（apps + run_sil）。改完请 Verify + compile_sil，再 run_sil。"
+)
+SKU_FI_SOURCE = (
+    "帧从哪来：none=无帧 SIL stub；synth=进程内彩条；"
+    "file/carla_file=读 GF 路径上的 raw RGB+json（同一协议）。"
+)
+SKU_FI_BACKEND = "像素怎么用：stub=帧驱动计数；onnx=检测路径（需 -DGF_WITH_ONNX）。"
+SKU_FI_BRIDGE = "run_sil 是否后台启动 tools/carla_bridge（写帧协议 + 执行变道 cmd）。"
+SKU_FI_DRY = (
+    "dry_run=无 CARLA UE 时写合成帧（协议自检）。"
+    "真车联调请取消勾选并启动 UE。"
+)
+SKU_FI_DEMO = "gateway 定时强制写一次 lane_change（演示变道；不经规划决策）。"
+SKU_FI_DEMO_SEC = "demo 变道触发时刻（秒，自 gateway 启动起算）。"
+SKU_FI_PATH_FRAME = "raw RGB 路径（旁路 .json sidecar）；bridge 写、fcm 读。"
+SKU_FI_PATH_CMD = "gateway→bridge 变道 cmd JSON 路径。"
 SKU_RECORD = (
     "录制策略：控制 measure/record 采多少。\n"
     "off=不录；minimal/sampled/full 依次更全、更重。"

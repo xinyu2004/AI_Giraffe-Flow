@@ -1,0 +1,4 @@
+# Install the carla client that matches your CARLA/UE build, e.g.:
+#   pip install /path/to/CARLA/PythonAPI/carla/dist/carla-*-py3*.egg
+# Dry-run mode needs no third-party packages.
+# carla>=0.9.14

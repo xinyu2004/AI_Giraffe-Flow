@@ -73,7 +73,7 @@ entities:
         << "schema_version: \"0.1\"\nprocesses:\n"
         << "  - name: stub.keeper\n"
         << "    binary: " << stub.string() << "\n"
-        << "    args: [\"--hold-ms\", \"2000\"]\n"
+        << "    args: [\"--hold-ms\", \"400\"]\n"
         << "  - name: stub.restarter\n"
         << "    binary: " << stub.string() << "\n"
         << "    args: [\"--exit-restart\"]\n"
@@ -103,7 +103,7 @@ entities:
   }
   Pass("EMD-03", "StartAll spawned");
 
-  const int rc = em.RunForMs(8000);
+  const int rc = em.RunForMs(2000);
   if (rc != 0) {
     return Fail("EMD-04", "RunForMs non-zero");
   }
@@ -115,9 +115,150 @@ entities:
     return Fail("EMD-04", "expected RestartCount>=1");
   }
   Pass("EMD-04", "OS relaunch on exit 75");
+  em.ShutdownAll();
 
-  std::cout << "gf_em_daemon_smoke OK launches_restarter="
-            << em.LaunchCount("stub.restarter")
-            << " restarts=" << em.RestartCount("stub.restarter") << "\n";
+  // --- EMD-05: dependency cycle must fail Load ---
+  {
+    std::ofstream(platform / "exec.yaml") << R"(
+schema_version: "0.1"
+function_groups:
+  - id: MachineFG
+    initial: Running
+processes:
+  - name: a
+    function_group: MachineFG
+    depends_on: [b]
+    execution_client: true
+  - name: b
+    function_group: MachineFG
+    depends_on: [a]
+    execution_client: true
+)";
+    std::ofstream(tmp / "em_launch_cycle.yaml")
+        << "schema_version: \"0.1\"\nprocesses:\n"
+        << "  - name: a\n    binary: " << stub.string() << "\n    args: [\"--hold-ms\", \"50\"]\n"
+        << "  - name: b\n    binary: " << stub.string() << "\n    args: [\"--hold-ms\", \"50\"]\n";
+    gf_ara::exec::EmDaemon em_cycle;
+    if (em_cycle.Load(platform.string(), (tmp / "em_launch_cycle.yaml").string(),
+                      tmp.string(), logs.string())) {
+      return Fail("EMD-05", "cycle should fail Load");
+    }
+    Pass("EMD-05", "dependency cycle rejected");
+  }
+
+  // --- EMD-06: unknown depends_on ---
+  {
+    std::ofstream(platform / "exec.yaml") << R"(
+schema_version: "0.1"
+function_groups:
+  - id: MachineFG
+    initial: Running
+processes:
+  - name: only
+    function_group: MachineFG
+    depends_on: [missing.dep]
+    execution_client: true
+)";
+    std::ofstream(tmp / "em_launch_unk.yaml")
+        << "schema_version: \"0.1\"\nprocesses:\n"
+        << "  - name: only\n    binary: " << stub.string() << "\n    args: [\"--hold-ms\", \"50\"]\n";
+    gf_ara::exec::EmDaemon em_unk;
+    if (em_unk.Load(platform.string(), (tmp / "em_launch_unk.yaml").string(), tmp.string(),
+                    logs.string())) {
+      return Fail("EMD-06", "unknown depends_on should fail Load");
+    }
+    Pass("EMD-06", "unknown depends_on rejected");
+  }
+
+  // --- EMD-07: topo order base → mid → app (HOST-style platform then app) ---
+  {
+    std::ofstream(platform / "exec.yaml") << R"(
+schema_version: "0.1"
+function_groups:
+  - id: MachineFG
+    initial: Running
+processes:
+  - name: host.base
+    function_group: MachineFG
+    depends_on: []
+    execution_client: false
+  - name: host.mid
+    function_group: MachineFG
+    depends_on: [host.base]
+    execution_client: false
+  - name: app.top
+    function_group: MachineFG
+    depends_on: [host.mid]
+    execution_client: true
+)";
+    std::ofstream(platform / "phm.yaml") << "schema_version: \"0.1\"\nentities: []\n";
+    std::ofstream(tmp / "em_launch_ord.yaml")
+        << "schema_version: \"0.1\"\nprocesses:\n"
+        << "  - name: host.base\n    binary: " << stub.string()
+        << "\n    args: [\"--hold-ms\", \"200\"]\n"
+        << "  - name: host.mid\n    binary: " << stub.string()
+        << "\n    args: [\"--hold-ms\", \"200\"]\n"
+        << "  - name: app.top\n    binary: " << stub.string()
+        << "\n    args: [\"--hold-ms\", \"200\"]\n";
+    gf_ara::exec::EmDaemon em_ord;
+    if (!em_ord.Load(platform.string(), (tmp / "em_launch_ord.yaml").string(), tmp.string(),
+                     logs.string())) {
+      return Fail("EMD-07", "Load order fixture");
+    }
+    const auto& procs = em_ord.Config().processes;
+    if (procs.size() != 3 || procs[0].name != "host.base" || procs[1].name != "host.mid" ||
+        procs[2].name != "app.top") {
+      return Fail("EMD-07", "topo order not base→mid→app");
+    }
+    if (!em_ord.StartAll()) {
+      return Fail("EMD-07", "StartAll");
+    }
+    Pass("EMD-07", "topo order base→mid→app + StartAll");
+    em_ord.ShutdownAll();
+  }
+
+  // --- EMD-08: max_restarts cap (no infinite relaunch) ---
+  {
+    std::ofstream(platform / "exec.yaml") << R"(
+schema_version: "0.1"
+function_groups:
+  - id: MachineFG
+    initial: Running
+processes:
+  - name: stub.cap
+    function_group: MachineFG
+    depends_on: []
+    execution_client: true
+)";
+    std::ofstream(platform / "phm.yaml") << R"(
+schema_version: "0.1"
+entities:
+  - id: cap_alive
+    process: stub.cap
+    alive_period_ms: 50
+    alive_timeout_ms: 200
+    on_failure: restart
+)";
+    std::ofstream(tmp / "em_launch_cap.yaml")
+        << "schema_version: \"0.1\"\nprocesses:\n"
+        << "  - name: stub.cap\n    binary: " << stub.string() << "\n"
+        << "    args: [\"--exit-restart\"]\n    max_restarts: 1\n";
+    gf_ara::exec::EmDaemon em_cap;
+    if (!em_cap.Load(platform.string(), (tmp / "em_launch_cap.yaml").string(), tmp.string(),
+                     logs.string())) {
+      return Fail("EMD-08", "Load");
+    }
+    if (!em_cap.StartAll()) {
+      return Fail("EMD-08", "StartAll");
+    }
+    (void)em_cap.RunForMs(1500);
+    if (em_cap.RestartCount("stub.cap") > 1) {
+      return Fail("EMD-08", "restarts exceeded max_restarts=1");
+    }
+    Pass("EMD-08", "max_restarts capped");
+    em_cap.ShutdownAll();
+  }
+
+  std::cout << "gf_em_daemon_smoke OK EMD-01..08\n";
   return EXIT_SUCCESS;
 }

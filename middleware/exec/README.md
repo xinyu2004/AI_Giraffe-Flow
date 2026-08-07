@@ -6,7 +6,7 @@ ARA-inspired **Execution** — Client（进程侧）+ 进程内 **EM 账本** + 
 |--------------|------|
 | `ExecutionClient` | Offer / ReportExecutionState |
 | `ExecutionManager` | 注册、状态镜像、`RequestRestart` 计数 |
-| `EmDaemon` / `gf_em_daemon` | 读 `exec.yaml` + `em_launch.yaml` + `phm.yaml`；`gf::osal::SpawnProcess`；exit 75 / 信号 → relaunch |
+| `EmDaemon` / `gf_em_daemon` | 产品：`LoadFromDeployConfig`（`deploy_config.hpp`）；smoke：YAML；`SpawnProcess`；exit 75 / 信号 → relaunch |
 
 **重启策略**
 
@@ -19,25 +19,22 @@ ARA-inspired **Execution** — Client（进程侧）+ 进程内 **EM 账本** + 
 
 ```mermaid
 flowchart TD
-  I[systemd/init] --> H[HOST 平台守护]
-  H -->|按需 log.yaml sinks| D[dlt-daemon]
-  H --> A[RouDi]
-  H --> B[gf_em_daemon]
-  B --> C[EM: Load exec + em_launch + phm]
-  C --> E[TopoSort 依赖序]
-  E --> F[按序 OSAL SpawnProcess]
-  F --> G[PollOnce: WaitProcess WNOHANG]
-  G -->|exit 75 / 信号 且 restart| R[SpawnProcess relaunch]
+  I[systemd_or_run_sil] --> B[EM_gf_em_daemon]
+  B --> C[LoadFromDeployConfig]
+  C --> R0[reclaim_stale_dlt_RouDi_IPC]
+  R0 --> E[TopoSort]
+  E --> F[Spawn dlt_optional RouDi_optional apps]
+  F --> G[PollOnce]
+  G -->|exit 75 and restart| R[relaunch]
   R --> G
-  G -->|正常退出或达 max_restarts| T[terminal_exit]
-  G -->|shutdown| K[Terminate → Kill → Wait]
 ```
 
 要点：
 
-1. **HOST 先于 Apps** — `dlt-daemon?` → RouDi → EM；业务进程由 EM 统一拉起。
+1. **入口 = EM** — OS/`run_sil`/后期单一 systemd unit **只起 EM**；daemons（dlt?/RouDi?/…）与 SOA apps 按 gf-config 由 EM Spawn。
 2. **进程原语只经 OSAL** — `EmDaemon` 不直接 `fork`/`exec`/`waitpid`/`kill`。
-3. **配置三件套** — `platform/exec.yaml`（依赖）、`platform/em_launch.yaml`（二进制）、`phm.yaml`（`on_failure: restart`）。
+3. **配置** — 作者：`platform/*.yaml`；产品冻结：`generated/include/gf_gen/deploy_config.hpp`（compose → 编进 `gf_em_daemon`）。YAML dump 仅人读；smoke 可用 `--launch` / `GF_EM_USE_YAML=1`。
+4. **CI**：`ctest -R gf_em_daemon_smoke`（最严模块门禁）；功能验收走 `run_sil`，不用 smoke 冒充。
 
 ```bash
 ctest -R 'gf_exec_|gf_em_daemon' --output-on-failure

@@ -10,6 +10,13 @@ target_include_directories(gf_ara_log PUBLIC
 )
 target_link_libraries(gf_ara_log PUBLIC gf_ara::core)
 
+# SKU compose freezes platform/log.yaml → log_config.hpp.
+if(DEFINED GF_GENERATED_DIR AND EXISTS
+   "${GF_GENERATED_DIR}/include/gf_gen/log_config.hpp")
+  target_include_directories(gf_ara_log PUBLIC "${GF_GENERATED_DIR}/include")
+  target_compile_definitions(gf_ara_log PUBLIC GF_HAS_LOG_CONFIG=1)
+endif()
+
 if(GF_DLT_FOUND AND TARGET dlt)
   target_compile_definitions(gf_ara_log PUBLIC GF_HAVE_DLT=1)
   target_link_libraries(gf_ara_log PUBLIC dlt)

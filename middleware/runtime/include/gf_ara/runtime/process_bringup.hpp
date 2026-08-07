@@ -1,8 +1,10 @@
 #pragma once
 
 // Process bring-up (SIL/HIL shared): Offer→Running + SM FG + PHM Alive/Logical + Collector/Log.
+// Config: prefer compose-frozen gf_gen/platform_tables.hpp (SKU build); else YAML under
+// GF_PLATFORM_DIR (smoke / no tables).
 // Env:
-//   GF_PLATFORM_DIR     path to platform/ (or project root containing platform/)
+//   GF_PLATFORM_DIR     path to platform/ (YAML fallback when tables not compiled in)
 //   GF_PHM_FAULT_MS     skip ReportAlive for N ms after first Alive (0=off)
 //   GF_PHM_FAULT_INJECT_MS  alias of GF_PHM_FAULT_MS
 //   GF_SM_ENTER_UPDATING_ON_FAULT  if 1, health_fault enters Updating (+ pause PHM)

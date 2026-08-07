@@ -12,7 +12,10 @@ import yaml
 
 from gf_codegen.compose.apply_wiring import apply_wiring
 from gf_codegen.compose.emit_build_cmake import emit_build_cmake, emit_observability_json
+from gf_codegen.compose.emit_deploy_config import emit_deploy_config
+from gf_codegen.compose.emit_frame_ingest import emit_frame_ingest
 from gf_codegen.compose.emit_iox import emit_iox_assets
+from gf_codegen.compose.emit_log_config import emit_log_config
 from gf_codegen.compose.emit_platform_tables import emit_platform_tables
 from gf_codegen.compose.import_oem import import_oem
 from gf_codegen.compose.lineage import run_lineage
@@ -120,10 +123,28 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     obs_json = paths.project_dir / "generated" / "observability.json"
     emit_observability_json(req, obs_json, wiring=wiring)
     gen_dir = paths.project_dir / "generated"
+    fi_meta = emit_frame_ingest(req, gen_dir)
     plat_loaded = sor.get("platform_manifest") if isinstance(sor.get("platform_manifest"), dict) else {}
+    deploy_meta = emit_deploy_config(
+        req,
+        plat_loaded,
+        paths.project_dir / "platform",
+        gen_dir,
+        wiring=wiring,
+    )
+    log_meta = emit_log_config(plat_loaded, gen_dir)
+    # exec/phm tables: prefer generated/exec.yaml written by deploy_config.
+    pt_path = emit_platform_tables(plat_loaded, gen_dir)
     iox_meta = emit_iox_assets(gen_dir, plat_loaded, req)
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)
     report.setdefault("outputs", {})["observability"] = str(obs_json)
+    report.setdefault("outputs", {})["frame_ingest_hpp"] = fi_meta["hpp"]
+    report.setdefault("outputs", {})["deploy_config_hpp"] = deploy_meta["hpp"]
+    report.setdefault("outputs", {})["log_config_hpp"] = log_meta["hpp"]
+    report.setdefault("outputs", {})["em_launch"] = deploy_meta["em_launch"]
+    report.setdefault("outputs", {})["exec_generated"] = deploy_meta["exec"]
+    if pt_path is not None:
+        report.setdefault("outputs", {})["platform_tables_hpp"] = str(pt_path)
     if iox_meta:
         report.setdefault("outputs", {})["iox_roudi_toml"] = iox_meta["toml"]
         report.setdefault("outputs", {})["iox_mgmt_cmake"] = iox_meta["cmake"]
@@ -133,6 +154,13 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     print(f"lineage wrote: {paths.lineage_report} (ok={report['ok']})")
     print(f"sku cmake wrote: {sku_cmake}")
     print(f"observability wrote: {obs_json}")
+    print(f"frame_ingest wrote: {fi_meta['hpp']}")
+    print(f"deploy_config wrote: {deploy_meta['hpp']}")
+    print(f"log_config wrote: {log_meta['hpp']}")
+    print(f"em_launch (human dump) wrote: {deploy_meta['em_launch']}")
+    print(f"exec (human dump) wrote: {deploy_meta['exec']}")
+    if pt_path is not None:
+        print(f"platform_tables wrote: {pt_path}")
     if iox_meta:
         print(f"iox_roudi.toml wrote: {iox_meta['toml']}")
         print(

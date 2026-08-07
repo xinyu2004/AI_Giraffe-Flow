@@ -42,6 +42,19 @@ AI_Giraffe-Flow/
 
 ---
 
+## 1b. 配置：白名单 vs 行为（全仓原则）
+
+| 类别 | 运行期 JSON/YAML | 入口 |
+|------|------------------|------|
+| 观测**白名单**（live_tap / record 服务列表） | 可以 | gf-config → `observability.json` |
+| **行为轨迹**（帧从哪来、起 bridge、dry_run…） | **不可以** | gf-config → compose → **编译冻结** |
+
+样板：`projects/oem_a/afc_no_uss` 的 `frame_ingest`。  
+细则与 backlog：[CONFIG_RUNTIME_POLICY.md](CONFIG_RUNTIME_POLICY.md)。  
+**其它 project 后续同样对齐**；尽量用 gf-config，少手改 YAML。
+
+---
+
 ## 2. 日常功能开发流程（已有稳定 SOR 时）
 
 适用于：在既有服务接口上改感知 / 规划 / 控制逻辑。

@@ -104,13 +104,21 @@ TIP_EN: dict[str, str] = {
         "Start deps: EM launches checked processes first, then Spawns this one "
         "(e.g. gateway before perception/planning)."
     ),
-    "ExecutionClient：进程是否主动向 EM 汇报 Running/Terminating。\n"
+    "ExecutionClient：仅 SOA 应用可选。进程是否主动向 EM 汇报 Running/Terminating。\n"
     "• true：期望进程内 ExecutionClient 握手（规范路径）\n"
-    "• false：EM 只按 Spawn/退出码管理，不期待客户端状态上报": (
-        "ExecutionClient: whether the process reports Running/Terminating to EM.\n"
+    "• false：EM 只按 Spawn/退出码管理，不期待客户端状态上报\n"
+    "host.* platform daemons 固定 n/a（不可选 true）。": (
+        "ExecutionClient: SOA apps only. Whether the process reports Running/Terminating to EM.\n"
         "• true: expect in-process ExecutionClient handshake (normative)\n"
-        "• false: EM manages by Spawn/exit code only — no client state reports"
+        "• false: EM manages by Spawn/exit code only — no client state reports\n"
+        "host.* platform daemons are fixed n/a (true is not selectable)."
     ),
+    "platform daemon（host.*）：外部二进制，无 ExecutionClient。"
+    "EM 只按 Spawn/退出码管理；Verify 会拒绝 execution_client=true。": (
+        "platform daemon (host.*): external binary — no ExecutionClient. "
+        "EM manages by Spawn/exit code; Verify rejects execution_client=true."
+    ),
+    "n/a · daemon": "n/a · daemon",
     "进程会通过 ExecutionClient 向 EM 汇报状态（推荐，贴近 ara::exec）。": (
         "Process reports state via ExecutionClient (recommended; closer to ara::exec)."
     ),
@@ -410,6 +418,44 @@ TIP_EN: dict[str, str] = {
         "Live tap: mirror canvas services to observability tools. "
         "On → compose adds debug_bridge/iox_obs_tap; run_sil can attach Foxglove WS."
     ),
+    "帧摄入（frame_ingest）：CARLA / 文件 / 未来 ISP·摄像头的 RGB 入口。"
+    "与 live_tap 白名单不同——这里是行为轨迹，经 compose 冻结为 "
+    "frame_ingest_config.hpp（apps + run_sil）。改完请 Verify + compile_sil，再 run_sil。": (
+        "Frame ingest: RGB ingress for CARLA / file / future ISP·camera. "
+        "Unlike live_tap allowlists, this is behavior — frozen as "
+        "frame_ingest_config.hpp (apps + run_sil). "
+        "After edits: Verify + compile_sil, then run_sil."
+    ),
+    "帧从哪来：none=无帧 SIL stub；synth=进程内彩条；"
+    "file/carla_file=读 GF 路径上的 raw RGB+json（同一协议）。": (
+        "Where pixels come from: none=no-frame SIL stub; synth=in-process bars; "
+        "file/carla_file=raw RGB+json at the configured path (same protocol)."
+    ),
+    "像素怎么用：stub=帧驱动计数；onnx=检测路径（需 -DGF_WITH_ONNX）。": (
+        "How pixels are used: stub=frame-driven counts; onnx=detector path "
+        "(needs -DGF_WITH_ONNX)."
+    ),
+    "run_sil 是否后台启动 tools/carla_bridge（写帧协议 + 执行变道 cmd）。": (
+        "Whether run_sil starts tools/carla_bridge (write frame protocol + apply "
+        "lane-change cmd)."
+    ),
+    "dry_run=无 CARLA UE 时写合成帧（协议自检）。"
+    "真车联调请取消勾选并启动 UE。": (
+        "dry_run=synth frames without CARLA UE (protocol self-check). "
+        "For real CARLA, uncheck and start UE."
+    ),
+    "gateway 定时强制写一次 lane_change（演示变道；不经规划决策）。": (
+        "Gateway forces a lane_change once on a timer (demo; not planner-decided)."
+    ),
+    "demo 变道触发时刻（秒，自 gateway 启动起算）。": (
+        "Seconds after gateway start when demo lane-change fires."
+    ),
+    "raw RGB 路径（旁路 .json sidecar）；bridge 写、fcm 读。": (
+        "Raw RGB path (+ .json sidecar); bridge writes, fcm reads."
+    ),
+    "gateway→bridge 变道 cmd JSON 路径。": (
+        "Path for gateway→bridge lane-change cmd JSON."
+    ),
     "live 服务范围：\n"
     "• wiring_all：天花板=页 1 全部 dataflow（推荐）\n"
     "• explicit：只用下面白名单，空名单会导致 Verify 失败": (
@@ -545,13 +591,14 @@ TIP_EN: dict[str, str] = {
     "compose → cmake 重配并重编 iceoryx（如 compile_sil）后才生效。\n"
     "• mempools：决定用户数据块共享内存（payload），compose 写出 "
     "iox_roudi.toml 后重启 RouDi 即可，不必重编。\n"
-    "req.bindings 含 iceoryx 时 SIL 会自动起 RouDi。": (
+    "req.bindings 含 iceoryx 时由 EM 拉起 RouDi（platform daemon，非与 EM 并列）。": (
         "Two knobs, two apply paths:\n"
         "• mgmt.* (IOX_MAX_*): sizes iceoryx_mgmt port tables — needs "
         "compose → cmake reconfigure + rebuild iceoryx (e.g. compile_sil).\n"
         "• mempools: user payload shared memory — compose writes "
         "iox_roudi.toml, then restart RouDi (no rebuild).\n"
-        "When req.bindings includes iceoryx, SIL starts RouDi automatically."
+        "When req.bindings includes iceoryx, EM starts RouDi as a platform daemon "
+        "(not a peer of EM)."
     ),
     "全局最多同时存在的 Publisher 端口数（编译进 iceoryx，对应 IOX_MAX_PUBLISHERS）。"
     "增大是拉高 iceoryx_mgmt 的主要因素；改后需重编 iceoryx。": (

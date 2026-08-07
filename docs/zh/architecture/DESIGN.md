@@ -221,29 +221,25 @@ OEM 换信号表时，优先改 gateway + 映射，**尽量不改编感知 / 规
 
 ### 8.1 板端启动顺序（EM）
 
-通信底座就绪后，**先起 EM（`gf_em_daemon`）**，再由 EM 按拓扑 `fork/exec`（经 **OSAL Process**）拉起 Apps。业务进程不自行抢先起依赖方。
+**入口只认 EM（`gf_em_daemon`）**：`systemd/init` / `run_sil` 只起 EM；可选 platform daemons（dlt / RouDi / …）与 SOA apps 由 EM 按 `em_launch` + `exec` 拓扑 Spawn（经 **OSAL Process**）。业务进程不自行抢先起依赖方。
 
 ```mermaid
 sequenceDiagram
-  participant Init as systemd/init
-  participant Host as HOST守护
-  participant Dlt as dlt-daemon
-  participant Com as RouDi
+  participant Init as systemd_or_run_sil
   participant EM as gf_em_daemon
-  participant App as Apps_topo
+  participant Dlt as dlt_daemon_opt
+  participant RouDi as RouDi_opt
+  participant App as SOA_apps
 
-  Init->>Host: 拉起平台守护（非 SOA）
-  opt log.yaml sinks 含 dlt
-    Host->>Dlt: 启动 dlt-daemon
-    Dlt-->>Host: 就绪
+  Init->>EM: 只起 EM（platform + em_launch + build_dir）
+  Note over EM: LoadFromDeployConfig<br/>deploy_config.hpp Spawn 表
+  opt log sinks 含 dlt / bindings 含 iceoryx
+    EM->>Dlt: Spawn host.dlt_daemon
+    EM->>RouDi: Spawn host.iox_roudi
   end
-  Host->>Com: 启动 iceoryx RouDi
-  Com-->>Host: 就绪
-  Host->>EM: 启动（platform + em_launch + build_dir）
-  Note over EM: 读 exec.yaml 拓扑<br/>phm.yaml on_failure<br/>em_launch.yaml 二进制
   loop 拓扑序
     EM->>App: OSAL SpawnProcess
-    App-->>EM: Offer / Running（可选账本）
+    App-->>EM: Offer / Running（SOA；daemon 无 ExecutionClient）
   end
   loop 运行期
     EM->>EM: WaitProcess nonblocking
@@ -255,12 +251,11 @@ sequenceDiagram
 
 | 阶段 | 谁 | 做什么 |
 |------|-----|--------|
-| 0 | systemd/init → HOST | 若 `log.yaml` sinks 含 **dlt**：起 `dlt-daemon`（标准 COVESA；按需） |
-| 1 | HOST | 起 com 底座（RouDi） |
-| 2 | HOST | 起 **唯一** `gf_em_daemon` |
-| 3 | EM | 解析 `exec.yaml` 依赖拓扑 + `em_launch.yaml` 二进制 + `phm.yaml` restart |
-| 4 | EM | 按拓扑 `gf::osal::SpawnProcess` 拉起进程；设 `GF_EM_MANAGED=1` |
-| 5 | EM | `PollOnce`：子进程 exit **75** / 信号 → 策略允许则 relaunch |
+| 0 | systemd/init 或 `run_sil` | 只起 **唯一** `gf_em_daemon`（保护层 / SIL 入口） |
+| 1 | EM | 按配置 Spawn 可选 daemons（`host.dlt_daemon` / `host.iox_roudi` / …） |
+| 2 | EM | `LoadFromDeployConfig`（`deploy_config.hpp`）；作者 YAML 经 compose 冻结 |
+| 3 | EM | 按拓扑 `gf::osal::SpawnProcess` 拉起 SOA apps；设 `GF_EM_MANAGED=1` |
+| 4 | EM | `PollOnce`：子进程 exit **75** / 信号 → 策略允许则 relaunch |
 
 细节与 SIL：[middleware/exec/README.md](../../../middleware/exec/README.md) · [exec_cases.md](../../../fusa/cases/exec_cases.md)。
 

@@ -9,7 +9,7 @@ Enable subsets per SKU via SOR / `req.yaml` `runtime_modules[]`.
 | GIF 芯片 | 本目录包 | 说明 |
 |----------|----------|------|
 | com | [com](com/) | 统一通信 |
-| EM | [exec](exec/)（EmDaemon） | HOST 守护；OSAL Spawn / relaunch |
+| EM | [exec](exec/)（EmDaemon） | **入口**；OSAL Spawn / relaunch daemons + apps |
 | exec | [exec](exec/) | ExecutionClient |
 | phm | [phm](phm/) | Alive / Deadline / Logical |
 | sm | [sm](sm/) | Function groups |
@@ -18,11 +18,11 @@ Enable subsets per SKU via SOR / `req.yaml` `runtime_modules[]`.
 | diag | [diag](diag/) | DoIP 会话（TCP）+ UDS Routine → OTA |
 | ucm | [ucm](ucm/) | PackageManager + OtaOrchestrator（SIL） |
 | log | [log](log/) | 日志 lite → DLT sink |
-| dlt | COVESA `dlt-daemon`（third_party） | HOST 守护；**按需**（`log.yaml` sinks 含 `dlt`） |
+| dlt | COVESA `dlt-daemon`（third_party） | platform daemon；**按需**（`log.yaml` sinks 含 `dlt`，由 EM 拉起） |
 | per | [per](per/) | 持久化 KV stub（可裁剪） |
 | tsync | [tsync](tsync/) | 时间同步骨架（可裁剪；Modules 环内） |
 
-HOST 启动（systemd/init）：`dlt-daemon?` → RouDi → `gf_em_daemon` → SOA apps。详见 [Giraffe_Modules](../result_pic/Giraffe_Modules/README.md) · [DLT_PLAN](../docs/zh/operations/DLT_PLAN.md)。
+启动（systemd/init 或 `run_sil`）：只起 **EM** → 可选 daemons（dlt?/RouDi?/…）+ SOA apps。详见 [Giraffe_Modules](../result_pic/Giraffe_Modules/README.md) · [DLT_PLAN](../docs/zh/operations/DLT_PLAN.md)。
 
 另有： [core](core/) · [bindings/](bindings/) · [hal](hal/) · [trace](trace/)（偏 debug-path）· [third_party/](third_party/)。
 

@@ -41,6 +41,7 @@ from gf_codegen.compose.mem_budget import (
     estimate_mem_budget,
     fmt_bytes,
 )
+from gf_codegen.compose.merge_platform import is_host_platform_process
 
 from gf_config.core import ProjectSession
 from gf_config.gui.field_ux import (
@@ -65,6 +66,7 @@ from gf_config.gui.field_ux import (
     TintedComboBox,
     style_enum_combo,
     tipify,
+    tipify_item,
 )
 from gf_config.gui import tips as T
 from gf_config.i18n import t
@@ -442,7 +444,7 @@ class PlatformEditor(QWidget):
         lay = QVBoxLayout(w)
         hint = QLabel(
             t(
-                "em_launch.yaml：OS EM（gf_em_daemon）二进制表。"
+                "em_launch.yaml：EM 入口拉起的进程表（可选 daemons + SOA apps）。"
                 "binary 相对 $GF_BUILD_DIR；与 exec.yaml 进程名对齐。"
                 "args / max_restarts 不留空（默认 args=0、max_restarts=3）。"
                 "args=POSIX argv（非 AP 字段，但 EM Spawn 需要；gateway 15=收满 Trajectory 退出）。"
@@ -751,7 +753,7 @@ class PlatformEditor(QWidget):
         hint = QLabel(
             t(
                 "log.yaml：默认级别、输出 sinks（console / file / DLT）、按模块级别。"
-                "勾选 DLT 时 SIL/HIL 会起 dlt-daemon；上位机用 dlt-viewer / GMT。"
+                "勾选 DLT 时由 EM 拉起 dlt-daemon（daemon，非与 EM 并列）；上位机用 dlt-viewer / GMT。"
                 "页 1 的 live/record 是观测通道，与这里分开。"
             )
         )
@@ -1466,6 +1468,22 @@ class PlatformEditor(QWidget):
             empty_label=t("（无依赖）"),
             title="选择 depends_on",
         )
+        self._set_proc_execution_client_cell(r, name, execution_client)
+
+    def _set_proc_execution_client_cell(
+        self, r: int, name: str, execution_client: bool
+    ) -> None:
+        """SOA apps: true/false combo. Platform daemons: locked n/a (always false)."""
+        self._proc_table.removeCellWidget(r, 3)
+        if is_host_platform_process(name):
+            _set_cell(self._proc_table, r, 3, "n/a · daemon", T.PROC_EC_DAEMON)
+            cell = self._proc_table.item(r, 3)
+            if cell is not None:
+                tipify_item(cell, T.PROC_EC_DAEMON)
+                cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            return
+        # Drop stale item so combo owns the cell
+        self._proc_table.takeItem(r, 3)
         _set_combo(
             self._proc_table,
             r,
@@ -1593,12 +1611,17 @@ class PlatformEditor(QWidget):
             deps = p.get("depends_on") or []
             if not isinstance(deps, list):
                 deps = []
+            pname = str(p.get("name") or "")
             self._fill_proc_row(
                 r,
-                name=str(p.get("name") or ""),
+                name=pname,
                 fg=str(p.get("function_group") or ""),
                 deps=[str(x) for x in deps],
-                execution_client=bool(p.get("execution_client", True)),
+                execution_client=(
+                    False
+                    if is_host_platform_process(pname)
+                    else bool(p.get("execution_client", True))
+                ),
             )
         self._fg_table.blockSignals(False)
         self._proc_table.blockSignals(False)
@@ -2231,14 +2254,33 @@ class PlatformEditor(QWidget):
             if initial not in _FG_INITIAL:
                 initial = "Running"
             fgs.append({"id": fid, "initial": initial})
+        # Keep EC column in sync when process name flips to/from host.*
+        self._proc_table.blockSignals(True)
+        try:
+            for r in range(self._proc_table.rowCount()):
+                name = _combo_text(self._proc_table, r, 0)
+                if not name:
+                    continue
+                is_daemon = is_host_platform_process(name)
+                has_combo = self._proc_table.cellWidget(r, 3) is not None
+                if is_daemon and has_combo:
+                    self._set_proc_execution_client_cell(r, name, False)
+                elif (not is_daemon) and (not has_combo):
+                    self._set_proc_execution_client_cell(r, name, True)
+        finally:
+            self._proc_table.blockSignals(False)
+
         procs: list[dict[str, Any]] = []
         for r in range(self._proc_table.rowCount()):
             name = _combo_text(self._proc_table, r, 0)
             if not name:
                 continue
             deps = multi_selected(self._proc_table, r, 2)
-            ec_s = (_combo_text(self._proc_table, r, 3) or "true").lower()
-            ec = ec_s not in ("false", "0", "no")
+            if is_host_platform_process(name):
+                ec = False
+            else:
+                ec_s = (_combo_text(self._proc_table, r, 3) or "true").lower()
+                ec = ec_s not in ("false", "0", "no")
             procs.append(
                 {
                     "name": name,
@@ -2668,7 +2710,7 @@ class PlatformEditor(QWidget):
             name=pick,
             fg=self._default_fg(),
             deps=[],
-            execution_client=True,
+            execution_client=not is_host_platform_process(pick),
         )
         self._proc_table.blockSignals(False)
         self._on_exec_changed()
@@ -2684,7 +2726,10 @@ class PlatformEditor(QWidget):
         for r in range(self._proc_table.rowCount()):
             name = _combo_text(self._proc_table, r, 0)
             if name:
-                ec = (_combo_text(self._proc_table, r, 3) or "true").lower() != "false"
+                if is_host_platform_process(name):
+                    ec = False
+                else:
+                    ec = (_combo_text(self._proc_table, r, 3) or "true").lower() != "false"
                 existing[name] = (
                     _combo_text(self._proc_table, r, 1),
                     multi_selected(self._proc_table, r, 2),
@@ -2702,7 +2747,11 @@ class PlatformEditor(QWidget):
                 name=name,
                 fg=old[0] if old else fg,
                 deps=old[1] if old else [],
-                execution_client=old[2] if old else True,
+                execution_client=(
+                    False
+                    if is_host_platform_process(name)
+                    else (old[2] if old else True)
+                ),
             )
         self._proc_table.blockSignals(False)
         self._on_exec_changed()

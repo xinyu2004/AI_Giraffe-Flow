@@ -1,5 +1,10 @@
-# interfaces/ — 项目本地模块接口
+# interfaces/ — afc_no_uss 模块接口
 
-本目录存放 **afc_no_uss** 项目专属的 `io_types.hpp`，由外仓交付或集成工程师维护。
+| 目录 | 用途 |
+|------|------|
+| `vehicle_gateway/` | EgoMotion · Perception_In_St · Trajectory |
+| `fcm_perception/` | Perception_In_St · Perception_MESSAGE_Out_St |
+| `planning_driving/` | Trajectory（planning Provide） |
+| `perception_front/` | **废弃**：旧 FrontObjectList 草稿，主链不再使用 |
 
-- 接口仅在本项目 `interfaces/` 下维护；wiring 通过 `modules[].hpp` 引用本目录路径，compose 时解析。
+由 `integration/wiring.yaml` 的 `modules[].hpp` 引用。

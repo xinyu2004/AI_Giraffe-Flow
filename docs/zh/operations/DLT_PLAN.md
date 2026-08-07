@@ -84,7 +84,7 @@ gf-config 页 2「日志」：在级别表下增加 **Sinks 勾选（console / f
 ### D2 — Bring-up 全覆盖 ✅
 - Host：`gf_dlt_log` + `host_info`；EM / runtime / sm / exec / phm → `Logger` → DLT。
 - APP ID（SIL）：`HOST` · `GATE` · `FCM_` · `USS_` · `PLAN`（`GF_DLT_APP_ID` / `gf_dlt_log -a`）。
-- 启动顺序：`dlt-daemon` → Host Info → RouDi → apps。
+- 启动顺序：`run_sil` / systemd → **EM** →（按需）`dlt-daemon` / RouDi → SOA apps；Host Info 日志经 `gf_dlt_log`（APP ID=`HOST`）。
 
 ### D3 — 硬化与收尾 ✅
 - ✅ 删除 `gmt_export` / `DrainGmtExport`（代码与配置均无残留）。

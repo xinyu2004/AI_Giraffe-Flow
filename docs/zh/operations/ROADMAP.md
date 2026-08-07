@@ -157,16 +157,19 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 操作说明：[DOIP_OTA.md](DOIP_OTA.md) · 验收：`bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh`  
 **2026-08-04：** gf-config 日志表 UX / 重复 context Verify / 撤销跳页；GMT 独立 Collector 页并入 OTA/UDS。
 
-### P3-5 Sim spike — 场景演示（未开工；弃 VP）
+### P3-5 Sim spike — 场景演示（A–C ✅；弃 VP）
 
 | # | 交付物 | 状态 |
 |---|--------|------|
-| S1' | **YOLO → semantic** feed 尖刺（主推荐） | ⏳ 下一轮 |
-| S1 | CARLA → 同一 semantic 出口（可选） | ⏳ |
+| A–C | **`afc_no_uss`**：Perception_*→Trajectory + `frame_ingest`（默认 C dry-run）+ Foxglove | ✅ **主路径** `run_sil.sh`（gf-config→compose→compile） |
+| cfg | **行为编译冻结**：`deploy_config.hpp` + `frame_ingest_config.hpp`；白名单仍可用 `observability.json` | ✅ [CONFIG_RUNTIME_POLICY.md](CONFIG_RUNTIME_POLICY.md) |
+| E | AM62 EdgeAI / S2 | ⏳ 桌面闭环后（文档占位，见 SIM_SPIKE） |
 | S2 | Vision Pilot | **放弃**（授权） |
-| S3 | 与 GMT live/inject 联调说明 | ⏳ |
 
-弱耦合；不替代主航道。
+弱耦合；不替代主航道。工程：`projects/oem_a/afc_no_uss/` · [SIM_SPIKE.md](../../../projects/oem_a/afc_no_uss/SIM_SPIKE.md)。  
+**其它 project 后续同样**：行为进编译期；白名单可 JSON；编排用 gf-config（少手改 YAML）。
+
+**2026-08-06：** A/B/C + `frame_ingest` 配置驱动验收落地。
 
 ### P3z Board / MCU — 冲刺门禁（最不急）
 
@@ -214,8 +217,8 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 ## 下一步
 
-1. **P3-5** YOLO→semantic 演示尖刺（弃 VP；CARLA 可选）。  
-2. **P3z**：真板 / vsomeip / RAUC 真刷写 / 板端 soak。  
-3. 云 CI 启用 `devops/ci` + 发版跑 T4。
+1. **P3z / wave E**：AM62 EdgeAI（同一 `frame_ingest`）/ 真板 / vsomeip / RAUC / soak。
+2. 配置策略 backlog：live/DoIP 等行为开关亦编译冻结（见 CONFIG_RUNTIME_POLICY）。
+3. 云 CI + 发版 T4；（可选）真 ORT / CARLA 图进 Foxglove topic。
 
 P3-4 桌面 DoIP/OTA 已收口 → [DOIP_OTA.md](DOIP_OTA.md)。

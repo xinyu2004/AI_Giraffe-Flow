@@ -282,14 +282,15 @@ ZH = {
     "subtitle": "中间件如何起来、如何协作（板内 · sm / phm / exec / com …）",
     "init": "systemd/init",
     "init_sub": "系统侧 · 非 Giraffe",
-    "host": "HOST",
-    "dlt": "dlt-daemon",
-    "dlt_sub": "按需 · log.yaml sinks",
-    "roudi": "RouDi",
-    "roudi_sub": "iceoryx",
     "em": "EM",
-    "em_sub": "gf_em_daemon",
+    "em_sub": "gf_em_daemon · 入口",
+    "daemons_title": "daemons（按 gf-config）",
+    "daemon_dlt": "· dlt-daemon?",
+    "daemon_roudi": "· RouDi? (iceoryx)",
+    "daemon_someip": "· SOME/IP daemon?",
+    "daemon_dds": "· DDS?",
     "spawn": "OSAL Spawn",
+    "spawn_daemons": "Spawn",
     "apps": "SOA apps",
     "apps_sub": "gateway · sensing · …",
     "bringup": "runtime bring-up",
@@ -325,14 +326,16 @@ ZH = {
 
 EN = {
     **ZH,
+    "_en": True,
     "subtitle": "How middleware boots & collaborates (on-board · sm / phm / exec / com …)",
-    "init": "systemd/init",
     "init_sub": "OS · not Giraffe",
-    "host": "HOST",
-    "dlt_sub": "on demand · log.yaml sinks",
-    "apps": "SOA apps",
+    "em_sub": "gf_em_daemon · entry",
+    "daemons_title": "daemons (via gf-config)",
+    "daemon_dlt": "· dlt-daemon?",
+    "daemon_roudi": "· RouDi? (iceoryx)",
+    "daemon_someip": "· SOME/IP daemon?",
+    "daemon_dds": "· DDS?",
     "apps_sub": "gateway · sensing · …",
-    "bringup": "runtime bring-up",
     "ring_title": "In-process middleware ring",
     "phm_sub": "Alive / Deadline",
     "sm_sub": "Off / Running / Updating",
@@ -342,12 +345,6 @@ EN = {
     "bindings_sub": "iceoryx · SOME/IP · DDS",
     "diag_sub": "DoIP / UDS",
     "ucm_sub": "OTA",
-    "log_dlt": "log → DLT",
-    "alive": "Offer / Alive",
-    "fault": "NotifyFault",
-    "ensure": "EnsureGroup",
-    "persist": "persist",
-    "updating": "Updating",
     "fusa": "FuSa evidence attaches to real exec / phm / sm / collector behavior",
 }
 
@@ -445,16 +442,26 @@ def draw_frame(texts: dict, phase: float) -> Image.Image:
     ring_title_w = d0.textlength(texts["ring_title"], font=f20b) + 40
     ring_w = min(W * 0.94, max(content_w + side_pad, fusa_w, ring_title_w) + 48)
 
-    bh = 50.0
-    vgap_boot = 48.0
-    bw = max(
-        sized(texts["dlt"], texts["dlt_sub"], pad_x=34),
-        sized(texts["roudi"], texts["roudi_sub"]),
-        sized(texts["em"], texts["em_sub"]),
-        sized(texts["apps"], texts["apps_sub"], pad_x=34),
-    )
-    # HOST: dlt + RouDi + EM; then SOA apps
-    boot_h = bh * 4 + vgap_boot * 3
+    bh = 52.0
+    vgap_boot = 40.0
+    em_fnt = f22b
+    em_bh = 90.0  # tall entry chip (ZH/EN)
+    em_w = max(sized(texts["em"], texts["em_sub"], pad_x=40), 200.0)
+    apps_w = max(sized(texts["apps"], texts["apps_sub"], pad_x=34), 160.0)
+    init_w = max(sized(texts["init"], texts["init_sub"], pad_x=28), 118.0)
+    daemon_lines = [
+        texts["daemon_dlt"],
+        texts["daemon_roudi"],
+        texts["daemon_someip"],
+        texts["daemon_dds"],
+    ]
+    daemon_title_w = d0.textlength(texts["daemons_title"], font=f16) + 28
+    daemon_line_w = max(d0.textlength(ln, font=f15) for ln in daemon_lines) + 28
+    daemon_w = max(daemon_title_w, daemon_line_w, 200.0)
+    daemon_h = 28.0 + 4 * 22.0 + 16.0  # title + 4 lines
+    init_h = bh * 0.85
+    # Row: init | EM | daemons ; then apps under EM
+    boot_h = max(init_h, em_bh, daemon_h) + vgap_boot + bh
     link_h = 28.0
     ring_hdr = 34.0
     ring_foot = 26.0
@@ -474,87 +481,35 @@ def draw_frame(texts: dict, phase: float) -> Image.Image:
     vcenter_text(d, texts["title"], ht, fnt=f22b, fill="#1b5e20")
     vcenter_text(d, texts["subtitle"], hs, fnt=f16, fill="#546e7a")
 
-    y = body.y0 + 8
-    # Room for OS init chip (same guardian language) + HOST frame on the left.
-    cx = body.cx + 72
+    # --- Boot: systemd → EM → daemons (right); EM ↓ SOA apps ---
+    hgap = 36.0
+    # Compact gap that still fits "Spawn"
+    hgap_daemon = max(62.0, (d0.textlength(texts["spawn_daemons"], font=f15b) + 56) * 0.7)
+    row_w = init_w + hgap + em_w + hgap_daemon + daemon_w
+    row_x0 = body.cx - row_w / 2
+    if row_x0 < page.x0 + 4:
+        row_x0 = page.x0 + 4
+    row_top = body.y0 + 10
+    row_mid_h = max(init_h, em_bh, daemon_h)
+    mid_y = row_top + row_mid_h / 2
 
-    def boot_box(yy: float) -> Box:
-        return Box(cx - bw / 2, yy, cx + bw / 2, yy + bh)
-
-    dlt = chip(
-        d, boot_box(y), texts["dlt"], texts["dlt_sub"],
-        fill="#e8f5e9", outline="#2e7d32", title_fill="#1b5e20",
-        fnt_t=f20b, fnt_s=f15, sub_fill="#558b2f",
-    )
-    y_roudi = y + bh + vgap_boot
-    roudi = chip(
-        d, boot_box(y_roudi), texts["roudi"], texts["roudi_sub"],
-        fill="#e3f2fd", outline="#1565c0", title_fill="#0d47a1",
-        fnt_t=f20b, fnt_s=f15, sub_fill="#546e7a",
-    )
-    y_em = y_roudi + bh + vgap_boot
-    em = chip(
-        d, boot_box(y_em), texts["em"], texts["em_sub"],
-        fill="#fff3e0", outline="#ef6c00", title_fill="#e65100",
-        fnt_t=f20b, fnt_s=f15, sub_fill="#6d4c41",
-    )
-    y_apps = y_em + bh + vgap_boot
-    apps = chip(
-        d, boot_box(y_apps), texts["apps"], texts["apps_sub"],
-        fill="#fce4ec", outline="#c2185b", title_fill="#880e4f",
-        fnt_t=f20b, fnt_s=f15, sub_fill="#6d4c41",
-    )
-
-    # HOST frame around dlt-daemon · RouDi · EM (Giraffe platform daemons)
-    host_pad_x, host_pad_y = 14.0, 8.0
-    host_frame = Box(
-        dlt.x0 - host_pad_x, dlt.y0 - host_pad_y,
-        dlt.x1 + host_pad_x, em.y1 + host_pad_y,
-    )
-    d.rounded_rectangle(
-        host_frame.as_ints(), radius=10, outline="#607d8b", width=2,
-    )
-
-    # HOST brace left of frame; label on the *right* of the brace (toward chips).
-    mid_y = (host_frame.y0 + host_frame.y1) / 2
-    hw = d.textlength(texts["host"], font=f15b)
-    host_label_gap = 6.0
-    # Need room between brace and frame for "HOST"
-    host_brace_x = host_frame.x0 - 18 - hw - host_label_gap
-    d.line(
-        [(host_brace_x, host_frame.y0), (host_brace_x, host_frame.y1)],
-        fill="#546e7a", width=2,
-    )
-    d.line(
-        [(host_brace_x, host_frame.y0), (host_brace_x + 10, host_frame.y0)],
-        fill="#546e7a", width=2,
-    )
-    d.line(
-        [(host_brace_x, host_frame.y1), (host_brace_x + 10, host_frame.y1)],
-        fill="#546e7a", width=2,
-    )
-    host_label_x = host_brace_x + 12
-    d.text((host_label_x, mid_y - 8), texts["host"], fill="#37474f", font=f15b)
-
-    # systemd/init left of brace → HOST
-    init_w = max(
-        sized(texts["init"], texts["init_sub"], pad_x=28),
-        118.0,
-    )
-    init_gap = 14.0
-    init_h = host_frame.h * 0.5
     init_box = Box(
-        host_brace_x - init_gap - init_w,
+        row_x0,
         mid_y - init_h / 2,
-        host_brace_x - init_gap,
+        row_x0 + init_w,
         mid_y + init_h / 2,
     )
-    if init_box.x0 < page.x0 + 2:
-        init_box = Box(page.x0 + 2, init_box.y0, init_box.x1, init_box.y1)
-    chip(
-        d, init_box, texts["init"], texts["init_sub"],
-        fill="#eceff1", outline="#455a64", title_fill="#263238",
-        fnt_t=f16, fnt_s=f15, sub_fill="#78909c",
+    em_box = Box(
+        init_box.x1 + hgap,
+        mid_y - em_bh / 2,
+        init_box.x1 + hgap + em_w,
+        mid_y + em_bh / 2,
+    )
+    daemon_box = Box(
+        em_box.x1 + hgap_daemon,
+        mid_y - daemon_h / 2,
+        em_box.x1 + hgap_daemon + daemon_w,
+        mid_y + daemon_h / 2,
     )
 
     def _dash_rect(b: Box, color: str, *, dash: int = 5, gap: int = 4) -> None:
@@ -579,33 +534,69 @@ def draw_frame(texts: dict, phase: float) -> Image.Image:
         for a, b2 in segs:
             d.line([a, b2], fill=color, width=2)
 
+    chip(
+        d, init_box, texts["init"], texts["init_sub"],
+        fill="#eceff1", outline="#455a64", title_fill="#263238",
+        fnt_t=f16, fnt_s=f15, sub_fill="#78909c",
+    )
     outer = Box(init_box.x0 - 4, init_box.y0 - 4, init_box.x1 + 4, init_box.y1 + 4)
     _dash_rect(outer, "#90a4ae", dash=6, gap=4)
 
-    ax0 = init_box.x1 + 4
-    ax1 = host_brace_x - 4
-    if ax1 > ax0 + 8:
-        d.line([(ax0, mid_y), (ax1, mid_y)], fill="#607d8b", width=2)
-        d.polygon(
-            [(ax1, mid_y), (ax1 - 7, mid_y - 4), (ax1 - 7, mid_y + 4)],
-            fill="#607d8b",
-        )
+    em = chip(
+        d, em_box, texts["em"], texts["em_sub"],
+        fill="#fff3e0", outline="#ef6c00", title_fill="#e65100",
+        fnt_t=em_fnt, fnt_s=f15, sub_fill="#6d4c41",
+    )
 
-    # Target outline colors — neighbors use distant hues (not same family).
-    # exec=cyan · phm=amber · sm=green · collector=coral · per=indigo
-    # com=sky · bindings=lime-teal · diag=magenta · ucm=violet
-    C_DLT, C_EM, C_APPS = "#2e7d32", "#ef6c00", "#c2185b"
+    # platform daemons panel (title encodes gf-config; no subtitle)
+    d.rounded_rectangle(
+        daemon_box.as_ints(), radius=8, fill="#e8f5e9", outline="#2e7d32", width=2,
+    )
+    ty = daemon_box.y0 + 10
+    tw = d.textlength(texts["daemons_title"], font=f16)
+    d.text(
+        (daemon_box.cx - tw / 2, ty),
+        texts["daemons_title"],
+        fill="#1b5e20",
+        font=f16,
+    )
+    ly = ty + 26
+    for ln in daemon_lines:
+        d.text((daemon_box.x0 + 14, ly), ln, fill="#33691e", font=f15)
+        ly += 22
+
+    apps_y = row_top + row_mid_h + vgap_boot
+    apps = chip(
+        d,
+        Box(em.cx - apps_w / 2, apps_y, em.cx + apps_w / 2, apps_y + bh),
+        texts["apps"],
+        texts["apps_sub"],
+        fill="#fce4ec",
+        outline="#c2185b",
+        title_fill="#880e4f",
+        fnt_t=f20b,
+        fnt_s=f15,
+        sub_fill="#6d4c41",
+    )
+
+    C_EM, C_APPS = "#ef6c00", "#c2185b"
+    C_DAEMON = "#2e7d32"
     C_EXEC, C_PHM, C_SM = "#26c6da", "#ffb300", "#66bb6a"
     C_COL, C_PER = "#ff7043", "#7986cb"
     C_COM, C_BIND = "#29b6f6", "#26a69a"
     C_DIAG, C_UCM = "#f06292", "#7e57c2"
     C_RING = "#c9a227"
 
-    draw_vline_flow(d, dlt.cx, dlt.y1, roudi.y0, C_DLT, phase, width=3, n_arrows=2)
-    draw_vline_flow(d, roudi.cx, roudi.y1, em.y0, C_EM, phase, width=3, n_arrows=2)
-    draw_vline_flow(d, em.cx, em.y1, apps.y0, C_APPS, phase, width=3, n_arrows=2)
-    d.text((em.cx + 14, (em.y1 + apps.y0) / 2 - 9), texts["spawn"], fill=C_APPS, font=f15b)
+    draw_h_flow(d, init_box.x1, em.x0, mid_y, "#607d8b", phase, width=2, n_arrows=2)
+    draw_h_flow(d, em.x1, daemon_box.x0, mid_y, C_DAEMON, phase, width=3, n_arrows=2)
+    label_between_h(
+        d, em.x1, daemon_box.x0, mid_y, texts["spawn_daemons"],
+        fnt=f15b, fill=C_DAEMON, dy=-22,
+    )
+    draw_vline_flow(d, em.cx, em.y1, apps.y0, C_EM, phase, width=3, n_arrows=2)
+    d.text((em.cx + 14, (em.y1 + apps.y0) / 2 - 9), texts["spawn"], fill=C_EM, font=f15b)
 
+    cx = body.cx
     y = apps.y1 + link_h
     ring_box = Box(cx - ring_w / 2, y, cx + ring_w / 2, y + ring_h)
     d.rounded_rectangle(ring_box.as_ints(), radius=12, fill="#12241e", outline="#c9a227", width=3)
@@ -789,7 +780,7 @@ def write_svg(texts: dict, out: Path, *, aria: str) -> None:
   <text x="550" y="36" text-anchor="middle" font="700 22px sans-serif" fill="#1b5e20">{html.escape(texts["title"])}</text>
   <text x="550" y="60" text-anchor="middle" font="500 16px sans-serif" fill="#546e7a">{html.escape(texts["subtitle"])}</text>
   <text x="550" y="120" text-anchor="middle" font="500 14px sans-serif" fill="#546e7a">See Giraffe_Modules.gif for the animated layout.</text>
-  <text x="550" y="150" text-anchor="middle" font="500 13px sans-serif" fill="#78909c">systemd/init → HOST(dlt-daemon? · RouDi · EM) → SOA apps · in-process ring</text>
+  <text x="550" y="150" text-anchor="middle" font="500 13px sans-serif" fill="#78909c">systemd/init → EM → {html.escape(texts["daemons_title"])} · EM ↓ SOA apps · ring</text>
 </svg>
 """
     out.write_text(body, encoding="utf-8")

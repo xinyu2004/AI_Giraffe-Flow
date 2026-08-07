@@ -135,7 +135,7 @@ GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
 | Giraffe 模块负责 | 不负责（交给工具） |
 |------------------|-------------------|
 | 进程内算法与 I/O、iceoryx 上真发真收 | 画 wiring / 裁 SKU → gf-config |
-| SIL：systemd/init → HOST（dlt? · RouDi · EM）→ App + tap/inject | Studio / Tag / MCAP；Logging 走 DLT |
+| SIL：systemd/init → EM → daemons + App；tap/inject/帧桥属 Flow/GMT（非 EM） | Studio / Tag / MCAP；Logging 走 DLT |
 | semantic 契约在板上成立 | 离线改 DBC / lineage 会议替代 → compose |
 | FuSa 证据（`fusa/`） | GMT 仍属 **debug-path**（不作板级 ASIL 证据） |
 

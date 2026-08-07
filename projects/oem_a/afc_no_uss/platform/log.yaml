@@ -1,0 +1,35 @@
+# log lite — console + DLT (+ optional file for SIL local). See docs/zh/operations/DLT_PLAN.md.
+schema_version: '0.1'
+default_level: INFO
+color: auto
+sinks:
+- console
+- dlt
+- file
+# Overridden at runtime by GF_LOG_FILE or GF_LOG_DIR/giraffe_modules.log (SIL only; not GMT).
+file_path: giraffe_modules.log
+# Soft rotate when file sink enabled (BL-MEM-BOUND); keeps path + path.1
+file_max_bytes: 1048576
+dlt:
+  app_id: GFAP
+contexts:
+- id: host
+  level: INFO
+- id: em
+  level: INFO
+- id: runtime
+  level: INFO
+- id: exec
+  level: INFO
+- id: sm
+  level: INFO
+- id: phm
+  level: INFO
+- id: collector
+  level: INFO
+- id: com
+  level: INFO
+- id: ucm
+  level: INFO
+- id: diag
+  level: INFO

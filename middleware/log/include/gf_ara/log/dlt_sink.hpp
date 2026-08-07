@@ -10,7 +10,7 @@ namespace gf_ara::log {
 
 /// COVESA libdlt sink (no-op when GF_HAVE_DLT is off).
 /// Bounded context table; never grows without limit (BL-MEM-BOUND).
-/// Does not block when daemon IPC is absent (probe /tmp/dlt before register).
+/// Does not block when daemon is absent (nonblocking open /tmp/dlt; skip stale FIFO).
 class DltSink {
  public:
   static DltSink& Instance();

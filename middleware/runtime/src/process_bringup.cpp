@@ -5,6 +5,10 @@
 #include <gf_ara/log/logger.hpp>
 #include <gf_ara/per/key_value_storage.hpp>
 
+#if defined(GF_HAS_PLATFORM_TABLES)
+#include "gf_gen/platform_tables.hpp"
+#endif
+
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
@@ -86,6 +90,18 @@ std::string PlatformDir() {
 
 ExecProcessConfig LoadExecProcess(std::string_view process_name) {
   ExecProcessConfig cfg;
+#if defined(GF_HAS_PLATFORM_TABLES)
+  if (const auto* row = gf_gen::platform::FindExec(process_name)) {
+    cfg.found = true;
+    cfg.function_group = row->function_group ? row->function_group : "MachineFG";
+    cfg.execution_client = row->execution_client;
+    return cfg;
+  }
+  // Product path: tables are truth. YAML only with GF_PLATFORM_USE_YAML=1 (smoke).
+  if (!EnvFlag("GF_PLATFORM_USE_YAML")) {
+    return cfg;
+  }
+#endif
   const std::string dir = PlatformDir();
   if (dir.empty()) {
     cfg.found = true;
@@ -96,7 +112,7 @@ ExecProcessConfig LoadExecProcess(std::string_view process_name) {
   const std::string text = ReadFile(dir + "/exec.yaml");
   if (text.empty()) {
     gf_ara::log::Logger::Instance().Error(
-        "runtime", "cannot read " + dir + "/exec.yaml");
+        "runtime", "cannot read " + dir + "/exec.yaml (and no platform_tables)");
     return cfg;
   }
 
@@ -125,6 +141,19 @@ ExecProcessConfig LoadExecProcess(std::string_view process_name) {
 
 PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
   PhmEntityConfig cfg;
+#if defined(GF_HAS_PLATFORM_TABLES)
+  if (const auto* row = gf_gen::platform::FindPhm(process_name)) {
+    cfg.found = true;
+    cfg.id = row->id ? row->id : (std::string(process_name) + "_alive");
+    cfg.alive_period_ms = row->alive_period_ms;
+    cfg.alive_timeout_ms = row->alive_timeout_ms;
+    cfg.on_failure = row->on_failure ? row->on_failure : "log";
+    return cfg;
+  }
+  if (!EnvFlag("GF_PLATFORM_USE_YAML")) {
+    return cfg;  // no PHM entity for this process — OK
+  }
+#endif
   const std::string dir = PlatformDir();
   if (dir.empty()) {
     return cfg;
@@ -132,7 +161,7 @@ PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
   const std::string text = ReadFile(dir + "/phm.yaml");
   if (text.empty()) {
     gf_ara::log::Logger::Instance().Error(
-        "runtime", "cannot read " + dir + "/phm.yaml");
+        "runtime", "cannot read " + dir + "/phm.yaml (and no platform_tables)");
     return cfg;
   }
 
@@ -193,12 +222,15 @@ void LoadCollectorConfig() {
 }
 
 void LoadLogConfig() {
-  const std::string dir = PlatformDir();
   auto& log = gf_ara::log::Logger::Instance();
-  if (!dir.empty()) {
-    const std::string text = ReadFile(dir + "/log.yaml");
-    if (!text.empty()) {
-      log.ConfigureFromYaml(text);
+  if (!log.ConfigureFromGenerated()) {
+    // Middleware-only / smoke: no log_config.hpp → authoring YAML.
+    const std::string dir = PlatformDir();
+    if (!dir.empty()) {
+      const std::string text = ReadFile(dir + "/log.yaml");
+      if (!text.empty()) {
+        log.ConfigureFromYaml(text);
+      }
     }
   }
   log.ApplyEnvFileSink();
@@ -264,12 +296,16 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
   LoadCollectorConfig();
 
   const auto exec_cfg = LoadExecProcess(process_name);
+  if (!exec_cfg.found) {
+    log.Error("runtime", "process not in platform_tables/exec.yaml: " + process_);
+    return false;
+  }
+#if !defined(GF_HAS_PLATFORM_TABLES)
   if (PlatformDir().empty()) {
     log.Warn("runtime", "GF_PLATFORM_DIR unset — using Offer defaults for " + process_);
-  } else if (!exec_cfg.found) {
-    log.Error("runtime", "process not in exec.yaml: " + process_);
-    return false;
-  } else if (!exec_cfg.execution_client) {
+  }
+#endif
+  if (!exec_cfg.execution_client) {
     log.Error("runtime", "execution_client=false for " + process_);
     return false;
   }
@@ -320,7 +356,7 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
       log.Info("phm", "t_ms=" + std::to_string(MonoMs()) + " FAULT inject armed for " +
                           std::to_string(fault_ms) + " ms after first Alive");
     }
-  } else if (!PlatformDir().empty()) {
+  } else {
     log.Info("phm", "no entity for " + process_ + " (ok)");
   }
   log.Info("runtime", "bring-up done process=" + process_);

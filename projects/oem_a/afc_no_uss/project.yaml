@@ -1,4 +1,4 @@
-# compose 入口 — OEM A / AFC 前视（无 USS）
+# compose 入口 — OEM A / AFC 前视（无 USS）· P3-5
 schema_version: "0.1"
 project_id: afc_no_uss
 customer_id: oem_a
@@ -13,6 +13,17 @@ oem:
 
 integration:
   wiring: integration/wiring.yaml
+
+platform:
+  exec: platform/exec.yaml
+  em_launch: platform/em_launch.yaml
+  phm: platform/phm.yaml
+  diag: platform/diag.yaml
+  log: platform/log.yaml
+  ucm: platform/ucm.yaml
+  collector: platform/collector.yaml
+  tsync: platform/tsync.yaml
+  bounds: platform/bounds.yaml
 
 delivery:
   req: req.yaml

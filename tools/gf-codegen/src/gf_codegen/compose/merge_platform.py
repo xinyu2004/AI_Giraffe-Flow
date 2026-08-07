@@ -50,6 +50,15 @@ def wiring_ap_processes(wiring: dict[str, Any] | None = None, *, sor: dict[str, 
     return names
 
 
+def is_host_platform_process(name: str) -> bool:
+    """EM-managed optional platform daemons (dlt/RouDi…); not wiring SOA apps."""
+    return str(name or "").startswith("host.")
+
+
+# Back-compat for internal callers
+_is_host_platform_process = is_host_platform_process
+
+
 def _enabled_keys(runtime_modules: list[str], platform_paths: dict[str, Path]) -> list[str]:
     mods = {str(m) for m in runtime_modules}
     out: list[str] = []
@@ -93,14 +102,23 @@ def validate_platform(
                 continue
             if name.startswith("external."):
                 bad.append(f"exec process must not be external: {name}")
-            elif name not in ap_processes:
+            elif not _is_host_platform_process(name) and name not in ap_processes:
                 bad.append(f"exec process not in wiring (non-external): {name}")
+            if _is_host_platform_process(name) and bool(proc.get("execution_client", False)):
+                bad.append(
+                    f"platform daemon {name}: execution_client must be false "
+                    "(external binary cannot Offer/ReportExecutionState)"
+                )
             fg = str(proc.get("function_group") or "").strip()
             if fg and fg_ids and fg not in fg_ids:
                 warnings.append(f"exec process {name}: unknown function_group {fg}")
             for dep in proc.get("depends_on") or []:
                 dep_s = str(dep).strip()
-                if dep_s and dep_s not in ap_processes:
+                if (
+                    dep_s
+                    and dep_s not in ap_processes
+                    and not _is_host_platform_process(dep_s)
+                ):
                     unknown_deps.append(f"{name} depends_on {dep_s}")
         if bad:
             errors.extend(f"platform.exec: {x}" for x in bad)
@@ -123,7 +141,7 @@ def validate_platform(
                 continue
             if name.startswith("external."):
                 bad_em.append(f"em_launch process must not be external: {name}")
-            elif name not in ap_processes:
+            elif not _is_host_platform_process(name) and name not in ap_processes:
                 bad_em.append(f"em_launch process not in wiring (non-external): {name}")
             if not binary:
                 bad_em.append(f"em_launch process {name}: missing binary")

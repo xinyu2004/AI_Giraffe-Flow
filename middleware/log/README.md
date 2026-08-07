@@ -10,7 +10,7 @@
 **Sinks（gf-config）：** `console` · `file` · `dlt`  
 **Env：** `GF_LOG_LEVEL` · `GF_LOG_FILE`/`GF_LOG_DIR` · `GF_DLT_APP_ID`（per-process 4 字符）
 
-**启动顺序（SIL）：** `dlt-daemon` → Host (`gf_dlt_log`) → RouDi → apps  
+**启动顺序（SIL）：** EM →（按需）`dlt-daemon` / RouDi → SOA apps；Host Info 经 `gf_dlt_log`（APP ID=`HOST`）  
 **APP ID 例：** `HOST` · `GATE` · `FCM_` · `USS_` · `PLAN`
 
 **有界内存（log 子集）：**

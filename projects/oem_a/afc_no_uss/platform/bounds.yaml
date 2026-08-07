@@ -1,0 +1,54 @@
+# BL-MEM-BOUND / BL-MEM-ROUDI — hard caps (gf-config「有界内存」+ Verify 预估)
+# Formulas: tools/gf-codegen/.../mem_budget.py (FORMULAS docstring)
+schema_version: '0.1'
+
+dlt:
+  # DltSink context handle table; overflow reuses OVFL
+  max_contexts: 64
+
+com:
+  # LoopbackBus (in-process smoke only)
+  queue_depth: 16
+  max_topic_keys: 64
+  # Verify estimate assumes avg payload bytes per queued sample
+  avg_payload_bytes: 256
+
+per:
+  max_keys: 1024
+  max_value_bytes: 65536
+
+diag:
+  # DoIP TCP rx accumulator (server + client)
+  rx_max_bytes: 65536
+  dids:
+    max_entries: 256
+    max_payload: 4096
+
+# Optional ceilings for Verify warn (0 = no warn)
+budget:
+  ram_bytes: 0
+  disk_bytes: 0
+
+# BL-MEM-ROUDI — iceoryx classic (v2.0.8)
+# - mgmt → CMake IOX_MAX_* at iceoryx build time (change ⇒ reconfigure + rebuild iceoryx)
+# - mempools → generated/iox_roudi.toml (RouDi loads at start; req.bindings 含 iceoryx 才起 RouDi)
+iceoryx:
+  mgmt:
+    # iceoryx_mgmt SHM: port tables / discovery / history metadata (NOT user payload)
+    max_publishers: 32                      # IOX_MAX_PUBLISHERS
+    max_subscribers: 64                     # IOX_MAX_SUBSCRIBERS
+    max_subscribers_per_publisher: 8        # IOX_MAX_SUBSCRIBERS_PER_PUBLISHER
+    max_publisher_history: 4                # IOX_MAX_PUBLISHER_HISTORY
+    max_chunks_allocated_per_publisher: 2   # IOX_MAX_CHUNKS_ALLOCATED_PER_PUBLISHER_SIMULTANEOUSLY
+    max_chunks_held_per_subscriber: 16      # IOX_MAX_CHUNKS_HELD_PER_SUBSCRIBER_SIMULTANEOUSLY
+    max_interface_number: 2                 # IOX_MAX_INTERFACE_NUMBER
+  mempools:
+    # chunk payload size (alignment 8) + count → payload SHM
+    - size: 256
+      count: 128
+    - size: 1024
+      count: 64
+    - size: 4096
+      count: 32
+  # Optional: roudi_payload + measured mgmt > this → Verify warn (0 = off)
+  budget_shm_bytes: 0

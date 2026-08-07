@@ -73,6 +73,24 @@ _EN: dict[str, str] = {
         "With DLT checked, SIL/HIL starts dlt-daemon; host uses dlt-viewer / GMT. "
         "Tab-1 live/record is a separate observability path."
     ),
+    "log.yaml：默认级别、输出 sinks（console / file / DLT）、按模块级别。"
+    "勾选 DLT 时由 EM 拉起 dlt-daemon（daemon，非与 EM 并列）；上位机用 dlt-viewer / GMT。"
+    "页 1 的 live/record 是观测通道，与这里分开。": (
+        "log.yaml: default level, sinks (console / file / DLT), per-module levels. "
+        "With DLT checked, EM starts dlt-daemon (a platform daemon, not a peer of EM); "
+        "host uses dlt-viewer / GMT. Tab-1 live/record is a separate observability path."
+    ),
+    "EM（入口）": "EM (entry)",
+    "启动：systemd/init → EM（入口）→ daemons（dlt/RouDi…，按 gf-config）+ SOA apps。"
+    "下方为 compose 冻结状态（改 Tab2 日志/诊断与绑定后 Verify）。": (
+        "Boot: systemd/init → EM (entry) → daemons (dlt/RouDi…, via gf-config) + SOA apps. "
+        "Below is compose-frozen status (edit Tab2 log/diag/bindings, then Verify)."
+    ),
+    "主体=EM；dlt/RouDi 按需由 EM 拉起。下方为 compose 将冻结的状态（改 Tab2 日志/诊断与绑定后 Verify）。": (
+        "Subject=EM; dlt/RouDi started by EM as needed. Below is compose-frozen status "
+        "(edit Tab2 log/diag/bindings, then Verify)."
+    ),
+    "HOST / EM": "EM (entry)",
     "输出 sinks": "Output sinks",
     "console": "console",
     "file": "file",
@@ -302,6 +320,18 @@ _EN: dict[str, str] = {
     "args=POSIX argv（非 AP 字段，但 EM Spawn 需要；gateway 15=收满 Trajectory 退出）。"
     "PHM on_failure=restart + GF_EM_MANAGED → exit 75 后按 max_restarts relaunch。": (
         "em_launch.yaml: OS EM (gf_em_daemon) binary table. "
+        "binary is relative to $GF_BUILD_DIR; names align with exec.yaml. "
+        "args / max_restarts are never blank (defaults args=0, max_restarts=3). "
+        "args = POSIX argv (not an AP field, but EM Spawn needs it; "
+        "gateway 15 = exit after N Trajectory). "
+        "PHM on_failure=restart + GF_EM_MANAGED → exit 75 then relaunch up to max_restarts."
+    ),
+    "em_launch.yaml：EM 入口拉起的进程表（可选 daemons + SOA apps）。"
+    "binary 相对 $GF_BUILD_DIR；与 exec.yaml 进程名对齐。"
+    "args / max_restarts 不留空（默认 args=0、max_restarts=3）。"
+    "args=POSIX argv（非 AP 字段，但 EM Spawn 需要；gateway 15=收满 Trajectory 退出）。"
+    "PHM on_failure=restart + GF_EM_MANAGED → exit 75 后按 max_restarts relaunch。": (
+        "em_launch.yaml: processes spawned by EM entry (optional daemons + SOA apps). "
         "binary is relative to $GF_BUILD_DIR; names align with exec.yaml. "
         "args / max_restarts are never blank (defaults args=0, max_restarts=3). "
         "args = POSIX argv (not an AP field, but EM Spawn needs it; "

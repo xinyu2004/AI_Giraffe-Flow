@@ -25,7 +25,7 @@
 | **P3-2 Middleware** | AP depth | sm state machine, PHM Logical + SM link, **Event Collector** runtime, log lite, per/tsync skeleton |
 | **P3-3 FuSa** | Functional Safety toward a **full Safety Case** | `fusa/` cases + runs/packs, [isolation](../../../fusa/metrics/isolation.md) / [latency](../../../fusa/metrics/latency.md) (+ `measure_latency.sh`), Safety Case skeleton; later: HARA / FSC / `production` profile |
 | **P3-4 DoIP / OTA / GMT** | Diag & update ops | ✅ DoIP TCP · GMT **OTA/UDS** (OTA · DEM-lite · Collector on one sheet) · UCM · default **0x38** ([DOIP_OTA](../../zh/operations/DOIP_OTA.md); real RAUC → P3z) |
-| **P3-5 Sim spike** | CARLA / Vision Pilot | CARLA→semantic adapter spike; VP feasibility; weak coupling to middleware |
+| **P3-5 Sim spike** | Perception SIL → CARLA tip | ✅ A–C + `frame_ingest` freeze (`run_sil` via gf-config); AM62/S2 last; VP dropped |
 | **P3z Board / MCU** | Sprint gate (lowest urgency) | Optional thin smoke mid-phase; full `run_hil` / soak / real CP after desktop tracks OK |
 
 ## Event Collector (replaces “no DEM”)
@@ -44,9 +44,10 @@ We do **not** sell / perform ISO 26262 certification or hold ASIL certificates f
 
 ## Next
 
-1. **P3-5** YOLO→semantic demo spike (VP dropped; CARLA optional).  
-2. **P3z** board / vsomeip / real RAUC / soak.  
-3. Cloud CI + release T4.
+1. **P3z / wave E** AM62 EdgeAI (same `frame_ingest`) / board / vsomeip / RAUC / soak.
+2. Config policy backlog: freeze more behavior switches at compile (see zh [CONFIG_RUNTIME_POLICY.md](../../zh/operations/CONFIG_RUNTIME_POLICY.md)).
+3. Cloud CI + release T4; optional real ORT / CARLA image→Foxglove topic.
 
-P3-4 desktop DoIP/OTA is closed — see Chinese [DOIP_OTA.md](../../zh/operations/DOIP_OTA.md).  
+P3-4 desktop DoIP/OTA is closed — see Chinese [DOIP_OTA.md](../../zh/operations/DOIP_OTA.md).
 **2026-08-04:** gf-config log-table UX + duplicate-context Verify; GMT Collector/DEM merged into the OTA/UDS tab.
+**2026-08-06:** P3-5 A–C + `frame_ingest` — accept via gf-config → compose → `compile_sil` → `run_sil` (other projects to follow same policy).
