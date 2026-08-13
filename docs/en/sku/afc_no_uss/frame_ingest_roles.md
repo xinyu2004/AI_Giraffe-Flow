@@ -39,6 +39,11 @@ Linux:    projects/<sku>/carla.env → run_sil → bridge ─┘
 - `bridge.dry_run` — meaningless on the full-CARLA product path (dev tip smoke: bridge CLI/env only).
 - `bridge.demo_lane_change*` — world maneuvers belong in `carla_scenarios/`.
 
+## Tip camera geometry (single source)
+
+`GF_CARLA_TIP_*` / mount presets live in [`carla_scenarios/src/lib/_tip_mount.py`](../../../../carla_scenarios/src/lib/_tip_mount.py).  
+`carla_bridge/tip_mount.py` is a **re-export only** (via `GF_SCENARIOS_DIR`) — do not duplicate. Scenario callers `load_local_env()` first; bridge reads SKU-injected env only.
+
 ## Two `carla.env` files
 
 | File | Reader | Repo |

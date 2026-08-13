@@ -1,9 +1,10 @@
-"""Tip / windshield camera mount (env-configurable).
+"""Tip / windshield camera mount (env-configurable) — **canonical** copy.
 
-Perception tip (carla_bridge) and pygame windshield mode share these keys so
-lab view can match the product tip. Changing pygame mode never moves tip.
+Perception tip (carla_bridge re-exports this module) and pygame windshield
+mode share these keys so lab view can match the product tip. Changing pygame
+mode never moves tip.
 
-Env (all optional; process env overrides carla.env)::
+Env (all optional; process env overrides carla.env on the scenario machine):
 
   GF_CARLA_TIP_MOUNT   1 = windshield (default); legacy names still accepted
   GF_CARLA_TIP_FOV     degrees (default 100)
@@ -86,13 +87,11 @@ def resolve_tip_mount_id(raw: str | None = None) -> str:
 
 
 def load_tip_mount() -> TipMount:
-    """Resolve mount from env; unknown mount id uses windshield (1) as base."""
-    try:
-        from _carla_env import load_local_env
+    """Resolve mount from already-set ``os.environ`` (unknown id → preset 1 base).
 
-        load_local_env()
-    except Exception:  # noqa: BLE001
-        pass
+    Does **not** load ``carla_scenarios/carla.env`` — callers (scenario) must
+    ``load_local_env()`` first; SIL/bridge must keep SKU env only.
+    """
     mid = resolve_tip_mount_id()
     if mid in _PRESETS:
         base = dict(_PRESETS[mid])

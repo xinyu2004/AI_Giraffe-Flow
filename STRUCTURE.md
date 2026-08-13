@@ -13,6 +13,7 @@ AI_Giraffe-Flow/
   middleware/         # board runtime + third_party/ checkouts
   apps/               # reference processes (mixed shared + SKU-ish stubs)
   tools/              # gf-config, gf-codegen, gmt, bridge, …
+  carla_scenarios/    # product CARLA Client A (place/IC; not under SKU)
   fusa/               # Functional Safety → Safety Case evidence
   schemas/
   dep-manifest/       # dependency pins + bootstrap.sh (checkouts → middleware/third_party/)

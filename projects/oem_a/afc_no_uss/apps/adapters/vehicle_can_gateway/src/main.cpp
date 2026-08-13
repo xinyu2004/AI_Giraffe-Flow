@@ -336,7 +336,7 @@ int main(int argc, char** argv) {
 
     if (!cmd_path.empty()) {
       // Lane / longitudinal intent from planning (+ optional ctrl tip).
-      // World scripted maneuvers belong in scenarios/*.py — not gateway demos.
+      // World scripted maneuvers belong in carla_scenarios/*.py — not gateway demos.
       const CtrlTip ctrl = ReadCtrlTip(ctrl_path);
       float thr = ctrl.has_longitudinal ? ctrl.throttle : 0.35f;
       float brk = ctrl.has_longitudinal ? ctrl.brake : 0.0f;

@@ -16,6 +16,7 @@ from _carla_env import (
     carla_port,
     connect_world,
     duration_s_for_case,
+    load_local_env,
     wait_budget_s,
 )
 from _instrument import (
@@ -106,6 +107,7 @@ class AtomCase:
         ensure_view: Optional[Callable[..., Optional[ScenarioView]]] = None,
     ) -> Tuple[int, Optional[ScenarioView]]:
         stop = stop_flag or (lambda: STOP)
+        load_local_env()
         mount = load_tip_mount()
         meta: dict[str, Any] = {"keep_ego": keep_ego}
         weather_cfg = None

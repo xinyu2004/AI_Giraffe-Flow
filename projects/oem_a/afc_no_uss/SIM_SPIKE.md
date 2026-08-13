@@ -1,6 +1,6 @@
 # P3-5 Sim spike — `afc_no_uss`
 
-桌面闭环：**契约冻结 → tip NV12 → 单管 Foxglove → CARLA Ego/cmd → scenarios truth → 带帧回灌**。  
+桌面闭环：**契约冻结 → tip NV12 → 单管 Foxglove → CARLA Ego/cmd → carla_scenarios truth → 带帧回灌**。  
 SKU 文档：[docs/](./docs/) → `docs/zh/sku/afc_no_uss/`（含 [职责说明](./docs/frame_ingest_roles.md)）。
 
 ## 主验收路径（完整产品）
@@ -14,7 +14,7 @@ SKU 文档：[docs/](./docs/) → `docs/zh/sku/afc_no_uss/`（含 [职责说明]
 ```
 
 - **bridge 必须**（相对 FCM）：无图像 tip 则无完整前视产品路径。  
-- **无** SKU 冻结的 `dry_run` / `demo_lane_change`（剧情在 scenarios；开发 tip 自检见 `smoke_carla_sil.sh`）。
+- **无** SKU 冻结的 `dry_run` / `demo_lane_change`（剧情在 `carla_scenarios/`；开发 tip 自检见 `smoke_carla_sil.sh`）。
 
 ## 目录
 

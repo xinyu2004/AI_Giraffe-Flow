@@ -18,7 +18,13 @@ for _p in (_AFC, _SRC, _LIB):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from _carla_env import carla_host, carla_port, connect_world, wait_budget_s  # noqa: E402
+from _carla_env import (  # noqa: E402
+    carla_host,
+    carla_port,
+    connect_world,
+    load_local_env,
+    wait_budget_s,
+)
 from _instrument import (  # noqa: E402
     CtrlProbe,
     make_cluster_state,
@@ -84,6 +90,7 @@ def run_session(
 ) -> Tuple[int, Optional[ScenarioView]]:
     """Scheme-1 session on an existing world (daemon or CLI)."""
     stop = stop_flag or (lambda: STOP)
+    load_local_env()
     cfg = load_weather(preset)
     apply_weather(world, carla, cfg)
     mount = load_tip_mount()

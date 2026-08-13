@@ -45,6 +45,11 @@ Linux:    projects/<sku>/carla.env → run_sil → bridge ─┘
 - `bridge.dry_run`：完整 CARLA 产品路径下无意义；开发无 UE tip 自检仅用 bridge **CLI/env**。  
 - `bridge.demo_lane_change*`：变道/剧情由 `carla_scenarios/` 定义。
 
+## Tip 相机几何（单一真源）
+
+`GF_CARLA_TIP_*` / mount 预设定义在 [`carla_scenarios/src/lib/_tip_mount.py`](../../../../carla_scenarios/src/lib/_tip_mount.py)。  
+`carla_bridge/tip_mount.py` **只 re-export**（经 `GF_SCENARIOS_DIR`），勿再抄一份。场景入口先 `load_local_env()`；bridge 只读 SKU 已注入的环境。
+
 ## 环境变量与两份 carla.env
 
 | 文件 | 谁读 | 仓库 |

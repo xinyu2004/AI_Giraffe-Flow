@@ -10,6 +10,10 @@ This process is a CARLA Python **client** (UE is the **server**).
 `run_sil.sh` auto-loads SKU `carla.env` (copy from `carla.env.example`).  
 Scenario machine uses `carla_scenarios/carla.env` — do not mix `CARLA_HOST`.
 
+Tip mount geometry: canonical `carla_scenarios/src/lib/_tip_mount.py`; local
+`tip_mount.py` only re-exports (set `GF_SCENARIOS_DIR` if the suite is not at
+repo-root `carla_scenarios/`).
+
 ## Env
 
 | Variable | Default | Meaning |
