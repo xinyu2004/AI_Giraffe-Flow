@@ -88,3 +88,11 @@ fusa/runs/*
 !fusa/runs/.gitkeep
 fusa/packs/*
 !fusa/packs/.gitkeep
+
+# carla_scenarios batch results (keep README; ignore run outputs)
+carla_scenarios/results/runs/*
+!carla_scenarios/results/runs/.gitkeep
+carla_scenarios/results/latest.json
+
+# SKU-local CARLA endpoint overrides (carla_scenarios/carla.env is tracked)
+projects/**/carla.env

@@ -1,0 +1,15 @@
+kind: cases
+cases:
+  - id: env_lane_split
+    script: env_lane_split.py
+    status: active
+    keyword: LANE_SPLIT
+    tags: [roadway, l2]
+    description: Lane count increases (split / widen)
+
+  - id: env_lane_merge
+    script: env_lane_merge.py
+    status: active
+    keyword: LANE_MERGE
+    tags: [roadway, l2]
+    description: Lane count decreases (merge / narrow)

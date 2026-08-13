@@ -1,0 +1,29 @@
+kind: cases
+cases:
+  - id: hlb_oncoming
+    script: hlb_oncoming.py
+    status: active
+    keyword: HLB
+    tags: [lighting, l2]
+    description: High/low beam — oncoming vehicle
+
+  - id: hlb_urban
+    script: hlb_urban.py
+    status: active
+    keyword: HLB
+    tags: [lighting, l2]
+    description: High/low beam — urban lit segment
+
+  - id: env_night_glare
+    script: env_night_glare.py
+    status: active
+    keyword: NIGHT_GLARE
+    tags: [lighting, isp_env, l2]
+    description: Night — oncoming high beam glare
+
+  - id: env_night_lead_hb
+    script: env_night_lead_hb.py
+    status: active
+    keyword: NIGHT_LEAD_HB
+    tags: [lighting, isp_env, l2]
+    description: Night — lead vehicle high beam

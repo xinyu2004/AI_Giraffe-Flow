@@ -36,14 +36,18 @@ observability:
 frame_ingest:
   frame_source: carla_file
   perception_backend: stub
+  pixel_format: nv12
+  ego_source: carla
+  frame_w: 640
+  frame_h: 480
   bridge:
     enabled: true
-    dry_run: true
-    demo_lane_change: true
-    demo_lane_change_sec: 8
   paths:
-    frame: /tmp/gf_front.rgb
+    frame: /tmp/gf_front.yuv
     cmd: /tmp/gf_carla_cmd.json
+    ego: /tmp/gf_carla_ego.json
+    truth: /tmp/gf_carla_truth.json
+    ctrl: /tmp/gf_planning_ctrl.json
 apps:
 - adapters/vehicle_can_gateway
 - perception/fcm

@@ -1,0 +1,8 @@
+kind: cases
+cases:
+  - id: tsr_speed_limit
+    script: tsr_speed_limit.py
+    status: active
+    keyword: TSR
+    tags: [perception, l2]
+    description: Traffic sign — speed limit visible

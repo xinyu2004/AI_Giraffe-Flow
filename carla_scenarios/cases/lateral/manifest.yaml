@@ -1,0 +1,36 @@
+kind: cases
+cases:
+  - id: lka_curve_entry
+    script: lka_curve_entry.py
+    status: active
+    keyword: LKA
+    tags: [lateral, curve, l2]
+    description: LKA — straight into curve entry (recognition time)
+
+  - id: lka_in_curve
+    script: lka_in_curve.py
+    status: active
+    keyword: LKA
+    tags: [lateral, curve, l2]
+    description: LKA — hold in curve
+
+  - id: ldw_drift
+    script: ldw_drift.py
+    status: active
+    keyword: LDW
+    tags: [lateral, warning, l2]
+    description: Lane departure warning — slow drift
+
+  - id: elk_overshoot
+    script: elk_overshoot.py
+    status: active
+    keyword: ELK
+    tags: [lateral, emergency, l2]
+    description: Emergency lane keep — overshoot + neighbor
+
+  - id: lcc_straight
+    script: lcc_straight.py
+    status: active
+    keyword: LCC
+    tags: [lateral, centering, l2]
+    description: Lane centering on straight

@@ -1,0 +1,14 @@
+# AFC root suite — links child directories (each must have its own manifest.yaml).
+# Run from this dir:  python3 run_cases.py
+# Or pass a child:    python3 run_cases.py cases/longitudinal
+# Multi-case subsets: add another suite/cases dir with its own manifest (not .py CLI lists).
+product: afc
+kind: suite
+children:
+  - cases/longitudinal
+  - cases/lateral
+  - cases/perception
+  - cases/lighting
+  - cases/roadway
+  - cases/isp_env
+  - cases/weather

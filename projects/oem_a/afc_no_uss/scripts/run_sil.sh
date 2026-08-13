@@ -157,12 +157,6 @@ fi
 if [[ -z "${GF_START_CARLA_BRIDGE+x}" ]]; then
   export GF_START_CARLA_BRIDGE="$(_gf_hpp_bool "${FRAME_HPP}" kBridgeEnabled 0)"
 fi
-if [[ -z "${GF_CARLA_BRIDGE_DRY_RUN+x}" ]]; then
-  export GF_CARLA_BRIDGE_DRY_RUN="$(_gf_hpp_bool "${FRAME_HPP}" kBridgeDryRun 1)"
-fi
-if [[ -z "${GF_CARLA_DEMO_LC+x}" ]]; then
-  export GF_CARLA_DEMO_LC="$(_gf_hpp_bool "${FRAME_HPP}" kDemoLaneChange 0)"
-fi
 if [[ -z "${GF_FRAME_SOURCE+x}" ]]; then
   export GF_FRAME_SOURCE="$(_gf_hpp_cstr "${FRAME_HPP}" kFrameSource none)"
 fi
@@ -170,15 +164,143 @@ if [[ -z "${GF_PERCEPTION_BACKEND+x}" ]]; then
   export GF_PERCEPTION_BACKEND="$(_gf_hpp_cstr "${FRAME_HPP}" kPerceptionBackend stub)"
 fi
 if [[ -z "${GF_CARLA_FRAME_PATH+x}" ]]; then
-  export GF_CARLA_FRAME_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kFramePath /tmp/gf_front.rgb)"
+  export GF_CARLA_FRAME_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kFramePath /tmp/gf_front.yuv)"
 fi
 if [[ -z "${GF_CARLA_CMD_PATH+x}" ]]; then
   export GF_CARLA_CMD_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kCmdPath /tmp/gf_carla_cmd.json)"
 fi
-if [[ -z "${GF_CARLA_DEMO_LC_SEC+x}" ]]; then
-  export GF_CARLA_DEMO_LC_SEC="$(_gf_hpp_u32 "${FRAME_HPP}" kDemoLaneChangeSec 8)"
+if [[ -z "${GF_CARLA_EGO_PATH+x}" ]]; then
+  export GF_CARLA_EGO_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kEgoPath /tmp/gf_carla_ego.json)"
 fi
-echo "${TAG} frame_ingest: hpp source=${GF_FRAME_SOURCE} bridge=${GF_START_CARLA_BRIDGE} dry=${GF_CARLA_BRIDGE_DRY_RUN}"
+if [[ -z "${GF_CARLA_TRUTH_PATH+x}" ]]; then
+  export GF_CARLA_TRUTH_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kTruthPath /tmp/gf_carla_truth.json)"
+fi
+if [[ -z "${GF_PLANNING_CTRL_PATH+x}" ]]; then
+  export GF_PLANNING_CTRL_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kCtrlPath /tmp/gf_planning_ctrl.json)"
+fi
+if [[ -z "${GF_PIXEL_FORMAT+x}" ]]; then
+  export GF_PIXEL_FORMAT="$(_gf_hpp_cstr "${FRAME_HPP}" kPixelFormat nv12)"
+fi
+if [[ -z "${GF_EGO_SOURCE+x}" ]]; then
+  export GF_EGO_SOURCE="$(_gf_hpp_cstr "${FRAME_HPP}" kEgoSource gateway)"
+fi
+if [[ -z "${GF_CARLA_CAM_W+x}" ]]; then
+  export GF_CARLA_CAM_W="$(_gf_hpp_u32 "${FRAME_HPP}" kFrameW 640)"
+fi
+if [[ -z "${GF_CARLA_CAM_H+x}" ]]; then
+  export GF_CARLA_CAM_H="$(_gf_hpp_u32 "${FRAME_HPP}" kFrameH 480)"
+fi
+# Product scenarios live under repo carla_scenarios/ (not gf-config).
+export GF_SAMPLES_DIR="${GF_SAMPLES_DIR:-${PROJECT_DIR}/samples}"
+export GF_SCENARIOS_DIR="${GF_SCENARIOS_DIR:-${ROOT}/carla_scenarios}"
+# HIL: two CARLA Python clients, one UE server.
+#   SKU carla.env     → this SIL / frame_ingest / carla_bridge (auto-loaded here)
+#   carla_scenarios/carla.env → scenario machine only (never steal its CARLA_HOST here)
+# Process env wins. Tip /tmp/gf_front.yuv is LOCAL on this SIL after RPC.
+_gf_load_carla_env_file() {
+  local f="$1"
+  shift
+  local skip_host=0
+  [[ "${1:-}" == "--skip-carla-host" ]] && skip_host=1
+  [[ -f "${f}" ]] || return 1
+  local line key val
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%%#*}"
+    line="$(echo "${line}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -n "${line}" ]] || continue
+    [[ "${line}" == export\ * ]] && line="${line#export }"
+    [[ "${line}" == *=* ]] || continue
+    key="${line%%=*}"
+    val="${line#*=}"
+    key="$(echo "${key}" | sed -e 's/[[:space:]]//g')"
+    val="$(echo "${val}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//')"
+    if [[ "${skip_host}" == "1" && "${key}" == "CARLA_HOST" ]]; then
+      continue
+    fi
+    case "${key}" in
+      CARLA_HOST|CARLA_PORT|GF_CARLA_WAIT_S|GF_CARLA_CONNECT_TIMEOUT_S|GF_CARLA_PYTHON|GF_CARLA_FRAME_PATH|GF_CARLA_EGO_PATH|GF_CARLA_CMD_PATH|GF_CARLA_TRUTH_PATH|GF_PIXEL_FORMAT)
+        if [[ -z "${!key+x}" || -z "${!key}" ]]; then
+          export "${key}=${val}"
+        fi
+        ;;
+    esac
+  done <"${f}"
+  echo "${TAG} loaded CARLA env ← ${f}${skip_host:+ (skip CARLA_HOST)}"
+  return 0
+}
+_SKU_CARLA_ENV="${PROJECT_DIR}/carla.env"
+_SCEN_CARLA_ENV="${GF_SCENARIOS_DIR}/carla.env"
+[[ -f "${_SCEN_CARLA_ENV}" ]] || _SCEN_CARLA_ENV="${ROOT}/carla_scenarios/carla.env"
+_CARLA_ENV_SKU=""
+_CARLA_ENV_SCEN=""
+if _gf_load_carla_env_file "${_SKU_CARLA_ENV}"; then
+  _CARLA_ENV_SKU="${_SKU_CARLA_ENV}"
+else
+  echo "${TAG} WARN: missing ${_SKU_CARLA_ENV}" >&2
+  echo "${TAG}       HIL SIL should: cp carla.env.example carla.env  # UE IP + GF_CARLA_PYTHON" >&2
+  echo "${TAG}       (do not use carla_scenarios/carla.env CARLA_HOST — that file is for the scenario machine)" >&2
+fi
+# Generic PORT/WAIT/etc. from product scenarios; never import scenario CARLA_HOST.
+if _gf_load_carla_env_file "${_SCEN_CARLA_ENV}" --skip-carla-host; then
+  _CARLA_ENV_SCEN="${_SCEN_CARLA_ENV}"
+fi
+export CARLA_HOST="${CARLA_HOST:-127.0.0.1}"
+export CARLA_PORT="${CARLA_PORT:-2000}"
+export GF_CARLA_WAIT_S="${GF_CARLA_WAIT_S:-0}"
+echo "${TAG} ========== frame_ingest status =========="
+echo "${TAG}   freeze: source=${GF_FRAME_SOURCE} pixel=${GF_PIXEL_FORMAT} ego=${GF_EGO_SOURCE}"
+echo "${TAG}   bridge.enabled(GF_START_CARLA_BRIDGE)=${GF_START_CARLA_BRIDGE}"
+echo "${TAG}   tip (SIL local file, written by carla_bridge AFTER UE connect):"
+echo "${TAG}     frame=${GF_CARLA_FRAME_PATH} ego=${GF_CARLA_EGO_PATH} truth=${GF_CARLA_TRUTH_PATH}"
+echo "${TAG}   cmd=${GF_CARLA_CMD_PATH}  cam=${GF_CARLA_CAM_W}x${GF_CARLA_CAM_H}"
+echo "${TAG}   CARLA_HOST=${CARLA_HOST} CARLA_PORT=${CARLA_PORT} GF_CARLA_WAIT_S=${GF_CARLA_WAIT_S}"
+echo "${TAG}   carla.env sku=${_CARLA_ENV_SKU:-none} scenarios=${_CARLA_ENV_SCEN:-none}"
+echo "${TAG}   roles: UE=server  carla_bridge=client  scenarios=client (often other host)"
+if [[ "${GF_START_CARLA_BRIDGE}" == "1" ]] && [[ -z "${_CARLA_ENV_SKU}" ]]; then
+  echo "${TAG}   WARN: no SKU carla.env — CARLA_HOST may be wrong for HIL (localhost = no remote UE)" >&2
+fi
+if [[ "${GF_START_CARLA_BRIDGE}" == "1" ]] && [[ "${CARLA_HOST}" == "127.0.0.1" || "${CARLA_HOST}" == "localhost" ]]; then
+  echo "${TAG}   WARN: CARLA_HOST is localhost — on Linux SIL, UE is usually Windows; set SKU carla.env" >&2
+  echo "${TAG}         tip stays missing until bridge connects to the UE RPC port :${CARLA_PORT}" >&2
+fi
+if [[ "${GF_START_CARLA_BRIDGE}" != "1" ]]; then
+  echo "${TAG}   WARN: bridge OFF — no tip writer; FCM will stay no_frame unless inject/file" >&2
+fi
+echo "${TAG} samples=${GF_SAMPLES_DIR} scenarios=${GF_SCENARIOS_DIR}"
+echo "${TAG} ========================================="
+
+# ego_source mutual exclusion (gateway | inject | carla).
+case "${GF_EGO_SOURCE}" in
+  inject)
+    if [[ "${INJECT_ON}" != "1" ]]; then
+      export GF_INJECT_MODE="${GF_INJECT_MODE:-playhead}"
+      DRIVE_HINT="${GF_INJECT_MODE}"
+      INJECT_ON=1
+      if [[ -n "${GF_INJECT_DUT:-}" || -n "${GF_INJECT_APPS:-}" ]]; then
+        INJECT_MODE="b2"
+      else
+        INJECT_MODE="b1"
+      fi
+      echo "${TAG} ego_source=inject → inject on mode=${INJECT_MODE} drive=${DRIVE_HINT} (gateway Ego off)"
+    fi
+    # Prefer frame volume replay over live carla_bridge when injecting images.
+    if [[ -n "${GF_INJECT_FRAMES_DIR:-}" ]]; then
+      export GF_START_CARLA_BRIDGE=0
+      echo "${TAG} inject frames ← ${GF_INJECT_FRAMES_DIR} (carla_bridge off)"
+    fi
+    ;;
+  carla)
+    if [[ "${INJECT_ON}" == "1" ]]; then
+      echo "${TAG} ERROR: ego_source=carla conflicts with inject (mutual exclusion)" >&2
+      exit 2
+    fi
+    ;;
+  gateway|"")
+    ;;
+  *)
+    echo "${TAG} WARN: unknown GF_EGO_SOURCE=${GF_EGO_SOURCE} (use gateway|inject|carla)" >&2
+    ;;
+esac
 
 # Flow/EM hints from deploy_config.hpp (soft for Flow; EM uses compiled table).
 _gf_deploy_bool() {
@@ -690,7 +812,7 @@ gf_sil_preflight_ports
 
 cleanup() {
   set +e
-  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${CARLA_BRIDGE_PID:-}" "${EM_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}" "${DLT_PID:-}"; do
+  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${FRAME_INGEST_STAT_PID:-}" "${BRIDGE_TAIL_PID:-}" "${CARLA_BRIDGE_PID:-}" "${EM_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}" "${DLT_PID:-}"; do
     [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null
   done
   # EM children (dlt/RouDi/apps) may outlive the daemon briefly
@@ -984,6 +1106,11 @@ if [[ "${INJECT_ON}" == "1" ]]; then
       _FOX_BEV=(--synth-bev)
       echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → /gf/camera/front/compressed; GF_SYNTH_BEV=0 to disable)"
     fi
+    _FOX_TIP=()
+    if [[ "${GF_TIP_CAMERA:-1}" != "0" && -n "${GF_CARLA_FRAME_PATH:-}" ]]; then
+      _FOX_TIP=(--tip-frame "${GF_CARLA_FRAME_PATH}")
+      echo "${TAG} Foxglove tip camera ← ${GF_CARLA_FRAME_PATH} (/gf/camera/front/tip/compressed)"
+    fi
     if [[ "${LIVE_TEE}" == "1" ]]; then
       mkdir -p "$(dirname "${LIVE_SESSION}")"
       : > "${LIVE_SESSION}"
@@ -1010,14 +1137,30 @@ if [[ "${INJECT_ON}" == "1" ]]; then
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
           | tee "${LIVE_SESSION}" \
           | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" --host "${HOST}" --port "${PORT}"
+          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
       else
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
           | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" --host "${HOST}" --port "${PORT}"
+          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
       fi
     ) &
     LIVE_FAN_PID=$!
+  fi
+
+  FRAME_REPLAY_PID=""
+  if [[ -n "${GF_INJECT_FRAMES_DIR:-}" ]]; then
+    REPLAY_PY="${PROJECT_DIR}/tools/carla_bridge/frame_replay.py"
+    PY="${GF_CARLA_PYTHON:-python3}"
+    if [[ -f "${REPLAY_PY}" && -d "${GF_INJECT_FRAMES_DIR}" ]]; then
+      echo "${TAG} frame_replay ← ${GF_INJECT_FRAMES_DIR} → ${GF_CARLA_FRAME_PATH}"
+      "${PY}" "${REPLAY_PY}" --frames-dir "${GF_INJECT_FRAMES_DIR}" \
+        --frame-path "${GF_CARLA_FRAME_PATH}" \
+        $([ "${GF_INJECT_LOOP:-0}" = "1" ] && echo --loop) \
+        >"${LOG_DIR}/frame_replay.log" 2>&1 &
+      FRAME_REPLAY_PID=$!
+    else
+      echo "${TAG} WARN: GF_INJECT_FRAMES_DIR set but replay missing/dir absent" >&2
+    fi
   fi
 
   if [[ "${DRIVE_MODE}" == "playhead" || "${DRIVE_MODE}" == "controlled" || "${DRIVE_MODE}" == "wait" ]]; then
@@ -1027,6 +1170,9 @@ if [[ "${INJECT_ON}" == "1" ]]; then
     rm -f "${INJ_FIFO}"
     if [[ -n "${LIVE_FAN_PID}" ]]; then
       kill "${LIVE_FAN_PID}" 2>/dev/null || true
+    fi
+    if [[ -n "${FRAME_REPLAY_PID}" ]]; then
+      kill "${FRAME_REPLAY_PID}" 2>/dev/null || true
     fi
     echo "${TAG} inject stopped; logs: ${LOG_DIR}/ (apps=${RUN_APPS})"
     exit 0
@@ -1038,35 +1184,172 @@ if [[ "${INJECT_ON}" == "1" ]]; then
   if [[ -n "${LIVE_FAN_PID}" ]]; then
     kill "${LIVE_FAN_PID}" 2>/dev/null || true
   fi
+  if [[ -n "${FRAME_REPLAY_PID}" ]]; then
+    kill "${FRAME_REPLAY_PID}" 2>/dev/null || true
+  fi
   echo "${TAG} inject finished; logs: ${LOG_DIR}/ (apps=${RUN_APPS})"
   exit 0
 fi
 
 # Optional CARLA / dry-run bridge — enabled by frame_ingest_config.hpp (or debug GF_*).
+# Optional CARLA / dry-run bridge — enabled by frame_ingest_config.hpp (or debug GF_*).
 CARLA_BRIDGE_PID=""
+BRIDGE_TAIL_PID=""
+FRAME_INGEST_STAT_PID=""
 if [[ "${GF_START_CARLA_BRIDGE:-0}" == "1" ]]; then
-  export GF_CARLA_FRAME_PATH="${GF_CARLA_FRAME_PATH:-/tmp/gf_front.rgb}"
+  export GF_CARLA_FRAME_PATH="${GF_CARLA_FRAME_PATH:-/tmp/gf_front.yuv}"
   export GF_CARLA_CMD_PATH="${GF_CARLA_CMD_PATH:-/tmp/gf_carla_cmd.json}"
   export GF_FRAME_SOURCE="${GF_FRAME_SOURCE:-carla_file}"
   export CARLA_HOST="${CARLA_HOST:-127.0.0.1}"
   export CARLA_PORT="${CARLA_PORT:-2000}"
+  # Default: record tip frames next to live session for W4 inject replay.
+  if [[ -z "${GF_RECORD_FRAMES_DIR+x}" && "${GF_LIVE_TEE:-1}" == "1" ]]; then
+    export GF_RECORD_FRAMES_DIR="$(gf_obs_dir)/session_frames"
+  fi
+  if [[ -n "${GF_RECORD_FRAMES_DIR:-}" ]]; then
+    mkdir -p "${GF_RECORD_FRAMES_DIR}"
+    : >"${GF_RECORD_FRAMES_DIR}/frames.jsonl"
+    echo "${TAG} record tip frames → ${GF_RECORD_FRAMES_DIR}"
+  fi
   BRIDGE_PY="${PROJECT_DIR}/tools/carla_bridge/carla_bridge.py"
-  PY="${GF_CARLA_PYTHON:-python3}"
-  echo "${TAG} carla_bridge → frame=${GF_CARLA_FRAME_PATH} cmd=${GF_CARLA_CMD_PATH} source=${GF_FRAME_SOURCE} dry=${GF_CARLA_BRIDGE_DRY_RUN:-0}"
+  # Prefer GF_CARLA_PYTHON; else active conda/venv; else ~/miniconda3/envs/carla_env.
+  # Bare `python3` is often /usr/bin/python3 — NOT the env where you `pip install carla`.
+  _gf_resolve_carla_python() {
+    local c
+    for c in \
+      "${GF_CARLA_PYTHON:-}" \
+      "${CONDA_PREFIX:+${CONDA_PREFIX}/bin/python}" \
+      "${VIRTUAL_ENV:+${VIRTUAL_ENV}/bin/python}" \
+      "${HOME}/miniconda3/envs/carla_env/bin/python" \
+      "${HOME}/anaconda3/envs/carla_env/bin/python" \
+      "python3"
+    do
+      [[ -n "${c}" ]] || continue
+      if [[ "${c}" == */* && ! -x "${c}" ]]; then
+        continue
+      fi
+      if "${c}" -c "import carla" >/dev/null 2>&1; then
+        echo "${c}"
+        return 0
+      fi
+    done
+    echo "${GF_CARLA_PYTHON:-python3}"
+    return 1
+  }
+  if PY="$(_gf_resolve_carla_python)"; then
+    export GF_CARLA_PYTHON="${PY}"
+  else
+    PY="${GF_CARLA_PYTHON:-python3}"
+    echo "${TAG} ERROR: no Python with 'import carla' (tried GF_CARLA_PYTHON/conda/venv/carla_env)." >&2
+    echo "${TAG}   You installed carla in (carla_env), but bridge uses: $(command -v "${PY}" || echo "${PY}")" >&2
+    echo "${TAG}   Fix:  export GF_CARLA_PYTHON=\$HOME/miniconda3/envs/carla_env/bin/python" >&2
+    echo "${TAG}   Or:   conda activate carla_env && re-run run_sil from that shell" >&2
+  fi
+  echo "${TAG} carla_bridge python → ${PY} ($("${PY}" -c 'import sys; print(sys.executable)' 2>/dev/null || echo '?'))"
+  echo "${TAG} carla_bridge start → host=${CARLA_HOST}:${CARLA_PORT} wait=${GF_CARLA_WAIT_S}"
+  echo "${TAG} carla_bridge tip → frame=${GF_CARLA_FRAME_PATH} fmt=${GF_PIXEL_FORMAT} ego_src=${GF_EGO_SOURCE}"
+  echo "${TAG} carla_bridge log → ${LOG_DIR}/carla_bridge.log (mirrored to console)"
   : >"${LOG_DIR}/carla_bridge.log"
   if [[ -f "${BRIDGE_PY}" ]]; then
-    "${PY}" "${BRIDGE_PY}" >"${LOG_DIR}/carla_bridge.log" 2>&1 &
+    # Real bridge PID (not tee). Mirror log to SIL console separately.
+    if command -v stdbuf >/dev/null 2>&1; then
+      stdbuf -oL -eL "${PY}" "${BRIDGE_PY}" >>"${LOG_DIR}/carla_bridge.log" 2>&1 &
+    else
+      "${PY}" "${BRIDGE_PY}" >>"${LOG_DIR}/carla_bridge.log" 2>&1 &
+    fi
     CARLA_BRIDGE_PID=$!
-    sleep 0.4
+    tail -n +1 -F "${LOG_DIR}/carla_bridge.log" 2>/dev/null &
+    BRIDGE_TAIL_PID=$!
+    sleep 0.6
     if ! kill -0 "${CARLA_BRIDGE_PID}" 2>/dev/null; then
       echo "${TAG} WARN: carla_bridge exited early; see ${LOG_DIR}/carla_bridge.log (SIL continues)" >&2
+      kill "${BRIDGE_TAIL_PID}" 2>/dev/null || true
+      BRIDGE_TAIL_PID=""
       CARLA_BRIDGE_PID=""
     else
-      host_info "carla_bridge ok pid=${CARLA_BRIDGE_PID} dry=${GF_CARLA_BRIDGE_DRY_RUN:-0}"
+      host_info "carla_bridge ok pid=${CARLA_BRIDGE_PID} host=${CARLA_HOST}:${CARLA_PORT}"
     fi
+    # Periodic tip / FCM heartbeat: carla_fps / tip_write_fps / fcm_read_fps.
+    (
+      FCM_LOG="${LOG_DIR}/em/perception_fcm.log"
+      [[ -f "${FCM_LOG}" ]] || FCM_LOG="${LOG_DIR}/fcm.log"
+      STATS="${GF_CARLA_BRIDGE_STATS_PATH:-/tmp/gf_carla_bridge_stats.json}"
+      META="${GF_CARLA_FRAME_PATH:-/tmp/gf_front.yuv}"
+      META="${META%.yuv}.meta.json"
+      prev_fseq=""
+      prev_fseq_t=""
+      prev_tip_seq=""
+      prev_tip_t=""
+      while true; do
+        sleep 5
+        tip="${GF_CARLA_FRAME_PATH}"
+        tip_sz="missing"
+        tip_age="n/a"
+        if [[ -f "${tip}" ]]; then
+          tip_sz="$(wc -c <"${tip}" 2>/dev/null | tr -d ' ' || echo '?')"
+          tip_age="$(date -r "${tip}" '+%H:%M:%S' 2>/dev/null || echo '?')"
+        fi
+        br="down"
+        if [[ -n "${CARLA_BRIDGE_PID}" ]] && kill -0 "${CARLA_BRIDGE_PID}" 2>/dev/null; then
+          br="up pid=${CARLA_BRIDGE_PID}"
+        fi
+        br_why=""
+        if [[ "${br}" == down && -f "${LOG_DIR}/carla_bridge.log" ]]; then
+          br_why="$(grep -E 'not installed|connect .* failed|waiting for CARLA|connected |waiting for scenario hero|fps carla=' "${LOG_DIR}/carla_bridge.log" 2>/dev/null | tail -1 || true)"
+          [[ -n "${br_why}" ]] || br_why="$(tail -1 "${LOG_DIR}/carla_bridge.log" 2>/dev/null || true)"
+        fi
+        carla_fps="?"
+        tip_fps="?"
+        waiting_hero="?"
+        if [[ -f "${STATS}" ]]; then
+          # small JSON: {"carla_fps":..,"tip_fps":..,"waiting_hero":..}
+          carla_fps="$(sed -n 's/.*"carla_fps":\([0-9.]*\).*/\1/p' "${STATS}" 2>/dev/null | head -1)"
+          tip_fps="$(sed -n 's/.*"tip_fps":\([0-9.]*\).*/\1/p' "${STATS}" 2>/dev/null | head -1)"
+          waiting_hero="$(sed -n 's/.*"waiting_hero":\([a-z]*\).*/\1/p' "${STATS}" 2>/dev/null | head -1)"
+          carla_fps="${carla_fps:-?}"
+          tip_fps="${tip_fps:-?}"
+          waiting_hero="${waiting_hero:-?}"
+        fi
+        # ingest tip-read proxy: meta.json seq rate (what FCM/file consumer sees)
+        tip_read_fps="?"
+        if [[ -f "${META}" ]]; then
+          tip_seq="$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "${META}" 2>/dev/null | head -1)"
+          now_t="$(date +%s)"
+          if [[ -n "${tip_seq}" && -n "${prev_tip_seq}" && -n "${prev_tip_t}" && "${now_t}" -gt "${prev_tip_t}" ]]; then
+            tip_read_fps="$(awk -v a="${tip_seq}" -v b="${prev_tip_seq}" -v t0="${prev_tip_t}" -v t1="${now_t}" 'BEGIN{d=a-b; dt=t1-t0; if(dt>0&&d>=0) printf "%.1f", d/dt; else print "?"}')"
+          fi
+          prev_tip_seq="${tip_seq}"
+          prev_tip_t="${now_t}"
+        fi
+        fcm_line="(no fcm log yet)"
+        fcm_fps="?"
+        if [[ -f "${FCM_LOG}" ]]; then
+          fcm_line="$(grep -E 'stream negotiate|fseq=|no_frame|frame_timeout|frame_source=' "${FCM_LOG}" 2>/dev/null | tail -1 || true)"
+          [[ -n "${fcm_line}" ]] || fcm_line="$(tail -1 "${FCM_LOG}" 2>/dev/null || true)"
+          fseq="$(printf '%s' "${fcm_line}" | sed -n 's/.*fseq=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          now_t="$(date +%s)"
+          if [[ -n "${fseq}" && -n "${prev_fseq}" && -n "${prev_fseq_t}" && "${now_t}" -gt "${prev_fseq_t}" ]]; then
+            fcm_fps="$(awk -v a="${fseq}" -v b="${prev_fseq}" -v t0="${prev_fseq_t}" -v t1="${now_t}" 'BEGIN{d=a-b; dt=t1-t0; if(dt>0&&d>=0) printf "%.1f", d/dt; else print "?"}')"
+          fi
+          if [[ -n "${fseq}" ]]; then
+            prev_fseq="${fseq}"
+            prev_fseq_t="${now_t}"
+          fi
+        fi
+        echo "${TAG} frame_ingest heartbeat: bridge=${br} waiting_hero=${waiting_hero} host=${CARLA_HOST}:${CARLA_PORT}"
+        echo "${TAG}   fps: carla=${carla_fps} tip_write=${tip_fps} tip_read=${tip_read_fps} fcm_read=${fcm_fps}"
+        echo "${TAG}   tip=${tip} bytes=${tip_sz} mtime=${tip_age}"
+        [[ -n "${br_why}" ]] && echo "${TAG}   bridge_log: ${br_why}"
+        echo "${TAG}   fcm: ${fcm_line}"
+        echo "${TAG}   fcm_log=${FCM_LOG}"
+      done
+    ) &
+    FRAME_INGEST_STAT_PID=$!
   else
     echo "${TAG} WARN: missing ${BRIDGE_PY}" >&2
   fi
+else
+  echo "${TAG} frame_ingest: bridge not started (GF_START_CARLA_BRIDGE=${GF_START_CARLA_BRIDGE:-0})"
 fi
 
 # SOA apps already under EM. Do not direct-spawn gateway/fcm/planning.
@@ -1106,6 +1389,11 @@ if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
   _FOX_BEV=(--synth-bev)
   echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → BEV)"
 fi
+_FOX_TIP=()
+if [[ "${GF_TIP_CAMERA:-1}" != "0" && -n "${GF_CARLA_FRAME_PATH:-}" ]]; then
+  _FOX_TIP=(--tip-frame "${GF_CARLA_FRAME_PATH}")
+  echo "${TAG} Foxglove tip camera ← ${GF_CARLA_FRAME_PATH} (same WS as BEV)"
+fi
 
 # GNU tee: if GMT Live process-sub dies, do NOT collapse the pipe to Foxglove.
 _tee_fan() {
@@ -1135,11 +1423,11 @@ _live_fan() {
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
       | tee "${LIVE_SESSION}" \
       | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" --host "${HOST}" --port "${PORT}"
+      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
   else
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
       | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" --host "${HOST}" --port "${PORT}"
+      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
   fi
 }
 

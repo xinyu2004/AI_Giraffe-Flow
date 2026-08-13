@@ -1,0 +1,55 @@
+# Weather / atmosphere atoms. Knobs via carla.env or process env (see lib/_weather.py).
+kind: cases
+cases:
+  - id: env_bright_sun
+    script: env_bright_sun.py
+    status: active
+    keyword: WEATHER_SUN
+    tags: [weather, isp_env, l2]
+    description: >
+      Harsh sun / glare on straight follow.
+      Knobs: GF_SUN_ALTITUDE_DEG GF_SUN_AZIMUTH_DEG GF_SUN_BRIGHTNESS (0..1)
+
+  - id: env_heavy_rain
+    script: env_heavy_rain.py
+    status: active
+    keyword: WEATHER_RAIN
+    tags: [weather, isp_env, l2]
+    description: >
+      Heavy rain + wet road.
+      Knobs: GF_RAIN_AMOUNT GF_RAIN_WETNESS GF_WIPER_SPEED (0=off 1=slow 2=fast)
+
+  - id: env_fog
+    script: env_fog.py
+    status: active
+    keyword: WEATHER_FOG
+    tags: [weather, isp_env, l2]
+    description: Dense fog — GF_FOG_DENSITY GF_FOG_DISTANCE
+
+  - id: env_dusk_backlight
+    script: env_dusk_backlight.py
+    status: active
+    keyword: WEATHER_DUSK
+    tags: [weather, isp_env, l2]
+    description: Low sun backlight / bloom — GF_SUN_ALTITUDE_DEG GF_SUN_AZIMUTH_DEG
+
+  - id: env_night_clear
+    script: env_night_clear.py
+    status: active
+    keyword: WEATHER_NIGHT
+    tags: [weather, lighting, l2]
+    description: Clear night (altitude &lt; 0) — baseline for HLB / glare cases
+
+  - id: env_wet_reflect
+    script: env_wet_reflect.py
+    status: active
+    keyword: WEATHER_WET
+    tags: [weather, roadway, l2]
+    description: Wet road specular after rain (no heavy precip) — GF_RAIN_WETNESS
+
+  - id: env_snow
+    script: env_snow.py
+    status: active
+    keyword: WEATHER_SNOW
+    tags: [weather, l2]
+    description: Snow / low mu approximation — preset snow

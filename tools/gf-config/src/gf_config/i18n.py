@@ -655,6 +655,23 @@ _EN: dict[str, str] = {
         "Exit code {rc}. See red items in the Lineage panel."
     ),
     "已写入：\n{path}": "Wrote:\n{path}",
+    # frame_ingest UI labels (zh source → en)
+    "帧摄入 frame_ingest": "Frame ingest (frame_ingest)",
+    "帧源": "Frame source",
+    "感知后端": "Perception backend",
+    "none（无帧 SIL）": "none (no-frame SIL)",
+    "启动 carla_bridge": "Start carla_bridge",
+    "dry_run（无 CARLA UE）": "dry_run (no CARLA UE)",
+    "demo 强制变道": "demo force lane-change",
+    "demo 秒": "demo seconds",
+    "帧路径": "Frame path",
+    "cmd 路径": "Cmd path",
+    "pixel_format": "pixel_format",
+    "ego_source": "ego_source",
+    "改此处 → Save/Verify → compile → run_sil（行为编译冻结，勿手改 tip JSON）": (
+        "Edit here → Save/Verify → compile → run_sil "
+        "(behavior is compile-frozen; do not hand-edit tip JSON)"
+    ),
 }
 
 # Authoritative field tips (gf_config.gui.tips) — purpose/effect, not enum noise.

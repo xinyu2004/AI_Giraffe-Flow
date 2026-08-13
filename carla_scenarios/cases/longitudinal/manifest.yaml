@@ -1,0 +1,72 @@
+# Longitudinal atoms. status: active = batch-run; planned = listed only.
+kind: cases
+cases:
+  - id: acc
+    script: acc.py
+    status: active
+    keyword: ACC
+    tags: [longitudinal, follow, l2]
+    description: Adaptive cruise — straight follow; time-headway; ego by Giraffe only
+
+  - id: aeb
+    script: aeb.py
+    status: active
+    keyword: AEB
+    tags: [longitudinal, emergency, l2]
+    description: AEB — stopped lead; no collision; ego by Giraffe only
+
+  - id: acc_cut_in
+    script: acc_cut_in.py
+    status: active
+    keyword: ACC
+    tags: [longitudinal, cut_in, l2]
+    description: ACC cut-in from adjacent lane
+
+  - id: aeb_ccru
+    script: aeb_ccru.py
+    status: active
+    keyword: AEB
+    tags: [longitudinal, crossing, l2]
+    description: AEB crossing / slow target (CCRu-ish)
+
+  - id: aeb_intersection_cross
+    script: aeb_intersection_cross.py
+    status: active
+    keyword: AEB
+    tags: [longitudinal, intersection, l2]
+    description: AEB — crossing target at intersection
+
+  - id: aeb_occluded_lateral
+    script: aeb_occluded_lateral.py
+    status: active
+    keyword: AEB
+    tags: [longitudinal, occlusion, l2]
+    description: AEB — sudden lateral object with poor visibility
+
+  - id: aeb_pedestrian
+    script: aeb_pedestrian.py
+    status: active
+    keyword: AEB
+    tags: [longitudinal, vru, l2]
+    description: AEB — pedestrian cross / dart-out
+
+  - id: aeb_bicycle
+    script: aeb_bicycle.py
+    status: active
+    keyword: AEB
+    tags: [longitudinal, vru, l2]
+    description: AEB — bicycle cross or slow same-direction
+
+  - id: fcw
+    script: fcw.py
+    status: active
+    keyword: FCW
+    tags: [longitudinal, warning, l2]
+    description: Forward collision warning window
+
+  - id: isa_limit_follow
+    script: isa_limit_follow.py
+    status: active
+    keyword: ISA
+    tags: [longitudinal, perception, l2]
+    description: ISA — speed response after TSR

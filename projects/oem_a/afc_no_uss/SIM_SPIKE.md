@@ -1,53 +1,30 @@
 # P3-5 Sim spike — `afc_no_uss`
 
-桌面闭环：**A（SIL）→ B（帧摄入）→ C（CARLA/dry-run + Foxglove）**。  
-配置策略见 [CONFIG_RUNTIME_POLICY.md](../../../docs/zh/operations/CONFIG_RUNTIME_POLICY.md)。
+桌面闭环：**契约冻结 → tip NV12 → 单管 Foxglove → CARLA Ego/cmd → scenarios truth → 带帧回灌**。  
+SKU 文档：[docs/](./docs/) → `docs/zh/sku/afc_no_uss/`（含 [职责说明](./docs/frame_ingest_roles.md)）。
 
-## 主验收路径（推荐）
-
-```text
-gf-config 打开本工程 → 页 1「帧摄入 frame_ingest」
-  （默认 C dry-run：carla_file + bridge + dry_run）
-→ Save / Verify（compose）
-→ bash projects/oem_a/afc_no_uss/scripts/compile_sil.sh
-→ bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
-→ Foxglove Studio → ws://127.0.0.1:8765
-```
-
-行为来自 **编译冻结**（`gf_gen/frame_ingest_config.hpp`），**不是**运行期 tip JSON / `.env`。  
-手改 `req.yaml` 仅工具底层存盘；请用 gf-config。
-
-## 拓扑
+## 主验收路径（完整产品）
 
 ```text
-gateway --Perception_In_St--> fcm --Perception_MESSAGE_Out_St--> planning
-gateway --EgoMotion----------> planning
-planning --Trajectory--------> gateway
-                 \--cmd path--> carla_bridge --force_lane_change--> CARLA
-CARLA/dry-run --RGB协议--> fcm
+起 CARLA UE
+→ python3 carla_scenarios/cases/longitudinal/acc.py   # pygame + truth tip（hero/lead）
+→ gf-config: bridge on, ego_source=carla → compile → run_sil
+     （bridge 挂 hero，写 YUV tip → FCM；cmd thr/brk → 车）
+→ Foxglove：BEV + tip；pygame/CARLA：跟车效果
 ```
 
-## frame_ingest（SKU 行为）
+- **bridge 必须**（相对 FCM）：无图像 tip 则无完整前视产品路径。  
+- **无** SKU 冻结的 `dry_run` / `demo_lane_change`（剧情在 scenarios；开发 tip 自检见 `smoke_carla_sil.sh`）。
 
-| 字段 | 含义 |
-|------|------|
-| `frame_source` | `none` / `synth` / `file` / `carla_file` |
-| `perception_backend` | `stub` / `onnx` |
-| `bridge.enabled` | run_sil 是否起 bridge |
-| `bridge.dry_run` | 无 UE 写合成帧 |
-| `bridge.demo_lane_change` | gateway 定时强制变道 |
-| `paths.frame` / `paths.cmd` | 帧协议与 cmd 路径 |
+## 目录
 
-真 CARLA：gf-config 取消 dry_run → Verify → compile → `run_sil`（`CARLA_HOST` 可覆盖部署主机）。
+| 路径 | 跟谁 | 内容 |
+|------|------|------|
+| `samples/` | 本 SKU | inject×3、stage |
+| `carla_scenarios/` | 产品类型 | acc/aeb + CI |
+| `docs` → 中央文档 | — | 说明与后续计划 |
 
-## 调试 env（非验收主路径）
+## 后续计划（待讨论）
 
-`GF_FRAME_SOURCE` / `GF_START_CARLA_BRIDGE` / … 可临时覆盖冻结值；改 SKU 行为请走 gf-config。
-
-## 薄包装（可选）
-
-`smoke_sil.sh` / `smoke_frame_sil.sh` / `smoke_carla_sil.sh` / `run_carla_sil.sh` 仍可用作超时 grep；**主路径是 `run_sil.sh`**。
-
-## Wave E — AM62（最后）
-
-同一 `frame_ingest` 契约；生产者换成板端 ISP。文档占位，真板后做。
+1. **inject 仅跑 planning**（无 FCM / 无图像）与完整产品路径如何并存。  
+2. frame_ingest UI 继续去掉「配 FCM」心智（`frame_source` / `perception_backend`）。

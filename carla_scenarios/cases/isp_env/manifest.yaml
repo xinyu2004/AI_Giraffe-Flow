@@ -1,0 +1,15 @@
+kind: cases
+cases:
+  - id: env_tunnel_entry
+    script: env_tunnel_entry.py
+    status: active
+    keyword: TUNNEL_ENTRY
+    tags: [isp_env, l2]
+    description: Enter tunnel — ISP exposure dark transition
+
+  - id: env_tunnel_exit
+    script: env_tunnel_exit.py
+    status: active
+    keyword: TUNNEL_EXIT
+    tags: [isp_env, l2]
+    description: Exit tunnel — ISP exposure bright transition

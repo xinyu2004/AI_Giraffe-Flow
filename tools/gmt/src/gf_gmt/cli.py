@@ -149,6 +149,13 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Scenario JSONL (AdasDemo) → enrich BEV Image only; not published to Studio",
     )
+    p_fox.add_argument(
+        "--tip-frame",
+        type=Path,
+        default=None,
+        help="With --ws --stdin: poll tip YUV/RGB and publish "
+        "/gf/camera/front/tip/compressed on the same Foxglove WS",
+    )
 
     p_live = br_sub.add_parser(
         "live",
@@ -314,6 +321,8 @@ def main(argv: list[str] | None = None) -> int:
             fox_argv.append("--synth-bev")
         if getattr(args, "bev_script", None) is not None:
             fox_argv += ["--bev-script", str(args.bev_script)]
+        if getattr(args, "tip_frame", None) is not None:
+            fox_argv += ["--tip-frame", str(args.tip_frame)]
         fox_argv += ["--host", args.host, "--port", str(args.port), "--speed", str(args.speed)]
         return main_bridge(fox_argv)
 

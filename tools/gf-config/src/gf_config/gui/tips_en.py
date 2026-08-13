@@ -418,38 +418,53 @@ TIP_EN: dict[str, str] = {
         "Live tap: mirror canvas services to observability tools. "
         "On → compose adds debug_bridge/iox_obs_tap; run_sil can attach Foxglove WS."
     ),
-    "帧摄入（frame_ingest）：CARLA / 文件 / 未来 ISP·摄像头的 RGB 入口。"
+    "帧摄入（frame_ingest）：CARLA / 文件 / 未来 ISP·摄像头的 tip 入口。"
     "与 live_tap 白名单不同——这里是行为轨迹，经 compose 冻结为 "
-    "frame_ingest_config.hpp（apps + run_sil）。改完请 Verify + compile_sil，再 run_sil。": (
-        "Frame ingest: RGB ingress for CARLA / file / future ISP·camera. "
+    "frame_ingest_config.hpp（apps + run_sil）。改完请 Verify + compile_sil，再 run_sil。"
+    "功能场景（ACC/AEB）不在此配置，见仓库 carla_scenarios/。": (
+        "Frame ingest: tip ingress for CARLA / file / future ISP·camera. "
         "Unlike live_tap allowlists, this is behavior — frozen as "
         "frame_ingest_config.hpp (apps + run_sil). "
-        "After edits: Verify + compile_sil, then run_sil."
+        "After edits: Verify + compile_sil, then run_sil. "
+        "Functional scenarios (ACC/AEB) are NOT configured here — see "
+        "repo carla_scenarios/."
     ),
     "帧从哪来：none=无帧 SIL stub；synth=进程内彩条；"
-    "file/carla_file=读 GF 路径上的 raw RGB+json（同一协议）。": (
+    "file/carla_file=读 tip 平面（stream 协商 format/w/h + 每帧 meta）。": (
         "Where pixels come from: none=no-frame SIL stub; synth=in-process bars; "
-        "file/carla_file=raw RGB+json at the configured path (same protocol)."
+        "file/carla_file=tip plane (stream negotiate format/w/h + per-frame meta)."
     ),
     "像素怎么用：stub=帧驱动计数；onnx=检测路径（需 -DGF_WITH_ONNX）。": (
         "How pixels are used: stub=frame-driven counts; onnx=detector path "
         "(needs -DGF_WITH_ONNX)."
     ),
-    "run_sil 是否后台启动 tools/carla_bridge（写帧协议 + 执行变道 cmd）。": (
-        "Whether run_sil starts tools/carla_bridge (write frame protocol + apply "
-        "lane-change cmd)."
+    "像素格式枚举（可配）：nv12 默认；预留 nv21/yuv422/yuv444/rgb8。"
+    "路径不含格式语义；以冻结字段 + stream.json 为准。": (
+        "Configurable pixel_format enum: nv12 default; nv21/yuv422/yuv444/rgb8 reserved. "
+        "Path has no format meaning — freeze field + stream.json win."
     ),
-    "dry_run=无 CARLA UE 时写合成帧（协议自检）。"
-    "真车联调请取消勾选并启动 UE。": (
-        "dry_run=synth frames without CARLA UE (protocol self-check). "
-        "For real CARLA, uncheck and start UE."
+    "Ego 源互斥：gateway=网关自造；carla=bridge tip→gateway 发布；"
+    "inject=回灌独占（gateway 不发 Ego）。运行时三选一。": (
+        "Ego source mutex: gateway=fabricated; carla=bridge tip→gateway publish; "
+        "inject=replay owns Ego (gateway does not publish). Pick one at runtime."
     ),
-    "gateway 定时强制写一次 lane_change（演示变道；不经规划决策）。": (
-        "Gateway forces a lane_change once on a timer (demo; not planner-decided)."
+    "完整前视产品路径下 tip 写端：run_sil 是否启动 carla_bridge"
+    "（相机→YUV tip、ego tip、执行 cmd）。世界/变道/ACC 由 carla_scenarios/ 脚本定义，不在此。": (
+        "Tip writer for the full front-camera product path: whether run_sil starts "
+        "carla_bridge (camera→YUV tip, ego tip, apply cmd). "
+        "World / lane-change / ACC are defined under carla_scenarios/, not here."
     ),
-    "demo 变道触发时刻（秒，自 gateway 启动起算）。": (
-        "Seconds after gateway start when demo lane-change fires."
+    "中性帧路径（如 .yuv）；格式不靠后缀。"
+    "旁路 .stream.json（协商）+ .meta.json（每帧 timestamp/seq）。"
+    "金样在 SKU samples/；用 stage 脚本拷到此运行路径。": (
+        "Neutral frame path (e.g. .yuv); format is not in the suffix. "
+        "Sidecars: .stream.json (negotiate) + .meta.json (per-frame timestamp/seq). "
+        "Goldens live under SKU samples/; use stage to copy onto this runtime path."
     ),
+    "gateway→bridge 控车 cmd JSON（throttle/brake/steer/lane_change）。": (
+        "gateway→bridge vehicle cmd JSON (throttle/brake/steer/lane_change)."
+    ),
+    # Legacy tip keys (kept so older tipify caches still translate)
     "raw RGB 路径（旁路 .json sidecar）；bridge 写、fcm 读。": (
         "Raw RGB path (+ .json sidecar); bridge writes, fcm reads."
     ),

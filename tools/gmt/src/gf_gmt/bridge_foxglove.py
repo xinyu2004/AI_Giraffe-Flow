@@ -511,6 +511,7 @@ def live_stdin_ws(
     stream: TextIO | None = None,
     synth_bev: bool = False,
     bev_script: Path | None = None,
+    tip_frame: Path | None = None,
 ) -> None:
     """Live NDJSON from stdin → Foxglove WS.
 
@@ -518,13 +519,17 @@ def live_stdin_ws(
     messages are published only while a client is connected and subscribed.
     When synth_bev=True, compose /gf/camera/front/compressed from EgoMotion/Trajectory
     (+ optional scenario script for three-phase story). /gf/AdasDemo is never advertised.
+    When tip_frame is set, poll tip YUV/RGB on the *same* WS and publish
+    /gf/camera/front/tip/compressed alongside BEV (one pipe forever).
     """
     from gf_gmt.bev_compose import AdasScriptIndex, LiveBevComposer, is_adas_demo_topic
+    from gf_gmt.tip_frame_reader import TOPIC_TIP_CAM, TipFramePublisher
 
     inp = stream if stream is not None else sys.stdin
     srv = _listen(host, port)
     script = AdasScriptIndex.load(bev_script) if bev_script else None
     bev = LiveBevComposer(script=script) if synth_bev else None
+    tip = TipFramePublisher(tip_frame) if tip_frame is not None else None
 
     def _status(kind: str, msg: str) -> None:
         conn_status("Foxglove", kind, msg)
@@ -538,6 +543,8 @@ def live_stdin_ws(
             )
         else:
             _status("listen", "synth BEV from EgoMotion/Trajectory (module I/O)")
+    if tip is not None:
+        _status("listen", f"tip CompressedImage ← {tip_frame} topic={TOPIC_TIP_CAM}")
 
     fd = -1
     if hasattr(inp, "fileno"):
@@ -620,6 +627,8 @@ def live_stdin_ws(
                                     "/gf/Trajectory",
                                     "/gf/camera/front/compressed",
                                 ]
+                                if tip is not None:
+                                    seed.append(TOPIC_TIP_CAM)
                                 new_state.advertise_topics(new_conn, seed)
                                 conn = new_conn
                                 state = new_state
@@ -682,6 +691,16 @@ def live_stdin_ws(
                                 int(cam["t_ns"]),
                                 cam["data"],
                             )
+
+                # Tip camera on the same pipe (poll even when stdin idle).
+                if tip is not None:
+                    tip_cam = tip.poll()
+                    if tip_cam is not None:
+                        _publish_row(
+                            str(tip_cam["topic"]),
+                            int(tip_cam["t_ns"]),
+                            tip_cam["data"],
+                        )
             except Exception as exc:  # noqa: BLE001 — Studio disconnect must not kill bridge
                 _status("err", f"client cycle error (bridge stays up): {exc}")
                 _close_client(reason=f"error: {exc}")
@@ -732,6 +751,13 @@ def main_bridge(argv: list[str] | None = None) -> int:
         help="Scenario JSONL with AdasDemo frames — used only to enrich BEV Image "
         "(not published as /gf/AdasDemo)",
     )
+    p.add_argument(
+        "--tip-frame",
+        type=Path,
+        default=None,
+        help="With --ws --stdin: poll tip YUV/RGB path and publish "
+        "/gf/camera/front/tip/compressed on the same Foxglove WS",
+    )
     args = p.parse_args(argv)
 
     if args.mcap:
@@ -755,6 +781,7 @@ def main_bridge(argv: list[str] | None = None) -> int:
                     args.port,
                     synth_bev=bool(args.synth_bev),
                     bev_script=args.bev_script,
+                    tip_frame=args.tip_frame,
                 )
                 return 0
             src = args.jsonl

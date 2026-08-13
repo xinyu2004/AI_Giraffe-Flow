@@ -394,24 +394,34 @@ SKU_LIVE_MODE_ITEMS: dict[str, str] = {
 }
 SKU_LIVE_SVCS = "explicit 模式下要镜像的服务；从 wiring 多选，避免手打拼写错误。"
 SKU_FRAME_INGEST = (
-    "帧摄入（frame_ingest）：CARLA / 文件 / 未来 ISP·摄像头的 RGB 入口。"
+    "帧摄入（frame_ingest）：CARLA / 文件 / 未来 ISP·摄像头的 tip 入口。"
     "与 live_tap 白名单不同——这里是行为轨迹，经 compose 冻结为 "
     "frame_ingest_config.hpp（apps + run_sil）。改完请 Verify + compile_sil，再 run_sil。"
+    "功能场景（ACC/AEB）不在此配置，见仓库 carla_scenarios/。"
 )
 SKU_FI_SOURCE = (
     "帧从哪来：none=无帧 SIL stub；synth=进程内彩条；"
-    "file/carla_file=读 GF 路径上的 raw RGB+json（同一协议）。"
+    "file/carla_file=读 tip 平面（stream 协商 format/w/h + 每帧 meta）。"
 )
 SKU_FI_BACKEND = "像素怎么用：stub=帧驱动计数；onnx=检测路径（需 -DGF_WITH_ONNX）。"
-SKU_FI_BRIDGE = "run_sil 是否后台启动 tools/carla_bridge（写帧协议 + 执行变道 cmd）。"
-SKU_FI_DRY = (
-    "dry_run=无 CARLA UE 时写合成帧（协议自检）。"
-    "真车联调请取消勾选并启动 UE。"
+SKU_FI_PIXEL = (
+    "像素格式枚举（可配）：nv12 默认；预留 nv21/yuv422/yuv444/rgb8。"
+    "路径不含格式语义；以冻结字段 + stream.json 为准。"
 )
-SKU_FI_DEMO = "gateway 定时强制写一次 lane_change（演示变道；不经规划决策）。"
-SKU_FI_DEMO_SEC = "demo 变道触发时刻（秒，自 gateway 启动起算）。"
-SKU_FI_PATH_FRAME = "raw RGB 路径（旁路 .json sidecar）；bridge 写、fcm 读。"
-SKU_FI_PATH_CMD = "gateway→bridge 变道 cmd JSON 路径。"
+SKU_FI_EGO = (
+    "Ego 源互斥：gateway=网关自造；carla=bridge tip→gateway 发布；"
+    "inject=回灌独占（gateway 不发 Ego）。运行时三选一。"
+)
+SKU_FI_BRIDGE = (
+    "完整前视产品路径下 tip 写端：run_sil 是否启动 carla_bridge"
+    "（相机→YUV tip、ego tip、执行 cmd）。世界/变道/ACC 由 carla_scenarios/ 脚本定义，不在此。"
+)
+SKU_FI_PATH_FRAME = (
+    "中性帧路径（如 .yuv）；格式不靠后缀。"
+    "旁路 .stream.json（协商）+ .meta.json（每帧 timestamp/seq）。"
+    "金样在 SKU samples/；用 stage 脚本拷到此运行路径。"
+)
+SKU_FI_PATH_CMD = "gateway→bridge 控车 cmd JSON（throttle/brake/steer/lane_change）。"
 SKU_RECORD = (
     "录制策略：控制 measure/record 采多少。\n"
     "off=不录；minimal/sampled/full 依次更全、更重。"

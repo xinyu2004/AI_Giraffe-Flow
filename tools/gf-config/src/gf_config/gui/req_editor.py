@@ -233,20 +233,23 @@ class ReqEditor(QWidget):
         self._fi_backend.addItem(t("stub"), "stub")
         self._fi_backend.addItem(t("onnx"), "onnx")
         self._fi_backend.currentIndexChanged.connect(self._on_any)
+        self._fi_pixel = TintedComboBox()
+        tipify(self._fi_pixel, T.SKU_FI_PIXEL)
+        for value in ("nv12", "nv21", "yuv422", "yuv444", "rgb8"):
+            self._fi_pixel.addItem(value, value)
+        self._fi_pixel.currentIndexChanged.connect(self._on_any)
+        self._fi_ego = TintedComboBox()
+        tipify(self._fi_ego, T.SKU_FI_EGO)
+        for value, label in (
+            ("gateway", "gateway"),
+            ("carla", "carla"),
+            ("inject", "inject"),
+        ):
+            self._fi_ego.addItem(t(label), value)
+        self._fi_ego.currentIndexChanged.connect(self._on_any)
         self._fi_bridge = QCheckBox(t("启动 carla_bridge"))
         tipify(self._fi_bridge, T.SKU_FI_BRIDGE)
-        self._fi_bridge.toggled.connect(self._on_fi_bridge_or_any)
-        self._fi_dry = QCheckBox(t("dry_run（无 CARLA UE）"))
-        tipify(self._fi_dry, T.SKU_FI_DRY)
-        self._fi_dry.toggled.connect(self._on_any)
-        self._fi_demo = QCheckBox(t("demo 强制变道"))
-        tipify(self._fi_demo, T.SKU_FI_DEMO)
-        self._fi_demo.toggled.connect(self._on_fi_bridge_or_any)
-        self._fi_demo_sec = QSpinBox()
-        tipify(self._fi_demo_sec, T.SKU_FI_DEMO_SEC)
-        self._fi_demo_sec.setRange(1, 120)
-        self._fi_demo_sec.setValue(8)
-        self._fi_demo_sec.valueChanged.connect(self._on_any)
+        self._fi_bridge.toggled.connect(self._on_any)
         self._fi_path_frame = QLineEdit()
         tipify(self._fi_path_frame, T.SKU_FI_PATH_FRAME)
         self._fi_path_frame.textChanged.connect(self._on_any)
@@ -257,10 +260,9 @@ class ReqEditor(QWidget):
         self._fi_path_cmd.editingFinished.connect(self._end_doc_edit)
         fi_f.addRow(t("帧源"), self._fi_source)
         fi_f.addRow(t("感知后端"), self._fi_backend)
+        fi_f.addRow(t("pixel_format"), self._fi_pixel)
+        fi_f.addRow(t("ego_source"), self._fi_ego)
         fi_f.addRow("", self._fi_bridge)
-        fi_f.addRow("", self._fi_dry)
-        fi_f.addRow("", self._fi_demo)
-        fi_f.addRow(t("demo 秒"), self._fi_demo_sec)
         fi_f.addRow(t("帧路径"), self._fi_path_frame)
         fi_f.addRow(t("cmd 路径"), self._fi_path_cmd)
         fi_l.addLayout(fi_f)
@@ -394,13 +396,15 @@ class ReqEditor(QWidget):
         self._set_combo_data(
             self._fi_backend, str(fi.get("perception_backend") or "stub")
         )
+        self._set_combo_data(
+            self._fi_pixel, str(fi.get("pixel_format") or "nv12")
+        )
+        self._set_combo_data(
+            self._fi_ego, str(fi.get("ego_source") or "gateway")
+        )
         self._fi_bridge.setChecked(bool(br.get("enabled", False)))
-        self._fi_dry.setChecked(bool(br.get("dry_run", True)))
-        self._fi_demo.setChecked(bool(br.get("demo_lane_change", False)))
-        self._fi_demo_sec.setValue(int(br.get("demo_lane_change_sec") or 8))
-        self._fi_path_frame.setText(str(paths.get("frame") or "/tmp/gf_front.rgb"))
+        self._fi_path_frame.setText(str(paths.get("frame") or "/tmp/gf_front.yuv"))
         self._fi_path_cmd.setText(str(paths.get("cmd") or "/tmp/gf_carla_cmd.json"))
-        self._apply_fi_ui()
 
         acc = req.get("acceptance") or {}
         if isinstance(acc, dict):
@@ -478,17 +482,6 @@ class ReqEditor(QWidget):
             self._obs_hint.setText(" · ".join(bits) if bits else "")
             self._obs_hint.setStyleSheet("color:#666; font-size:10px;")
 
-    def _apply_fi_ui(self) -> None:
-        on = self._fi_bridge.isChecked()
-        self._fi_dry.setEnabled(on)
-        self._fi_demo.setEnabled(on)
-        self._fi_demo_sec.setEnabled(on and self._fi_demo.isChecked())
-
-    def _on_fi_bridge_or_any(self, *_args: object) -> None:
-        if not self._loading:
-            self._apply_fi_ui()
-        self._on_any()
-
     def _on_profile_or_any(self, *_args: object) -> None:
         if not self._loading:
             self._apply_profile_ui()
@@ -531,18 +524,30 @@ class ReqEditor(QWidget):
                 "services": self._record_svcs.selected(),
             },
         }
+        prev_fi = (
+            req.get("frame_ingest")
+            if isinstance(req.get("frame_ingest"), dict)
+            else {}
+        )
+        prev_paths = (
+            prev_fi.get("paths") if isinstance(prev_fi.get("paths"), dict) else {}
+        )
         req["frame_ingest"] = {
             "frame_source": str(self._fi_source.currentData() or "none"),
             "perception_backend": str(self._fi_backend.currentData() or "stub"),
+            "pixel_format": str(self._fi_pixel.currentData() or "nv12"),
+            "ego_source": str(self._fi_ego.currentData() or "gateway"),
+            "frame_w": int(prev_fi.get("frame_w") or 640),
+            "frame_h": int(prev_fi.get("frame_h") or 480),
             "bridge": {
                 "enabled": self._fi_bridge.isChecked(),
-                "dry_run": self._fi_dry.isChecked(),
-                "demo_lane_change": self._fi_demo.isChecked(),
-                "demo_lane_change_sec": int(self._fi_demo_sec.value()),
             },
             "paths": {
-                "frame": self._fi_path_frame.text().strip() or "/tmp/gf_front.rgb",
+                "frame": self._fi_path_frame.text().strip() or "/tmp/gf_front.yuv",
                 "cmd": self._fi_path_cmd.text().strip() or "/tmp/gf_carla_cmd.json",
+                "ego": str(prev_paths.get("ego") or "/tmp/gf_carla_ego.json"),
+                "truth": str(prev_paths.get("truth") or "/tmp/gf_carla_truth.json"),
+                "ctrl": str(prev_paths.get("ctrl") or "/tmp/gf_planning_ctrl.json"),
             },
         }
         prev_acc = req.get("acceptance") if isinstance(req.get("acceptance"), dict) else {}
