@@ -12,6 +12,19 @@ Mutual exclusion: use with ego_source=inject (gateway Ego off).
 
 from __future__ import annotations
 
+def _ipc_default(name: str) -> str:
+    """SIL file-IPC under project/runtime_ipc (not /tmp)."""
+    import os
+    from pathlib import Path
+    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
+    if proj:
+        return str(Path(proj) / "runtime_ipc" / name)
+    rt = (os.environ.get("GF_RUNTIME_DIR") or "").strip()
+    if rt:
+        return str(Path(rt) / "var" / name)
+    return str(Path("runtime_ipc") / name)
+
+
 import argparse
 import json
 import os
@@ -50,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--frame-path",
         type=Path,
-        default=Path(os.environ.get("GF_CARLA_FRAME_PATH") or "/tmp/gf_front.yuv"),
+        default=Path(os.environ.get("GF_CARLA_FRAME_PATH") or _ipc_default("front.yuv")),
     )
     p.add_argument("--loop", action="store_true", default=os.environ.get("GF_INJECT_LOOP") == "1")
     p.add_argument("--period-s", type=float, default=float(os.environ.get("GF_FRAME_REPLAY_PERIOD_S") or "0.05"))
@@ -91,8 +104,32 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
+    tip_pub = None
+    tip_slot = (os.environ.get("GF_CHANNEL_SLOT") or "").strip()
+    transport = (os.environ.get("GF_CHANNEL_TRANSPORT") or "shm").strip().lower()
+    if tip_slot and transport == "shm":
+        try:
+            fi = Path(__file__).resolve().parents[2] / "apps" / "frame_ingest"
+            if str(fi) not in sys.path:
+                sys.path.insert(0, str(fi))
+            from gf_channel_py import GfChannel as TipChannel  # noqa: WPS433
+
+            tip_ch = TipChannel.open(tip_slot)
+            tip_pub = tip_ch.publish
+            print(f"[frame_replay] tip slot {tip_slot}", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[frame_replay] tip open failed: {exc}", flush=True)
+
+    # Timebase: prefer recorded deltas; fallback --period-s / GF_CHANNEL_RECORD_FPS.
+    record_fps = float(os.environ.get("GF_CHANNEL_RECORD_FPS") or "0")
+    use_record_dt = len(rows) >= 2 and all(
+        isinstance(r.get("timestamp_ns"), (int, float)) for r in rows[: min(8, len(rows))]
+    )
+
     while not STOP:
-        for row in rows:
+        t_wall0 = time.monotonic()
+        t_rec0 = int(rows[0].get("timestamp_ns") or 0) if use_record_dt else 0
+        for i, row in enumerate(rows):
             if STOP:
                 break
             fname = str(row.get("file") or "")
@@ -102,14 +139,25 @@ def main(argv: list[str] | None = None) -> int:
             plane = bin_p.read_bytes()
             seq = int(row.get("seq") or 0)
             ts = int(row.get("timestamp_ns") or time.time_ns())
-            # Use wall clock for live consumers; keep seq from recording.
             live_ts = time.time_ns()
-            atomic_write_bytes(out, plane)
-            atomic_write_text(
-                meta_out,
-                json.dumps({"timestamp_ns": live_ts, "seq": seq}, separators=(",", ":")),
-            )
-            time.sleep(max(0.001, args.period_s))
+            if callable(tip_pub):
+                tip_pub(plane, live_ts, seq)
+            if transport == "file" or not tip_slot or os.environ.get("GF_TIP_FILE_TEE", "0") == "1":
+                atomic_write_bytes(out, plane)
+                atomic_write_text(
+                    meta_out,
+                    json.dumps({"timestamp_ns": live_ts, "seq": seq}, separators=(",", ":")),
+                )
+            if use_record_dt and i + 1 < len(rows):
+                t_next = int(rows[i + 1].get("timestamp_ns") or ts)
+                target = t_wall0 + (t_next - t_rec0) / 1e9
+                delay = target - time.monotonic()
+                if delay > 0:
+                    time.sleep(delay)
+            elif record_fps > 0:
+                time.sleep(max(0.001, 1.0 / record_fps))
+            else:
+                time.sleep(max(0.001, args.period_s))
         if not args.loop:
             break
         print("[frame_replay] loop", flush=True)

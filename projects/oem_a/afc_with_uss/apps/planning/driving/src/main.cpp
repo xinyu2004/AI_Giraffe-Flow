@@ -74,6 +74,7 @@ int main() {
 
   gf_ara::runtime::ProcessSupervisor supervisor;
   if (!supervisor.Start(kProcess)) {
+    std::cerr << "[ERROR] planning.driving: ProcessSupervisor.Start failed\n";
     return EXIT_FAILURE;
   }
 

@@ -6,9 +6,15 @@
 #     branches: [main]
 #   pull_request:
 #   schedule:
-#     - cron: "0 18 * * *"   # nightly UTC — FuSa jobs
+#     - cron: "0 18 * * *"   # nightly UTC
+#   workflow_dispatch:
+#
+# concurrency:
+#   group: ci-${{ github.workflow }}-${{ github.ref }}
+#   cancel-in-progress: true
 #
 # jobs:
+#   # —— L0：主体 PR / push ——
 #   smoke:
 #     runs-on: ubuntu-latest
 #     steps:
@@ -16,20 +22,52 @@
 #       - name: PR / daily gate
 #         run: bash devops/ci/scripts/smoke.sh
 #
-#   fusa-nightly:
+#   # —— L0b：GMT / gf-config / codegen / schemas → 工具链 SIL（强制）——
+#   toolchain:
+#     if: github.event_name == 'pull_request'
+#     runs-on: ubuntu-latest
+#     needs: [smoke]
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: dorny/paths-filter@v3
+#         id: filter
+#         with:
+#           filters: |
+#             toolchain:
+#               - 'tools/gmt/**'
+#               - 'tools/gf-config/**'
+#               - 'tools/gf-codegen/**'
+#               - 'schemas/**'
+#       - name: observability + inject + gmt_vcd
+#         if: steps.filter.outputs.toolchain == 'true'
+#         run: |
+#           set -euo pipefail
+#           # L0 already ran; ensure SKU SIL then skip recompile in toolchain smokes
+#           if [[ ! -d projects/oem_a/afc_with_uss/build-sil ]]; then
+#             bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+#           fi
+#           GF_SKIP_COMPILE=1 bash devops/ci/scripts/smoke_toolchain.sh
+#
+#   # —— L2：nightly ——
+#   nightly:
 #     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
 #     runs-on: ubuntu-latest
 #     steps:
 #       - uses: actions/checkout@v4
-#       - name: FuSa case matrix
-#         run: GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
-#       - name: T4 production profile (release gate)
-#         run: GF_FUSA_T4=1 bash fusa/scripts/run_cases.sh
-#       - name: SKU FuSa artifacts (afc_with_uss)
-#         run: bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
+#       - name: nightly gate (L0 + L1 + DoIP + FuSa SIL)
+#         run: bash devops/ci/scripts/smoke_nightly.sh
+#
+#   # —— L3：发版（手动 / tag）——
+#   release-gate:
+#     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - name: release gate (cautious toolchain + DoIP + T4 + FuSa evidence)
+#         run: bash devops/ci/scripts/smoke_release.sh
 #       - uses: actions/upload-artifact@v4
 #         with:
-#           name: fusa-artifacts
+#           name: fusa-evidence
 #           path: |
 #             fusa/runs/
 #             fusa/packs/

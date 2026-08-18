@@ -13,6 +13,19 @@ must not kill tip→FCM). GF_CARLA_BRIDGE_ON_FAIL=exit|idle|reconnect.
 
 from __future__ import annotations
 
+def _ipc_default(name: str) -> str:
+    """SIL file-IPC under project/runtime_ipc (not /tmp)."""
+    import os
+    from pathlib import Path
+    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
+    if proj:
+        return str(Path(proj) / "runtime_ipc" / name)
+    rt = (os.environ.get("GF_RUNTIME_DIR") or "").strip()
+    if rt:
+        return str(Path(rt) / "var" / name)
+    return str(Path("runtime_ipc") / name)
+
+
 import argparse
 import json
 import math
@@ -28,7 +41,7 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
-from tip_mount import load_tip_mount  # noqa: E402
+from camera_mount import load_camera_mount  # noqa: E402
 from yuv_codec import plane_size, rgb_to_yuv, synth_rgb  # noqa: E402
 
 STOP = False
@@ -39,8 +52,9 @@ def _env(key: str, default: str = "") -> str:
     return v if v else default
 
 
-def _log(msg: str) -> None:
-    print(f"[carla_bridge] {msg}", flush=True)
+def _log(msg: str, *, error: bool = False) -> None:
+    prefix = "[ERROR] carla_bridge" if error else "[carla_bridge]"
+    print(f"{prefix}: {msg}", file=sys.stderr if error else sys.stdout, flush=True)
 
 
 def _on_signal(signum: int, _frame: Any) -> None:
@@ -84,9 +98,22 @@ def write_frame(
     *,
     record_dir: Optional[Path] = None,
 ) -> None:
-    atomic_write_bytes(frame_path, plane)
-    meta = {"timestamp_ns": timestamp_ns, "seq": seq}
-    atomic_write_text(meta_path(frame_path), json.dumps(meta, separators=(",", ":")))
+    # TipChannel live path (frame_ingest Create; we Open+Publish).
+    tip_slot = os.environ.get("GF_CHANNEL_SLOT", "").strip()
+    transport = (os.environ.get("GF_CHANNEL_TRANSPORT") or "shm").strip().lower()
+    if tip_slot and transport == "shm":
+        try:
+            pub = _tip_publisher()
+            if callable(pub):
+                pub(plane, timestamp_ns, seq)
+        except Exception as exc:  # noqa: BLE001
+            _log(f"tip publish error: {exc}", error=True)
+    # File tip / tee only when transport=file or GF_TIP_FILE_TEE=1 (Foxglove uses GfChannel).
+    tee = transport == "file" or os.environ.get("GF_TIP_FILE_TEE", "0") == "1"
+    if tee or not tip_slot or transport != "shm":
+        atomic_write_bytes(frame_path, plane)
+        meta = {"timestamp_ns": timestamp_ns, "seq": seq}
+        atomic_write_text(meta_path(frame_path), json.dumps(meta, separators=(",", ":")))
     if record_dir is not None:
         record_dir.mkdir(parents=True, exist_ok=True)
         atomic_write_bytes(record_dir / f"{seq:08d}.bin", plane)
@@ -98,6 +125,36 @@ def write_frame(
                 )
                 + "\n"
             )
+
+
+_TIP_PUB = None
+
+
+def _tip_publisher():
+    """Lazy Open TipChannel for GF_CHANNEL_SLOT; returns publish(plane, ts, seq)."""
+    global _TIP_PUB
+    if _TIP_PUB is not None:
+        return _TIP_PUB
+    slot = os.environ.get("GF_CHANNEL_SLOT", "").strip()
+    if not slot:
+        return None
+    try:
+        fi = Path(__file__).resolve().parents[2] / "apps" / "frame_ingest"
+        if str(fi) not in sys.path:
+            sys.path.insert(0, str(fi))
+        from gf_channel_py import GfChannel as TipChannel  # noqa: WPS433
+
+        ch = TipChannel.open(slot)
+        def _pub(plane: bytes, timestamp_ns: int, seq: int) -> None:
+            ch.publish(plane, int(timestamp_ns), int(seq))
+
+        _TIP_PUB = _pub
+        _log(f"tip channel open {slot}")
+        return _TIP_PUB
+    except Exception as exc:  # noqa: BLE001
+        _log(f"tip channel unavailable ({exc}); file tip only")
+        _TIP_PUB = False  # type: ignore[assignment]
+        return None
 
 
 def write_ego_tip(
@@ -336,7 +393,7 @@ def _connect_world(
 
 
 def _stats_path() -> Path:
-    return Path(_env("GF_CARLA_BRIDGE_STATS_PATH", "/tmp/gf_carla_bridge_stats.json"))
+    return Path(_env("GF_CARLA_BRIDGE_STATS_PATH", _ipc_default("carla_bridge_stats.json")))
 
 
 def _write_bridge_stats(
@@ -346,6 +403,8 @@ def _write_bridge_stats(
     hero_id: int,
     seq: int,
     waiting_hero: bool = False,
+    t_convert_ms: float = 0.0,
+    t_write_ms: float = 0.0,
 ) -> None:
     payload = {
         "carla_fps": round(float(carla_fps), 2),
@@ -353,6 +412,8 @@ def _write_bridge_stats(
         "hero_id": int(hero_id),
         "seq": int(seq),
         "waiting_hero": bool(waiting_hero),
+        "t_convert_ms": round(float(t_convert_ms), 2),
+        "t_write_ms": round(float(t_write_ms), 2),
         "timestamp_ns": time.time_ns(),
     }
     try:
@@ -424,14 +485,14 @@ def _run_carla_session(
     except Exception:  # noqa: BLE001
         pass
 
-    tip = load_tip_mount()
+    mount = load_camera_mount()
     cam_bp = world.get_blueprint_library().find("sensor.camera.rgb")
     cam_bp.set_attribute("image_size_x", str(w))
     cam_bp.set_attribute("image_size_y", str(h))
-    cam_bp.set_attribute("fov", str(float(tip.fov)))
-    cam_transform = tip.as_carla_transform(carla_mod)
+    cam_bp.set_attribute("fov", str(float(mount.fov)))
+    cam_transform = mount.as_carla_transform(carla_mod)
     camera = world.spawn_actor(cam_bp, cam_transform, attach_to=vehicle)
-    _log(f"tip camera {tip.describe()} → perception (pygame view does not move this)")
+    _log(f"camera_mount {mount.describe()} → perception (pygame view does not move this)")
 
     seq_holder = {"seq": 0}
     last_cmd = {"seq": -1, "mtime": -1.0}
@@ -439,7 +500,7 @@ def _run_carla_session(
     ego_ref: dict[str, Any] = {"v": vehicle}
     # FPS: CARLA camera callbacks vs successful tip writes (windowed).
     fps_win = {"t0": time.monotonic(), "carla_n": 0, "tip_n": 0}
-    fps_pub = {"carla": 0.0, "tip": 0.0, "last_log": 0.0}
+    fps_pub = {"carla": 0.0, "tip": 0.0, "last_log": 0.0, "t_convert_ms": 0.0, "t_write_ms": 0.0}
 
     def _bump_fps(*, carla: bool = False, tip_ok: bool = False) -> None:
         if carla:
@@ -460,10 +521,14 @@ def _run_carla_session(
             tip_fps=float(fps_pub["tip"]),
             hero_id=int(getattr(ego_ref["v"], "id", -1)),
             seq=int(seq_holder["seq"]),
+            t_convert_ms=float(fps_pub.get("t_convert_ms", 0.0)),
+            t_write_ms=float(fps_pub.get("t_write_ms", 0.0)),
         )
         if now - float(fps_pub["last_log"]) >= 2.0:
             _log(
                 f"fps carla={fps_pub['carla']:.1f} tip_write={fps_pub['tip']:.1f} "
+                f"convert_ms={fps_pub.get('t_convert_ms', 0):.1f} "
+                f"write_ms={fps_pub.get('t_write_ms', 0):.1f} "
                 f"hero={getattr(ego_ref['v'], 'id', '?')} seq={seq_holder['seq']}"
             )
             fps_pub["last_log"] = now
@@ -477,21 +542,32 @@ def _run_carla_session(
         _bump_fps(carla=True)
         try:
             raw = bytes(image.raw_data)
+            # BGRA → RGB (fast path: memoryview slices)
+            mv = memoryview(raw)
             rgb = bytearray(w * h * 3)
-            for i in range(w * h):
-                b = raw[i * 4 + 0]
-                g = raw[i * 4 + 1]
-                r = raw[i * 4 + 2]
-                rgb[i * 3 + 0] = r
-                rgb[i * 3 + 1] = g
-                rgb[i * 3 + 2] = b
+            di = 0
+            for i in range(0, w * h * 4, 4):
+                rgb[di] = mv[i + 2]
+                rgb[di + 1] = mv[i + 1]
+                rgb[di + 2] = mv[i]
+                di += 3
+            t0 = time.perf_counter()
             seq_holder["seq"] += 1
             seq = seq_holder["seq"]
             ts = time.time_ns()
             plane = rgb_to_yuv(fmt, bytes(rgb), w, h)
+            t_convert_ms = (time.perf_counter() - t0) * 1000.0
             if len(plane) < need:
                 return
+            t1 = time.perf_counter()
             write_frame(frame_path, plane, seq, ts, record_dir=record_dir)
+            t_write_ms = (time.perf_counter() - t1) * 1000.0
+            fps_pub["t_convert_ms"] = (
+                0.8 * float(fps_pub.get("t_convert_ms", t_convert_ms)) + 0.2 * t_convert_ms
+            )
+            fps_pub["t_write_ms"] = (
+                0.8 * float(fps_pub.get("t_write_ms", t_write_ms)) + 0.2 * t_write_ms
+            )
             _bump_fps(tip_ok=True)
 
             vel = veh.get_velocity()
@@ -508,7 +584,7 @@ def _run_carla_session(
                 timestamp_ns=ts,
             )
         except Exception as exc:  # noqa: BLE001
-            _log(f"on_image error (will re-session): {exc}")
+            _log(f"on_image error (will re-session): {exc}", error=True)
 
     camera.listen(on_image)
     _log(f"camera listening → {frame_path} fmt={fmt} (Giraffe cmd only after IC handoff)")
@@ -581,7 +657,8 @@ def run_carla(
         _log(
             f"carla Python module not installed in this interpreter: {sys.executable}. "
             "pip install into THAT env, or set GF_CARLA_PYTHON=/path/to/env/bin/python "
-            "(e.g. conda env carla_env). See tools/carla_bridge/README.md"
+            "(e.g. conda env carla_env). See tools/carla_bridge/README.md",
+            error=True,
         )
         if on_fail in ("idle", "reconnect"):
             _log(f"idle without frames (GF_CARLA_BRIDGE_ON_FAIL={on_fail})")
@@ -612,7 +689,7 @@ def run_carla(
             )
         except RuntimeError as exc:
             msg = str(exc)
-            _log(msg)
+            _log(msg, error=True)
             if "API mismatch" in msg:
                 if mode == "idle":
                     while not STOP:
@@ -626,9 +703,24 @@ def run_carla(
                 while not STOP:
                     time.sleep(1.0)
                 return 0
-            _log(f"connect failed; retry in {reconnect_s:.1f}s")
+            _log(f"connect failed; retry in {reconnect_s:.1f}s", error=True)
             time.sleep(max(0.5, reconnect_s))
             continue
+
+        # Optional sync / fixed-delta recording (25fps tip volume timebase).
+        if _env("GF_CARLA_SYNC", "0") == "1":
+            try:
+                fps = float(_env("GF_CHANNEL_RECORD_FPS", "25"))
+                settings = world.get_settings()
+                settings.synchronous_mode = True
+                settings.fixed_delta_seconds = 1.0 / max(1.0, fps)
+                world.apply_settings(settings)
+                _log(
+                    f"CARLA sync on fixed_delta={settings.fixed_delta_seconds:.4f}s "
+                    f"(record_fps={fps})"
+                )
+            except Exception as exc:  # noqa: BLE001
+                _log(f"sync mode failed: {exc}", error=True)
 
         try:
             reason = _run_carla_session(
@@ -647,7 +739,7 @@ def run_carla(
             )
         except Exception as exc:  # noqa: BLE001
             reason = "rpc_error"
-            _log(f"session crashed: {exc}")
+            _log(f"session crashed: {exc}", error=True)
 
         if STOP or reason == "stop":
             break
@@ -670,10 +762,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     host = _env("CARLA_HOST", "127.0.0.1")
     port = int(_env("CARLA_PORT", "2000"))
     timeout_s = float(_env("GF_CARLA_CONNECT_TIMEOUT_S", "3"))
-    frame_path = Path(_env("GF_CARLA_FRAME_PATH", "/tmp/gf_front.yuv"))
-    cmd_path = Path(_env("GF_CARLA_CMD_PATH", "/tmp/gf_carla_cmd.json"))
-    ego_path = Path(_env("GF_CARLA_EGO_PATH", "/tmp/gf_carla_ego.json"))
-    truth_path = Path(_env("GF_CARLA_TRUTH_PATH", "/tmp/gf_carla_truth.json"))
+    frame_path = Path(_env("GF_CARLA_FRAME_PATH", _ipc_default("front.yuv")))
+    cmd_path = Path(_env("GF_CARLA_CMD_PATH", _ipc_default("carla_cmd.json")))
+    ego_path = Path(_env("GF_CARLA_EGO_PATH", _ipc_default("carla_ego.json")))
+    truth_path = Path(_env("GF_CARLA_TRUTH_PATH", _ipc_default("carla_truth.json")))
     fmt = _env("GF_PIXEL_FORMAT", "nv12").lower()
     w = int(_env("GF_CARLA_CAM_W", "640"))
     h = int(_env("GF_CARLA_CAM_H", "480"))

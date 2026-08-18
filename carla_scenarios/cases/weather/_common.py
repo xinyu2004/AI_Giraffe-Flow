@@ -31,7 +31,7 @@ from _instrument import (  # noqa: E402
     mps_to_kph,
     prime_run_meta,
 )
-from _tip_mount import load_tip_mount  # noqa: E402
+from _camera_mount import load_camera_mount  # noqa: E402
 from _traffic import ensure_ambient_traffic  # noqa: E402
 from _truth import write_truth  # noqa: E402
 from _verdict import (  # noqa: E402
@@ -93,7 +93,7 @@ def run_session(
     load_local_env()
     cfg = load_weather(preset)
     apply_weather(world, carla, cfg)
-    mount = load_tip_mount()
+    mount = load_camera_mount()
     ego, lead, _meta = layout_acc_follow(
         carla, client, world, lead_gap_m=32.0, keep_ego=keep_ego
     )
@@ -119,7 +119,7 @@ def run_session(
                 width=int(os.environ.get("GF_SCENARIO_VIEW_W") or "960"),
                 height=int(os.environ.get("GF_SCENARIO_VIEW_H") or "540"),
                 title=f"AFC {tag} — weather follow",
-                tip_mount=mount,
+                camera_mount=mount,
             )
         except Exception as exc:  # noqa: BLE001
             print(f"[{tag}] pygame unavailable: {type(exc).__name__}: {exc}", flush=True)

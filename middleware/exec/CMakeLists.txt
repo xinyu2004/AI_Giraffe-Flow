@@ -1,4 +1,4 @@
-add_library(gf_ara_exec STATIC
+add_library(gf_ara_exec SHARED
   src/execution_client.cpp
   src/execution_manager.cpp
   src/em_daemon.cpp

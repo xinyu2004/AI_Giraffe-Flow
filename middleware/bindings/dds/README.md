@@ -10,7 +10,7 @@
 ```bash
 bash scripts/bootstrap_deps.sh          # fetch cyclonedds 0.10.5
 bash scripts/smoke_bd_cyclone.sh        # real ≥1 event
-bash scripts/smoke_bd_stub.sh           # offline stub
+bash scripts/smoke_bd_cyclone.sh
 ```
 
 **主链 SIL 仍为 iceoryx** — 见 [CYCLONEDDS_BYPASS.md](../../../docs/zh/operations/CYCLONEDDS_BYPASS.md)。  

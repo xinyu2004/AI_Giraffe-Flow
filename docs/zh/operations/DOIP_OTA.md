@@ -77,18 +77,13 @@ UdsDispatcher → UCM OtaOrchestrator → PackageManager →（stub）落盘/Act
 ## SIL 一键路径
 
 ```bash
-# 1) 假包（可选）
-bash scripts/make_sil_swu.sh /tmp/gf_demo.swu
-
-# 2) 编译 + 跑 SIL（diag 开 13400 时会起 gf_doip_ota_server）
+# 1) 编译 + 跑 SIL（diag 开 13400 时会起 gf_doip_ota_server）
 #    见 projects/.../scripts/run_sil.sh
-#    默认写 GF_COLLECTOR_STORE=${BUILD}/runtime/collector/events.ndjson
 
-# 3) 自动化冒烟
+# 2) DoIP 通路冒烟（ctest + session；**不**冒烟刷写本身）
 bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
 
-# 4) 或开 GMT → 加载 project.yaml → OTA/UDS → 连接 → Start OTA
-#    （同页可切 DEM 读/清 DTC，或 Collector 读环缓）
+# 3) 或开 GMT → 加载 project.yaml → OTA/UDS → 连接（测 DoIP/UDS，非真刷写）
 ```
 
 ### 观测演示（Collector / DEM）

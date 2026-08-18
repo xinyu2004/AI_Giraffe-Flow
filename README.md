@@ -115,15 +115,24 @@ Production perception/planning: **external packages**. See [apps/](apps/README.m
 
 #### 2.4 Product path (SIL)
 
+Primary SKUs under `projects/oem_a/` share the same contract: **mtime compose / configure-on-need / incremental build**; `ctest` only with `GF_CTEST=1`; staged `runtime/bin/giraffe_launch`; GMT extras via `GMT_depend_launch` (`GF_GMT_DEPEND=0` → EM only).
+
 ```bash
+# afc_with_uss (USS in chain) or afc_no_uss (no USS / tip-oriented)
 bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 
+# Board / same EM entry after stage:
+#   ./projects/.../build-sil/runtime/bin/giraffe_launch
+
 GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+
+# CI-style tests during compile:
+#   GF_CTEST=1 bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
 ```
 
-Scripts: [scripts/README.md](projects/oem_a/afc_with_uss/scripts/README.md)  
+Scripts: [afc_with_uss](projects/oem_a/afc_with_uss/scripts/README.md) · [afc_no_uss](projects/oem_a/afc_no_uss/README.md)  
 Scenarios: [scenarios/README.md](projects/oem_a/afc_with_uss/scenarios/README.md)
 
 #### 2.5 Boundary vs toolchain
@@ -131,7 +140,7 @@ Scenarios: [scenarios/README.md](projects/oem_a/afc_with_uss/scenarios/README.md
 | Giraffe modules own | Toolchain owns |
 |---------------------|----------------|
 | In-process I/O, real pub/sub on iceoryx | wiring / SKU trim → gf-config |
-| SIL: systemd/init → EM → daemons + apps; tap/inject/frame bridge = Flow/GMT (not EM) | Studio / Tag / MCAP; Logging via DLT |
+| SIL: systemd/init → EM → daemons + apps; tap/inject/Foxglove/DoIP = **GMT_depend** (not EM) | Studio / Tag / MCAP; Logging via DLT |
 | Semantic contract on target | DBC / lineage gates → compose |
 | FuSa evidence (`fusa/`) | GMT remains **debug-path** (not board ASIL evidence) |
 

@@ -51,6 +51,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QTabWidget,
     QToolButton,
     QVBoxLayout,
@@ -58,7 +59,13 @@ from PySide6.QtWidgets import (
 )
 
 from gf_codegen.compose.parse_hpp import is_fat_port_name
-from gf_config.core import ProjectSession, canon_service, short_service
+from gf_config.core import (
+    ProjectSession,
+    canon_service,
+    is_channel_svc,
+    normalize_channel_slot,
+    short_service,
+)
 from gf_config.gui.cursors import (
     port_move_cursor,
     wire_link_cursor,
@@ -104,6 +111,30 @@ _SIDE_LABEL = {"left": "left", "right": "right", "top": "top", "bottom": "bottom
 
 def is_external_node(*, kind: str = "", process: str = "") -> bool:
     return kind == "external" or process.startswith("external.")
+
+
+def is_frame_ingest_node(*, kind: str = "", process: str = "") -> bool:
+    return ProjectSession.is_frame_ingest_process(kind=kind, process=process)
+
+
+def is_camera_source(*, kind: str = "", process: str = "") -> bool:
+    """Compat alias for frame_ingest / legacy camera.* canvas nodes."""
+    return is_frame_ingest_node(kind=kind, process=process)
+
+
+def port_label(svc: str) -> str:
+    """Display name: keep full gf.channel.* slot; SOA uses short service."""
+    ch = normalize_channel_slot(svc or "")
+    if ch:
+        return ch
+    return short_service(svc)
+
+
+def port_link_key(svc: str) -> str:
+    ch = normalize_channel_slot(svc or "")
+    if ch:
+        return ch
+    return short_service(svc)
 
 
 def _norm_side(side: str | None, default: str) -> str:
@@ -243,7 +274,7 @@ class PortItem(QGraphicsEllipseItem):
         side_l = _SIDE_LABEL.get(self.side, self.side)
         # 裸拖连线（Out↔In）；Ctrl+拖 = 改边 / 同边调序（减交叉）
         self.setToolTip(
-            f"{tip_dir}: {short_service(self.service)} ({tip} · {side_l})\n"
+            f"{tip_dir}: {port_label(self.service)} ({tip} · {side_l})\n"
             "拖拽连线 · Ctrl+拖：改边或同边调序 · 右键选边"
         )
         s = self.SIZE
@@ -397,7 +428,7 @@ class ProcessCard(QGraphicsItem):
         self._emphasis = False
         self._dimmed = False
         self._updating_links = False
-        # 短服务名：已有 dataflow 的 Out / In
+        # 已有 dataflow / channel_flow 的 Out / In（SOA 用短名；GfChannel 用全槽名）
         self._linked_out: set[str] = set()
         self._linked_in: set[str] = set()
         self.setPos(x, y)
@@ -409,9 +440,9 @@ class ProcessCard(QGraphicsItem):
         self._rebuild_ports()
 
     def set_link_status(self, *, linked_out: set[str], linked_in: set[str]) -> None:
-        """按 dataflow 标记端口是否已连；未连线文字/圆点为红。"""
-        self._linked_out = {short_service(s) for s in linked_out}
-        self._linked_in = {short_service(s) for s in linked_in}
+        """按 dataflow / channel_flow 标记端口是否已连；未连线文字/圆点为红。"""
+        self._linked_out = {port_link_key(s) for s in linked_out}
+        self._linked_in = {port_link_key(s) for s in linked_in}
         if _qt_alive(self):
             self.update()
             for p in self._out_ports + self._in_ports:
@@ -419,7 +450,7 @@ class ProcessCard(QGraphicsItem):
                     p._apply_brush()
 
     def is_port_linked(self, direction: str, service: str) -> bool:
-        key = short_service(service)
+        key = port_link_key(service)
         if direction == "out":
             return key in self._linked_out
         return key in self._linked_in
@@ -427,9 +458,19 @@ class ProcessCard(QGraphicsItem):
     def is_external(self) -> bool:
         return is_external_node(kind=self.kind, process=self.process_name)
 
+    def is_camera(self) -> bool:
+        return self.is_frame_ingest()
+
+    def is_frame_ingest(self) -> bool:
+        return is_frame_ingest_node(kind=self.kind, process=self.process_name)
+
     @property
     def card_width(self) -> float:
-        return float(self.EXT_WIDTH if self.is_external() else self.WIDTH)
+        if self.is_external():
+            return float(self.EXT_WIDTH)
+        if self.is_frame_ingest():
+            return 220.0
+        return float(self.WIDTH)
 
     def set_canvas_hide(
         self,
@@ -500,11 +541,15 @@ class ProcessCard(QGraphicsItem):
         # External MCU: compact block, no signal ports on canvas
         if self.is_external():
             return float(self.EXT_HEIGHT)
+        # CameraSource / frame_ingest: title + Out only (GfChannel slot)
+        if self.is_frame_ingest():
+            n = 1 + max(len(self._visible_provides()), 1)
+            return self.HEADER + n * self.LINE + 12
         n = (
             1
-            + max(len(self._visible_provides()), 1)
-            + 1
             + max(len(self._visible_requires()), 1)
+            + 1
+            + max(len(self._visible_provides()), 1)
         )
         return self.HEADER + n * self.LINE + 12
 
@@ -556,16 +601,16 @@ class ProcessCard(QGraphicsItem):
                 self._in_ports.append(port)
 
     def out_port_for_service(self, service: str) -> PortItem | None:
-        key = short_service(service)
+        key = port_link_key(service)
         for p in self._out_ports:
-            if short_service(p.service) == key:
+            if port_link_key(p.service) == key:
                 return p
         return self._out_ports[0] if self._out_ports else None
 
     def in_port_for_service(self, service: str) -> PortItem | None:
-        key = short_service(service)
+        key = port_link_key(service)
         for p in self._in_ports:
-            if short_service(p.service) == key:
+            if port_link_key(p.service) == key:
                 return p
         return self._in_ports[0] if self._in_ports else None
 
@@ -610,31 +655,53 @@ class ProcessCard(QGraphicsItem):
         r = QRectF(0, 0, w, self._height)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         external = self.is_external()
+        camera = self.is_frame_ingest()
 
         if self._emphasis or self.isSelected():
-            fill = QColor("#3d3a1e") if external else QColor("#1e6b4f")
+            if external:
+                fill = QColor("#3d3a1e")
+            elif camera:
+                fill = QColor("#1a3a4a")
+            else:
+                fill = QColor("#1e6b4f")
             border = QColor("#f7dc6f")
             border_w = 3.5
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(QColor(247, 220, 111, 50)))
             painter.drawRoundedRect(r.adjusted(-5, -5, 5, 5), 12, 12)
         elif self._dimmed:
-            fill = QColor("#1a1a14") if external else QColor("#0f221c")
+            if external:
+                fill = QColor("#1a1a14")
+            elif camera:
+                fill = QColor("#0f1c24")
+            else:
+                fill = QColor("#0f221c")
             border = QColor("#5c5346")
             border_w = 1.5
         else:
-            fill = QColor("#2a2618") if external else QColor("#15352c")
-            border = QColor("#c9a227") if external else QColor("#7dcea0")
+            if external:
+                fill = QColor("#2a2618")
+                border = QColor("#c9a227")
+            elif camera:
+                fill = QColor("#152832")
+                border = QColor("#5dade2")
+            else:
+                fill = QColor("#15352c")
+                border = QColor("#7dcea0")
             border_w = 2
 
         painter.setBrush(QBrush(fill))
         pen = QPen(border, border_w)
         if external:
             pen.setStyle(Qt.PenStyle.DashLine)
+        elif camera:
+            pen.setStyle(Qt.PenStyle.DashDotLine)
         painter.setPen(pen)
         painter.drawRoundedRect(r, 10, 10)
 
         title_c = QColor("#fff8dc") if (self._emphasis or self.isSelected()) else QColor("#eafaf1")
+        if camera and not (self._emphasis or self.isSelected()):
+            title_c = QColor("#d6eaf8")
         if self._dimmed:
             title_c = QColor("#5d6d63")
 
@@ -659,6 +726,22 @@ class ProcessCard(QGraphicsItem):
         painter.setFont(font_small)
         y = self.HEADER
         outs = self._visible_provides()
+        outs_head = QColor("#145a32") if self._dimmed else QColor("#00e676")
+        out_ok = QColor("#1e8449") if self._dimmed else QColor("#69f0ae")
+        if camera:
+            outs_head = QColor("#1a5276") if self._dimmed else QColor("#5dade2")
+            out_ok = QColor("#2874a6") if self._dimmed else QColor("#85c1e9")
+            painter.setPen(outs_head)
+            painter.drawText(8, y + 12, "Out · GfChannel")
+            y += self.LINE
+            for svc in outs:
+                linked = self.is_port_linked("out", svc)
+                painter.setPen(out_ok)
+                mark = "" if linked else " !"
+                painter.drawText(16, y + 12, f"{port_label(svc)}{mark}")
+                y += self.LINE
+            return
+
         ins = self._visible_requires()
         # Color = direction; unlinked ports get a trailing !
         # 列表顺序：In 在上、Out 在下（与常见「输入→处理→输出」阅读方向一致）
@@ -673,7 +756,7 @@ class ProcessCard(QGraphicsItem):
             linked = self.is_port_linked("in", svc)
             painter.setPen(in_ok)
             mark = "" if linked else " !"
-            painter.drawText(16, y + 12, f"{short_service(svc)}{mark}")
+            painter.drawText(16, y + 12, f"{port_label(svc)}{mark}")
             y += self.LINE
         painter.setPen(out_head)
         painter.drawText(8, y + 12, "Out")
@@ -682,7 +765,7 @@ class ProcessCard(QGraphicsItem):
             linked = self.is_port_linked("out", svc)
             painter.setPen(out_ok)
             mark = "" if linked else " !"
-            painter.drawText(16, y + 12, f"{short_service(svc)}{mark}")
+            painter.drawText(16, y + 12, f"{port_label(svc)}{mark}")
             y += self.LINE
 
     def itemChange(self, change, value):  # type: ignore[no-untyped-def]
@@ -723,7 +806,10 @@ class ProcessCard(QGraphicsItem):
 
     def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if self.graph is not None:
-            self.graph.edit_ports(self)
+            if self.is_frame_ingest():
+                self.graph.edit_frame_ingest(self)
+            else:
+                self.graph.edit_ports(self)
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
@@ -1243,6 +1329,146 @@ class McuPeerLink(QGraphicsPathItem):
         super().contextMenuEvent(event)
 
 
+class ChannelEdge(QGraphicsPathItem):
+    """GfChannel tip edge (camera → consumer); not an iceoryx dataflow."""
+
+    def __init__(
+        self,
+        src: ProcessCard,
+        dst: ProcessCard,
+        slot: str,
+        flow: dict[str, Any],
+        graph: WiringGraphView | None = None,
+    ) -> None:
+        super().__init__()
+        self.src = src
+        self.dst = dst
+        self.slot = (slot or "").strip() or "gf.channel.front"
+        self.flow = flow
+        self.service = self.slot  # PortItem/anchor helpers reuse service name
+        self.graph = graph
+        self._base_color = QColor("#5dade2")
+        self._highlight = False
+        self._dimmed = False
+        self._role = ""
+        self.setZValue(-1)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, False)
+        self.setAcceptHoverEvents(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        src._edges.append(self)
+        dst._edges.append(self)
+        self._label = QGraphicsSimpleTextItem(self.slot)
+        font = QFont()
+        font.setPointSize(9)
+        font.setBold(True)
+        self._label.setFont(font)
+        self._apply_style()
+        self.update_path()
+
+    def set_visual_state(
+        self,
+        *,
+        highlight: bool = False,
+        dimmed: bool = False,
+        role: str = "",
+    ) -> None:
+        self._highlight = highlight
+        self._dimmed = dimmed
+        self._role = role
+        if not _qt_alive(self):
+            return
+        self._apply_style()
+        self.update_path()
+
+    def _apply_style(self) -> None:
+        selected = self.isSelected()
+        if selected:
+            color = QColor("#f7dc6f")
+            width = 3.2
+        elif self._highlight and self._role == "out":
+            color = QColor("#5dade2")
+            width = 2.8
+        elif self._highlight and self._role == "in":
+            color = QColor("#48c9b0")
+            width = 2.8
+        elif self._highlight:
+            color = QColor("#5dade2")
+            width = 2.5
+        elif self._dimmed:
+            color = QColor(self._base_color)
+            color.setAlpha(55)
+            width = 1.2
+        else:
+            color = self._base_color
+            width = 2.2
+        pen = QPen(color, width, Qt.PenStyle.DashDotLine)
+        self.setPen(pen)
+        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        lc = QColor("#d6eaf8") if not selected else QColor("#f7dc6f")
+        if self._dimmed and not selected and not self._highlight:
+            lc.setAlpha(80)
+        self._label.setBrush(QBrush(lc))
+
+    def shape(self) -> QPainterPath:
+        stroker = QPainterPathStroker()
+        stroker.setWidth(14.0)
+        stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
+        return stroker.createStroke(self.path())
+
+    def update_path(self) -> None:
+        if not _qt_alive(self.src) or not _qt_alive(self.dst):
+            return
+        p0 = self.src.out_anchor(self.slot)
+        p3 = self.dst.in_anchor(self.slot)
+        dist = max(48.0, 0.25 * math.hypot(p3.x() - p0.x(), p3.y() - p0.y()))
+        src_port = self.src.out_port_for_service(self.slot)
+        dst_port = self.dst.in_port_for_service(self.slot)
+        src_side = (
+            src_port.side
+            if src_port is not None
+            else self.src.port_side_for(self.slot, "out")
+        )
+        dst_side = (
+            dst_port.side
+            if dst_port is not None
+            else self.dst.port_side_for(self.slot, "in")
+        )
+        p1 = EdgeCurve._leave_point(p0, src_side, dist, 0.0)
+        p2 = EdgeCurve._approach_point(p3, dst_side, dist, 0.0)
+        path = QPainterPath(p0)
+        path.cubicTo(p1, p2, p3)
+        tip = cubic_bezier_point(p0, p1, p2, p3, 0.68)
+        tang = cubic_bezier_tangent(p0, p1, p2, p3, 0.68)
+        length = math.hypot(tang.x(), tang.y()) or 1.0
+        append_chevron(path, tip, tang.x() / length, tang.y() / length)
+        self.setPath(path)
+        label_pt = cubic_bezier_point(p0, p1, p2, p3, 0.42)
+        if self.scene() and self._label.scene() is None:
+            self.scene().addItem(self._label)
+        self._label.setText(self.slot)
+        self._label.setPos(label_pt.x() - 28, label_pt.y() - 18)
+        self._label.setZValue(2 if (self._highlight or self.isSelected()) else 1)
+        self.setZValue(1 if self.isSelected() else (0 if self._highlight else -1))
+
+    def remove_label(self) -> None:
+        if _qt_alive(self._label) and self._label.scene():
+            self._label.scene().removeItem(self._label)
+
+    def itemChange(self, change, value):  # type: ignore[no-untyped-def]
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
+            self._apply_style()
+            self.update_path()
+        return super().itemChange(change, value)
+
+    def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self.graph is not None:
+            self.graph.show_channel_edge_menu(self, event.screenPos())
+            event.accept()
+            return
+        super().contextMenuEvent(event)
+
+
 class ZoomGraphicsView(QGraphicsView):
     """Ctrl+wheel zoom; wire-drag mouse routing; stores default transform."""
 
@@ -1581,6 +1807,208 @@ class ImportPortsDialog(QDialog):
         return self._proc.currentText(), names, direction
 
 
+class FrameIngestDialog(QDialog):
+    """Configure host.frame_ingest lanes (id/WxH/pixel). Tip source = runtime GF_FRAME_SOURCE."""
+
+    def __init__(
+        self,
+        fi: dict[str, Any],
+        slots: list[dict[str, Any]],
+        *,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("frame_ingest · 视频契约")
+        self.setMinimumWidth(480)
+        self._rows: list[dict[str, Any]] = []
+        root = QVBoxLayout(self)
+        hint = QLabel(
+            "每路 = 一个 Out（gf.channel.{id}）→ 拖到消费方。\n"
+            "SOP 默认 tip=isp；SIL 用 GF_FRAME_SOURCE=carla|replay|colorbar|none（run_sil）。\n"
+            "无外参/内参/ego；buffers=AB 固定 2。"
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#888;font-size:11px;")
+        root.addWidget(hint)
+
+        root.addWidget(QLabel("通道（每路一条 GfChannel Out）"))
+        self._list = QListWidget()
+        self._list.currentRowChanged.connect(self._on_row)
+        root.addWidget(self._list)
+        form = QFormLayout()
+        self._id = QLineEdit()
+        self._w = QSpinBox()
+        self._w.setRange(16, 8192)
+        self._h = QSpinBox()
+        self._h.setRange(16, 8192)
+        self._pixel = QComboBox()
+        self._pixel.setEditable(True)
+        for p in ("nv12", "nv21", "yuv422", "yuv444", "rgb8"):
+            self._pixel.addItem(p, p)
+        self._slot_ro = QLabel("")
+        self._slot_ro.setStyleSheet("color:#5dade2;")
+        form.addRow("id", self._id)
+        form.addRow("槽名", self._slot_ro)
+        form.addRow("宽", self._w)
+        form.addRow("高", self._h)
+        form.addRow("pixel_format", self._pixel)
+        root.addLayout(form)
+        row_btns = QHBoxLayout()
+        btn_add = QPushButton("添加一路")
+        btn_del = QPushButton("删除当前路")
+        btn_add.clicked.connect(self._add_row)
+        btn_del.clicked.connect(self._del_row)
+        row_btns.addWidget(btn_add)
+        row_btns.addWidget(btn_del)
+        row_btns.addStretch(1)
+        root.addLayout(row_btns)
+        self._id.textChanged.connect(self._sync_slot_label)
+        self._id.editingFinished.connect(self._apply_form_to_row)
+        self._w.valueChanged.connect(lambda _v: self._apply_form_to_row())
+        self._h.valueChanged.connect(lambda _v: self._apply_form_to_row())
+        self._pixel.currentTextChanged.connect(lambda _t: self._apply_form_to_row())
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+        self._loading = False
+        self._load(fi, slots)
+
+    @staticmethod
+    def _set_combo(cb: QComboBox, value: str) -> None:
+        idx = cb.findData(value)
+        if idx < 0:
+            idx = cb.findText(value)
+        if idx >= 0:
+            cb.setCurrentIndex(idx)
+        elif cb.isEditable():
+            cb.setEditText(value)
+
+    def _default_slot(self, sid: str = "front") -> dict[str, Any]:
+        return {"id": sid, "w": 640, "h": 480, "pixel_format": "nv12"}
+
+    def _load(self, fi: dict[str, Any], slots: list[dict[str, Any]]) -> None:
+        default_pix = str(fi.get("pixel_format") or "nv12")
+        self._rows = []
+        for s in slots:
+            if not isinstance(s, dict):
+                continue
+            sid = str(s.get("id") or "").strip()
+            if not sid:
+                continue
+            self._rows.append(
+                {
+                    "id": sid,
+                    "w": int(s.get("w") or fi.get("frame_w") or 640),
+                    "h": int(s.get("h") or fi.get("frame_h") or 480),
+                    "pixel_format": str(s.get("pixel_format") or default_pix),
+                }
+            )
+        if not self._rows:
+            self._rows.append(self._default_slot("front"))
+        self._refresh_list()
+        self._list.setCurrentRow(0)
+
+    def _refresh_list(self) -> None:
+        self._list.blockSignals(True)
+        self._list.clear()
+        for r in self._rows:
+            sid = str(r.get("id") or "?")
+            pix = str(r.get("pixel_format") or "nv12")
+            self._list.addItem(f"{sid}  →  gf.channel.{sid}  ({pix})")
+        self._list.blockSignals(False)
+
+    def _on_row(self, row: int) -> None:
+        if row < 0 or row >= len(self._rows):
+            return
+        self._loading = True
+        try:
+            r = self._rows[row]
+            self._id.setText(str(r.get("id") or ""))
+            self._w.setValue(int(r.get("w") or 640))
+            self._h.setValue(int(r.get("h") or 480))
+            self._set_combo(self._pixel, str(r.get("pixel_format") or "nv12"))
+            self._sync_slot_label()
+        finally:
+            self._loading = False
+
+    def _sync_slot_label(self) -> None:
+        sid = self._id.text().strip() or "?"
+        self._slot_ro.setText(f"gf.channel.{sid}")
+
+    def _apply_form_to_row(self) -> None:
+        if self._loading:
+            return
+        row = self._list.currentRow()
+        if row < 0 or row >= len(self._rows):
+            return
+        sid = self._id.text().strip() or f"cam{row + 1}"
+        pix = str(self._pixel.currentData() or self._pixel.currentText() or "nv12")
+        self._rows[row] = {
+            "id": sid,
+            "w": int(self._w.value()),
+            "h": int(self._h.value()),
+            "pixel_format": pix,
+        }
+        item = self._list.item(row)
+        if item is not None:
+            item.setText(f"{sid}  →  gf.channel.{sid}  ({pix})")
+
+    def _add_row(self) -> None:
+        self._apply_form_to_row()
+        used = {str(r.get("id")) for r in self._rows}
+        n = 1
+        sid = "front"
+        while sid in used:
+            n += 1
+            sid = f"cam{n}"
+        self._rows.append(self._default_slot(sid))
+        self._refresh_list()
+        self._list.setCurrentRow(len(self._rows) - 1)
+
+    def _del_row(self) -> None:
+        row = self._list.currentRow()
+        if row < 0 or len(self._rows) <= 1:
+            QMessageBox.information(self, "通道", "至少保留一路。")
+            return
+        del self._rows[row]
+        self._refresh_list()
+        self._list.setCurrentRow(min(row, len(self._rows) - 1))
+
+    def _on_accept(self) -> None:
+        self._apply_form_to_row()
+        ids = [str(r.get("id") or "").strip() for r in self._rows]
+        if not all(ids) or len(ids) != len(set(ids)):
+            QMessageBox.warning(self, "通道", "每路 id 必填且唯一。")
+            return
+        self.accept()
+
+    def result_config(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Freeze SOP default isp; SIL overrides via GF_FRAME_SOURCE."""
+        slots = []
+        for r in self._rows:
+            slots.append(
+                {
+                    "id": str(r.get("id")),
+                    "w": int(r.get("w") or 640),
+                    "h": int(r.get("h") or 480),
+                    "pixel_format": str(r.get("pixel_format") or "nv12"),
+                }
+            )
+        fields: dict[str, Any] = {
+            "active_source": "isp",
+            "frame_source": "none",
+            "bridge": {"enabled": True},
+        }
+        if slots:
+            fields["frame_w"] = int(slots[0]["w"])
+            fields["frame_h"] = int(slots[0]["h"])
+            fields["pixel_format"] = str(slots[0].get("pixel_format") or "nv12")
+        return fields, slots
+
+
 class AddNodeDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1599,7 +2027,8 @@ class AddNodeDialog(QDialog):
         )
         hint = QLabel(
             "compute_domain is a wiring field (into SOR).\n"
-            "For an external MCU node: blank canvas → right-click → Add external MCU."
+            "For an external MCU node: blank canvas → right-click → Add external MCU.\n"
+            "视频契约：空白处右键 → 添加 frame_ingest（不进 deployments）。"
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#888;font-size:11px;")
@@ -1628,6 +2057,7 @@ class WiringGraphView(QWidget):
         self._session: ProjectSession | None = None
         self._nodes: dict[str, ProcessCard] = {}
         self._edges: list[EdgeCurve] = []
+        self._channel_edges: list[ChannelEdge] = []
         self._missing: list[MissingEdge] = []
         self._peers: list[McuPeerLink] = []
         self._wire_src: PortItem | None = None
@@ -1665,6 +2095,7 @@ class WiringGraphView(QWidget):
 
         self._legend = QLabel(
             "Out=绿 · In=橙 · ! =未连\n"
+            "蓝点划线=GfChannel（frame_ingest Out）\n"
             "拖拽连线 · Ctrl+拖改边/同边调序 · Ctrl+Z/Y 撤销（全应用）"
         )
         self._legend.setWordWrap(True)
@@ -1676,7 +2107,7 @@ class WiringGraphView(QWidget):
         flows_l.addWidget(self._legend)
         flows_l.addWidget(self._search)
         flows_l.addWidget(self._search_hits)
-        flows_l.addWidget(QLabel("dataflows"))
+        flows_l.addWidget(QLabel("dataflows / channel_flows"))
         flows_l.addWidget(self._flow_list)
 
         self._lineage = LineageView()
@@ -1920,6 +2351,12 @@ class WiringGraphView(QWidget):
             br = e.sceneBoundingRect()
             if not br.isNull():
                 rect = rect.united(br)
+        for e in self._channel_edges:
+            if not _qt_alive(e):
+                continue
+            br = e.sceneBoundingRect()
+            if not br.isNull():
+                rect = rect.united(br)
         if rect.isNull():
             return QRectF(0, 0, 400, 300)
         return rect
@@ -1960,6 +2397,9 @@ class WiringGraphView(QWidget):
         for e in list(self._edges):
             if _qt_alive(e):
                 e.set_visual_state(highlight=False, dimmed=False)
+        for e in list(self._channel_edges):
+            if _qt_alive(e):
+                e.set_visual_state(highlight=False, dimmed=False)
         for m in list(self._missing):
             if _qt_alive(m):
                 m.set_visual_state(highlight=False, dimmed=False)
@@ -1977,6 +2417,11 @@ class WiringGraphView(QWidget):
         selected_edges = [
             i for i in self._scene.selectedItems() if isinstance(i, EdgeCurve) and _qt_alive(i)
         ]
+        selected_channels = [
+            i
+            for i in self._scene.selectedItems()
+            if isinstance(i, ChannelEdge) and _qt_alive(i)
+        ]
         selected_peers = [
             i for i in self._scene.selectedItems() if isinstance(i, McuPeerLink) and _qt_alive(i)
         ]
@@ -1987,6 +2432,11 @@ class WiringGraphView(QWidget):
         if selected_missing and not selected_cards and not selected_edges and not selected_peers:
             miss = selected_missing[0]
             self._focus_missing(miss, select=False, center=False)
+            return
+
+        if selected_channels and not selected_cards:
+            edge = selected_channels[0]
+            self._focus_channel_edge(edge, select=False, center=False)
             return
 
         if selected_edges and not selected_cards:
@@ -2005,10 +2455,16 @@ class WiringGraphView(QWidget):
 
         focus = selected_cards[0]
         connected: set[EdgeCurve] = set()
+        channel_hit: set[ChannelEdge] = set()
         neighbors: set[ProcessCard] = {focus}
         for e in self._edges:
             if e.src is focus or e.dst is focus:
                 connected.add(e)
+                neighbors.add(e.src)
+                neighbors.add(e.dst)
+        for e in self._channel_edges:
+            if e.src is focus or e.dst is focus:
+                channel_hit.add(e)
                 neighbors.add(e.src)
                 neighbors.add(e.dst)
         for m in self._missing:
@@ -2038,6 +2494,14 @@ class WiringGraphView(QWidget):
                 e.set_visual_state(highlight=True, dimmed=False, role="out")
             else:
                 # 进入本节点 = In → 橙
+                e.set_visual_state(highlight=True, dimmed=False, role="in")
+
+        for e in self._channel_edges:
+            if e not in channel_hit:
+                e.set_visual_state(highlight=False, dimmed=True, role="")
+            elif e.src is focus:
+                e.set_visual_state(highlight=True, dimmed=False, role="out")
+            else:
                 e.set_visual_state(highlight=True, dimmed=False, role="in")
 
         for p in self._peers:
@@ -2155,11 +2619,7 @@ class WiringGraphView(QWidget):
         if target is None:
             ok: bool | None = None  # blank = searching
         else:
-            ok = (
-                target is not src
-                and target.direction != src.direction
-                and target.card is not src.card
-            )
+            ok = self._wire_pair_ok(src, target)
         # Legal → green; illegal → red dash + ✕; searching → yellow dash. Cursor stays hand.
         if ok is True:
             pen = QPen(QColor("#2ecc71"), 2.5, Qt.PenStyle.SolidLine)
@@ -2170,6 +2630,28 @@ class WiringGraphView(QWidget):
         self._wire_line.setPen(pen)
         self._set_wire_forbid_mark(scene_pos if ok is False else None)
 
+    def _wire_pair_ok(self, src: PortItem, target: PortItem) -> bool:
+        if target is src or target.card is src.card:
+            return False
+        if target.direction == src.direction:
+            return False
+        out_port = src if src.direction == "out" else target
+        in_port = target if src.direction == "out" else src
+        out_cam = out_port.card.is_frame_ingest()
+        in_cam = in_port.card.is_frame_ingest()
+        if out_cam and in_cam:
+            return False
+        if in_cam:
+            return False  # frame_ingest 只出不进
+        if out_cam:
+            return not in_port.card.is_external()
+        if out_port.card.is_external() or in_port.card.is_external():
+            return True
+        # SOA: Out→In；禁止把 GfChannel 口当普通服务边混连
+        if is_channel_svc(out_port.service) or is_channel_svc(in_port.service):
+            return out_cam  # only frame_ingest Out owns channel svc
+        return True
+
     def finish_wire(self, scene_pos: QPointF) -> None:
         src = self._wire_src
         # hit-test before cancel clears the preview line
@@ -2177,14 +2659,32 @@ class WiringGraphView(QWidget):
         self.cancel_wire()
         if src is None or not self._session:
             return
-        if target is None or target.direction == src.direction:
-            return  # need Out↔In pair (either drag direction)
-        if target.card is src.card:
-            QMessageBox.information(self, "连线", "不能连到同一模块")
+        if target is None or not self._wire_pair_ok(src, target):
             return
 
         out_port = src if src.direction == "out" else target
         in_port = target if src.direction == "out" else src
+
+        # GfChannel: frame_ingest Out → consumer（不写 dataflows / deployments）
+        if out_port.card.is_frame_ingest():
+            slot = (out_port.service or "").strip()
+            if not is_channel_svc(slot):
+                sid = ProjectSession.slot_id_from_camera_process(
+                    out_port.card.process_name
+                )
+                slot = ProjectSession.gf_channel_slot_name(sid)
+            self._push_undo()
+            ok = self._session.add_channel_flow(
+                out_port.card.process_name,
+                in_port.card.process_name,
+                slot=slot,
+            )
+            if not ok:
+                QMessageBox.information(self, "连线", "该 GfChannel 边已存在")
+                return
+            self.rebuild()
+            self.changed.emit()
+            return
 
         self._push_undo()
         out_svc = canon_service(out_port.service)
@@ -2192,16 +2692,28 @@ class WiringGraphView(QWidget):
         # Simulink-like: connection carries the Out signal; In port name follows Out.
         if not in_svc:
             new_req = list(in_port.card.requires) + [out_svc]
-            self._session.set_ports(
-                in_port.card.process_name, list(in_port.card.provides), new_req
+            # 保留画布上的 GfChannel In
+            new_req = self._merge_channel_requires(
+                in_port.card.process_name, new_req
             )
-        elif short_service(in_svc) != short_service(out_svc):
+            soa_req = [r for r in new_req if not is_channel_svc(r)]
+            self._session.set_ports(
+                in_port.card.process_name,
+                [p for p in in_port.card.provides if not is_channel_svc(p)],
+                soa_req,
+            )
+        elif short_service(in_svc) != short_service(out_svc) and not is_channel_svc(
+            in_svc
+        ):
             new_req = [
                 out_svc if short_service(r) == short_service(in_svc) else r
                 for r in in_port.card.requires
+                if not is_channel_svc(r)
             ]
             self._session.set_ports(
-                in_port.card.process_name, list(in_port.card.provides), new_req
+                in_port.card.process_name,
+                [p for p in in_port.card.provides if not is_channel_svc(p)],
+                new_req,
             )
 
         ok = self._session.add_dataflow(
@@ -2214,6 +2726,23 @@ class WiringGraphView(QWidget):
             return
         self.rebuild()
         self.changed.emit()
+
+    def _merge_channel_requires(self, process: str, requires: list[str]) -> list[str]:
+        """Keep existing channel In slots from channel_flows when editing SOA ports."""
+        if not self._session:
+            return requires
+        extra: list[str] = []
+        for fl in self._session.channel_flows():
+            if str(fl.get("to")) != process:
+                continue
+            slot = str(fl.get("slot") or "").strip()
+            if not slot and str(fl.get("from") or "").startswith("camera."):
+                slot = ProjectSession.gf_channel_slot_name(
+                    ProjectSession.slot_id_from_camera_process(str(fl.get("from")))
+                )
+            if slot and slot not in requires and slot not in extra:
+                extra.append(slot)
+        return list(requires) + extra
 
     def cancel_wire(self) -> None:
         self._wire_src = None
@@ -2524,6 +3053,9 @@ class WiringGraphView(QWidget):
             if isinstance(cur, EdgeCurve):
                 self.show_edge_menu(cur, self._view.mapToGlobal(pos))
                 return
+            if isinstance(cur, ChannelEdge):
+                self.show_channel_edge_menu(cur, self._view.mapToGlobal(pos))
+                return
             if isinstance(cur, MissingEdge):
                 self.show_missing_menu(cur, self._view.mapToGlobal(pos))
                 return
@@ -2534,6 +3066,7 @@ class WiringGraphView(QWidget):
 
         menu = QMenu(self)
         act_add = menu.addAction("添加模块…")
+        act_cam = menu.addAction("添加 frame_ingest…")
         act_ext = menu.addAction("Add external MCU…")
         act_ext.setEnabled(self._show_external_mcu())
         if not self._show_external_mcu():
@@ -2545,6 +3078,8 @@ class WiringGraphView(QWidget):
         chosen = menu.exec(self._view.mapToGlobal(pos))
         if chosen is act_add:
             self.add_node()
+        elif chosen is act_cam:
+            self.add_frame_ingest()
         elif chosen is act_ext:
             self.add_external_mcu_node()
         elif chosen is act_import:
@@ -2567,6 +3102,14 @@ class WiringGraphView(QWidget):
             self.changed.emit()
         elif chosen is act_del:
             self._remove_edge(edge)
+
+    def show_channel_edge_menu(self, edge: ChannelEdge, global_pos) -> None:  # type: ignore[no-untyped-def]
+        edge.setSelected(True)
+        menu = QMenu(self)
+        act_del = menu.addAction("删除 GfChannel 边")
+        chosen = menu.exec(global_pos)
+        if chosen is act_del:
+            self._remove_channel_edge(edge)
 
     def show_missing_menu(self, miss: MissingEdge, global_pos) -> None:  # type: ignore[no-untyped-def]
         miss.setSelected(True)
@@ -2637,6 +3180,8 @@ class WiringGraphView(QWidget):
                 dimmed=(e is not edge),
                 role="",
             )
+        for e in self._channel_edges:
+            e.set_visual_state(highlight=False, dimmed=True, role="")
         for m in self._missing:
             m.set_visual_state(highlight=False, dimmed=True)
         for card in self._nodes.values():
@@ -2653,6 +3198,35 @@ class WiringGraphView(QWidget):
         if center:
             self._view.centerOn(edge)
 
+    def _focus_channel_edge(
+        self, edge: ChannelEdge, *, select: bool = True, center: bool = True
+    ) -> None:
+        if select:
+            self._scene.blockSignals(True)
+            self._scene.clearSelection()
+            edge.setSelected(True)
+            self._scene.blockSignals(False)
+        for e in self._edges:
+            e.set_visual_state(highlight=False, dimmed=True, role="")
+        for e in self._channel_edges:
+            e.set_visual_state(
+                highlight=(e is edge),
+                dimmed=(e is not edge),
+                role="",
+            )
+        for m in self._missing:
+            m.set_visual_state(highlight=False, dimmed=True)
+        for card in self._nodes.values():
+            hit = card is edge.src or card is edge.dst
+            card.set_visual_state(emphasis=hit, dimmed=not hit)
+        if edge in self._channel_edges:
+            idx = len(self._edges) + self._channel_edges.index(edge)
+            self._flow_list.blockSignals(True)
+            self._flow_list.setCurrentRow(idx)
+            self._flow_list.blockSignals(False)
+        if center:
+            self._view.centerOn(edge)
+
     def _focus_missing(self, miss: MissingEdge, *, select: bool = True, center: bool = True) -> None:
         if select:
             self._scene.blockSignals(True)
@@ -2661,16 +3235,24 @@ class WiringGraphView(QWidget):
             self._scene.blockSignals(False)
         for e in self._edges:
             e.set_visual_state(highlight=False, dimmed=True)
+        for e in self._channel_edges:
+            e.set_visual_state(highlight=False, dimmed=True, role="")
         for m in self._missing:
             m.set_visual_state(highlight=(m is miss), dimmed=(m is not miss))
         for card in self._nodes.values():
             hit = card is miss.src or card is miss.dst
             card.set_visual_state(emphasis=hit, dimmed=not hit)
         if miss in self._missing:
-            row = len(self._edges) + self._missing.index(miss)
-            self._flow_list.blockSignals(True)
-            self._flow_list.setCurrentRow(row)
-            self._flow_list.blockSignals(False)
+            for i in range(self._flow_list.count()):
+                it = self._flow_list.item(i)
+                if it is None:
+                    continue
+                data = it.data(Qt.ItemDataRole.UserRole)
+                if data and data[0] == "missing" and data[1] == self._missing.index(miss):
+                    self._flow_list.blockSignals(True)
+                    self._flow_list.setCurrentRow(i)
+                    self._flow_list.blockSignals(False)
+                    break
         if center:
             self._view.centerOn(miss)
 
@@ -2681,6 +3263,8 @@ class WiringGraphView(QWidget):
             peer.setSelected(True)
             self._scene.blockSignals(False)
         for e in self._edges:
+            e.set_visual_state(highlight=False, dimmed=True, role="")
+        for e in self._channel_edges:
             e.set_visual_state(highlight=False, dimmed=True, role="")
         for m in self._missing:
             m.set_visual_state(highlight=False, dimmed=True)
@@ -2739,6 +3323,17 @@ class WiringGraphView(QWidget):
                         i,
                     )
                 )
+        for i, e in enumerate(self._channel_edges):
+            if self._fuzzy_match(
+                q, e.slot, e.src.process_name, e.dst.process_name
+            ):
+                hits.append(
+                    (
+                        f"[GfChannel] {e.slot}:  {e.src.process_name}  →  {e.dst.process_name}",
+                        "channel",
+                        i,
+                    )
+                )
         for i, m in enumerate(self._missing):
             if self._fuzzy_match(
                 q, short_service(m.service), m.src.process_name, m.dst.process_name, m.service
@@ -2768,6 +3363,8 @@ class WiringGraphView(QWidget):
         kind, idx = data
         if kind == "edge" and 0 <= idx < len(self._edges):
             self._focus_edge(self._edges[idx])
+        elif kind == "channel" and 0 <= idx < len(self._channel_edges):
+            self._focus_channel_edge(self._channel_edges[idx])
         elif kind == "missing" and 0 <= idx < len(self._missing):
             self._focus_missing(self._missing[idx])
         elif kind == "peer" and 0 <= idx < len(self._peers):
@@ -2838,7 +3435,23 @@ class WiringGraphView(QWidget):
         self.rebuild()
         self.changed.emit()
 
+    def _remove_channel_edge(self, edge: ChannelEdge) -> None:
+        if not self._session:
+            return
+        self._push_undo()
+        self._session.remove_channel_flow_match(
+            edge.src.process_name,
+            edge.dst.process_name,
+            slot=edge.slot,
+        )
+        self.rebuild()
+        self.changed.emit()
+
     def _delete_selection(self) -> None:
+        channels = [i for i in self._scene.selectedItems() if isinstance(i, ChannelEdge)]
+        if channels:
+            self._remove_channel_edge(channels[0])
+            return
         edges = [i for i in self._scene.selectedItems() if isinstance(i, EdgeCurve)]
         if edges:
             self._remove_edge(edges[0])
@@ -2858,6 +3471,9 @@ class WiringGraphView(QWidget):
             if data and data[0] == "edge" and 0 <= data[1] < len(self._edges):
                 self._remove_edge(self._edges[data[1]])
                 return
+            if data and data[0] == "channel" and 0 <= data[1] < len(self._channel_edges):
+                self._remove_channel_edge(self._channel_edges[data[1]])
+                return
             if data and data[0] == "missing" and 0 <= data[1] < len(self._missing):
                 self.ignore_missing_edge(self._missing[data[1]])
                 return
@@ -2870,6 +3486,15 @@ class WiringGraphView(QWidget):
             act_del = menu.addAction("Delete external MCU")
             chosen = menu.exec(global_pos)
             if chosen is act_del:
+                self.delete_node(card)
+            return
+        if card.is_frame_ingest():
+            act_edit = menu.addAction("编辑 frame_ingest…")
+            act_del = menu.addAction("删除 frame_ingest")
+            chosen = menu.exec(global_pos)
+            if chosen is act_edit:
+                self.edit_frame_ingest(card)
+            elif chosen is act_del:
                 self.delete_node(card)
             return
         act_edit = menu.addAction("编辑端口…")
@@ -2914,6 +3539,108 @@ class WiringGraphView(QWidget):
         self._session.upsert_deployment(name, compute_domain=domain, provides=[], requires=[])
         self.rebuild(fit_view=True)
         self.changed.emit()
+
+    def add_frame_ingest(self) -> None:
+        """Add optional host.frame_ingest canvas node (not a deployment)."""
+        if not self._session:
+            return
+        name = ProjectSession.FRAME_INGEST_PROCESS
+        if name in self._nodes or any(
+            c.is_frame_ingest() for c in self._nodes.values() if _qt_alive(c)
+        ):
+            QMessageBox.information(
+                self,
+                "frame_ingest",
+                f"已存在视频契约节点。请双击 {name} 编辑。",
+            )
+            self.edit_frame_ingest(self._nodes.get(name))
+            return
+        fi = dict(self._session.frame_ingest_cfg())
+        slots = list(self._session.tip_slots())
+        if not slots:
+            slots = [{"id": "front", "w": 640, "h": 480}]
+        if str(fi.get("active_source") or "none") == "none":
+            fi = {**fi, "active_source": "isp"}
+        dlg = FrameIngestDialog(fi, slots, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._push_undo()
+        fields, new_slots = dlg.result_config()
+        self._apply_frame_ingest(fields, new_slots, seed_fcm=True)
+        self.rebuild(fit_view=True)
+        self.changed.emit()
+
+    def edit_frame_ingest(self, card: ProcessCard | None = None) -> None:
+        if not self._session:
+            return
+        fi = dict(self._session.frame_ingest_cfg())
+        slots = list(self._session.tip_slots())
+        dlg = FrameIngestDialog(fi, slots, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._push_undo()
+        fields, new_slots = dlg.result_config()
+        self._apply_frame_ingest(fields, new_slots, seed_fcm=False)
+        self.rebuild()
+        self.changed.emit()
+
+    def _apply_frame_ingest(
+        self,
+        fields: dict[str, Any],
+        slots: list[dict[str, Any]],
+        *,
+        seed_fcm: bool,
+    ) -> None:
+        assert self._session is not None
+        self._session.migrate_legacy_camera_channel_flows()
+        old_ids = {str(s.get("id")) for s in self._session.tip_slots()}
+        new_ids = {str(s.get("id")) for s in slots if str(s.get("id") or "").strip()}
+        # Preserve SIL paths / tip_transport from prior req
+        prev = self._session.frame_ingest_cfg()
+        merged = dict(prev)
+        merged.update(fields)
+        if isinstance(prev.get("paths"), dict) and "paths" not in fields:
+            merged["paths"] = prev["paths"]
+        if prev.get("tip_transport") and "tip_transport" not in fields:
+            merged["tip_transport"] = prev["tip_transport"]
+        for k, v in merged.items():
+            if k == "tip_slots":
+                continue
+            self._session.update_frame_ingest(**{k: v})
+        self._session.set_tip_slots(slots)
+        # Drop channel_flows for removed lane ids
+        for sid in old_ids - new_ids:
+            slot = ProjectSession.gf_channel_slot_name(sid)
+            for fl in list(self._session.channel_flows()):
+                if str(fl.get("slot") or "") == slot:
+                    self._session.remove_channel_flow_match(
+                        str(fl.get("from") or ""),
+                        str(fl.get("to") or ""),
+                        slot=slot,
+                    )
+        name = ProjectSession.FRAME_INGEST_PROCESS
+        ui = self._session.node_ui(name)
+        x = float(ui["x"]) if "x" in ui else -80.0
+        y = float(ui["y"]) if "y" in ui else -320.0
+        self._session.set_node_ui(
+            name,
+            kind="frame_ingest",
+            label=str(ui.get("label") or "frame_ingest"),
+            x=x,
+            y=y,
+            out_side="right",
+            in_side="left",
+        )
+        self._layout_pos[name] = (x, y)
+        if seed_fcm and not self._session.channel_flows():
+            deps = {str(d.get("process")) for d in self._session.deployments()}
+            if "perception.fcm" in deps and slots:
+                sid = str(slots[0].get("id") or "front")
+                self._session.add_channel_flow(
+                    name,
+                    "perception.fcm",
+                    slot=ProjectSession.gf_channel_slot_name(sid),
+                )
 
     def add_external_mcu_node(self) -> None:
         """Add external MCU boundary node (VehicleBus / Trajectory via gateway)."""
@@ -2994,6 +3721,20 @@ class WiringGraphView(QWidget):
     def delete_node(self, card: ProcessCard) -> None:
         if not self._session:
             return
+        if card.is_frame_ingest():
+            reply = QMessageBox.question(
+                self,
+                "删除 frame_ingest",
+                "删除视频契约节点？\n"
+                "将清空 tip_slots / channel_flows，并把 active_source 设为 none。",
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            self._push_undo()
+            self._session.remove_frame_ingest_node()
+            self.rebuild()
+            self.changed.emit()
+            return
         reply = QMessageBox.question(
             self,
             "删除模块",
@@ -3002,6 +3743,14 @@ class WiringGraphView(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
         self._push_undo()
+        # Also drop GfChannel edges into this process
+        for fl in list(self._session.channel_flows()):
+            if str(fl.get("to")) == card.process_name or str(fl.get("from")) == card.process_name:
+                self._session.remove_channel_flow_match(
+                    str(fl.get("from") or ""),
+                    str(fl.get("to") or ""),
+                    slot=str(fl.get("slot") or ""),
+                )
         self._session.remove_deployment(card.process_name)
         self.rebuild()
         self.changed.emit()
@@ -3034,10 +3783,15 @@ class WiringGraphView(QWidget):
                 "No editable ports on canvas (boundary link to gateway only).",
             )
             return
+        if card.is_frame_ingest():
+            self.edit_frame_ingest(card)
+            return
+        soa_prov = [p for p in card.provides if not is_channel_svc(p)]
+        soa_req = [r for r in card.requires if not is_channel_svc(r)]
         dlg = PortEditDialog(
             card.process_name,
-            list(card.provides),
-            list(card.requires),
+            soa_prov,
+            soa_req,
             self._port_candidates(card.process_name),
             self,
         )
@@ -3189,6 +3943,9 @@ class WiringGraphView(QWidget):
             for e in self._edges:
                 if _qt_alive(e):
                     e.remove_label()
+            for e in self._channel_edges:
+                if _qt_alive(e):
+                    e.remove_label()
             for m in self._missing:
                 if _qt_alive(m):
                     m.remove_label()
@@ -3197,6 +3954,7 @@ class WiringGraphView(QWidget):
                     p.remove_label()
             self._nodes.clear()
             self._edges.clear()
+            self._channel_edges.clear()
             self._missing.clear()
             self._peers.clear()
             self._scene.clear()
@@ -3207,6 +3965,26 @@ class WiringGraphView(QWidget):
 
         if not self._session:
             return
+
+        self._session.migrate_legacy_camera_channel_flows()
+
+        # Ensure single frame_ingest canvas node when tip / active / channel_flows present
+        fi_cfg = self._session.frame_ingest_cfg()
+        active = str(fi_cfg.get("active_source") or "none").strip() or "none"
+        tip_slots = self._session.tip_slots()
+        ch_flows = self._session.channel_flows()
+        need_ingest = bool(tip_slots) or active != "none" or bool(ch_flows)
+        ingest_name = ProjectSession.FRAME_INGEST_PROCESS
+        if need_ingest:
+            ui = self._session.node_ui(ingest_name)
+            if str(ui.get("kind") or "") != "frame_ingest":
+                self._session.set_node_ui(
+                    ingest_name,
+                    kind="frame_ingest",
+                    label=str(ui.get("label") or "frame_ingest"),
+                )
+            if "x" not in ui or "y" not in ui:
+                self._session.set_node_ui(ingest_name, x=-80.0, y=-320.0)
 
         dep_map: dict[str, dict[str, Any]] = {}
         for d in self._session.deployments():
@@ -3242,10 +4020,34 @@ class WiringGraphView(QWidget):
                     # 有 MCU 时 AP 列右移留空；仅 AP 拓扑则贴左
                     auto_slots[name] = (ap_x0 + depth * 280.0, 40.0 + i * 240.0)
 
+        # Consumer channel Ins derived from channel_flows (never from deployments)
+        channel_ins: dict[str, list[str]] = {}
+        for fl in self._session.channel_flows():
+            dst = str(fl.get("to") or "").strip()
+            if not dst:
+                continue
+            slot = normalize_channel_slot(str(fl.get("slot") or "")) or ""
+            frm = str(fl.get("from") or "")
+            if not slot and frm.startswith("camera."):
+                slot = ProjectSession.gf_channel_slot_name(
+                    ProjectSession.slot_id_from_camera_process(frm)
+                )
+            if not slot and frm == ProjectSession.FRAME_INGEST_PROCESS:
+                continue
+            if slot and slot not in channel_ins.setdefault(dst, []):
+                channel_ins[dst].append(slot)
+
         for name in ordered:
             d = dep_map.get(name) or {}
-            provides = [str(x) for x in (d.get("provides") or [])]
-            requires = [str(x) for x in (d.get("requires") or [])]
+            provides = [
+                str(x) for x in (d.get("provides") or []) if not is_channel_svc(str(x))
+            ]
+            requires = [
+                str(x) for x in (d.get("requires") or []) if not is_channel_svc(str(x))
+            ]
+            for slot in channel_ins.get(name, []):
+                if not any(normalize_channel_slot(str(r)) == slot for r in requires):
+                    requires.append(slot)
             ui = self._session.node_ui(name)
             kind = str(ui.get("kind") or "")
             if is_external_node(kind=kind, process=name) and not kind:
@@ -3282,7 +4084,41 @@ class WiringGraphView(QWidget):
             self._scene.addItem(card)
             self._nodes[name] = card
 
-        # drop positions for deleted processes
+        # Single frame_ingest card: one Out per tip_slot
+        if need_ingest and ingest_name not in self._nodes:
+            outs = [
+                ProjectSession.gf_channel_slot_name(str(s.get("id")))
+                for s in tip_slots
+                if str(s.get("id") or "").strip()
+            ]
+            if not outs and active != "none":
+                outs = [ProjectSession.gf_channel_slot_name("front")]
+            ui = self._session.node_ui(ingest_name)
+            if ingest_name in self._layout_pos:
+                x, y = self._layout_pos[ingest_name]
+            elif "x" in ui and "y" in ui:
+                x, y = float(ui["x"]), float(ui["y"])
+                self._layout_pos[ingest_name] = (x, y)
+            else:
+                x, y = -80.0, -320.0
+                self._layout_pos[ingest_name] = (x, y)
+            card = ProcessCard(
+                ingest_name,
+                outs,
+                [],
+                x,
+                y,
+                graph=self,
+                out_side=str(ui.get("out_side") or "right"),
+                in_side=str(ui.get("in_side") or "left"),
+                kind="frame_ingest",
+                label=str(ui.get("label") or "frame_ingest"),
+                compute_domain="host",
+            )
+            self._scene.addItem(card)
+            self._nodes[ingest_name] = card
+
+        # drop positions for deleted processes / cameras
         self._layout_pos = {k: v for k, v in self._layout_pos.items() if k in self._nodes}
 
         flows = self._session.dataflows()
@@ -3316,6 +4152,28 @@ class WiringGraphView(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, ("edge", len(self._edges) - 1))
             self._flow_list.addItem(item)
 
+        for fl in self._session.channel_flows():
+            src = str(fl.get("from") or "")
+            dst = str(fl.get("to") or "")
+            slot = str(fl.get("slot") or "").strip()
+            if not slot and src.startswith("camera."):
+                slot = ProjectSession.gf_channel_slot_name(
+                    ProjectSession.slot_id_from_camera_process(src)
+                )
+            src_n = self._nodes.get(src)
+            dst_n = self._nodes.get(dst)
+            if not src_n or not dst_n or not slot:
+                continue
+            cedge = ChannelEdge(src_n, dst_n, slot, fl, graph=self)
+            self._scene.addItem(cedge)
+            cedge.update_path()
+            self._channel_edges.append(cedge)
+            item = QListWidgetItem(f"[GfChannel] {slot}:  {src}  →  {dst}")
+            item.setData(
+                Qt.ItemDataRole.UserRole, ("channel", len(self._channel_edges) - 1)
+            )
+            self._flow_list.addItem(item)
+
         # gateway 上仅面向 MCU 的端口：画布隐藏（保留 planning→Trajectory In 等）
         hide_out: dict[str, set[str]] = {}
         hide_in: dict[str, set[str]] = {}
@@ -3332,15 +4190,18 @@ class WiringGraphView(QWidget):
             elif dst_n.is_external() and not src_n.is_external():
                 hide_out.setdefault(src, set()).add(svc)
         for name, card in self._nodes.items():
-            if card.is_external():
+            if card.is_external() or card.is_camera():
                 continue
             card.set_canvas_hide(out=hide_out.get(name, set()), inn=hide_in.get(name, set()))
         # 隐藏端口后 gateway 高度变化，刷新已有边锚点
         for e in self._edges:
             if _qt_alive(e):
                 e.update_path()
+        for e in self._channel_edges:
+            if _qt_alive(e):
+                e.update_path()
 
-        # 有 dataflow 的端口=已连（绿/橙）；否则红
+        # 有 dataflow / channel_flow 的端口=已连（绿/橙）；否则红
         linked_out: dict[str, set[str]] = {n: set() for n in self._nodes}
         linked_in: dict[str, set[str]] = {n: set() for n in self._nodes}
         for fl in flows:
@@ -3353,6 +4214,20 @@ class WiringGraphView(QWidget):
                 linked_out[src].add(svc)
             if dst in linked_in:
                 linked_in[dst].add(svc)
+        for fl in self._session.channel_flows():
+            src = str(fl.get("from") or "")
+            dst = str(fl.get("to") or "")
+            slot = str(fl.get("slot") or "").strip()
+            if not slot and src.startswith("camera."):
+                slot = ProjectSession.gf_channel_slot_name(
+                    ProjectSession.slot_id_from_camera_process(src)
+                )
+            if not slot:
+                continue
+            if src in linked_out:
+                linked_out[src].add(slot)
+            if dst in linked_in:
+                linked_in[dst].add(slot)
         for name, card in self._nodes.items():
             card.set_link_status(
                 linked_out=linked_out.get(name, set()),
@@ -3376,13 +4251,17 @@ class WiringGraphView(QWidget):
 
         provided_by: dict[str, list[str]] = {}
         for name, card in self._nodes.items():
+            if card.is_camera():
+                continue
             for p in card.provides:
+                if is_channel_svc(p):
+                    continue
                 provided_by.setdefault(short_service(p), []).append(name)
 
         # 仅当某 In 端口「完全没有」入边时才提示缺失；
-        # External MCU has no missing-edge dashes (peer link covers the boundary).
+        # External MCU / CameraSource / GfChannel In：不画缺失虚线
         for cons_name, card in self._nodes.items():
-            if card.is_external():
+            if card.is_external() or card.is_camera():
                 continue
             ignored = set()
             if self._session:
@@ -3391,6 +4270,8 @@ class WiringGraphView(QWidget):
                     for x in (self._session.node_ui(cons_name).get("ignore_missing") or [])
                 }
             for req in card.requires:
+                if is_channel_svc(req):
+                    continue
                 svc_s = short_service(req)
                 satisfied = any(
                     str(f.get("to")) == cons_name
@@ -3411,7 +4292,7 @@ class WiringGraphView(QWidget):
                     if key in ignored:
                         continue
                     src_n = self._nodes.get(prov)
-                    if not src_n or src_n.is_external():
+                    if not src_n or src_n.is_external() or src_n.is_camera():
                         continue
                     miss = MissingEdge(src_n, card, req, graph=self)
                     self._scene.addItem(miss)
@@ -3462,6 +4343,8 @@ class WiringGraphView(QWidget):
         kind, idx = data
         if kind == "edge" and 0 <= idx < len(self._edges):
             self._focus_edge(self._edges[idx])
+        elif kind == "channel" and 0 <= idx < len(self._channel_edges):
+            self._focus_channel_edge(self._channel_edges[idx])
         elif kind == "missing" and 0 <= idx < len(self._missing):
             self._focus_missing(self._missing[idx])
         elif kind == "peer" and 0 <= idx < len(self._peers):

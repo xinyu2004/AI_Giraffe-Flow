@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+def _ipc_under_project(name: str) -> Path:
+    import os
+    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
+    if proj:
+        return Path(proj) / "runtime_ipc" / name
+    return Path("runtime_ipc") / name
+
+
 import json
 import os
 from dataclasses import dataclass, field
@@ -10,7 +18,7 @@ from typing import Any
 
 
 def cmd_path() -> Path:
-    return Path(os.environ.get("GF_CARLA_CMD_PATH") or "/tmp/gf_carla_cmd.json")
+    return Path(os.environ.get("GF_CARLA_CMD_PATH") or str(_ipc_under_project("carla_cmd.json")))
 
 
 def time_headway_s(gap_m: float, ego_mps: float, v_min: float = 1.0) -> float:

@@ -1,4 +1,4 @@
-add_library(gf_ara_phm STATIC
+add_library(gf_ara_phm SHARED
   src/supervised_entity.cpp
 )
 add_library(gf_ara::phm ALIAS gf_ara_phm)

@@ -45,8 +45,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 gf-codegen lint projects/oem_a/afc_with_uss/gf.sor.json   # gitignored 工作产出
 gf-codegen suggest wiring --project projects/oem_a/afc_with_uss/project.yaml
 gf-codegen generate projects/oem_a/afc_with_uss/gf.sor.json --out generated/
-gf-codegen emit-idl projects/oem_a/afc_with_uss/gf.sor.json --out generated/idl/
-bash scripts/run_idlc.sh generated/idl/gf_types.idl   # SKIP if no idlc
+# optional: gf-codegen emit-idl …（Cyclone 旁路）
 ```
 
 ## 当前能力边界

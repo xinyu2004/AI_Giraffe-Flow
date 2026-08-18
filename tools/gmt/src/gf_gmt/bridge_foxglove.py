@@ -512,6 +512,7 @@ def live_stdin_ws(
     synth_bev: bool = False,
     bev_script: Path | None = None,
     tip_frame: Path | None = None,
+    tip_slot: str | None = None,
 ) -> None:
     """Live NDJSON from stdin → Foxglove WS.
 
@@ -519,8 +520,7 @@ def live_stdin_ws(
     messages are published only while a client is connected and subscribed.
     When synth_bev=True, compose /gf/camera/front/compressed from EgoMotion/Trajectory
     (+ optional scenario script for three-phase story). /gf/AdasDemo is never advertised.
-    When tip_frame is set, poll tip YUV/RGB on the *same* WS and publish
-    /gf/camera/front/tip/compressed alongside BEV (one pipe forever).
+    Tip camera: prefer tip_slot (GfChannel shm); tip_frame is SIL file bypass only.
     """
     from gf_gmt.bev_compose import AdasScriptIndex, LiveBevComposer, is_adas_demo_topic
     from gf_gmt.tip_frame_reader import TOPIC_TIP_CAM, TipFramePublisher
@@ -529,7 +529,12 @@ def live_stdin_ws(
     srv = _listen(host, port)
     script = AdasScriptIndex.load(bev_script) if bev_script else None
     bev = LiveBevComposer(script=script) if synth_bev else None
-    tip = TipFramePublisher(tip_frame) if tip_frame is not None else None
+    tip = None
+    if tip_slot or tip_frame is not None:
+        tip = TipFramePublisher(
+            tip_frame if tip_frame is not None else None,
+            tip_slot=(tip_slot or None),
+        )
 
     def _status(kind: str, msg: str) -> None:
         conn_status("Foxglove", kind, msg)
@@ -544,7 +549,10 @@ def live_stdin_ws(
         else:
             _status("listen", "synth BEV from EgoMotion/Trajectory (module I/O)")
     if tip is not None:
-        _status("listen", f"tip CompressedImage ← {tip_frame} topic={TOPIC_TIP_CAM}")
+        if tip_slot:
+            _status("listen", f"tip CompressedImage ← slot={tip_slot} topic={TOPIC_TIP_CAM}")
+        else:
+            _status("listen", f"tip CompressedImage ← {tip_frame} topic={TOPIC_TIP_CAM}")
 
     fd = -1
     if hasattr(inp, "fileno"):
@@ -755,8 +763,14 @@ def main_bridge(argv: list[str] | None = None) -> int:
         "--tip-frame",
         type=Path,
         default=None,
-        help="With --ws --stdin: poll tip YUV/RGB path and publish "
-        "/gf/camera/front/tip/compressed on the same Foxglove WS",
+        help="SIL file bypass: poll tip YUV/RGB path for "
+        "/gf/camera/front/tip/compressed (prefer --tip-slot)",
+    )
+    p.add_argument(
+        "--tip-slot",
+        type=str,
+        default=None,
+        help="GfChannel shm slot (e.g. gf.channel.front) for tip camera on same Foxglove WS",
     )
     args = p.parse_args(argv)
 
@@ -782,6 +796,7 @@ def main_bridge(argv: list[str] | None = None) -> int:
                     synth_bev=bool(args.synth_bev),
                     bev_script=args.bev_script,
                     tip_frame=args.tip_frame,
+                    tip_slot=args.tip_slot,
                 )
                 return 0
             src = args.jsonl

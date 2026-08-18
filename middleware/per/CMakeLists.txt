@@ -1,4 +1,4 @@
-add_library(gf_ara_per STATIC
+add_library(gf_ara_per SHARED
   src/key_value_storage.cpp
 )
 add_library(gf_ara::per ALIAS gf_ara_per)

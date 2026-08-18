@@ -6,7 +6,8 @@ Pin exact versions here after spikes. Edit [DEPENDENCIES.yaml](DEPENDENCIES.yaml
 |----|---------------|-------|----------|-------|
 | attr | **2.5.2** | P0 | middleware/.deps-prefix（acl 依赖） | 源码；`bootstrap_deps.sh` |
 | acl | **2.3.2** | P0 | iceoryx / middleware/.deps-prefix | 源码；交叉用 `GF_CROSS_PREFIX` |
-| iceoryx | **v2.0.8** | P0 | middleware/bindings/iceoryx | classic C++; 同工具链 add_subdirectory |
+| iceoryx | **v2.0.8** | P0 | middleware/bindings/iceoryx | classic C++; 同工具链 add_subdirectory；`DOWNLOAD_TOML_LIB=OFF` |
+| cpptoml | **v0.1.1** | P0 | iceoryx RouDi TOML | `bootstrap_deps.sh` → `third_party/cpptoml` + `.deps-prefix`；勿进 SKU `build-*/dependencies/` |
 | vsomeip | **stub** (P1 staged) | P1 | middleware/bindings/someip | 真 vsomeip+Boost 后置；`GF_WITH_SOMEIP` |
 | cyclonedds | **0.10.5** | P2 | middleware/bindings/dds | `bootstrap_deps.sh` 拉取；`smoke_bd_cyclone.sh` 真收发；主链仍 iceoryx；P2-G 已钉扎 |
 | dlt_daemon | **v2.18.11** | P3 M4b | middleware/log · SIL/HIL daemon | COVESA；`bootstrap_deps.sh` → `third_party/dlt-daemon`；CMake 编 libdlt≈524K / daemon≈914K；见 [DLT_PLAN.md](../docs/zh/operations/DLT_PLAN.md) |

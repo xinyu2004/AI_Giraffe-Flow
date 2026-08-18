@@ -1,4 +1,4 @@
-add_library(gf_ara_sm STATIC
+add_library(gf_ara_sm SHARED
   src/state_client.cpp
 )
 add_library(gf_ara::sm ALIAS gf_ara_sm)

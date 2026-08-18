@@ -79,6 +79,7 @@ int main() {
 
   gf_ara::runtime::ProcessSupervisor supervisor;
   if (!supervisor.Start(kProcess)) {
+    std::cerr << "[ERROR] perception.fcm: ProcessSupervisor.Start failed\n";
     return EXIT_FAILURE;
   }
 
@@ -187,9 +188,10 @@ int main() {
            static_cast<std::uint64_t>(timeout_ms) * 1000000ULL);
       if (timed_out) {
         if (!logged_timeout) {
-          std::cout << "gf-perception-fcm: "
+          std::cerr << "[ERROR] perception.fcm: "
                     << (never ? "no_frame" : "frame_timeout")
-                    << " → empty packets" << std::endl;
+                    << " timeout_ms=" << timeout_ms
+                    << " → empty packets\n";
           logged_timeout = true;
         }
         if (last_empty_ns == 0 ||

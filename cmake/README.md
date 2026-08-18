@@ -4,7 +4,7 @@ Shared build modules for Giraffe Flow.
 
 | File | Role |
 |------|------|
-| [Dependencies.cmake](Dependencies.cmake) | iceoryx / ACL from `middleware/third_party` + `.deps-prefix` |
+| [Dependencies.cmake](Dependencies.cmake) | iceoryx / ACL / cpptoml from `middleware/third_party` + `.deps-prefix` |
 | [GfModules.cmake](GfModules.cmake) | **SKU 裁剪**：按 `GF_RUNTIME_MODULES` / `GF_APPS` / `GF_WITH_*` 加目录 |
 | [profiles/](profiles/) | `desktop_*` / `mcu_desktop` / `eu_stub` / `bd_stub` |
 | [toolchains/](toolchains/) | aarch64 / armhf 交叉；[host-clang.cmake](toolchains/host-clang.cmake) 主机 Clang（SIL） |
@@ -36,9 +36,9 @@ req.yaml  ──compose──►  projects/<sku>/generated/gf_build.cmake
 
 **MCU 桌面联调（无 iceoryx）：** [profiles/mcu_desktop.cmake](profiles/mcu_desktop.cmake) + `projects/oem_b/adc_full/scripts/smoke_mcu_desktop.sh`。
 
-**E/U stub（exec/phm/ucm/diag）：** [profiles/eu_stub.cmake](profiles/eu_stub.cmake) + `scripts/smoke_eu_stub.sh`。
+**E/U stub（exec/phm/ucm/diag）：** [profiles/eu_stub.cmake](profiles/eu_stub.cmake)（历史轨；日常门禁见 devops/ci + SKU verify）。
 
-**B/D stub（DDS + SOME/IP）：** [profiles/bd_stub.cmake](profiles/bd_stub.cmake) + `scripts/smoke_bd_stub.sh`；IDL：`gf-codegen emit-idl` + `scripts/run_idlc.sh`。
+**B/D Cyclone：** [profiles/bd_cyclone.cmake](profiles/bd_cyclone.cmake) + `scripts/smoke_bd_cyclone.sh`。
 
 **低配示例（afc_no_uss）：** compose 后仅 iceoryx + `demo_pipeline`；`log`/`exec`/… 无实现则 STATUS 跳过，不失败。
 

@@ -17,6 +17,6 @@ ctest --test-dir build -R 'gf_diag_doip_smoke|gf_uds_nrc_smoke|gf_doip_session_s
 bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
 ```
 
-假包（SIL）：`bash scripts/make_sil_swu.sh /tmp/gf_demo.swu`
+DoIP 通路冒烟（**不**冒烟刷写本身）。
 
 Parent: [middleware/README.md](../README.md) · FuSa: [diag_cases.md](../../fusa/cases/diag_cases.md).

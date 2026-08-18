@@ -19,8 +19,11 @@ bash fusa/scripts/run_cases.sh
 # 可选：GF_FUSA_CODEGEN=1
 # L3 FuSa SIL 全套：GF_FUSA_SIL=1 …
 
-# SKU 产物包（独立，不调用本脚本）：
+# SKU 证据包（独立，不调用本脚本）：
 # bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
+# 发版门禁末步（硬校验）：
+# GF_FUSA_PACK_RELEASE=1 bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
+# 或一键：bash devops/ci/scripts/smoke_release.sh
 ```
 
 ## 边界
@@ -41,7 +44,7 @@ bash fusa/scripts/run_cases.sh
 
 论证与追溯见 [`safety-case/`](safety-case/)（主表 [`traceability.md`](safety-case/traceability.md)：SG → SR → L1/L3）。  
 **行为** isolation / **延时** latency 见 [`metrics/`](metrics/)（`measure_latency` 不并入默认 `run_cases`）。  
-证据层仍是 `cases` + `run_cases` / SKU `generate_fusa_artifacts`。
+证据层仍是 `cases` + `run_cases` / SKU `generate_fusa_artifacts`（发版用 `GF_FUSA_PACK_RELEASE=1`）。
 
 ## 索引
 

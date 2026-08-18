@@ -2,7 +2,7 @@
 # Offline CI: GF_DDS_BACKEND=stub (in-process TopicBus).
 # Real backend: tree present + GF_DDS_BACKEND=cyclone → link ddsc + idlc GfBlob.
 
-add_library(gf_ara_com_dds STATIC
+add_library(gf_ara_com_dds SHARED
   src/runtime.cpp
 )
 add_library(gf_ara::com_dds ALIAS gf_ara_com_dds)

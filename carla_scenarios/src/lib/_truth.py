@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+def _ipc_under_project(name: str) -> Path:
+    import os
+    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
+    if proj:
+        return Path(proj) / "runtime_ipc" / name
+    return Path("runtime_ipc") / name
+
+
 import json
 import os
 import time
@@ -10,7 +18,7 @@ from typing import Any, Optional
 
 
 def truth_path() -> Path:
-    return Path(os.environ.get("GF_CARLA_TRUTH_PATH") or "/tmp/gf_carla_truth.json")
+    return Path(os.environ.get("GF_CARLA_TRUTH_PATH") or str(_ipc_under_project("carla_truth.json")))
 
 
 def atomic_write_text(path: Path, text: str) -> None:

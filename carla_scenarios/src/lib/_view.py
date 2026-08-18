@@ -12,7 +12,7 @@ import os
 from typing import Any, Callable, Optional
 
 from _instrument import ClusterState, draw_cluster
-from _tip_mount import TipMount, load_tip_mount, scene_chase_pose
+from _camera_mount import CameraMount, load_camera_mount, scene_chase_pose
 
 MODE_SCENE = "2"
 MODE_WINDSHIELD = "1"
@@ -48,7 +48,7 @@ class ScenarioView:
         height: int = 540,
         title: str = "AFC scenario",
         follow_spectator: bool = True,
-        tip_mount: Optional[TipMount] = None,
+        camera_mount: Optional[CameraMount] = None,
         initial_mode: Optional[str] = None,
     ) -> None:
         import carla  # type: ignore
@@ -59,7 +59,7 @@ class ScenarioView:
         self._world = world
         self._vehicle = vehicle
         self._follow_spectator = follow_spectator
-        self._mount = tip_mount or load_tip_mount()
+        self._mount = camera_mount or load_camera_mount()
         mode = (
             resolve_chase_cam_mode(initial_mode)
             if initial_mode is not None
@@ -138,7 +138,7 @@ class ScenarioView:
     def mode(self) -> str:
         return self._mode
 
-    def tip_mount(self) -> TipMount:
+    def camera_mount(self) -> CameraMount:
         return self._mount
 
     def toggle_mode(self) -> str:

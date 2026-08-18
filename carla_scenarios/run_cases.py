@@ -46,7 +46,7 @@ from _carla_env import (  # noqa: E402
     wait_budget_s,
 )
 from _manifest import resolve_targets  # noqa: E402
-from _tip_mount import load_tip_mount  # noqa: E402
+from _camera_mount import load_camera_mount  # noqa: E402
 from _view import ScenarioView  # noqa: E402
 from spawn.boundary import sanitize_keep_ego  # noqa: E402
 
@@ -80,7 +80,7 @@ def _ensure_view(
 ) -> Optional[ScenarioView]:
     if no_window:
         return None
-    mount = load_tip_mount()
+    mount = load_camera_mount()
     if view is not None:
         try:
             if int(getattr(view._vehicle, "id", -1)) == int(getattr(ego, "id", -2)):
@@ -98,7 +98,7 @@ def _ensure_view(
             width=int(os.environ.get("GF_SCENARIO_VIEW_W") or "960"),
             height=int(os.environ.get("GF_SCENARIO_VIEW_H") or "540"),
             title=title,
-            tip_mount=mount,
+            camera_mount=mount,
         )
         print("[run_cases] pygame window open (reused across cases)", flush=True)
         return v

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from gf_codegen.compose.emit_em_launch import build_product_em_tables
+from gf_codegen.compose.emit_frame_ingest import normalize_frame_ingest
 from gf_codegen.compose.emit_iox import iceoryx_enabled
 from gf_codegen.compose.observability import live_tap_config, normalize_profile
 
@@ -110,10 +111,13 @@ def normalize_deploy_flags(
     k_em = "exec" in mods
     k_dlt = ("dlt" in _log_sinks(platform)) and k_em
     k_roudi = iceoryx_enabled(req) and k_em
+    fi = normalize_frame_ingest(req)
+    k_frame_ingest = bool(fi.get("bridge", {}).get("enabled")) and k_em
     return {
         "k_em": k_em,
         "k_dlt": k_dlt,
         "k_roudi": k_roudi,
+        "k_frame_ingest": k_frame_ingest,
         "k_live_tap": bool(live_on),
         "k_doip": _doip_enabled(platform),
         "k_inject_built": profile == "vehicle-debug",
@@ -171,6 +175,7 @@ def emit_deploy_config_hpp(
         f"inline constexpr bool kEm = {_cxx_bool(flags['k_em'])};",
         f"inline constexpr bool kDlt = {_cxx_bool(flags['k_dlt'])};",
         f"inline constexpr bool kRouDi = {_cxx_bool(flags['k_roudi'])};",
+        f"inline constexpr bool kFrameIngest = {_cxx_bool(flags.get('k_frame_ingest', False))};",
         f"inline constexpr bool kLiveTap = {_cxx_bool(flags['k_live_tap'])};",
         f"inline constexpr bool kDoip = {_cxx_bool(flags['k_doip'])};",
         f"inline constexpr bool kInjectBuilt = {_cxx_bool(flags['k_inject_built'])};",
@@ -284,6 +289,7 @@ def emit_deploy_config(
         platform_dir,
         k_dlt=bool(flags["k_dlt"]),
         k_roudi=bool(flags["k_roudi"]),
+        k_frame_ingest=bool(flags.get("k_frame_ingest", False)),
         gateway_forever=True,
     )
     # YAML for compose diff / humans only — EM product path ignores them.

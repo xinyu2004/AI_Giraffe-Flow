@@ -10,7 +10,7 @@
 #   bash scripts/bootstrap_deps.sh              # check + fetch + build attr/acl
 #   bash scripts/bootstrap_deps.sh --check      # check only
 #   bash scripts/bootstrap_deps.sh --clean      # wipe staging; then re-run without flags
-#   bash scripts/bootstrap_deps.sh --clean-all  # wipe staging + middleware/third_party/{attr,acl,iceoryx,cyclonedds,dlt-daemon}
+#   bash scripts/bootstrap_deps.sh --clean-all  # wipe staging + middleware/third_party/{attr,acl,iceoryx,cyclonedds,dlt-daemon,cpptoml}
 #   GF_CROSS_PREFIX=aarch64-linux-gnu bash scripts/bootstrap_deps.sh
 set -euo pipefail
 
@@ -32,7 +32,7 @@ Usage: bash scripts/bootstrap_deps.sh [options]
   (default)       Check tools, fetch sources, build attr/acl into middleware/.deps-prefix
   --check, -n     Check only (no download / build)
   --clean         Remove middleware/.deps-prefix and legacy staging, then exit
-  --clean-all     --clean plus remove middleware/third_party/{attr,acl,iceoryx,cyclonedds,dlt-daemon}
+  --clean-all     --clean plus remove middleware/third_party/{attr,acl,iceoryx,cyclonedds,dlt-daemon,cpptoml}
   -h, --help      Show this help
 
 Env:
@@ -41,6 +41,7 @@ Env:
   GF_DEPS_PREFIX    Install prefix (default middleware/.deps-prefix); isolate when switching compilers
   GF_ICEORYX_TAG    Override iceoryx git tag (default v2.0.8)
   GF_CYCLONEDDS_TAG Override CycloneDDS git tag (default 0.10.5)
+  GF_CPPTOML_TAG    Override cpptoml git tag (default v0.1.1; iceoryx RouDi TOML)
   GF_DLT_TAG        Override dlt-daemon git tag (default v2.18.11)
 EOF
 }
@@ -67,9 +68,9 @@ do_clean() {
   echo "  removed: .deps-prefix/ (legacy root, if present)"
   echo "  removed: .deps-sysroot/ (legacy, if present)"
   if [[ "$CLEAN_ALL" -eq 1 ]]; then
-    rm -rf "${TP}/attr" "${TP}/acl" "${TP}/iceoryx" "${TP}/cyclonedds" "${TP}/dlt-daemon"
-    rm -rf "${LEGACY_TP}/attr" "${LEGACY_TP}/acl" "${LEGACY_TP}/iceoryx" "${LEGACY_TP}/cyclonedds" "${LEGACY_TP}/dlt-daemon"
-    echo "  removed: middleware/third_party/{attr,acl,iceoryx,cyclonedds,dlt-daemon}"
+    rm -rf "${TP}/attr" "${TP}/acl" "${TP}/iceoryx" "${TP}/cyclonedds" "${TP}/dlt-daemon" "${TP}/cpptoml"
+    rm -rf "${LEGACY_TP}/attr" "${LEGACY_TP}/acl" "${LEGACY_TP}/iceoryx" "${LEGACY_TP}/cyclonedds" "${LEGACY_TP}/dlt-daemon" "${LEGACY_TP}/cpptoml"
+    echo "  removed: middleware/third_party/{attr,acl,iceoryx,cyclonedds,dlt-daemon,cpptoml}"
   fi
   echo "Clean done. Re-run: bash scripts/bootstrap_deps.sh"
 }
@@ -91,6 +92,12 @@ CYCLONEDDS_DIR="${TP}/cyclonedds"
 DLT_TAG="${GF_DLT_TAG:-v2.18.11}"
 DLT_URL="${GF_DLT_URL:-https://github.com/COVESA/dlt-daemon.git}"
 DLT_DIR="${TP}/dlt-daemon"
+
+# iceoryx RouDi TOML parser (was ExternalProject into each SKU build-*/dependencies/)
+CPPTOML_TAG="${GF_CPPTOML_TAG:-v0.1.1}"
+CPPTOML_URL="${GF_CPPTOML_URL:-https://github.com/skystrife/cpptoml.git}"
+CPPTOML_DIR="${TP}/cpptoml"
+CPPTOML_PATCH="${ICEORYX_DIR}/iceoryx_posh/cmake/cpptoml/0001-cpptoml-cmake-version.patch"
 
 ATTR_VER="${GF_ATTR_VER:-2.5.2}"
 ACL_VER="${GF_ACL_VER:-2.3.2}"
@@ -463,6 +470,147 @@ fetch_git() {
 }
 
 fetch_git "${ICEORYX_URL}" "${ICEORYX_TAG}" "${ICEORYX_DIR}" "iceoryx" || true
+
+# ============================================================
+step "[4a/5] cpptoml source + install → middleware/.deps-prefix (iceoryx RouDi; not SKU build-*)"
+# ============================================================
+# Policy: do NOT let iceoryx DOWNLOAD_TOML_LIB clone into projects/.../build-sil/dependencies/.
+if [[ -f "${CPPTOML_DIR}/CMakeLists.txt" ]]; then
+  if [[ -d "${CPPTOML_DIR}/.git" ]]; then
+    cur="$(git -C "${CPPTOML_DIR}" describe --tags --always 2>/dev/null || echo unknown)"
+    ok "cpptoml    → present ${CPPTOML_DIR}  (${cur})"
+  else
+    ok "cpptoml    → present ${CPPTOML_DIR} (vendored source; prefer git clone via bootstrap)"
+  fi
+else
+  fetch_git "${CPPTOML_URL}" "${CPPTOML_TAG}" "${CPPTOML_DIR}" "cpptoml" || true
+fi
+
+apply_cpptoml_patch() {
+  local dest="$1"
+  [[ -d "${dest}" ]] || return 0
+  if [[ ! -f "${CPPTOML_PATCH}" ]]; then
+    warn "cpptoml patch missing (${CPPTOML_PATCH}); iceoryx not fetched yet?"
+    return 0
+  fi
+  if grep -q 'cmake_minimum_required(VERSION 3.16)' "${dest}/CMakeLists.txt" 2>/dev/null; then
+    ok "cpptoml patch → already applied (cmake 3.16)"
+    return 0
+  fi
+  if [[ "$CHECK_ONLY" -eq 1 ]]; then
+    miss "cpptoml patch → not applied yet"
+    return 1
+  fi
+  info "cpptoml: apply iceoryx cmake-version patch"
+  if git -C "${dest}" apply -p1 --ignore-space-change --whitespace=nowarn "${CPPTOML_PATCH}"; then
+    ok "cpptoml patch → applied"
+  else
+    miss "cpptoml patch → failed"
+    REQUIRED_MISSING=$((REQUIRED_MISSING + 1))
+    return 1
+  fi
+}
+
+build_cpptoml() {
+  local src="${CPPTOML_DIR}"
+  local stamp="${PREFIX}/.stamp-cpptoml-${CROSS_PREFIX:-host}"
+  local marker="${PREFIX}/lib/cmake/cpptoml/cpptomlConfig.cmake"
+  local hdr="${PREFIX}/include/cpptoml.h"
+
+  if [[ -f "${stamp}" && -f "${marker}" && -f "${hdr}" ]]; then
+    ok "cpptoml installed → ${PREFIX} (${CROSS_PREFIX:-host})"
+    return 0
+  fi
+  rm -f "${stamp}"
+
+  if [[ "$CHECK_ONLY" -eq 1 ]]; then
+    miss "cpptoml build → not installed under ${PREFIX}"
+    REQUIRED_MISSING=$((REQUIRED_MISSING + 1))
+    ACTIONS+=("Re-run without --check to build cpptoml into middleware/.deps-prefix")
+    return 1
+  fi
+  if [[ ! -f "${src}/CMakeLists.txt" ]]; then
+    miss "cpptoml build → ${src}/CMakeLists.txt missing"
+    REQUIRED_MISSING=$((REQUIRED_MISSING + 1))
+    return 1
+  fi
+
+  local cmake_bin
+  if ! cmake_bin="$(resolve_cmake)"; then
+    miss "cpptoml build → cmake not found"
+    REQUIRED_MISSING=$((REQUIRED_MISSING + 1))
+    return 1
+  fi
+
+  local build_dir="${PREFIX}/_build/cpptoml"
+  rm -rf "${build_dir}"
+  mkdir -p "${build_dir}" "${PREFIX}"
+
+  local cmake_args=(
+    -S "${src}"
+    -B "${build_dir}"
+    -DCMAKE_INSTALL_PREFIX="${PREFIX}"
+    -DCMAKE_BUILD_TYPE=Release
+    -DENABLE_LIBCXX=OFF
+    -DCPPTOML_BUILD_EXAMPLES=OFF
+  )
+  if [[ -n "${CROSS_PREFIX}" ]]; then
+    local tc="${ROOT}/cmake/toolchains/${CROSS_PREFIX}.cmake"
+    if [[ -f "${tc}" ]]; then
+      cmake_args+=("-DCMAKE_TOOLCHAIN_FILE=${tc}")
+    else
+      cmake_args+=("-DCMAKE_C_COMPILER=${CROSS_PREFIX}-gcc" "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}-g++")
+    fi
+    info "cpptoml: cross ${CROSS_PREFIX} → ${PREFIX}"
+  else
+    if [[ -n "${HOST_CC}" ]]; then
+      cmake_args+=("-DCMAKE_C_COMPILER=${HOST_CC}")
+    fi
+    if [[ -n "${HOST_CXX}" ]]; then
+      cmake_args+=("-DCMAKE_CXX_COMPILER=${HOST_CXX}")
+    fi
+    info "cpptoml: host build → ${PREFIX}"
+  fi
+
+  if ! (
+    "${cmake_bin}" "${cmake_args[@]}"
+    "${cmake_bin}" --build "${build_dir}" -j"$(nproc 2>/dev/null || echo 2)"
+    "${cmake_bin}" --install "${build_dir}"
+  ); then
+    miss "cpptoml build → cmake configure/build/install failed"
+    REQUIRED_MISSING=$((REQUIRED_MISSING + 1))
+    ACTIONS+=("Inspect ${build_dir} and re-run bootstrap")
+    return 1
+  fi
+
+  if [[ ! -f "${marker}" || ! -f "${hdr}" ]]; then
+    miss "cpptoml build → ${marker} or ${hdr} missing after install"
+    REQUIRED_MISSING=$((REQUIRED_MISSING + 1))
+    return 1
+  fi
+
+  date -Iseconds >"${stamp}"
+  ok "cpptoml installed → ${PREFIX}"
+}
+
+apply_cpptoml_patch "${CPPTOML_DIR}" || true
+if [[ "$CHECK_ONLY" -eq 0 && "$REQUIRED_MISSING" -eq 0 && -f "${CPPTOML_DIR}/CMakeLists.txt" ]]; then
+  build_cpptoml || true
+elif [[ "$CHECK_ONLY" -eq 1 ]]; then
+  build_cpptoml || true
+fi
+
+if [[ -f "${PREFIX}/lib/cmake/cpptoml/cpptomlConfig.cmake" ]]; then
+  ok "cpptoml CMake package → ${PREFIX}/lib/cmake/cpptoml"
+else
+  if [[ "$CHECK_ONLY" -eq 1 ]]; then
+    miss "cpptoml CMake package → not present yet under ${PREFIX}"
+  else
+    miss "cpptoml CMake package → still missing after build"
+  fi
+  REQUIRED_MISSING=$((REQUIRED_MISSING + 1))
+  ACTIONS+=("Fix cpptoml bootstrap and re-run (needed by iceoryx RouDi)")
+fi
 
 # ============================================================
 step "[4b/5] Third-party CycloneDDS source (optional DDS backend)"

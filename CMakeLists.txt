@@ -22,6 +22,7 @@ set(GF_GENERATED_DIR "${CMAKE_SOURCE_DIR}/generated" CACHE PATH "gf-codegen --ou
 set(GF_SKU_CMAKE "" CACHE FILEPATH "SKU fragment from compose (generated/gf_build.cmake)")
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(GfRuntimeRpath)
 
 # Apply SKU before Dependencies so GF_WITH_* drive third-party fetch.
 if(GF_SKU_CMAKE STREQUAL "")

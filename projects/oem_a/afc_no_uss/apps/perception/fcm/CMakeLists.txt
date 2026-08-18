@@ -14,7 +14,18 @@ target_link_libraries(gf_perception_fcm PRIVATE
   gf_ara::com_iceoryx
   gf_ara::runtime
 )
+if(TARGET gf_channel::channel)
+  target_link_libraries(gf_perception_fcm PRIVATE gf_channel::channel)
+elseif(TARGET gf_tip::channel)
+  target_link_libraries(gf_perception_fcm PRIVATE gf_tip::channel)
+endif()
 add_dependencies(gf_perception_fcm iox-roudi)
+
+set_target_properties(gf_perception_fcm PROPERTIES
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH "$ORIGIN/../lib"
+  BUILD_RPATH "${CMAKE_BINARY_DIR}/lib;$ORIGIN/../lib"
+)
 
 if(NOT GF_USE_GENERATED)
   message(FATAL_ERROR "gf_perception_fcm requires GF_USE_GENERATED=ON")

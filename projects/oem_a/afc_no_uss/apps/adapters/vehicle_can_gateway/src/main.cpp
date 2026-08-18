@@ -214,6 +214,7 @@ int main(int argc, char** argv) {
 
   gf_ara::runtime::ProcessSupervisor supervisor;
   if (!supervisor.Start(kProcess)) {
+    std::cerr << "[ERROR] vehicle_can_gateway: ProcessSupervisor.Start failed\n";
     return EXIT_FAILURE;
   }
 
@@ -236,10 +237,10 @@ int main(int argc, char** argv) {
   }
 #else
   if (ego_path.empty()) {
-    ego_path = "/tmp/gf_carla_ego.json";
+    ego_path = "runtime_ipc/carla_ego.json";
   }
   if (ctrl_path.empty()) {
-    ctrl_path = "/tmp/gf_planning_ctrl.json";
+    ctrl_path = "runtime_ipc/planning_ctrl.json";
   }
 #endif
 

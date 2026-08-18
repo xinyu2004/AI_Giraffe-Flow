@@ -35,23 +35,31 @@ observability:
 # Behavior freeze (gf-config → compose → compile). Not a runtime tip JSON.
 frame_ingest:
   frame_source: carla_file
-  perception_backend: stub
   pixel_format: nv12
   ego_source: carla
   frame_w: 640
   frame_h: 480
+  tip_transport: shm
+  # SOP freeze default; SIL overrides via GF_FRAME_SOURCE=carla|replay|colorbar
+  active_source: isp
+  tip_slots:
+  - id: front
+    w: 640
+    h: 480
+    pixel_format: nv12
   bridge:
     enabled: true
   paths:
-    frame: /tmp/gf_front.yuv
-    cmd: /tmp/gf_carla_cmd.json
-    ego: /tmp/gf_carla_ego.json
-    truth: /tmp/gf_carla_truth.json
-    ctrl: /tmp/gf_planning_ctrl.json
+    frame: runtime_ipc/front.yuv
+    cmd: runtime_ipc/carla_cmd.json
+    ego: runtime_ipc/carla_ego.json
+    truth: runtime_ipc/carla_truth.json
+    ctrl: runtime_ipc/planning_ctrl.json
 apps:
 - adapters/vehicle_can_gateway
 - perception/fcm
 - planning/driving
+- frame_ingest
 acceptance:
   description: AFC 无 USS — Perception_* + Trajectory + frame_ingest（默认 C dry-run）
   lineage_required: true

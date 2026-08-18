@@ -1,4 +1,4 @@
-add_library(gf_ara_tsync STATIC
+add_library(gf_ara_tsync SHARED
   src/time_sync.cpp
 )
 add_library(gf_ara::tsync ALIAS gf_ara_tsync)

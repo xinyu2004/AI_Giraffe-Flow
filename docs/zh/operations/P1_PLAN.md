@@ -179,15 +179,15 @@ iceoryx 路径：  hpp / fidl 进 SOR types → iceoryx binding（不用 fdepl /
 - [x] exec + phm Alive/Deadline 最小闭环（`gf_phm_alive_deadline_smoke`）  
 - [x] ucm PackageManager 状态机 stub + SM/PHM 钩子文档  
 - [x] diag DoIP Initialize/Shutdown（+ TesterPresent 探针）stub 可链  
-- [x] profile / 脚本：`cmake/profiles/eu_stub.cmake` · `scripts/smoke_eu_stub.sh` 
+- [x] profile：`cmake/profiles/eu_stub.cmake`（原 `scripts/smoke_eu_stub.sh` 已删；DoIP → `smoke_doip_ota.sh`）
 
 ### B / D（已交付 · 离线 stub + 工具链）
 
 - [x] CycloneDDS binding **可选编译**（默认厂商；offline 用 stub 后端，`GF_WITH_DDS`）  
 - [x] vsomeip **分期** stub 可链（`GF_WITH_SOMEIP`；真 vsomeip+Boost 后置）  
 - [x] 轻量读 `.fdepl` SOME/IP ID（`parse_fdepl` + 样例）；**不**用 fdepl 代替 `req.bindings`  
-- [x] SOR types → IDL（`gf-codegen emit-idl`）+ `scripts/run_idlc.sh`（无 idlc 则 SKIP）  
-- [x] profile / 脚本：`cmake/profiles/bd_stub.cmake` · `scripts/smoke_bd_stub.sh` 
+- [x] SOR types → IDL（`gf-codegen emit-idl`）；可选本机 `idlc`（仓根 `run_idlc.sh` 已删）  
+- [x] profile：`cmake/profiles/bd_stub.cmake`；真收发 → `scripts/smoke_bd_cyclone.sh`（原 `smoke_bd_stub.sh` 已删）
 
 ### T / A（已交付）
 
@@ -195,7 +195,7 @@ iceoryx 路径：  hpp / fidl 进 SOR types → iceoryx binding（不用 fdepl /
 - [x] `GMT measure export` JSONL → MCAP 雏形（无 Foxglove 桥）  
 - [x] ARXML 子集 import：`gf-codegen import arxml` + `parse_arxml`（可消费 FARACON 产出）  
 - [x] 样例：`schemas/examples/oem/demo_faracon_subset.arxml`  
-- [x] 脚本：`scripts/smoke_ta.sh`；CI `smoke.sh` 已挂 architect lineage  
+- [x] GMT architect lineage + pytest；CI `smoke.sh` 已挂（原 `scripts/smoke_ta.sh` 已删）
 
 ### 接口语言配对（§3.0b · 已纳入）
 

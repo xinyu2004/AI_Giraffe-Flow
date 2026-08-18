@@ -27,7 +27,7 @@ from _instrument import (
     mps_to_kph,
     prime_run_meta,
 )
-from _tip_mount import load_tip_mount
+from _camera_mount import load_camera_mount
 from _traffic import ensure_ambient_traffic
 from _truth import write_truth
 from _verdict import (
@@ -108,7 +108,7 @@ class AtomCase:
     ) -> Tuple[int, Optional[ScenarioView]]:
         stop = stop_flag or (lambda: STOP)
         load_local_env()
-        mount = load_tip_mount()
+        mount = load_camera_mount()
         meta: dict[str, Any] = {"keep_ego": keep_ego}
         weather_cfg = None
         if self.weather_preset is not None:
@@ -160,7 +160,7 @@ class AtomCase:
                     width=int(os.environ.get("GF_SCENARIO_VIEW_W") or "960"),
                     height=int(os.environ.get("GF_SCENARIO_VIEW_H") or "540"),
                     title=title,
-                    tip_mount=mount,
+                    camera_mount=mount,
                 )
             except Exception as exc:  # noqa: BLE001
                 print(

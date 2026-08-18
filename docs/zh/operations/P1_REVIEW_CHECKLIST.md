@@ -90,13 +90,13 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R5.1 | 一键 smoke | `bash scripts/smoke_eu_stub.sh` | □ | □ | □ | |
+| R5.1 | 一键 smoke | DoIP 通路：`bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh`（**不**冒烟刷写）；exec/phm 见 `devops/ci` / `fusa` | □ | □ | □ | 原 `smoke_eu_stub.sh` 已删 |
 | R5.2 | exec | `gf_exec_smoke`：Offer → Running | □ | □ | □ | |
 | R5.3 | phm Alive/Deadline | `gf_phm_alive_deadline_smoke`：超时 miss → Alive 恢复 → Pause | □ | □ | □ | |
 | R5.4 | ucm 状态机 | Idle→Transfer→Process→Activate→Rollback | □ | □ | □ | |
 | R5.5 | diag DoIP stub | Initialize / Shutdown / TesterPresent | □ | □ | □ | |
 | R5.6 | 文档钩子 | ucm README 写明 OTA 时 PHM `SetPaused` | □ | □ | □ | |
-| R5.7 | 边界 | 无真 OTA 后端 / 无真 DoIP 台架 | □ | □ | □ | |
+| R5.7 | 边界 | 无真 OTA 后端 / 无真 DoIP 台架；不冒烟刷写本身 | □ | □ | □ | |
 
 ---
 
@@ -104,11 +104,11 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R6.1 | 一键 smoke | `bash scripts/smoke_bd_stub.sh` | □ | □ | □ | |
+| R6.1 | 一键 smoke | `bash scripts/smoke_bd_cyclone.sh`（真收发）；ctest/cmake 覆盖 stub 路径 | □ | □ | □ | 原 `smoke_bd_stub.sh` 已删 |
 | R6.2 | DDS binding | `GF_WITH_DDS` → `gf_ara::com_dds`；默认厂商文档写 Cyclone；offline=stub | □ | □ | □ | |
 | R6.3 | SOME/IP stub | `GF_WITH_SOMEIP` → `gf_ara::com_someip` Init/Shutdown | □ | □ | □ | |
 | R6.4 | emit-idl | `gf-codegen emit-idl <sor> --out …` 生成 `gf_types.idl` | □ | □ | □ | |
-| R6.5 | idlc 包装 | `bash scripts/run_idlc.sh …`：无 idlc 则 SKIP 不失败 | □ | □ | □ | |
+| R6.5 | idlc | 可选本机 `idlc`；**无**仓根 `run_idlc.sh` 包装（已删） | □ | □ | □ | |
 | R6.6 | Dependencies | 有 cyclonedds 源码树时可 add_subdirectory；无则 stub | □ | □ | □ | |
 | R6.7 | 边界 | 真 Cyclone/vsomeip+Boost **未**强制下载；完整 CommonAPI 不做 | □ | □ | □ | |
 
@@ -118,7 +118,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R7.1 | 一键 smoke | `bash scripts/smoke_ta.sh` | □ | □ | □ | |
+| R7.1 | 一键 smoke | `pytest tools/gmt/tests -q` + `GMT architect lineage --project …` | □ | □ | □ | 原 `smoke_ta.sh` 已删 |
 | R7.2 | architect lineage | `GMT architect lineage --project projects/oem_a/afc_with_uss/project.yaml` → PASS | □ | □ | □ | |
 | R7.3 | architect dag | `GMT architect dag --project …` 输出 nodes/edges JSON | □ | □ | □ | |
 | R7.4 | measure export | `GMT measure export --in tools/gmt/fixtures/session_stub.jsonl --out /tmp/x.mcap`；文件以 `\x89MCAP0` 开头 | □ | □ | □ | |
@@ -137,7 +137,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 | 3 | R2 + R3 | CLI + 对照 wiring | 25–40 min |
 | 4 | R4 | smoke 脚本 | 10–15 min |
 | 5 | R5 + R6 | smoke 脚本 | 15–20 min |
-| 6 | R7 | smoke_ta | 10–15 min |
+| 6 | R7 | GMT pytest + architect | 10–15 min |
 | 7 | （可选）`bash devops/ci/scripts/smoke.sh` | 全量 CI，需 bootstrap/iceoryx | 较长 |
 
 ---
@@ -149,10 +149,10 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 source .venv/bin/activate
 pip install -e "tools/gf-codegen[dev]" -e "tools/gmt[dev]"
 
-bash scripts/smoke_eu_stub.sh
-bash scripts/smoke_bd_stub.sh
-bash projects/oem_b/adc_full/scripts/smoke_mcu_desktop.sh
-bash scripts/smoke_ta.sh
+bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
+bash scripts/smoke_bd_cyclone.sh
+bash projects/oem_b/adc_full/scripts/verify/smoke_mcu_desktop.sh
+GMT architect lineage --project projects/oem_a/afc_with_uss/project.yaml
 
 pytest tools/gf-codegen/tests tools/gmt/tests -q
 ```

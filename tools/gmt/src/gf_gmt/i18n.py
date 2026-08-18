@@ -456,8 +456,8 @@ _EN: dict[str, str] = {
         'DoIP / UDS step log (0x10 → 0x27 → 0x38/0x34 → 0x36 → 0x37)'
     ),
     '断开 DoIP TCP；停止 0x3E keep-alive': 'Disconnect DoIP TCP; stop 0x3E keep-alive',
-    '主机侧产物路径。0x38/0x34 模式会按块经 DoIP 下发；SIL 可用 bash scripts/make_sil_swu.sh 生成假包（magic GFSW）。真 RAUC 刷写 → P3z。': (
-        'Host-side artifact path. 0x38/0x34 modes stream blocks over DoIP; SIL: bash scripts/make_sil_swu.sh makes a fake package (magic GFSW). Real RAUC flash → P3z.'
+    '主机侧产物路径。0x38/0x34 模式会按块经 DoIP 下发；SIL 只冒烟 DoIP/UDS 通路（smoke_doip_ota），不冒烟刷写。真刷写 → P3z。': (
+        'Host-side artifact path. 0x38/0x34 modes stream blocks over DoIP; SIL smokes DoIP/UDS only (smoke_doip_ota), not flash. Real flash → P3z.'
     ),
     '配置在 gf-config（diag.yaml）；本页只读跟从传输模式与时序。流程：run_sil（起 DoIP）→ 加载项目 → 连接 → Start OTA。非真刷写；失败进 Collector ota_failed。': (
         'Configure in gf-config (diag.yaml); this page follows mode & timing read-only. Flow: run_sil (starts DoIP) → Load project → Connect → Start OTA. No real flash; failures → Collector ota_failed.'

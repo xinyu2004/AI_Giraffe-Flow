@@ -52,7 +52,9 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 - GMT **不启动 SIL**  
 
 前提：`gf-config` A 页 `live_tap` 已开 + 已 `compile_sil`。  
-`run_sil` 将 tap fan-out 到 Live（8766）与 Foxglove（8765）。
+`run_sil` 将 tap fan-out 到 Live（8766）与 Foxglove（8765）（`GMT_depend_launch` 段）。
+
+板端 / 仅 EM：`runtime/bin/giraffe_launch`，或 `GF_GMT_DEPEND=0 bash …/run_sil.sh`。
 
 ### 回灌（playhead）
 
@@ -78,9 +80,7 @@ GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
 主文件 `overtake_acc_aeb.jsonl`（变道 → ACC → AEB）。由 **GMT 打开 session / 回灌** 加载；`run_sil` 不会自动挂该文件。SIL 上 Foxglove BEV 来自 EgoMotion+Trajectory；Studio 不再依赖 `/gf/AdasDemo` topic。
 
 ```bash
-python scripts/gen_adas_scenarios.py
-# SIL：run_sil → GMT 打开 jsonl → 回灌播放
-# 离线（无 SIL）也可：
+# SIL：run_sil → GMT 打开既有 jsonl session → 回灌播放
 GMT bridge foxglove --ws --synth-bev \
   --jsonl projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl --port 8765
 

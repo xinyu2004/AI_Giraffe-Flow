@@ -134,6 +134,9 @@ int main(int argc, char** argv) {
     gf_ara::log::Logger::Instance().Error("em", "StartAll failed");
     return 1;
   }
+  gf_ara::log::Logger::Instance().Info(
+      "em",
+      "policy: abnormal child exit (no relaunch) stops EM; board recovery = systemd Restart");
   gf_ara::log::Logger::Instance().Info("em", "polling children");
   const int rc = em.RunForMs(deadline_ms);
   em.ShutdownAll();

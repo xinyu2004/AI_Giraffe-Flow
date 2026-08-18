@@ -153,8 +153,13 @@ def main(argv: list[str] | None = None) -> int:
         "--tip-frame",
         type=Path,
         default=None,
-        help="With --ws --stdin: poll tip YUV/RGB and publish "
-        "/gf/camera/front/tip/compressed on the same Foxglove WS",
+        help="SIL file bypass tip YUV/RGB (prefer --tip-slot GfChannel)",
+    )
+    p_fox.add_argument(
+        "--tip-slot",
+        type=str,
+        default=None,
+        help="GfChannel shm slot for tip camera (e.g. gf.channel.front)",
     )
 
     p_live = br_sub.add_parser(
@@ -323,6 +328,8 @@ def main(argv: list[str] | None = None) -> int:
             fox_argv += ["--bev-script", str(args.bev_script)]
         if getattr(args, "tip_frame", None) is not None:
             fox_argv += ["--tip-frame", str(args.tip_frame)]
+        if getattr(args, "tip_slot", None):
+            fox_argv += ["--tip-slot", str(args.tip_slot)]
         fox_argv += ["--host", args.host, "--port", str(args.port), "--speed", str(args.speed)]
         return main_bridge(fox_argv)
 

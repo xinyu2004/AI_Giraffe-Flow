@@ -20,7 +20,8 @@ fi
 
 echo "${TAG} run_hil: STUB only — board deploy/run is not automated (P2.5-H / P3)."
 echo "${TAG}   build dir : ${BUILD_HIL}"
-echo "${TAG}   use SIL for day-to-day: bash ${SCRIPT_DIR}/run_sil.sh"
-echo "${TAG}   later    : scp ${BUILD_HIL} + deps to board → RouDi → same apps as SIL"
-echo "${TAG}   optional : bash ${ROOT}/projects/oem_a/afc_with_uss/scripts/verify/deploy_hil.sh  (also stub)"
+echo "${TAG}   day-to-day: bash ${SCRIPT_DIR}/run_sil.sh"
+echo "${TAG}   on board  : stage runtime → ./bin/giraffe_launch  (or GF_STAGE_HIL=1 on compile_hil)"
+echo "${TAG}   later     : scp ${BUILD_HIL} + deps to board → same EM apps as SIL"
+echo "${TAG}   optional  : bash ${SCRIPT_DIR}/verify/deploy_hil.sh  (also stub)"
 exit 0

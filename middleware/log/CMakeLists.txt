@@ -1,4 +1,4 @@
-add_library(gf_ara_log STATIC
+add_library(gf_ara_log SHARED
   src/logger.cpp
   src/dlt_sink.cpp
 )

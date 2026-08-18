@@ -4,7 +4,8 @@
 
 PySide6 工具：按 **SKU** 编辑 `req.yaml`，用 **类 Simulink 信号图** 编辑 `wiring.yaml`，一键 `compose` + lineage。
 
-> **流程：** 改页 1/2 → **Ctrl+S 保存**（只写盘）→ **Verify（Ctrl+R）** 合成 SOR + lineage → 可选 **Generate（Ctrl+G）** 产出 Proxy/Skeleton。  
+> **流程：** 改页 1/2 → **Ctrl+S 保存**（只写盘）→ **Verify（Ctrl+R）** 合成 SOR + lineage + `generated/*.hpp`（行为冻结）→ 需要 Proxy/Skeleton 时再 **Generate（Ctrl+G）**。  
+> **作者态到此结束。** 之后才是 `compile_sil` / `run_sil`（**不再**自动 compose）。  
 > CI / 无界面：`python -m gf_codegen.compose --project …`；代码生成仍用 `gf-codegen generate`。  
 > 边界：`gf-config` = 唯一作者 GUI · `gf-codegen` = lint / generate / import · GMT = 只读 CI + 度量
 

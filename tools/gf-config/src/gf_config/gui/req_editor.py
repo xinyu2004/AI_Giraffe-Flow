@@ -211,69 +211,6 @@ class ReqEditor(QWidget):
         stage_l.addWidget(self._obs_hint)
         root.addWidget(stage)
 
-        # frame_ingest — behavior freeze (compose→compile); not a live JSON tip
-        fi = QGroupBox(t("帧摄入 frame_ingest"))
-        fi_l = QVBoxLayout(fi)
-        fi_l.setContentsMargins(4, 4, 4, 4)
-        fi_l.setSpacing(2)
-        tipify(fi, T.SKU_FRAME_INGEST)
-        fi_f = _form()
-        self._fi_source = TintedComboBox()
-        tipify(self._fi_source, T.SKU_FI_SOURCE)
-        for value, label in (
-            ("none", "none（无帧 SIL）"),
-            ("synth", "synth"),
-            ("file", "file"),
-            ("carla_file", "carla_file"),
-        ):
-            self._fi_source.addItem(t(label), value)
-        self._fi_source.currentIndexChanged.connect(self._on_any)
-        self._fi_backend = TintedComboBox()
-        tipify(self._fi_backend, T.SKU_FI_BACKEND)
-        self._fi_backend.addItem(t("stub"), "stub")
-        self._fi_backend.addItem(t("onnx"), "onnx")
-        self._fi_backend.currentIndexChanged.connect(self._on_any)
-        self._fi_pixel = TintedComboBox()
-        tipify(self._fi_pixel, T.SKU_FI_PIXEL)
-        for value in ("nv12", "nv21", "yuv422", "yuv444", "rgb8"):
-            self._fi_pixel.addItem(value, value)
-        self._fi_pixel.currentIndexChanged.connect(self._on_any)
-        self._fi_ego = TintedComboBox()
-        tipify(self._fi_ego, T.SKU_FI_EGO)
-        for value, label in (
-            ("gateway", "gateway"),
-            ("carla", "carla"),
-            ("inject", "inject"),
-        ):
-            self._fi_ego.addItem(t(label), value)
-        self._fi_ego.currentIndexChanged.connect(self._on_any)
-        self._fi_bridge = QCheckBox(t("启动 carla_bridge"))
-        tipify(self._fi_bridge, T.SKU_FI_BRIDGE)
-        self._fi_bridge.toggled.connect(self._on_any)
-        self._fi_path_frame = QLineEdit()
-        tipify(self._fi_path_frame, T.SKU_FI_PATH_FRAME)
-        self._fi_path_frame.textChanged.connect(self._on_any)
-        self._fi_path_frame.editingFinished.connect(self._end_doc_edit)
-        self._fi_path_cmd = QLineEdit()
-        tipify(self._fi_path_cmd, T.SKU_FI_PATH_CMD)
-        self._fi_path_cmd.textChanged.connect(self._on_any)
-        self._fi_path_cmd.editingFinished.connect(self._end_doc_edit)
-        fi_f.addRow(t("帧源"), self._fi_source)
-        fi_f.addRow(t("感知后端"), self._fi_backend)
-        fi_f.addRow(t("pixel_format"), self._fi_pixel)
-        fi_f.addRow(t("ego_source"), self._fi_ego)
-        fi_f.addRow("", self._fi_bridge)
-        fi_f.addRow(t("帧路径"), self._fi_path_frame)
-        fi_f.addRow(t("cmd 路径"), self._fi_path_cmd)
-        fi_l.addLayout(fi_f)
-        self._fi_hint = QLabel(
-            t("改此处 → Save/Verify → compile → run_sil（行为编译冻结，勿手改 tip JSON）")
-        )
-        self._fi_hint.setWordWrap(True)
-        self._fi_hint.setStyleSheet("color:#666; font-size:10px;")
-        fi_l.addWidget(self._fi_hint)
-        root.addWidget(fi)
-
         binds = QGroupBox(t("通信绑定"))
         binds_l = QVBoxLayout(binds)
         binds_l.setContentsMargins(4, 4, 4, 4)
@@ -388,23 +325,8 @@ class ReqEditor(QWidget):
             self._record_svcs.set_selected([])
 
         fi = req.get("frame_ingest") if isinstance(req.get("frame_ingest"), dict) else {}
-        br = fi.get("bridge") if isinstance(fi.get("bridge"), dict) else {}
-        paths = fi.get("paths") if isinstance(fi.get("paths"), dict) else {}
-        self._set_combo_data(
-            self._fi_source, str(fi.get("frame_source") or "none")
-        )
-        self._set_combo_data(
-            self._fi_backend, str(fi.get("perception_backend") or "stub")
-        )
-        self._set_combo_data(
-            self._fi_pixel, str(fi.get("pixel_format") or "nv12")
-        )
-        self._set_combo_data(
-            self._fi_ego, str(fi.get("ego_source") or "gateway")
-        )
-        self._fi_bridge.setChecked(bool(br.get("enabled", False)))
-        self._fi_path_frame.setText(str(paths.get("frame") or "/tmp/gf_front.yuv"))
-        self._fi_path_cmd.setText(str(paths.get("cmd") or "/tmp/gf_carla_cmd.json"))
+        # frame_ingest authored on B-page only
+        _ = fi
 
         acc = req.get("acceptance") or {}
         if isinstance(acc, dict):
@@ -529,27 +451,9 @@ class ReqEditor(QWidget):
             if isinstance(req.get("frame_ingest"), dict)
             else {}
         )
-        prev_paths = (
-            prev_fi.get("paths") if isinstance(prev_fi.get("paths"), dict) else {}
-        )
-        req["frame_ingest"] = {
-            "frame_source": str(self._fi_source.currentData() or "none"),
-            "perception_backend": str(self._fi_backend.currentData() or "stub"),
-            "pixel_format": str(self._fi_pixel.currentData() or "nv12"),
-            "ego_source": str(self._fi_ego.currentData() or "gateway"),
-            "frame_w": int(prev_fi.get("frame_w") or 640),
-            "frame_h": int(prev_fi.get("frame_h") or 480),
-            "bridge": {
-                "enabled": self._fi_bridge.isChecked(),
-            },
-            "paths": {
-                "frame": self._fi_path_frame.text().strip() or "/tmp/gf_front.yuv",
-                "cmd": self._fi_path_cmd.text().strip() or "/tmp/gf_carla_cmd.json",
-                "ego": str(prev_paths.get("ego") or "/tmp/gf_carla_ego.json"),
-                "truth": str(prev_paths.get("truth") or "/tmp/gf_carla_truth.json"),
-                "ctrl": str(prev_paths.get("ctrl") or "/tmp/gf_planning_ctrl.json"),
-            },
-        }
+        # B-page owns frame_ingest; A-page Save must not clobber tip/ego/slots.
+        if prev_fi:
+            req["frame_ingest"] = prev_fi
         prev_acc = req.get("acceptance") if isinstance(req.get("acceptance"), dict) else {}
         acceptance: dict = {
             "description": self._acc_desc.text().strip(),

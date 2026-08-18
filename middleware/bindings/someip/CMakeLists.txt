@@ -1,7 +1,7 @@
 # vsomeip is P1-staged: linkable stub by default (no Boost download).
 # Real COVESA vsomeip: set GF_SOMEIP_BACKEND=vsomeip after bootstrap (later).
 
-add_library(gf_ara_com_someip STATIC
+add_library(gf_ara_com_someip SHARED
   src/runtime.cpp
 )
 add_library(gf_ara::com_someip ALIAS gf_ara_com_someip)

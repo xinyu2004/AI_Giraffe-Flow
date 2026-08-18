@@ -1,4 +1,4 @@
-add_library(gf_ara_cross_domain_ipc STATIC
+add_library(gf_ara_cross_domain_ipc SHARED
   src/transport.cpp
 )
 add_library(gf_ara::cross_domain_ipc ALIAS gf_ara_cross_domain_ipc)

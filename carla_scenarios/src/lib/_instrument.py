@@ -6,6 +6,14 @@ feature slots from ``src/cluster_templates/*`` (unknown → common).
 
 from __future__ import annotations
 
+def _ipc_under_project(name: str) -> Path:
+    import os
+    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
+    if proj:
+        return Path(proj) / "runtime_ipc" / name
+    return Path("runtime_ipc") / name
+
+
 import json
 import os
 import sys
@@ -42,7 +50,7 @@ def fmt_num(value: Optional[float], *, digits: int = 0) -> str:
 
 
 def ctrl_path() -> Path:
-    return Path(os.environ.get("GF_PLANNING_CTRL_PATH") or "/tmp/gf_planning_ctrl.json")
+    return Path(os.environ.get("GF_PLANNING_CTRL_PATH") or str(_ipc_under_project("planning_ctrl.json")))
 
 
 @dataclass

@@ -119,6 +119,18 @@ python3 run_cases.py --no-window cases/weather
 python3 cases/longitudinal/acc.py          # single case; no results/
 ```
 
+### Align camera with gf-config
+
+After compose, the SKU writes `generated/camera_contract.json`. Scenarios **read** it (no copy into this tree):
+
+```bash
+export GF_PROJECT_DIR=/path/to/projects/oem_a/afc_no_uss
+# or: export GF_CAMERA_CONTRACT=$GF_PROJECT_DIR/generated/camera_contract.json
+python3 cases/longitudinal/acc.py
+```
+
+See [frame_ingest_roles.md](./frame_ingest_roles.md).
+
 - Batch targets are directories with `manifest.yaml` only.  
 - Defaults in **`carla.env`** (CLI may override):  
   - `GF_SCENARIO_DURATION_S=8` (most cases)  

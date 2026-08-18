@@ -26,7 +26,7 @@ restore() {
   if [[ -f "${BACKUP}" ]]; then
     mv -f "${BACKUP}" "${REQ}"
     echo "${TAG} restored profile in ${REQ}; recomposing vehicle-debug ..."
-    gf_prepare_codegen || true
+    python -m gf_codegen.compose --project "${PROJECT_YAML}" || true
     if [[ "${NEED_RESTORE_BUILD}" == "1" && "${code}" -eq 0 ]]; then
       echo "${TAG} recompile vehicle-debug apps into ${PROD_BUILD} ..."
       GF_BUILD_DIR="${PROD_BUILD}" bash "${PROJECT_DIR}/scripts/compile_sil.sh" || true
@@ -50,7 +50,7 @@ p.write_text("".join(lines))
 PY
 
 echo "${TAG} compose production-release ..."
-gf_prepare_codegen
+python -m gf_codegen.compose --project "${PROJECT_YAML}"
 
 python - <<PY
 import json, pathlib, sys

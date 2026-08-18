@@ -58,22 +58,28 @@ def rgb_to_nv12(rgb: bytes, w: int, h: int, *, swap_uv: bool = False) -> bytes:
         raise ValueError(f"rgb too short: {len(rgb)} < {need}")
     y_plane = bytearray(w * h)
     uv = bytearray((w * h) // 2)
+    mv = memoryview(rgb)
+    yi = 0
     for y in range(h):
+        row = y * w * 3
         for x in range(w):
-            i = (y * w + x) * 3
-            r, g, b = rgb[i], rgb[i + 1], rgb[i + 2]
+            i = row + x * 3
+            r = mv[i]
+            g = mv[i + 1]
+            b = mv[i + 2]
             yv = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16
-            y_plane[y * w + x] = _clamp(yv)
+            y_plane[yi] = 0 if yv < 0 else 255 if yv > 255 else yv
+            yi += 1
             if (y & 1) == 0 and (x & 1) == 0:
                 u = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128
                 v = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128
                 ui = (y // 2) * w + x
                 if swap_uv:
-                    uv[ui] = _clamp(v)
-                    uv[ui + 1] = _clamp(u)
+                    uv[ui] = 0 if v < 0 else 255 if v > 255 else v
+                    uv[ui + 1] = 0 if u < 0 else 255 if u > 255 else u
                 else:
-                    uv[ui] = _clamp(u)
-                    uv[ui + 1] = _clamp(v)
+                    uv[ui] = 0 if u < 0 else 255 if u > 255 else u
+                    uv[ui + 1] = 0 if v < 0 else 255 if v > 255 else v
     return bytes(y_plane) + bytes(uv)
 
 

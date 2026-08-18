@@ -1,9 +1,10 @@
 # Resolve board/runtime third-party deps declared in dep-manifest/DEPENDENCIES.yaml.
 #
 # Policy (P0+): runtime deps are built from source with the active toolchain.
-#   - attr/acl → scripts/bootstrap_deps.sh installs into middleware/.deps-prefix/
+#   - attr/acl/cpptoml → scripts/bootstrap_deps.sh installs into middleware/.deps-prefix/
 #   - iceoryx  → middleware/third_party/iceoryx via add_subdirectory (same CMAKE_TOOLCHAIN_FILE)
 # Do NOT treat apt libacl1-dev as the board/cross path.
+# Do NOT let iceoryx DOWNLOAD_TOML_LIB / googletest ExternalProject land under SKU build-*.
 
 set(GF_THIRD_PARTY_DIR "${CMAKE_SOURCE_DIR}/middleware/third_party" CACHE PATH "Vendored upstream trees")
 set(GF_DEPS_PREFIX "${CMAKE_SOURCE_DIR}/middleware/.deps-prefix" CACHE PATH "Staging prefix for source-built deps (attr/acl)")
@@ -77,7 +78,19 @@ if(GF_WITH_ICEORYX)
   set(INTROSPECTION OFF CACHE BOOL "" FORCE)
   set(DDS_GATEWAY OFF CACHE BOOL "" FORCE)
   set(BINDING_C OFF CACHE BOOL "" FORCE)
-  set(DOWNLOAD_TOML_LIB ON CACHE BOOL "" FORCE)
+  # cpptoml is vendored + installed by bootstrap into middleware/.deps-prefix.
+  # Do NOT let iceoryx ExternalProject clone into SKU build-*/dependencies/.
+  set(DOWNLOAD_TOML_LIB OFF CACHE BOOL "" FORCE)
+  set(_gf_cpptoml_cfg "${GF_DEPS_PREFIX}/lib/cmake/cpptoml/cpptomlConfig.cmake")
+  if(NOT EXISTS "${_gf_cpptoml_cfg}")
+    message(FATAL_ERROR
+      "GF_WITH_ICEORYX=ON requires cpptoml CMake package at:\n"
+      "  ${_gf_cpptoml_cfg}\n"
+      "Source: middleware/third_party/cpptoml (iceoryx RouDi TOML dep).\n"
+      "Run: bash scripts/bootstrap_deps.sh")
+  endif()
+  list(APPEND CMAKE_PREFIX_PATH "${GF_DEPS_PREFIX}")
+  message(STATUS "Giraffe Flow: cpptoml from ${GF_DEPS_PREFIX} (DOWNLOAD_TOML_LIB=OFF)")
 
   add_subdirectory("${_gf_iox_meta}" "${CMAKE_BINARY_DIR}/_dep-manifest/iceoryx_meta" EXCLUDE_FROM_ALL)
   set(GF_ICEORYX_FOUND TRUE)

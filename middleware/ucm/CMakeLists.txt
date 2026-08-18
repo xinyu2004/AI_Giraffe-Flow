@@ -1,4 +1,4 @@
-add_library(gf_ara_ucm STATIC
+add_library(gf_ara_ucm SHARED
   src/package_manager.cpp
   src/ota_orchestrator.cpp
 )

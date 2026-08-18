@@ -65,11 +65,25 @@ dependencies:
     license: Apache-2.0
     planned_version: "v2.0.8"
     integration: cmake_fetchcontent
+    depends_on: [acl, cpptoml]
     enabled_profiles: [desktop, board, vehicle-debug, production]
     notes: >
       Classic C++ iceoryx (not iceoryx2). Source in middleware/third_party/iceoryx;
-      CMake add_subdirectory with the same toolchain. Needs ACL from
-      middleware/.deps-prefix (bootstrap builds attr+acl from source).
+      CMake add_subdirectory with the same toolchain. Needs ACL + cpptoml from
+      middleware/.deps-prefix (bootstrap). DOWNLOAD_TOML_LIB stays OFF.
+
+  - id: cpptoml
+    name: cpptoml
+    category: runtime_board
+    purpose: TOML parser for iceoryx RouDi config (iox_roudi.toml)
+    homepage: https://github.com/skystrife/cpptoml
+    license: MIT
+    planned_version: "v0.1.1"
+    integration: source_staging
+    enabled_profiles: [desktop, board, vehicle-debug, production]
+    notes: >
+      Vendored under middleware/third_party/cpptoml; bootstrap installs into
+      middleware/.deps-prefix. Not cloned into projects/.../build-*/dependencies/.
 
   - id: vsomeip
     name: COVESA vsomeip

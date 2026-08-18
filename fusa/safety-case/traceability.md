@@ -25,7 +25,7 @@
 | 意图 | 关键进程异常退出后不静默丢失监督；可 relaunch / soft restart |
 | 假设 | A-01 · A-03 · A-04 |
 | 设计 / 机制 | `middleware/exec` ExecutionManager；`gf_em_daemon` + `platform/em_launch.yaml`；OSAL `SpawnProcess`；PHM `on_failure: restart` → exit **75** |
-| 源码锚点 | `middleware/exec/` · `middleware/osal/`（process）· `scripts/verify/.../smoke_sil_em_daemon.sh` |
+| 源码锚点 | `middleware/exec/` · `middleware/osal/`（process）· `projects/.../scripts/verify/smoke_sil_em_daemon.sh` |
 
 ### 安全需求
 

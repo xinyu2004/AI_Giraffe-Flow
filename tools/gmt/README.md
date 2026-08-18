@@ -51,7 +51,9 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 - GMT **does not start SIL**  
 
 Prerequisite: `gf-config` tab A `live_tap` on + `compile_sil` done.  
-`run_sil` fans tap to Live (8766) and Foxglove (8765).
+`run_sil` / `GMT_depend_launch` fans tap to Live (8766) and Foxglove (8765).
+
+Board / EM-only: `runtime/bin/giraffe_launch`, or `GF_GMT_DEPEND=0 bash …/run_sil.sh`.
 
 ### Inject (playhead)
 
@@ -77,7 +79,6 @@ GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
 Primary file `overtake_acc_aeb.jsonl` (lane change → ACC → AEB). Load it in **GMT** (Open session → Inject); `run_sil` does not auto-attach it. On SIL, Foxglove BEV is EgoMotion+Trajectory; Studio need not subscribe `/gf/AdasDemo`.
 
 ```bash
-python scripts/gen_adas_scenarios.py
 # SIL: run_sil → GMT open jsonl → Inject play
 # Offline (no SIL):
 GMT bridge foxglove --ws --synth-bev \

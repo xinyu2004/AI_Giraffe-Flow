@@ -115,19 +115,26 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 
 #### 2.4 产品路径（SIL）
 
+`projects/oem_a/` 下 SKU 同一合同：**mtime compose / 按需 cmake configure / 增量 build**；`GF_CTEST=1` 才跑 ctest；stage 出 `runtime/bin/giraffe_launch`；GMT 旁路为 `GMT_depend_launch`（`GF_GMT_DEPEND=0` → 只 EM）。
+
 ```bash
-# 配置已 Verify / Generate 后：
+# afc_with_uss（含 USS）或 afc_no_uss（无 USS / tip 向）
 bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
 
-# 普通主链（gateway 开车态）
+# 普通主链（gateway 开车态）+ 默认挂 GMT depend
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+
+# 板端 / 同口径 EM：
+#   ./projects/.../build-sil/runtime/bin/giraffe_launch
 
 # 场景回灌（GMT playhead；全量 live 含 Ego → BEV）
 GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+
+# CI 要测：GF_CTEST=1 bash …/compile_sil.sh
 ```
 
-脚本与环境变量：[projects/.../scripts/README.md](projects/oem_a/afc_with_uss/scripts/README.md)  
+脚本：[afc_with_uss](projects/oem_a/afc_with_uss/scripts/README.md) · [afc_no_uss](projects/oem_a/afc_no_uss/README.md)  
 场景（变道→ACC→AEB）：[scenarios/README.md](projects/oem_a/afc_with_uss/scenarios/README.md)
 
 #### 2.5 与工具链的边界
@@ -135,7 +142,7 @@ GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
 | Giraffe 模块负责 | 不负责（交给工具） |
 |------------------|-------------------|
 | 进程内算法与 I/O、iceoryx 上真发真收 | 画 wiring / 裁 SKU → gf-config |
-| SIL：systemd/init → EM → daemons + App；tap/inject/帧桥属 Flow/GMT（非 EM） | Studio / Tag / MCAP；Logging 走 DLT |
+| SIL：systemd/init → EM → daemons + App；tap/inject/Foxglove/DoIP 属 **GMT_depend**（非 EM） | Studio / Tag / MCAP；Logging 走 DLT |
 | semantic 契约在板上成立 | 离线改 DBC / lineage 会议替代 → compose |
 | FuSa 证据（`fusa/`） | GMT 仍属 **debug-path**（不作板级 ASIL 证据） |
 

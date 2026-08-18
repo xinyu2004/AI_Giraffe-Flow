@@ -38,3 +38,11 @@ def test_tip_frame_publisher_polls_nv12(tmp_path: Path) -> None:
     row2 = tip.poll()
     assert row2 is not None
     assert row2["t_ns"] == 456
+
+
+def test_tip_frame_publisher_requires_source() -> None:
+    try:
+        TipFramePublisher()
+        assert False, "expected ValueError"
+    except ValueError:
+        pass

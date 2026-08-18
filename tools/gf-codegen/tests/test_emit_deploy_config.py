@@ -10,7 +10,12 @@ from gf_codegen.compose.emit_deploy_config import (
     emit_deploy_config,
     normalize_deploy_flags,
 )
-from gf_codegen.compose.emit_em_launch import HOST_DLT, HOST_ROUDI, emit_product_em_assets
+from gf_codegen.compose.emit_em_launch import (
+    HOST_DLT,
+    HOST_FRAME_INGEST,
+    HOST_ROUDI,
+    emit_product_em_assets,
+)
 
 
 def test_normalize_deploy_flags() -> None:
@@ -29,9 +34,21 @@ def test_normalize_deploy_flags() -> None:
     assert cfg["k_em"] is True
     assert cfg["k_dlt"] is True
     assert cfg["k_roudi"] is True
+    assert cfg["k_frame_ingest"] is False
     assert cfg["k_live_tap"] is True
     assert cfg["k_doip"] is True
     assert cfg["k_inject_built"] is True
+
+
+def test_normalize_deploy_flags_frame_ingest() -> None:
+    req = {
+        "profile": "vehicle-debug",
+        "bindings": ["iceoryx"],
+        "runtime_modules": ["exec"],
+        "frame_ingest": {"active_source": "carla", "ego_source": "carla"},
+    }
+    cfg = normalize_deploy_flags(req, {"log": {"sinks": ["console"]}})
+    assert cfg["k_frame_ingest"] is True
 
 
 def test_emit_deploy_config_hpp_and_tables(tmp_path: Path) -> None:
@@ -183,8 +200,72 @@ def test_emit_product_em_filters_dlt(tmp_path: Path) -> None:
     names = [p["name"] for p in launch["processes"]]
     assert HOST_DLT not in names
     assert HOST_ROUDI in names
+    assert HOST_FRAME_INGEST not in names
     gw = next(p for p in launch["processes"] if p["name"] == "adapter.vehicle_can_gateway")
     assert gw["args"] == ["0"]
     exec_doc = yaml.safe_load(Path(meta["exec"]).read_text(encoding="utf-8"))
     roudi = next(p for p in exec_doc["processes"] if p["name"] == HOST_ROUDI)
     assert HOST_DLT not in (roudi.get("depends_on") or [])
+
+
+def test_emit_product_em_includes_frame_ingest(tmp_path: Path) -> None:
+    plat = tmp_path / "platform"
+    plat.mkdir()
+    (plat / "em_launch.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "0.1",
+                "processes": [
+                    {
+                        "name": "adapter.vehicle_can_gateway",
+                        "binary": "bin/gw",
+                        "args": ["0"],
+                        "max_restarts": 1,
+                    },
+                    {
+                        "name": "perception.fcm",
+                        "binary": "bin/fcm",
+                        "args": ["0"],
+                        "max_restarts": 1,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plat / "exec.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "0.1",
+                "function_groups": [{"id": "MachineFG", "initial": "Running"}],
+                "processes": [
+                    {
+                        "name": "adapter.vehicle_can_gateway",
+                        "function_group": "MachineFG",
+                        "depends_on": [],
+                        "execution_client": True,
+                    },
+                    {
+                        "name": "perception.fcm",
+                        "function_group": "MachineFG",
+                        "depends_on": ["adapter.vehicle_can_gateway"],
+                        "execution_client": True,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    gen = tmp_path / "generated"
+    meta = emit_product_em_assets(
+        plat, gen, k_dlt=False, k_roudi=True, k_frame_ingest=True
+    )
+    launch = yaml.safe_load(Path(meta["em_launch"]).read_text(encoding="utf-8"))
+    names = [p["name"] for p in launch["processes"]]
+    assert HOST_FRAME_INGEST in names
+    assert names.index(HOST_FRAME_INGEST) < names.index("adapter.vehicle_can_gateway")
+    fi = next(p for p in launch["processes"] if p["name"] == HOST_FRAME_INGEST)
+    assert fi["binary"] == "bin/gf_frame_ingest"
+    exec_doc = yaml.safe_load(Path(meta["exec"]).read_text(encoding="utf-8"))
+    fcm = next(p for p in exec_doc["processes"] if p["name"] == "perception.fcm")
+    assert HOST_FRAME_INGEST in (fcm.get("depends_on") or [])

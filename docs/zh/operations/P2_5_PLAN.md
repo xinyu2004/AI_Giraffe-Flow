@@ -155,7 +155,7 @@ Host-only 时序/波形；与 **Foxglove**（语义 topic 实时）互补，**�
 | HIL 二进制 | `projects/<oem>/<sku>/build-hil/`（或 `GF_BUILD_DIR_HIL`） |
 | 观测落盘 | `${BUILD}/observability/`（session/MCAP）；`${BUILD}/runtime/{logs,collector,per}` |
 | 产品脚本 | 仅 `compile_sil\|hil` + `run_sil\|hil` |
-| 验证 | `scripts/verify/` |
+| 验证 | `projects/<oem>/<sku>/scripts/verify/` |
 
 ---
 

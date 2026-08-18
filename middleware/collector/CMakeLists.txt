@@ -1,4 +1,4 @@
-add_library(gf_ara_collector STATIC
+add_library(gf_ara_collector SHARED
   src/event_collector.cpp
 )
 add_library(gf_ara::collector ALIAS gf_ara_collector)

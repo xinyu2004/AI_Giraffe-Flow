@@ -482,7 +482,7 @@ class MainWindow(QMainWindow):
         self._graph.focus_lineage()
         if rc == 0:
             self.statusBar().showMessage(
-                t("Verify OK — 右侧 Lineage。需要 C++ API 时点 Generate (Ctrl+G)"),
+                t("Verify OK — 作者态完成（见右侧 Lineage）。需要 C++ API 时再 Generate (Ctrl+G)；然后 compile_sil"),
                 8000,
             )
             if show_dialog:

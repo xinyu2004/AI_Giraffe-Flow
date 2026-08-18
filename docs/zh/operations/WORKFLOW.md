@@ -181,9 +181,21 @@ CI 在合入 / 发版前执行 compose + lint + golden diff；**不**把 codegen
    - **OTA**：Start OTA（UDS 日志在按钮下方）  
    - **DEM**：读/清 DTC（0x19 / 0x14）  
    - **Collector**：本机 NDJSON 或板端环缓（0x31 F201）  
-4. 假包：`bash scripts/make_sil_swu.sh`；冒烟：`scripts/verify/.../smoke_doip_ota.sh`  
+4. DoIP 通路冒烟（**不**冒烟刷写）：`bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh`  
+   - CI：**仅 nightly / 发版**（`devops/ci/scripts/smoke_nightly.sh` · `smoke_release.sh`），不进日常 PR
 
 细则：[DOIP_OTA.md](DOIP_OTA.md)。真刷写 → P3z。
+
+### 5.5 CI 门禁（整理入口）
+
+| 层 | 命令 | 何时 |
+|----|------|------|
+| L0 | `bash devops/ci/scripts/smoke.sh` | 每次 PR |
+| L0b | `GF_SKIP_COMPILE=1 bash devops/ci/scripts/smoke_toolchain.sh` | 改 `tools/gmt` · `gf-config` · `gf-codegen` · `schemas` **强制** |
+| L2 | `bash devops/ci/scripts/smoke_nightly.sh` | nightly（含 DoIP · cyclone · iox） |
+| L3 | `bash devops/ci/scripts/smoke_release.sh` | 发版（工具链 SIL · DoIP · T4 · **FuSa evidence pack**） |
+
+完整政策：[devops/ci/README.md](../../../devops/ci/README.md)。
 
 ---
 

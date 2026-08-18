@@ -545,7 +545,7 @@ class OtaPanel(QWidget):
         self.artifact.setToolTip(
             t(
                 "主机侧产物路径。0x38/0x34 模式会按块经 DoIP 下发；"
-                "SIL 可用 bash scripts/make_sil_swu.sh 生成假包（magic GFSW）。"
+                "DoIP 通路冒烟见 smoke_doip_ota.sh（不冒烟刷写本身）。"
                 "真 RAUC 刷写 → P3z。"
             )
         )

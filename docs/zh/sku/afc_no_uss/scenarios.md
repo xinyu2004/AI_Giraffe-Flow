@@ -130,6 +130,18 @@ python3 run_cases.py --no-window cases/longitudinal
 python3 cases/longitudinal/acc.py          # 单 case；不写 results/
 ```
 
+### 与 gf-config 相机契约对齐
+
+compose 后 SKU 写出 `generated/camera_contract.json`（槽位 / 分辨率 / pixel / mount）。场景机**只读**该文件，无需拷进本目录：
+
+```bash
+export GF_PROJECT_DIR=/path/to/projects/oem_a/afc_no_uss
+# 或：export GF_CAMERA_CONTRACT=$GF_PROJECT_DIR/generated/camera_contract.json
+python3 cases/longitudinal/acc.py
+```
+
+详见 [frame_ingest_roles.md](./frame_ingest_roles.md)「与 carla_scenarios 同步」。
+
 - 批跑目标只接受带 `manifest.yaml` 的目录。  
 - 默认旋钮在 **`carla.env`**；CLI 可覆盖。常用：  
   - `GF_SCENARIO_DURATION_S=8`（多数 case）  

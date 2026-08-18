@@ -92,7 +92,7 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 | B.1 | 依赖钉扎 | `dep-manifest/versions.lock.md` → cyclonedds **0.10.5**；`bootstrap_deps.sh` 可拉 | □ | □ | □ | |
 | B.2 | 真收发 | `bash scripts/smoke_bd_cyclone.sh` → backend=cyclonedds，≥1 event | □ | □ | □ | |
 | B.3 | 边界文档 | [CYCLONEDDS_BYPASS.md](CYCLONEDDS_BYPASS.md)：主链 iceoryx；vsomeip stub | □ | □ | □ | |
-| B.4 | stub 回归 | `bash scripts/smoke_bd_stub.sh` | □ | □ | □ | |
+| B.4 | stub 回归 | cmake/ctest（`GF_WITH_DDS` stub 路径）；真收发见 B.2 cyclone | □ | □ | □ | 原 `smoke_bd_stub.sh` 已删 |
 
 ---
 

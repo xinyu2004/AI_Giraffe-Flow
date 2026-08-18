@@ -13,6 +13,7 @@ AI_Giraffe-Flow/
   middleware/         # board runtime + third_party/ checkouts
   apps/               # reference processes (mixed shared + SKU-ish stubs)
   tools/              # gf-config, gf-codegen, gmt, bridge, …
+  common/             # launch/deploy **templates** (copy into SKU; then fork)
   carla_scenarios/    # product CARLA Client A (place/IC; not under SKU)
   fusa/               # Functional Safety → Safety Case evidence
   schemas/
@@ -25,8 +26,11 @@ Flow today:
 
 ```text
 bash scripts/bootstrap_deps.sh   # → dep-manifest/bootstrap.sh
-→ projects/<oem>/<sku>/scripts/compile_sil.sh | run_sil.sh
-→ projects/<oem>/<sku>/scripts/verify/smoke_*.sh
+→ bash common/bootstrap_sku_scripts.sh <oem>/<sku>   # copy templates if missing
+→ projects/<oem>/<sku>/scripts/compile_sil.sh
+→ projects/<oem>/<sku>/scripts/run_sil.sh       # EM + optional GMT_depend
+→ board: systemd/init → runtime/bin/gf_em_daemon   # product
+→ host debug: runtime/bin/giraffe_launch           # optional
 ```
 
 ---
@@ -43,7 +47,7 @@ AI_Giraffe-Flow/
 │   └── bootstrap.sh              # real installer
 │
 ├── middleware/                   # board / SIL runtime (product core)
-│   ├── core/ com/ bindings/ osal/
+│   ├── bindings/ iceoryx, gf_channel (ex tip_channel), …
 │   ├── exec/ phm/ sm/ collector/ diag/ ucm/ log/ per/ tsync/
 │   ├── runtime/                  # process bring-up (SIL/HIL shared)
 │   ├── trace/                    # timing → VCD / GMT (debug-path adjacent)
@@ -84,9 +88,11 @@ AI_Giraffe-Flow/
 ├── cmake/                        # profiles, toolchain
 ├── scripts/                      # repo-wide helpers（SKU smoke 在 project 内）
 │   ├── bootstrap_deps.sh         # → dep-manifest/bootstrap.sh
-│   └── verify/                   # deprecated shims → projects/.../scripts/verify/
+│   ├── run_iox_demo.sh
+│   ├── smoke_bd_cyclone.sh
+│   └── cross_link_smoke.sh
 ├── devops/
-│   ├── ci/                       # smoke 门禁 · 云 CI 样例
+│   ├── ci/                       # L0 smoke · L0b toolchain · nightly · release
 │   └── cd/                       # 交付占位（package stub）
 │
 ├── docs/
@@ -197,12 +203,13 @@ Naming: prefer `test_*.py` / `*_test.cpp` already used; don’t invent a second 
 
 ```text
 bash scripts/bootstrap_deps.sh          # → dep-manifest/bootstrap.sh
-bash projects/<oem>/<sku>/scripts/compile_sil.sh
-bash projects/<oem>/<sku>/scripts/run_sil.sh
+bash projects/<oem>/<sku>/scripts/compile_sil.sh   # GF_CTEST=1 for smoke tests
+bash projects/<oem>/<sku>/scripts/run_sil.sh       # GF_GMT_DEPEND=0 → EM only
+# after stage: ./build-sil/runtime/bin/giraffe_launch
 bash projects/<oem>/<sku>/scripts/verify/smoke_sil.sh
 
 project → gf-config (tab1 graph → tab2 platform) → compose/generate
-        → SIL / GMT (focus filter) / Foxglove
+        → SIL / GMT_depend / Foxglove
 ```
 
 Links: [README.md](README.md) · [ROADMAP](docs/zh/operations/ROADMAP.md) · [MIDDLEWARE_CONFIG_PLAN](docs/zh/operations/MIDDLEWARE_CONFIG_PLAN.md) · [UPLOAD_CHECKLIST](projects/UPLOAD_CHECKLIST.md)

@@ -1,4 +1,4 @@
-add_library(gf_ara_diag STATIC
+add_library(gf_ara_diag SHARED
   src/doip_stack.cpp
   src/doip_proto.cpp
   src/doip_session.cpp
@@ -12,13 +12,19 @@ target_include_directories(gf_ara_diag PUBLIC
 )
 target_link_libraries(gf_ara_diag PUBLIC gf_ara::core gf_ara::collector ${CMAKE_DL_LIBS})
 
-# SIL security plugin (.so) — OEM replaces via diag.yaml path
-add_library(gf_diag_sec_sil_stub SHARED plugins/sil_sec_stub.c)
-target_include_directories(gf_diag_sec_sil_stub PRIVATE
+# Optional 0x27 security plugin (.so). Formal name; content may be stub.
+# Product runtime: stage only if configured. Default: do not ship.
+add_library(gf_diag_sec SHARED plugins/sil_sec_stub.c)
+target_include_directories(gf_diag_sec PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include)
-set_target_properties(gf_diag_sec_sil_stub PROPERTIES
-  OUTPUT_NAME "gf_diag_sec_sil_stub"
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+set_target_properties(gf_diag_sec PROPERTIES
+  OUTPUT_NAME "gf_diag_sec"
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+  BUILD_RPATH_USE_ORIGIN TRUE
+  INSTALL_RPATH "$ORIGIN"
+  BUILD_RPATH "${CMAKE_BINARY_DIR}/lib;$ORIGIN")
+# Keep old target name as alias for tests that still reference sil_stub
+add_library(gf_diag_sec_sil_stub ALIAS gf_diag_sec)
 
 # gf_doip_ota_server + session smoke registered in cmake/GfModules.cmake after ucm/sm/collector.
 

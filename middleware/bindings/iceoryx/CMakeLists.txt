@@ -1,4 +1,4 @@
-add_library(gf_ara_com_iceoryx STATIC
+add_library(gf_ara_com_iceoryx SHARED
   src/status.cpp
   src/runtime.cpp
 )

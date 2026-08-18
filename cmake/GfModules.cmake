@@ -108,6 +108,15 @@ gf_add_binding(GF_WITH_SOMEIP someip)
 gf_add_binding(GF_WITH_DDS dds)
 gf_add_binding(GF_WITH_CROSS_DOMAIN_IPC cross_domain_ipc)
 
+# Image-plane shm (GfChannel; no third_party dep) — always when present.
+if(EXISTS "${CMAKE_SOURCE_DIR}/middleware/bindings/gf_channel/CMakeLists.txt")
+  add_subdirectory("${CMAKE_SOURCE_DIR}/middleware/bindings/gf_channel")
+  message(STATUS "Giraffe Flow: binding gf_channel")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/middleware/bindings/tip_channel/CMakeLists.txt")
+  add_subdirectory("${CMAKE_SOURCE_DIR}/middleware/bindings/tip_channel")
+  message(STATUS "Giraffe Flow: binding tip_channel (legacy)")
+endif()
+
 # --- apps from req.apps ---
 # Prefer tools/<path> for debug_bridge/*; then projects/<oem>/<sku>/apps/<path>;
 # fall back to shared apps/<path>. Binary dir stays build/apps/<path> for run scripts.

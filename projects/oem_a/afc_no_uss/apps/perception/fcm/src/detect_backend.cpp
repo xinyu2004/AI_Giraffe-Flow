@@ -83,7 +83,7 @@ DetectResult TryOrtSession(const Frame& frame, const std::string& model_path) {
     (void)session;
     return r;
   } catch (const std::exception& e) {
-    std::cerr << "gf-perception-fcm: ORT failed (" << e.what()
+    std::cerr << "[ERROR] perception.fcm: ORT failed (" << e.what()
               << "); using pixel heuristic\n";
     return HeuristicFromPixels(frame);
   }
@@ -93,18 +93,9 @@ DetectResult TryOrtSession(const Frame& frame, const std::string& model_path) {
 }  // namespace
 
 BackendKind ParseBackend(const char* env_or_null) {
-  const char* v = env_or_null;
-  if (!v || !v[0]) {
-    v = std::getenv("GF_PERCEPTION_BACKEND");
-  }
-#if defined(GF_FCM_HAS_FRAME_INGEST)
-  if (!v || !v[0]) {
-    v = gf_gen::frame_ingest::kPerceptionBackend;
-  }
-#endif
-  if (v && std::strcmp(v, "onnx") == 0) {
-    return BackendKind::Onnx;
-  }
+  (void)env_or_null;
+  // Product path: stub. Onnx / model selection is FCM-internal (build & code),
+  // not gf-config / frame_ingest freeze / GF_PERCEPTION_BACKEND.
   return BackendKind::Stub;
 }
 
@@ -123,13 +114,13 @@ DetectResult DetectOnnxOrHeuristic(const Frame& frame,
   return TryOrtSession(frame, model_path);
 #else
 #if defined(GF_WITH_ONNX) && GF_WITH_ONNX
-  std::cerr << "gf-perception-fcm: GF_WITH_ONNX=ON but onnxruntime headers "
+  std::cerr << "[ERROR] perception.fcm: GF_WITH_ONNX=ON but onnxruntime headers "
                "missing; pixel heuristic (opaque=1)\n";
 #else
   static bool once = false;
   if (!once) {
     once = true;
-    std::cerr << "gf-perception-fcm: GF_PERCEPTION_BACKEND=onnx without "
+    std::cerr << "[ERROR] perception.fcm: GF_PERCEPTION_BACKEND=onnx without "
                  "-DGF_WITH_ONNX=ON; pixel heuristic (opaque=1). "
                  "Rebuild with ORT to load GF_ONNX_MODEL.\n";
   }

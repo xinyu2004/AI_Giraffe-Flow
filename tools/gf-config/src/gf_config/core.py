@@ -30,10 +30,32 @@ def load_yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
+def normalize_channel_slot(s: str) -> str | None:
+    """Return canonical gf.channel.* or None if not a GfChannel slot name."""
+    raw = (s or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("gf.channel."):
+        return raw
+    # Polluted SOA form: services.semantic.gf.channel.front
+    marker = "gf.channel."
+    idx = raw.find(marker)
+    if idx >= 0:
+        return raw[idx:]
+    return None
+
+
+def is_channel_svc(s: str) -> bool:
+    return normalize_channel_slot(s) is not None
+
+
 def canon_service(s: str) -> str:
     s = (s or "").strip()
     if not s:
         return ""
+    ch = normalize_channel_slot(s)
+    if ch:
+        return ch
     if s.startswith("services."):
         return s
     if s.startswith("semantic."):
@@ -42,6 +64,9 @@ def canon_service(s: str) -> str:
 
 
 def short_service(svc: str) -> str:
+    ch = normalize_channel_slot(svc or "")
+    if ch:
+        return ch
     return (svc or "").split(".")[-1] if svc else ""
 
 
@@ -206,9 +231,17 @@ class ProjectSession:
         else:
             found["compute_domain"] = compute_domain or found.get("compute_domain") or "ap_linux"
         if provides is not None:
-            found["provides"] = [canon_service(x) for x in provides if str(x).strip()]
+            found["provides"] = [
+                canon_service(x)
+                for x in provides
+                if str(x).strip() and not is_channel_svc(str(x))
+            ]
         if requires is not None:
-            found["requires"] = [canon_service(x) for x in requires if str(x).strip()]
+            found["requires"] = [
+                canon_service(x)
+                for x in requires
+                if str(x).strip() and not is_channel_svc(str(x))
+            ]
         self.dirty_wiring = True
 
     def remove_deployment(self, process: str) -> None:
@@ -268,16 +301,19 @@ class ProjectSession:
         *,
         prune_flows: bool = True,
     ) -> None:
+        # GfChannel slots never belong in deployments (canvas / channel_flows only).
+        soa_prov = [x for x in provides if not is_channel_svc(x)]
+        soa_req = [x for x in requires if not is_channel_svc(x)]
         self.upsert_deployment(
             process,
-            provides=[canon_service(x) for x in provides],
-            requires=[canon_service(x) for x in requires],
+            provides=[canon_service(x) for x in soa_prov],
+            requires=[canon_service(x) for x in soa_req],
         )
         if prune_flows:
             # drop dataflows that no longer match ports
-            provides_set = {short_service(canon_service(x)) for x in provides}
+            provides_set = {short_service(canon_service(x)) for x in soa_prov}
             requires_by = {
-                process: {short_service(canon_service(x)) for x in requires}
+                process: {short_service(canon_service(x)) for x in soa_req}
             }
             new_flows: list[dict[str, Any]] = []
             for f in self.dataflows():
@@ -325,6 +361,275 @@ class ProjectSession:
             )
         ]
         self.set_dataflows(flows)
+
+    # --- GfChannel / frame_ingest (canvas UX; freeze in req.frame_ingest) ---
+
+    FRAME_INGEST_PROCESS = "host.frame_ingest"
+
+    @classmethod
+    def frame_ingest_process_name(cls) -> str:
+        return cls.FRAME_INGEST_PROCESS
+
+    @staticmethod
+    def is_frame_ingest_process(*, kind: str = "", process: str = "") -> bool:
+        p = (process or "").strip()
+        k = (kind or "").strip()
+        if k == "frame_ingest":
+            return True
+        if p in ("host.frame_ingest", "frame_ingest"):
+            return True
+        # Legacy Round-B CameraSource nodes
+        return k == "camera_source" or p.startswith("camera.")
+
+    @staticmethod
+    def camera_process_name(slot_id: str) -> str:
+        """Deprecated alias — lanes are Out ports on host.frame_ingest."""
+        sid = (slot_id or "front").strip() or "front"
+        return f"camera.{sid}"
+
+    @staticmethod
+    def slot_id_from_camera_process(process: str) -> str:
+        p = (process or "").strip()
+        if p.startswith("camera."):
+            return p[len("camera.") :] or "front"
+        return p or "front"
+
+    @staticmethod
+    def gf_channel_slot_name(slot_id: str) -> str:
+        sid = (slot_id or "front").strip() or "front"
+        return f"gf.channel.{sid}"
+
+    @staticmethod
+    def slot_id_from_channel(slot: str) -> str:
+        s = (slot or "").strip()
+        if s.startswith("gf.channel."):
+            return s[len("gf.channel.") :] or "front"
+        return s or "front"
+
+    def tip_slots(self) -> list[dict[str, Any]]:
+        fi = self.req.get("frame_ingest")
+        if not isinstance(fi, dict):
+            return []
+        slots = fi.get("tip_slots")
+        return [s for s in slots if isinstance(s, dict)] if isinstance(slots, list) else []
+
+    def set_tip_slots(self, slots: list[dict[str, Any]]) -> None:
+        fi = self.req.get("frame_ingest")
+        if not isinstance(fi, dict):
+            fi = {}
+            self.req["frame_ingest"] = fi
+        # Authoring: id/w/h (+ optional pixel); no mount / buffers in GUI contract
+        cleaned: list[dict[str, Any]] = []
+        for s in slots:
+            if not isinstance(s, dict):
+                continue
+            sid = str(s.get("id") or "").strip()
+            if not sid:
+                continue
+            entry: dict[str, Any] = {
+                "id": sid,
+                "w": int(s.get("w") or 640),
+                "h": int(s.get("h") or 480),
+            }
+            pix = str(s.get("pixel_format") or "").strip()
+            if pix:
+                entry["pixel_format"] = pix
+            cleaned.append(entry)
+        fi["tip_slots"] = cleaned
+        self.dirty_req = True
+
+    def frame_ingest_cfg(self) -> dict[str, Any]:
+        fi = self.req.get("frame_ingest")
+        return fi if isinstance(fi, dict) else {}
+
+    def update_frame_ingest(self, **fields: Any) -> None:
+        fi = self.req.get("frame_ingest")
+        if not isinstance(fi, dict):
+            fi = {}
+            self.req["frame_ingest"] = fi
+        for k, v in fields.items():
+            if v is None:
+                fi.pop(k, None)
+            else:
+                fi[k] = v
+        self.dirty_req = True
+
+    def upsert_tip_slot(self, slot: dict[str, Any]) -> None:
+        sid = str(slot.get("id") or "").strip()
+        if not sid:
+            raise ValueError("tip_slot id required")
+        slots = self.tip_slots()
+        found = None
+        for s in slots:
+            if str(s.get("id")) == sid:
+                found = s
+                break
+        if found is None:
+            slots.append(dict(slot))
+        else:
+            found.update(slot)
+            found["id"] = sid
+        self.set_tip_slots(slots)
+
+    def remove_tip_slot(self, slot_id: str) -> None:
+        sid = (slot_id or "").strip()
+        self.set_tip_slots([s for s in self.tip_slots() if str(s.get("id")) != sid])
+
+    def channel_flows(self) -> list[dict[str, Any]]:
+        raw = self.wiring.get("channel_flows")
+        return [f for f in raw if isinstance(f, dict)] if isinstance(raw, list) else []
+
+    def set_channel_flows(self, flows: list[dict[str, Any]]) -> None:
+        self.wiring["channel_flows"] = list(flows)
+        self.dirty_wiring = True
+
+    def migrate_legacy_camera_channel_flows(self) -> None:
+        """Rewrite camera.* → host.frame_ingest; scrub GfChannel out of deployments."""
+        ingest = self.FRAME_INGEST_PROCESS
+        changed = False
+        flows: list[dict[str, Any]] = []
+        for f in self.channel_flows():
+            frm = str(f.get("from") or "")
+            entry = dict(f)
+            if frm.startswith("camera."):
+                entry["from"] = ingest
+                if not str(entry.get("slot") or "").strip():
+                    entry["slot"] = self.gf_channel_slot_name(
+                        self.slot_id_from_camera_process(frm)
+                    )
+                changed = True
+            slot = normalize_channel_slot(str(entry.get("slot") or ""))
+            if slot and str(entry.get("slot") or "") != slot:
+                entry["slot"] = slot
+                changed = True
+            flows.append(entry)
+        if changed:
+            self.set_channel_flows(flows)
+        nodes = self.canvas().get("nodes")
+        if isinstance(nodes, dict):
+            drop = [k for k in list(nodes.keys()) if str(k).startswith("camera.")]
+            for k in drop:
+                del nodes[k]
+            if drop:
+                self.dirty_wiring = True
+        self.scrub_channel_ports_from_deployments()
+
+    def scrub_channel_ports_from_deployments(self) -> None:
+        """Remove polluted gf.channel.* entries from deployments provides/requires."""
+        deps = list(self.wiring.get("deployments") or [])
+        dirty = False
+        for d in deps:
+            if not isinstance(d, dict):
+                continue
+            for key in ("provides", "requires"):
+                raw = d.get(key)
+                if not isinstance(raw, list):
+                    continue
+                cleaned = [x for x in raw if not is_channel_svc(str(x))]
+                if cleaned != list(raw):
+                    d[key] = cleaned
+                    dirty = True
+        if dirty:
+            self.wiring["deployments"] = deps
+            self.dirty_wiring = True
+
+    def add_channel_flow(self, frm: str, to: str, *, slot: str = "") -> bool:
+        """Append GfChannel edge (not iceoryx dataflow)."""
+        frm = frm.strip()
+        to = to.strip()
+        if not frm or not to:
+            return False
+        if frm.startswith("camera."):
+            if not slot:
+                slot = self.gf_channel_slot_name(self.slot_id_from_camera_process(frm))
+            frm = self.FRAME_INGEST_PROCESS
+        slot_n = normalize_channel_slot(slot or "") or (slot or "").strip()
+        flows = self.channel_flows()
+        for f in flows:
+            if str(f.get("from")) == frm and str(f.get("to")) == to:
+                existing = str(f.get("slot") or "")
+                if slot_n and existing and existing != slot_n:
+                    continue
+                if slot_n and not existing:
+                    f["slot"] = slot_n
+                    self.dirty_wiring = True
+                return False
+            # Same slot already wired from ingest to this consumer
+            if (
+                str(f.get("from")) == frm
+                and slot_n
+                and str(f.get("slot") or "") == slot_n
+                and str(f.get("to")) == to
+            ):
+                return False
+        entry: dict[str, Any] = {"from": frm, "to": to, "kind": "gf_channel"}
+        if slot_n:
+            entry["slot"] = slot_n
+        flows.append(entry)
+        self.set_channel_flows(flows)
+        return True
+
+    def remove_channel_flow_match(self, frm: str, to: str, *, slot: str = "") -> None:
+        if frm.startswith("camera."):
+            frm = self.FRAME_INGEST_PROCESS
+        slot_n = (slot or "").strip()
+        flows = []
+        for f in self.channel_flows():
+            if str(f.get("from")) == frm and str(f.get("to")) == to:
+                if slot_n and str(f.get("slot") or "") not in ("", slot_n):
+                    flows.append(f)
+                    continue
+                continue
+            flows.append(f)
+        self.set_channel_flows(flows)
+
+    def remove_frame_ingest_node(self) -> None:
+        """Remove optional video-contract node: tip_slots + channel_flows + canvas."""
+        ingest = self.FRAME_INGEST_PROCESS
+        self.update_frame_ingest(active_source="none")
+        self.set_tip_slots([])
+        flows = [
+            f
+            for f in self.channel_flows()
+            if str(f.get("from")) != ingest
+            and str(f.get("to")) != ingest
+            and not str(f.get("from") or "").startswith("camera.")
+        ]
+        self.set_channel_flows(flows)
+        nodes = self.canvas().get("nodes")
+        if isinstance(nodes, dict):
+            for key in list(nodes.keys()):
+                ui = nodes.get(key) if isinstance(nodes.get(key), dict) else {}
+                if self.is_frame_ingest_process(
+                    process=str(key), kind=str(ui.get("kind") or "")
+                ):
+                    del nodes[key]
+                    self.dirty_wiring = True
+
+    def remove_camera_node(self, process: str) -> None:
+        """Compat: per-lane camera.* → strip that tip_slot; ingest node uses remove_frame_ingest_node."""
+        process = process.strip()
+        if self.is_frame_ingest_process(process=process) and not process.startswith("camera."):
+            self.remove_frame_ingest_node()
+            return
+        sid = self.slot_id_from_camera_process(process)
+        self.remove_tip_slot(sid)
+        slot = self.gf_channel_slot_name(sid)
+        flows = []
+        for f in self.channel_flows():
+            if str(f.get("from")) == process:
+                continue
+            if str(f.get("slot") or "") == slot and str(f.get("from")) in (
+                self.FRAME_INGEST_PROCESS,
+                process,
+            ):
+                continue
+            flows.append(f)
+        self.set_channel_flows(flows)
+        nodes = self.canvas().get("nodes")
+        if isinstance(nodes, dict) and process in nodes:
+            del nodes[process]
+            self.dirty_wiring = True
 
     def upsert_module(
         self,

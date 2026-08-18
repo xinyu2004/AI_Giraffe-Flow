@@ -26,7 +26,7 @@ bash scripts/smoke_bd_cyclone.sh
 离线 stub（无 third_party）：
 
 ```bash
-bash scripts/smoke_bd_stub.sh   # GF_DDS_BACKEND=stub
+bash scripts/smoke_bd_cyclone.sh   # GF_DDS_BACKEND=cyclone（真收发）
 ```
 
 ## 配置开关

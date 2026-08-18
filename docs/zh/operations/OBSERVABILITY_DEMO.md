@@ -3,7 +3,7 @@
 > 配套：`GMT measure record|tag|export` · `GMT bridge foxglove`  
 > 主链 SIL：`projects/oem_a/afc_with_uss`（**iceoryx**）  
 > **说明：** `GMT bridge foxglove --ws` 是自研 Foxglove WebSocket **子集**，**不是** ROS 包 `foxglove_bridge`。  
-> **主路径：** gf-config → `compile_sil` → `run_sil`（四脚本政策；验证 smoke 在 `scripts/verify/`）。
+> **主路径：** gf-config Verify(+Generate) → `compile_sil` → `run_sil`。SKU 验收 smoke → `projects/.../scripts/verify/`；平台门禁 → `devops/ci/`。
 
 ## 0. 前置（1 min）
 
@@ -72,7 +72,7 @@ GMT bridge foxglove --mcap projects/oem_a/afc_with_uss/build-sil/observability/s
 **主文件** `overtake_acc_aeb.jsonl`：变道超车 → ACC → AEB。`AdasDemo` 是 JSONL topic，不是新 app。
 
 ```bash
-python scripts/gen_adas_scenarios.py
+# （场景 jsonl 已在 projects/.../scenarios/；用 GMT 打开 session / 回灌）
 GMT bridge foxglove --ws --synth-bev \
   --jsonl projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl --port 8765
 # Studio → ws://127.0.0.1:8765 · Image + Plot(AdasDemo.*)

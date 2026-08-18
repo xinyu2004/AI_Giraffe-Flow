@@ -225,7 +225,7 @@ std::string TruthPath() {
     v = gf_gen::frame_ingest::kTruthPath;
   }
 #endif
-  return (v && v[0]) ? std::string(v) : std::string("/tmp/gf_carla_truth.json");
+  return (v && v[0]) ? std::string(v) : std::string("runtime_ipc/carla_truth.json");
 }
 
 std::string CtrlPath() {
@@ -235,7 +235,7 @@ std::string CtrlPath() {
     v = gf_gen::frame_ingest::kCtrlPath;
   }
 #endif
-  return (v && v[0]) ? std::string(v) : std::string("/tmp/gf_planning_ctrl.json");
+  return (v && v[0]) ? std::string(v) : std::string("runtime_ipc/planning_ctrl.json");
 }
 
 }  // namespace
@@ -245,6 +245,7 @@ int main() {
 
   gf_ara::runtime::ProcessSupervisor supervisor;
   if (!supervisor.Start(kProcess)) {
+    std::cerr << "[ERROR] planning.driving: ProcessSupervisor.Start failed\n";
     return EXIT_FAILURE;
   }
 

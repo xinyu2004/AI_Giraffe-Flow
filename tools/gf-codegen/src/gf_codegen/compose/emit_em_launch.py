@@ -9,6 +9,7 @@ import yaml
 
 HOST_DLT = "host.dlt_daemon"
 HOST_ROUDI = "host.iox_roudi"
+HOST_FRAME_INGEST = "host.frame_ingest"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -33,6 +34,7 @@ def build_product_em_tables(
     *,
     k_dlt: bool,
     k_roudi: bool,
+    k_frame_ingest: bool = False,
     gateway_forever: bool = True,
 ) -> dict[str, Any]:
     """Build frozen launch/exec tables (no I/O). Used by deploy_config.hpp + YAML dumps."""
@@ -44,6 +46,8 @@ def build_product_em_tables(
         drop.add(HOST_DLT)
     if not k_roudi:
         drop.add(HOST_ROUDI)
+    if not k_frame_ingest:
+        drop.add(HOST_FRAME_INGEST)
 
     # --- em_launch ---
     procs_in = launch.get("processes") if isinstance(launch.get("processes"), list) else []
@@ -67,7 +71,7 @@ def build_product_em_tables(
             0,
             {
                 "name": HOST_DLT,
-                "binary": "_dep-manifest/dlt-daemon/src/daemon/dlt-daemon",
+                "binary": "bin/dlt-daemon",
                 "args": [],
                 "max_restarts": 3,
             },
@@ -78,8 +82,27 @@ def build_product_em_tables(
             idx,
             {
                 "name": HOST_ROUDI,
-                "binary": "iox-roudi",
+                "binary": "bin/iox-roudi",
                 "args": ["-c", "$GF_IOX_TOML"],
+                "max_restarts": 3,
+            },
+        )
+    if k_frame_ingest and HOST_FRAME_INGEST not in names:
+        # After RouDi (or DLT), before SOA apps.
+        idx = 0
+        for i, p in enumerate(procs_out):
+            if str(p.get("name") or "").startswith("adapter.") or str(
+                p.get("name") or ""
+            ).startswith("perception."):
+                idx = i
+                break
+            idx = i + 1
+        procs_out.insert(
+            idx,
+            {
+                "name": HOST_FRAME_INGEST,
+                "binary": "bin/gf_frame_ingest",
+                "args": [],
                 "max_restarts": 3,
             },
         )
@@ -109,6 +132,8 @@ def build_product_em_tables(
                 deps = [HOST_DLT] + deps
         if name == HOST_ROUDI and k_dlt and HOST_DLT not in deps:
             deps = [HOST_DLT] + deps
+        if name == "perception.fcm" and k_frame_ingest and HOST_FRAME_INGEST not in deps:
+            deps = deps + [HOST_FRAME_INGEST]
         entry["depends_on"] = deps
         if name.startswith("host."):
             entry["execution_client"] = False
@@ -135,6 +160,30 @@ def build_product_em_tables(
                 "execution_client": False,
             },
         )
+    if k_frame_ingest and HOST_FRAME_INGEST not in enames:
+        deps_fi: list[str] = []
+        if k_roudi:
+            deps_fi = [HOST_ROUDI]
+        elif k_dlt:
+            deps_fi = [HOST_DLT]
+        # Insert before first SOA app
+        idx = len(eprocs_out)
+        for i, p in enumerate(eprocs_out):
+            n = str(p.get("name") or "")
+            if n.startswith("adapter.") or n.startswith("perception.") or n.startswith(
+                "planning."
+            ):
+                idx = i
+                break
+        eprocs_out.insert(
+            idx,
+            {
+                "name": HOST_FRAME_INGEST,
+                "function_group": "MachineFG",
+                "depends_on": deps_fi,
+                "execution_client": False,
+            },
+        )
 
     exec_out = {
         "schema_version": str(exec_doc.get("schema_version") or "0.1"),
@@ -151,6 +200,7 @@ def emit_product_em_assets(
     *,
     k_dlt: bool,
     k_roudi: bool,
+    k_frame_ingest: bool = False,
     gateway_forever: bool = True,
 ) -> dict[str, str]:
     """Write generated/em_launch.yaml + generated/exec.yaml (human/diff only).
@@ -161,6 +211,7 @@ def emit_product_em_assets(
         platform_dir,
         k_dlt=k_dlt,
         k_roudi=k_roudi,
+        k_frame_ingest=k_frame_ingest,
         gateway_forever=gateway_forever,
     )
     gen_dir.mkdir(parents=True, exist_ok=True)

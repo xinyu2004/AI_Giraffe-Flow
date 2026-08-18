@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Wave B: synth frame tip → Perception_MESSAGE_Out (frame-driven stub).
+# Wave B: colorbar tip → Perception_MESSAGE_Out (frame-driven stub).
 #   bash projects/oem_a/afc_no_uss/scripts/smoke_frame_sil.sh
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,12 +18,12 @@ if [[ ! -x "${FCM}" || ! -x "${PLAN}" || ! -x "${GW}" ]]; then
 fi
 
 export GF_SKIP_COMPILE="${GF_SKIP_COMPILE:-1}"
-export GF_FRAME_SOURCE="${GF_FRAME_SOURCE:-synth}"
+export GF_FRAME_SOURCE="${GF_FRAME_SOURCE:-colorbar}"
 export GF_PERCEPTION_BACKEND="${GF_PERCEPTION_BACKEND:-stub}"
 export GF_FRAME_TIMEOUT_MS="${GF_FRAME_TIMEOUT_MS:-300}"
 SECONDS_WIN="${GF_SIL_SECONDS:-12}"
 
-echo "${TAG} smoke_frame_sil: source=${GF_FRAME_SOURCE} backend=${GF_PERCEPTION_BACKEND} ~${SECONDS_WIN}s"
+echo "${TAG} smoke_frame_sil: GF_FRAME_SOURCE=${GF_FRAME_SOURCE} backend=${GF_PERCEPTION_BACKEND} ~${SECONDS_WIN}s"
 set +e
 timeout --signal=INT --kill-after=5 "${SECONDS_WIN}" bash "${SCRIPT_DIR}/run_sil.sh"
 rc=$?

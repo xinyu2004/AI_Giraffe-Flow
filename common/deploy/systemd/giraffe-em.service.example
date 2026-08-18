@@ -1,0 +1,37 @@
+# Giraffe EM — board / product entry (protection layer around gf_em_daemon).
+#
+# Install:
+#   1) Stage or copy a self-contained runtime/ tree to e.g. /opt/giraffe/current
+#   2) Copy this file to /etc/systemd/system/giraffe-em.service
+#   3) Edit RuntimeRoot below (Environment + paths)
+#   4) sudo systemctl daemon-reload && sudo systemctl enable --now giraffe-em
+#
+# Contract: start EM only. EM Spawns dlt?/RouDi?/frame_ingest?/SOA apps from
+# compose-frozen deploy_config.hpp (compiled into gf_em_daemon).
+# NOT in this unit: Foxglove, GMT inject, DoIP, carla_scenarios.
+#
+# No GF_PLATFORM_DIR required (product path = hpp). Optional debug dump only.
+
+[Unit]
+Description=Giraffe EM (gf_em_daemon)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=giraffe
+Group=giraffe
+# === edit RuntimeRoot ===
+WorkingDirectory=/opt/giraffe/current
+Environment=GF_BUILD_DIR=/opt/giraffe/current
+Environment=GF_RUNTIME_DIR=/opt/giraffe/current
+Environment=GF_IOX_TOML=/opt/giraffe/current/etc/iox_roudi.toml
+Environment=GF_EM_LOG_DIR=/var/log/giraffe/em
+Environment=LD_LIBRARY_PATH=/opt/giraffe/current/lib
+# EM stops the machine on abnormal child exit (no relaunch). Unit Restart recovers the tree.
+ExecStart=/opt/giraffe/current/bin/gf_em_daemon --build-dir /opt/giraffe/current --log-dir /var/log/giraffe/em --deadline-ms 0
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -4,7 +4,8 @@
 
 PySide6 tool: edit **SKU** via `req.yaml`, edit the **Simulink-like signal graph** via `wiring.yaml`, then one-shot `compose` + lineage.
 
-> **Flow:** edit tabs 1/2 → **Ctrl+S Save** (disk only) → **Verify (Ctrl+R)** builds SOR + lineage → optional **Generate (Ctrl+G)** for Proxy/Skeleton.  
+> **Flow:** edit tabs 1/2 → **Ctrl+S Save** (disk only) → **Verify (Ctrl+R)** builds SOR + lineage + `generated/*.hpp` (behavior freeze) → optional **Generate (Ctrl+G)** for Proxy/Skeleton.  
+> **Authoring ends there.** Then `compile_sil` / `run_sil` (**no** auto-compose).  
 > Headless / CI: `python -m gf_codegen.compose --project …`; codegen remains `gf-codegen generate`.  
 > Boundaries: `gf-config` = authoring GUI · `gf-codegen` = lint / generate / import · GMT = read-only CI + measure
 

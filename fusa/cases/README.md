@@ -6,7 +6,7 @@
 |----|------|
 | L1 | 板级库 `middleware/**/testcases` ↔ `CASE` 行 |
 | L2 | gf-codegen 生成物保证（pytest / golden） |
-| L3 | SIL 集成场景（`scripts/verify/.../smoke_*.sh`） |
+| L3 | SIL 集成场景（`projects/.../scripts/verify/smoke_*.sh`） |
 
 **不含 GMT**（主机工具）。
 

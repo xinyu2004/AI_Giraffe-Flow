@@ -1,7 +1,5 @@
 # exec + SM（function_groups → middleware/sm StateClient）
-# EM entry. Optional host.dlt_daemon / host.iox_roudi are EM-managed daemons
-# when enabled by compose (log sinks / iceoryx bindings). Authoring source for gf-config;
-# product freeze → generated/exec.yaml.
+# host.frame_ingest optional — compose drops when tip source disabled.
 schema_version: "0.1"
 function_groups:
   - id: MachineFG
@@ -16,6 +14,11 @@ processes:
     depends_on:
       - host.dlt_daemon
     execution_client: false
+  - name: host.frame_ingest
+    function_group: MachineFG
+    depends_on:
+      - host.iox_roudi
+    execution_client: false
   - name: adapter.vehicle_can_gateway
     function_group: MachineFG
     depends_on:
@@ -25,6 +28,7 @@ processes:
     function_group: MachineFG
     depends_on:
       - adapter.vehicle_can_gateway
+      - host.frame_ingest
     execution_client: true
   - name: planning.driving
     function_group: MachineFG

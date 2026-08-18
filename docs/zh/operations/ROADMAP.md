@@ -44,7 +44,7 @@
 | P0-5 | 两进程 demo | `apps/simulators/`, `apps/demo_pipeline/` + `smoke_sil.sh` | ✅ |
 | P0-6 | OSAL POSIX | `middleware/osal/` | ✅ |
 | P0-7 | CMake + `req.yaml` | `cmake/`，`projects/**/req.yaml` | ✅ |
-| P0-8 | CI smoke | `devops/ci/scripts/smoke.sh` | ✅ |
+| P0-8 | CI smoke | `devops/ci/scripts/smoke.sh`（+ toolchain/nightly/release 分层，见 [ci/README](../../../devops/ci/README.md)） | ✅ |
 | P0-9 | `adc_full` compose / generate | `projects/oem_b/adc_full/` | ✅ |
 
 ### 明确不在 P0
@@ -219,6 +219,6 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 1. **P3z / wave E**：AM62 EdgeAI（同一 `frame_ingest`）/ 真板 / vsomeip / RAUC / soak。
 2. 配置策略 backlog：live/DoIP 等行为开关亦编译冻结（见 CONFIG_RUNTIME_POLICY）。
-3. 云 CI + 发版 T4；（可选）真 ORT / CARLA 图进 Foxglove topic。
+3. 云 CI：L0 + 路径 L0b + nightly/发版门禁（见 [devops/ci/README.md](../../../devops/ci/README.md)）；（可选）真 ORT / CARLA 图进 Foxglove topic。
 
 P3-4 桌面 DoIP/OTA 已收口 → [DOIP_OTA.md](DOIP_OTA.md)。

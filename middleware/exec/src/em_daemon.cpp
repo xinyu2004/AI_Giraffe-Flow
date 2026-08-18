@@ -77,7 +77,10 @@ void ReclaimStalePlatformDaemons(std::string_view build_dir, bool reclaim_roudi,
   }
 
   if (reclaim_roudi) {
-    const std::string sku_roudi = std::string(build_dir) + "/iox-roudi";
+    std::string sku_roudi = std::string(build_dir) + "/bin/iox-roudi";
+    if (!FileExists(sku_roudi)) {
+      sku_roudi = std::string(build_dir) + "/iox-roudi";
+    }
     if (FileExists(sku_roudi)) {
       const std::string cmd = "pkill -f '^" + sku_roudi + "( |$)' >/dev/null 2>&1 || true";
       run_ignore(cmd.c_str());
@@ -585,6 +588,8 @@ bool EmDaemon::PollOnce() {
   if (shutting_down_) {
     return true;
   }
+  auto& log = gf_ara::log::Logger::Instance();
+
   for (auto& rt : runtimes_) {
     if (!gf::osal::IsValidProcessId(rt.pid)) {
       continue;
@@ -600,11 +605,37 @@ bool EmDaemon::PollOnce() {
     const int exit_code =
         (wr.status == gf::osal::ProcessWaitStatus::kExited) ? wr.exit_code : -1;
     const bool signaled = (wr.status == gf::osal::ProcessWaitStatus::kSignaled);
-    gf_ara::log::Logger::Instance().Info(
-        "em", "t_ms=" + std::to_string(MonoMs()) + " em_daemon: child exit name=" +
-                  rt.spec.name + " pid=" + std::to_string(rt.pid) +
-                  " code=" + std::to_string(exit_code) +
-                  " signaled=" + (signaled ? "yes" : "no"));
+    const bool abnormal = signaled || exit_code != 0;
+    const std::string detail =
+        "t_ms=" + std::to_string(MonoMs()) + " em_daemon: child exit name=" +
+        rt.spec.name + " pid=" + std::to_string(rt.pid) +
+        " code=" + std::to_string(exit_code) +
+        " signaled=" + (signaled ? "yes" : "no");
+    if (abnormal) {
+      log.Error("em", detail);
+      // Surface last lines of redirected child log (host_*.log / app logs).
+      if (!cfg_.log_dir.empty()) {
+        std::string safe = rt.spec.name;
+        for (char& c : safe) {
+          if (c == '.') {
+            c = '_';
+          }
+        }
+        const std::string child_log = JoinPath(cfg_.log_dir, safe + ".log");
+        const std::string tail = ReadFile(child_log);
+        if (!tail.empty()) {
+          constexpr std::size_t kMax = 1200;
+          const std::string snippet =
+              tail.size() > kMax ? tail.substr(tail.size() - kMax) : tail;
+          log.Error("em", "child log tail (" + child_log + "):\n" + snippet);
+        } else {
+          log.Error("em", "child log empty or missing: " + child_log +
+                              " (check DLT / GF_LOG_FILE)");
+        }
+      }
+    } else {
+      log.Info("em", detail);
+    }
     rt.pid = gf::osal::kInvalidProcessId;
 
     const bool do_restart =
@@ -613,15 +644,22 @@ bool EmDaemon::PollOnce() {
         (exit_code == kEmRestartExitCode || signaled);
 
     if (do_restart) {
-      gf_ara::log::Logger::Instance().Info(
-          "em", "t_ms=" + std::to_string(MonoMs()) + " em_daemon: relaunch name=" +
-                    rt.spec.name + " restart#" + std::to_string(rt.restarts + 1));
+      log.Info("em", "t_ms=" + std::to_string(MonoMs()) + " em_daemon: relaunch name=" +
+                         rt.spec.name + " restart#" + std::to_string(rt.restarts + 1));
       if (!Spawn(rt, true)) {
         rt.terminal_exit = true;
         return false;
       }
     } else {
       rt.terminal_exit = true;
+      // Mechanism: abnormal exit that will not relaunch → stop the machine.
+      // Board recovery = systemd Restart=on-failure of the EM unit (whole tree).
+      if (abnormal && !shutting_down_) {
+        log.Error("em", "abnormal child exit → shutting down EM after failure of " +
+                            rt.spec.name);
+        RequestShutdown();
+        return false;
+      }
     }
   }
   return true;

@@ -10,7 +10,7 @@
 `.fdepl` SOME/IP IDs: `gf_codegen.compose.parse_fdepl`（**不**代替 `req.bindings`）。样例：`projects/oem_a/afc_with_uss/interfaces/demo_fidl/VehicleStatus.fdepl`。
 
 ```bash
-bash scripts/smoke_bd_stub.sh
+# CycloneDDS path: scripts/smoke_bd_cyclone.sh
 ```
 
 Parent: [bindings/README.md](../README.md) · Deps: [dep-manifest/DEPENDENCIES.yaml](../../../dep-manifest/DEPENDENCIES.yaml)

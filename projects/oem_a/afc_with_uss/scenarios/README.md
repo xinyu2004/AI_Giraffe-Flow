@@ -26,7 +26,7 @@
 GMT **变量轨**可读本地 jsonl 里的 AdasDemo；Foxglove topic 列表里不应再出现 `/gf/AdasDemo`。
 
 ```bash
-python scripts/gen_adas_scenarios.py
+# 场景 jsonl 见本目录；GMT 打开 session / 回灌即可
 
 GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh

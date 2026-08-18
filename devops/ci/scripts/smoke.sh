@@ -33,6 +33,8 @@ echo "== lint schema example =="
 gf-codegen lint schemas/examples/desktop_ap_only.sor.json
 
 echo "== cmake host build (desktop_default) =="
+# Clean CI tree: one configure + build + ctest is expected.
+# SKU day-to-day path skips reconfigure via .gf_cmake_configure_ok (see projects/.../compile_sil.sh).
 cmake -B build -DGF_BUILD_TESTS=ON -DGF_USE_GENERATED=OFF
 cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
@@ -49,4 +51,4 @@ bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh
 echo "== optional aarch64 link =="
 bash scripts/cross_link_smoke.sh
 
-echo "CI smoke OK (P0 close)"
+echo "== CI smoke OK (P0 / L0) =="

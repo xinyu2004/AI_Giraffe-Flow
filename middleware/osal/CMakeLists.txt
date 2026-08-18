@@ -1,4 +1,4 @@
-add_library(gf_osal STATIC
+add_library(gf_osal SHARED
   src/posix/clock.cpp
   src/posix/thread.cpp
   src/posix/process.cpp

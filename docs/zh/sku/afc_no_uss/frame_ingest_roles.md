@@ -1,114 +1,129 @@
-# frame_ingest / bridge / scenarios 职责（为什么拆开）
+# frame_ingest / tip / carla_scenarios 职责
 
-## 完整前视产品路径
+## 主路径
 
-`carla_bridge` **必须**（相对 FCM）：没有图像 tip，FCM 无法按产品路径运行。  
-`frame_ingest.bridge.enabled=true` 表示 Flow 起 tip 写端（类 ISP 适配）。
+```text
+gf-config（Save → Verify → 可选 Generate）→ compile_sil → runtime/{bin,lib} → run_sil → GMT
+```
+
+- **帧源**：freeze SOP 默认 `isp`（进 `frame_ingest_config.hpp`）；SIL 用 **`GF_FRAME_SOURCE`** 覆盖：`isp` / `carla` / `replay` / `colorbar`（旧名 `synth`）/ `none`。与 `GF_INJECT_MODE`（ego/SOA 注入）正交。兼容别名：`GF_TIP_SOURCE` / `GF_ACTIVE_SOURCE`。
+- **ego_source**：`gateway` / `carla` / `inject` — 同样冻结；gateway/FCM/ingest 读 constexpr，**不要**靠 `run_sil` grep hpp。
+- **`carla_scenarios/`**：独立 Client A 场景机；**零** compose / stamp / runtime 合同；勿与 tip 源混称「场景」。
+- **compile / run 不 compose**：改 tip 后须在 gf-config **Verify**；`compile_sil` / `run_sil` 只编/跑已有 `generated/`。
+
+## 与 carla_scenarios 同步（相机契约）
+
+gf-config **不**把配置「推」进场景机。compose 写出只读契约，场景机按路径读：
+
+```text
+gf-config Save/Verify
+  → compose
+  → projects/<sku>/generated/camera_contract.json   ← 槽位 / WxH / pixel / mount
+  → projects/<sku>/generated/include/gf_gen/frame_ingest_config.hpp  ← 板端/SIL 行为
+```
+
+场景机侧（`carla_scenarios/src/lib/_camera_mount.py`）**只读契约**，无本地 preset、无 `GF_CAMERA_MOUNT_*` 手写几何：
+
+1. **`GF_CAMERA_CONTRACT=/绝对路径/camera_contract.json`**  
+2. 否则 **`$GF_PROJECT_DIR/generated/camera_contract.json`**  
+3. 否则仓库相对路径 `projects/oem_a/afc_no_uss/generated/camera_contract.json`（若存在）  
+4. 都没有 / 字段不全 → **硬退出**（不发明数字）
+
+```bash
+# 例：Windows/另一台机跑场景时显式对齐
+export GF_CAMERA_CONTRACT=/path/to/afc_no_uss/generated/camera_contract.json
+# 或
+export GF_PROJECT_DIR=/path/to/afc_no_uss
+cd carla_scenarios && python3 cases/longitudinal/acc.py
+```
+
+不需要拷贝进 `carla_scenarios/`；改 tip 后 **重新 compose**，场景机下次启动即读到新契约。SIL tip 写端（`carla_bridge`）优先用 ingest 从 hpp `SetEnv` 的 `GF_CAMERA_MOUNT_*`，缺省时同样读 `camera_contract.json`。
+
+## 常驻 `gf_frame_ingest`（C++）
+
+tip 源非 `none` 时，compose 把 `host.frame_ingest`（`bin/gf_frame_ingest`）冻进 `deploy_config.hpp`，由 **EM** 启动。`run_sil` 产品路径不再 shell 起一份；GMT inject 停 EM 后由 `GMT_depend_launch.sh` 可选再启。
+
+- 冻结 `kBridgeEnabled=false` 或 `kActiveSource=none` → **立即 exit 0**
+- 否则 Create GfChannel，再 spawn Python 模块（`--module-only`）
+- so 在 `runtime/lib/libgf_gf_channel.so`（RPATH / `LD_LIBRARY_PATH`）；**无 `GF_TIP_LIB`**
+- `modules/carla_bridge` 由 stage **实体拷贝**进 `share/frame_ingest/`（非绝对 symlink）
 
 | 角色 | 负责 | 不负责 |
 |------|------|--------|
-| **frame_ingest** | tip 插座：`pixel_format`、paths、`ego_source`、是否起 bridge | pygame、ACC 剧情、变道脚本、FCM 内部算法 |
-| **carla_bridge** | 挂 tip 相机→YUV、ego tip、**仅**执行 Giraffe cmd；**不** spawn hero/lead；长驻重连（**非 systemd**） | 布景、pygame、truth、初速 IC |
-| **run_cases / cases** | Client A：布 lead/天气、**摆位+IC**（方案1）、pygame、truth；`run_cases.py` 长驻少开关窗（**非 systemd**） | 连续控 ego、写 FCM tip |
-| **CARLA UE** | 仿真 **server**（RPC `:2000`） | — |
-| **manual_control.py** | CARLA 官方/人开（可选，勿与 scenario 抢同一车） | 不是 Giraffe 产品组件 |
-| **Foxglove** | 产品侧可视化（BEV + tip CompressedImage） | 与 scenario 窗口并存 |
+| **gf_frame_ingest (C++)** | 读 hpp；Create 槽；spawn 模块 | 布景、ACC 剧情 |
+| **模块 carla** | 相机→YUV、ego、执行 cmd | spawn hero |
+| **GfChannel** | shm 图像槽 | ARA 事件 |
+| **FCM** | Open+Latest | Create |
+| **carla_scenarios** | Client A 布景+IC | 写 tip / 进 compose |
 
-### client / server（HIL 常双机）
+## runtime = SIL 运行根 = HIL 板端载荷
 
-| 角色 | 是什么 | 典型机器 |
-|------|--------|----------|
-| **Server** | CARLA **UE** | Windows 仿真机 |
-| **Client A** | `carla_scenarios/cases/**/*.py` | 常与 UE 同机 |
-| **Client B** | SIL `frame_ingest` → `carla_bridge` | Linux SIL |
-
-两端 Python 都是 client，都连同一 UE。HIL 下各有一份 `carla.env`（`CARLA_HOST` 不同）。
+完整树见 [runtime_package.md](./runtime_package.md)。摘要：
 
 ```text
-Windows:  carla_scenarios/carla.env  → cases/.../acc.py ──RPC──┐
-                                                    ├→ UE :2000 (server)
-Linux:    projects/<sku>/carla.env → run_sil → bridge ─┘
-          tip 写在 SIL 本机 /tmp/gf_front.yuv → FCM
+runtime/{bin,lib,etc,platform,share}
 ```
 
-- **`run_sil.sh`**：起 bridge 时 **自动加载** SKU `carla.env`（无需 `enable_*.sh`）。  
-- **不要**把 scenario 的 `CARLA_HOST=127.0.0.1` 抄到 SIL；SIL 缺 SKU 文件会 WARN。
+- `bin/`：`gf_em_daemon (systemd) / gf_em_daemon (systemd) / giraffe_launch debug debug`、`gf_em_daemon`、`iox-roudi`、`dlt-daemon`、SOA apps、`gf_frame_ingest`
+- `lib/`：`libgf_ara_*.so`、`libgf_osal.so`、`libgf_gf_channel.so`、`libdlt.so*`（无 `*_sil_stub`）
+- 入口：`./bin/gf_em_daemon (systemd) / gf_em_daemon (systemd) / giraffe_launch debug debug`（或设 `GF_BUILD_DIR=runtime` 后起 EM）
 
-### 为什么 `acc.py` 不替代 bridge？
+本机粗评（SHARED + strip 后约 **4.3 MiB**，相对原先静态 app stage ~69 MiB）。
 
-1. **bridge = tip 适配层（假 ISP）** — 场景脚本随 case 换，不应重写 tip 协议。  
-2. **scenarios = 功能 case** — 真值 / 布世界，不是 tip 写端。  
-3. **pygame ≠ 产品可视化** — 产品观测走 Foxglove。
+```bash
+du -sh projects/oem_a/afc_no_uss/build-sil/runtime
+```
 
-## 已删除（产品冻结）
+## compile（不 compose）
 
-- `bridge.dry_run`：完整 CARLA 产品路径下无意义；开发无 UE tip 自检仅用 bridge **CLI/env**。  
-- `bridge.demo_lane_change*`：变道/剧情由 `carla_scenarios/` 定义。
+`run_sil` 仍可调 `compile_sil`。增量分工：
 
-## Tip 相机几何（单一真源）
+- **作者态**：gf-config Verify（+ Generate）写出 `generated/`；**compile 不再 compose**
+- **C/C++**：`cmake --build` → Ninja/Make（文件 mtime + gcc `-MD` depfile）
+- **stage**：runtime 缺件或 build 产物更新才拷
+- **ctest**：默认跳过；`GF_CTEST=1` 才跑
+- 强制：`GF_FORCE_COMPILE=1`（强制 cmake configure + stage）
 
-`GF_CARLA_TIP_*` / mount 预设定义在 [`carla_scenarios/src/lib/_tip_mount.py`](../../../../carla_scenarios/src/lib/_tip_mount.py)。  
-`carla_bridge/tip_mount.py` **只 re-export**（经 `GF_SCENARIOS_DIR`），勿再抄一份。场景入口先 `load_local_env()`；bridge 只读 SKU 已注入的环境。
+## GfChannel vs iceoryx
 
-## 环境变量与两份 carla.env
+| | iceoryx | gf_channel |
+|--|---------|-------------|
+| 负载 | 结构化事件 | 大块图像 |
+| RouDi | 需要 | 不需要 |
 
-| 文件 | 谁读 | 仓库 |
-|------|------|------|
-| `carla_scenarios/carla.env` | scenario / `run_cases` | 跟踪（通用，默认 `127.0.0.1`） |
-| `projects/oem_a/afc_no_uss/carla.env` | `run_sil` → bridge | gitignore；从 `carla.env.example` 复制 |
+## 录 25fps 回灌
 
-| 变量 | 用途 |
+```bash
+GF_CARLA_SYNC=1 GF_TIP_RECORD_FPS=25 GF_RECORD_FRAMES_DIR=/tmp/tip_vol \
+  bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
+# tip 源改成 replay 后：gf-config Verify → compile_sil，或调试：
+GF_INJECT_FRAMES_DIR=/tmp/tip_vol …
+```
+
+## client / server（HIL）
+
+| 角色 | 是什么 |
+|------|--------|
+| Server | CARLA UE |
+| Client A | `carla_scenarios`（独立机/进程） |
+| Client B | SIL `gf_frame_ingest` |
+
+```text
+Windows:  carla_scenarios → cases ──RPC──┐
+                                         ├→ UE
+Linux:    EM → runtime/bin/gf_frame_ingest ─┘
+          GfChannel(shm) → FCM
+```
+
+## carla.env
+
+| 文件 | 谁读 |
 |------|------|
-| `CARLA_HOST` / `CARLA_PORT` | **UE（server）** 地址 |
-| tip 路径（如 `/tmp/gf_front.yuv`） | **SIL 本机文件**（bridge RPC 取帧后写出） |
-| `GF_CARLA_PYTHON` | SIL 上含匹配 `carla` 的解释器（SKU `carla.env`） |
-| `GF_CARLA_WAIT_S` | 首次连 UE 的耐心窗口（秒） |
-| `GF_CARLA_CONNECT_TIMEOUT_S` | 单次 RPC 超时（远程 HIL 建议 ≥10） |
-| `GF_CARLA_BRIDGE_ON_FAIL` | 默认 `reconnect`：掉线/换场景重挂 tip；勿再用 `exit` 当实验室默认 |
-| `GF_CARLA_RECONNECT_S` | 重连间隔（秒） |
-| `GF_PIXEL_FORMAT` / tip paths | 见 freeze / frame_ingest |
+| `projects/.../carla.env` | `run_sil`（仅 SKU；UE IP / Python） |
+| `carla_scenarios/carla.env` | **仅**场景机；SIL **不加载** |
 
-连接后两边打印同一版本条，便于双机对照：
+## 验收
 
-```text
-===
-carla API  client=…  server=…
-===
-```
-
-### CI / 批量 case
-
-```powershell
-# 场景机：编辑 carla_scenarios\carla.env 后
-# 无 SIL → ACC/AEB 应为 fail（no_giraffe_control），不再假绿
-python carla_scenarios\run_cases.py
-```
-
-
-```bash
-# SIL：cp carla.env.example carla.env 后直接 run_sil，再跑场景
-./projects/oem_a/afc_no_uss/scripts/run_sil.sh
-```
-
-- 判定契约见 [scenarios.md](./scenarios.md)：scenario 不控 ego；时距 / 碰撞 / cmd 新鲜度。  
-- 场景与 SIL **独立生命周期**。
-
-## 方案1 边界（已落地方向）
-
-- 两 client **同 UE 端口**（如 `:2000`）。  
-- ego（`role_name=hero`）：scenario **可摆位 + AEB 初速 IC**；连续控车 **仅 Giraffe→bridge**。  
-- bridge **等待** scenario hero，不再自己造车。  
-- 除 **EM** 外不使用 systemd；bridge / `run_cases` 均为会话子进程长驻。  
-- SIL 心跳：`carla_fps` / `tip_write` / `tip_read` / `fcm_read`。
-
-```bash
-# 场景机（长驻 Client A）
-python3 carla_scenarios/run_cases.py cases/longitudinal
-# SIL：重启 run_sil 以加载新 bridge
-```
-
-## 后续计划（待讨论）
-
-- **HIL 双 client 延时优化**（验通后）：tip 改 SHM / 减 RPC；自适应超时。  
-- **inject 仅跑 planning**（无 FCM / 无图像）。  
-- frame_ingest UI 继续收口。
+- 无 `GF_TIP_LIB`、无脚本 grep `frame_ingest_config.hpp`
+- 二次 `compile_sil`：compose/stage 可 mtime-skip；`cmake --build` 由 Ninja 增量
+- `runtime/` 可 `du`；含 `bin/gf_frame_ingest` + `lib/libgf_gf_channel.so`

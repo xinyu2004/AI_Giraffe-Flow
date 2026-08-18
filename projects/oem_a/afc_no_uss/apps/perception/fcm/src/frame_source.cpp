@@ -5,6 +5,11 @@
 #define GF_FCM_HAS_FRAME_INGEST 1
 #endif
 
+#if __has_include("gf_channel/gf_channel.h")
+#include "gf_channel/gf_channel.h"
+#define GF_FCM_HAS_TIP_CHANNEL 1
+#endif
+
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -208,7 +213,7 @@ std::string ReadFile(const std::string& path) {
 }
 
 std::string StemSibling(const std::string& path, const char* suffix) {
-  // /tmp/gf_front.yuv → /tmp/gf_front + suffix
+  // runtime_ipc/front.yuv → stem + suffix (file-IPC bypass; not GfChannel)
   const auto slash = path.find_last_of('/');
   const auto dot = path.find_last_of('.');
   std::string stem = path;
@@ -221,29 +226,54 @@ std::string StemSibling(const std::string& path, const char* suffix) {
 }  // namespace
 
 FrameSourceKind ParseFrameSource(const char* env_or_null) {
+  const char* transport = std::getenv("GF_CHANNEL_TRANSPORT");
+  if (!transport || !transport[0]) transport = std::getenv("GF_TIP_TRANSPORT");
+#if defined(GF_FCM_HAS_FRAME_INGEST)
+  if (!transport || !transport[0]) {
+    transport = gf_gen::frame_ingest::kTipTransport;
+  }
+#endif
   const char* v = env_or_null;
   if (!v || !v[0]) {
     v = std::getenv("GF_FRAME_SOURCE");
   }
-#if defined(GF_FCM_HAS_FRAME_INGEST)
   if (!v || !v[0]) {
-    v = gf_gen::frame_ingest::kFrameSource;
+    v = std::getenv("GF_TIP_SOURCE");  // compat alias
+  }
+#if defined(GF_FCM_HAS_FRAME_INGEST)
+  // Prefer freeze active_source (isp|carla|…) over legacy kFrameSource IPC label.
+  if (!v || !v[0]) {
+    v = gf_gen::frame_ingest::kActiveSource;
   }
 #endif
-  if (!v || !v[0] || std::strcmp(v, "none") == 0) {
-    return FrameSourceKind::None;
-  }
-  if (std::strcmp(v, "synth") == 0) {
+  std::string src = (v && v[0]) ? v : "none";
+  if (src == "synth") {
+    // FCM-internal color bars (no tip). Prefer GF_FRAME_SOURCE=colorbar + tip for product.
     return FrameSourceKind::Synth;
   }
-  if (std::strcmp(v, "file") == 0) {
+  // Product live path: shm tip when transport says so.
+  if (transport && std::strcmp(transport, "shm") == 0) {
+    if (src != "none" && src != "file") {
+      // isp|carla|replay|colorbar|carla_file → Open GfChannel
+      return FrameSourceKind::TipShm;
+    }
+  }
+  if (src == "none") {
+    return FrameSourceKind::None;
+  }
+  if (src == "file") {
     return FrameSourceKind::File;
   }
-  if (std::strcmp(v, "carla_file") == 0) {
+  if (src == "carla_file" || src == "carla" || src == "replay") {
     return FrameSourceKind::CarlaFile;
   }
-  std::cerr << "gf-perception-fcm: unknown GF_FRAME_SOURCE=" << v
-            << " (use none|synth|file|carla_file); falling back to none\n";
+  if (src == "isp" || src == "colorbar") {
+    // No shm transport: cannot consume tip; idle.
+    return FrameSourceKind::None;
+  }
+  std::cerr << "[ERROR] perception.fcm: unknown GF_FRAME_SOURCE=" << src
+            << " (use none|isp|carla|replay|colorbar|file|carla_file|synth); "
+               "falling back to none\n";
   return FrameSourceKind::None;
 }
 
@@ -256,6 +286,14 @@ std::uint64_t FrameSource::NowNs() {
 }
 
 FrameSource::FrameSource(FrameSourceKind kind) : kind_(kind) {
+  if (kind_ == FrameSourceKind::TipShm) {
+#if defined(GF_FCM_HAS_FRAME_INGEST)
+    tip_slot_ = EnvOr("GF_CHANNEL_SLOT", gf_gen::frame_ingest::kTipSlotFront);
+#else
+    tip_slot_ = EnvOr("GF_CHANNEL_SLOT", "gf.tip.front");
+#endif
+    std::cout << "gf-perception-fcm: tip_transport=shm slot=" << tip_slot_ << std::endl;
+  }
   if (kind_ == FrameSourceKind::File || kind_ == FrameSourceKind::CarlaFile) {
 #if defined(GF_FCM_HAS_FRAME_INGEST)
     plane_path_ = EnvOr("GF_CARLA_FRAME_PATH", gf_gen::frame_ingest::kFramePath);
@@ -263,7 +301,7 @@ FrameSource::FrameSource(FrameSourceKind kind) : kind_(kind) {
     plane_path_ = EnvOr("GF_CARLA_FRAME_PATH", "");
 #endif
     if (plane_path_.empty()) {
-      std::cerr << "gf-perception-fcm: GF_FRAME_SOURCE needs GF_CARLA_FRAME_PATH\n";
+      std::cerr << "[ERROR] perception.fcm: GF_FRAME_SOURCE needs GF_CARLA_FRAME_PATH\n";
     } else {
       stream_path_ = StemSibling(plane_path_, ".stream.json");
       meta_path_ = StemSibling(plane_path_, ".meta.json");
@@ -284,6 +322,15 @@ FrameSource::FrameSource(FrameSourceKind kind) : kind_(kind) {
       }
     }
   }
+}
+
+FrameSource::~FrameSource() {
+#if defined(GF_FCM_HAS_TIP_CHANNEL)
+  if (tip_ch_) {
+    gf_channel_close(static_cast<GfChannel*>(tip_ch_));
+    tip_ch_ = nullptr;
+  }
+#endif
 }
 
 bool FrameSource::EnsureNegotiated() {
@@ -329,6 +376,8 @@ std::optional<Frame> FrameSource::Poll() {
     case FrameSourceKind::File:
     case FrameSourceKind::CarlaFile:
       return PollFile();
+    case FrameSourceKind::TipShm:
+      return PollTipShm();
   }
   return std::nullopt;
 }
@@ -471,6 +520,70 @@ std::optional<Frame> FrameSource::PollFile() {
   last_seq_ = seq;
   last_mtime_ns_ = mtime;
   return f;
+}
+
+bool FrameSource::EnsureTipOpen() {
+#if defined(GF_FCM_HAS_TIP_CHANNEL)
+  if (tip_ch_) {
+    return true;
+  }
+  tip_ch_ = gf_channel_open(tip_slot_.c_str());
+  if (!tip_ch_) {
+    return false;
+  }
+  std::uint32_t w = 0, h = 0, plane_bytes = 0, buffers = 0;
+  std::uint16_t fmt = 0;
+  if (gf_channel_info(static_cast<GfChannel*>(tip_ch_), &w, &h, &fmt, &plane_bytes,
+                  &buffers) != 0) {
+    return false;
+  }
+  negotiated_w_ = w;
+  negotiated_h_ = h;
+  negotiated_fmt_ = ParsePixelFormat(gf_channel_format_name(fmt));
+  tip_plane_.resize(plane_bytes);
+  negotiated_ = true;
+  std::cout << "gf-perception-fcm: tip_channel open " << tip_slot_ << " " << w
+            << "x" << h << " " << gf_channel_format_name(fmt) << std::endl;
+  return true;
+#else
+  (void)tip_slot_;
+  return false;
+#endif
+}
+
+std::optional<Frame> FrameSource::PollTipShm() {
+#if defined(GF_FCM_HAS_TIP_CHANNEL)
+  if (!EnsureTipOpen()) {
+    return std::nullopt;
+  }
+  std::uint32_t plane_bytes = 0;
+  std::uint64_t ts = 0;
+  std::uint32_t w = 0, h = 0;
+  std::uint16_t fmt = 0;
+  const int got = gf_channel_latest(
+      static_cast<GfChannel*>(tip_ch_), tip_plane_.data(),
+      static_cast<std::uint32_t>(tip_plane_.size()), &plane_bytes, &last_seq_, &ts,
+      &w, &h, &fmt);
+  if (got != 1) {
+    return std::nullopt;
+  }
+  negotiated_w_ = w;
+  negotiated_h_ = h;
+  negotiated_fmt_ = ParsePixelFormat(gf_channel_format_name(fmt));
+  Frame f;
+  f.meta.w = w;
+  f.meta.h = h;
+  f.meta.stride = w * 3u;
+  f.meta.timestamp_ns = ts;
+  f.meta.seq = last_seq_;
+  f.meta.format = negotiated_fmt_;
+  if (!ConvertPlaneToRgb(negotiated_fmt_, tip_plane_, w, h, &f.rgb)) {
+    return std::nullopt;
+  }
+  return f;
+#else
+  return std::nullopt;
+#endif
 }
 
 }  // namespace gf_fcm

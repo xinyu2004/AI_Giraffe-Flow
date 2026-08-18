@@ -2,21 +2,23 @@
 
 SIL ≈ HIL（仅工具链不同）。配置真相 = gf-config → compose 生成物。
 
-**产品主路径（四入口）**
+**产品主路径**
 
 | Script | Purpose |
 |--------|---------|
-| [compile_sil.sh](compile_sil.sh) | host：compose → generate → cmake → ctest |
-| [compile_hil.sh](compile_hil.sh) | 交叉编译 → `build-hil/` |
-| [run_sil.sh](run_sil.sh) | 主链 bring-up；`live_tap` 有效时自动 Foxglove WS |
-| [run_hil.sh](run_hil.sh) | 板端对等（部署后续） |
-| [_common.sh](_common.sh) | 共享路径 / compose |
+| [compile_sil.sh](compile_sil.sh) | 增量：mtime compose / 按需 cmake configure / build；默认跳过 ctest（`GF_CTEST=1`）；stage → `runtime/` + `giraffe_launch` |
+| [compile_hil.sh](compile_hil.sh) | 交叉编译 → `build-hil/`；同样按需 configure |
+| [stage_sil_runtime.sh](stage_sil_runtime.sh) | 打 `runtime/` 包（默认**不**拷 `platform/`；`GF_STAGE_PLATFORM=1` 才拷） |
+| [run_sil.sh](run_sil.sh) | compile → EM；默认挂 [GMT_depend_launch.sh](GMT_depend_launch.sh) |
+| [GMT_depend_launch.sh](GMT_depend_launch.sh) | GMT 旁路：端口预检 + Foxglove / inject / DoIP / carla_bridge |
+| [run_hil.sh](run_hil.sh) | 板端提示（日常仍用 SIL） |
+| [_common.sh](_common.sh) | 共享路径 / mtime 门禁 |
 
 **FuSa 产物（非主路径，与 `fusa/scripts/run_cases.sh` 独立）**
 
 | Script | Purpose |
 |--------|---------|
-| [generate_fusa_artifacts.sh](generate_fusa_artifacts.sh) | compose/SOR/lineage（+可选 smoke）→ `fusa/packs/oem_a_afc_with_uss/` |
+| [generate_fusa_artifacts.sh](generate_fusa_artifacts.sh) | FuSa evidence → `fusa/packs/oem_a_afc_with_uss/`；发版：`GF_FUSA_PACK_RELEASE=1`（经 `smoke_release.sh`） |
 
 ```bash
 # 主路径（默认主机 GCC）
@@ -40,6 +42,10 @@ GF_CC=clang GF_CXX=clang++ GF_BUILD_DIR=$PWD/build-clang \
 | `GF_CC` / `GF_CXX` | 主机编译器 |
 | `GF_SIL_TOOLCHAIN_FILE` | 可选 CMake toolchain（覆盖 CC/CXX） |
 | `GF_BUILD_DIR` | SIL 输出（默认 `projects/.../build-sil`） |
+| `GF_FORCE_COMPILE=1` | 强制 compose + cmake configure + stage |
+| `GF_CTEST=1` | 跑 ctest（默认跳过） |
+| `GF_GMT_DEPEND=0` | 只 EM，不挂 GMT 旁路 |
+| `GF_STAGE_PLATFORM=1` | stage 时拷贝 `platform/*.yaml`（默认不拷；板端零行为 yaml） |
 | `GF_OBS_OUT` | session/MCAP 根（默认 `${BUILD}/observability`） |
 | `GF_DEPS_PREFIX` | 依赖前缀；换编译器时避免与 GCC deps 混链 |
 | `GF_INJECT_SESSION` | 若设置：回灌（**不起 gateway**；跑 `gf_iox_obs_inject`） |
@@ -49,7 +55,7 @@ GF_CC=clang GF_CXX=clang++ GF_BUILD_DIR=$PWD/build-clang \
 | `GF_LIVE_TEE` | live_tap 时 tee NDJSON→session（默认 `1`；`0` 关闭） |
 | `GF_LIVE_SESSION` | tee 目标（默认 `${BUILD}/observability/session_live.jsonl`） |
 
-**验证 / smoke**（非产品路径）→ [`verify/`](verify/)（与工程同树；仓根 `scripts/verify/oem_a_*` 仅为 deprecated shim）
+**验证 / smoke**（非产品路径）→ [`verify/`](verify/)
 
 | gf-config | compile_sil | run_sil |
 |-----------|-------------|---------|

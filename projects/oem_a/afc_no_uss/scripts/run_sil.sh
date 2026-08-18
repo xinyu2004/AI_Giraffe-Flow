@@ -2,7 +2,8 @@
 # SIL run (product path): RouDi + wiring main chain; optional Foxglove from observability.json.
 # Optional G3 inject mode: replace gateway EgoMotion with session replay (no dual publish).
 #
-# Config truth = gf-config → compose → generated/observability.json + build binaries.
+# Config truth = gf-config Verify(+Generate) → generated/ + compile binaries.
+# compile/run do NOT compose.
 #   live_tap effective → gf_iox_obs_tap | GMT bridge foxglove --ws
 #   else → main chain only until Ctrl+C
 #
@@ -47,31 +48,47 @@
 #   GF_PHM_FAULT_MS    DoIP 开且未显式设置时默认 500 — 真实 AliveMissed → GF_PER_DIR → DEM 0x19
 #   GF_PHM_FAULT_TARGET  默认 planning（fcm|planning|gateway）；其它进程 fault=0
 #                      关闭 PHM 注入：GF_PHM_FAULT_MS=0
-#   frame_ingest（行为）：compose→frame_ingest_config.hpp（勿手改 JSON）
-#   调试覆盖仍可用 GF_FRAME_SOURCE / GF_START_CARLA_BRIDGE / GF_CARLA_*（见 SIM_SPIKE.md）
+#   frame_ingest：tip 开时由 EM 启 bin/gf_frame_ingest（compose filter）
+#   GF_FRAME_SOURCE   帧源（与 GF_INJECT_MODE 正交）：isp|carla|replay|colorbar|none
+#                    默认 isp（freeze SOP）；CARLA SIL 设 carla；GF_INJECT_FRAMES_DIR 未设时暗示 replay
+#                    兼容别名：GF_ACTIVE_SOURCE / GF_TIP_SOURCE；synth → colorbar
+#   GF_CARLA_*：仅调试覆盖；默认路径在 ingest/gateway 二进制内
+#   GF_GMT_DEPEND=0：只跑 EM（不挂 GMT 旁路）；默认 1 → GMT_depend_launch.sh
+#                    （旧名 GF_SIL_FLOW 仍可作别名）
 #   # playhead (GMT stream; session file optional):
 #   GF_INJECT_MODE=playhead bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
 #   # then GMT gui → open session → 回灌 tab → connect 127.0.0.1:8767
 #   # continuous still needs a file:
 #   GF_INJECT_SESSION=… bash …/run_sil.sh
+#
+# Product entry: systemd/init → gf_em_daemon (see common/deploy/). giraffe_launch = debug only.
+# GMT extras: scripts/GMT_depend_launch.sh (+ obs_inject.sh); not part of runtime package.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
+# shellcheck source=obs_inject.sh
+source "${SCRIPT_DIR}/obs_inject.sh"
 
 gf_project_env
 
 ROOT="${ROOT}"
 BUILD="${GF_BUILD_DIR:-${BUILD_SIL}}"
+RUNTIME="${GF_RUNTIME_DIR:-${BUILD}/runtime}"
+export GF_RUNTIME_DIR="${RUNTIME}"
+export GF_PROJECT_DIR="${PROJECT_DIR}"
 HOST="${GF_WS_HOST:-0.0.0.0}"
 PORT="${GF_WS_PORT:-8765}"
-export GF_PLATFORM_DIR="${GF_PLATFORM_DIR:-${PROJECT_DIR}/platform}"
+# Authoring tree only if present; product EM uses deploy_config.hpp (no board yaml).
+if [[ -z "${GF_PLATFORM_DIR:-}" && -d "${PROJECT_DIR}/platform" ]]; then
+  export GF_PLATFORM_DIR="${PROJECT_DIR}/platform"
+fi
 # Remember whether caller set PHM fault (empty = unset) before applying defaults.
 _PHM_FAULT_USER="${GF_PHM_FAULT_MS-}"
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
 export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-planning}"
-export LD_LIBRARY_PATH="${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+export LD_LIBRARY_PATH="${RUNTIME}/lib:${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 # COVESA libdlt from in-tree build (not apt)
 _DLT_LIBDIR="${BUILD}/_dep-manifest/dlt-daemon/src/lib"
 if [[ -d "${_DLT_LIBDIR}" ]]; then
@@ -106,16 +123,36 @@ elif [[ "${DRIVE_HINT}" == "playhead" || "${DRIVE_HINT}" == "controlled" || "${D
   fi
 fi
 
+# Optional debug: GF_EGO_SOURCE=inject (product freeze is in gateway binary).
+if [[ "${GF_EGO_SOURCE:-}" == "inject" && "${INJECT_ON}" != "1" ]]; then
+  export GF_INJECT_MODE="${GF_INJECT_MODE:-playhead}"
+  DRIVE_HINT="${GF_INJECT_MODE}"
+  INJECT_ON=1
+  if [[ -n "${GF_INJECT_DUT:-}" || -n "${GF_INJECT_APPS:-}" ]]; then
+    INJECT_MODE="b2"
+  else
+    INJECT_MODE="b1"
+  fi
+  echo "${TAG} GF_EGO_SOURCE=inject → inject on mode=${INJECT_MODE}"
+fi
+if [[ "${GF_EGO_SOURCE:-}" == "carla" && "${INJECT_ON}" == "1" ]]; then
+  echo "${TAG} ERROR: GF_EGO_SOURCE=carla conflicts with inject" >&2
+  exit 2
+fi
+if [[ -n "${GF_INJECT_FRAMES_DIR:-}" ]]; then
+  echo "${TAG} inject frames ← ${GF_INJECT_FRAMES_DIR}"
+fi
+
 # Which consumer apps to start (keys: uss fcm planning). Empty until resolved.
 RUN_APPS=""
 
 if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
   bash "${SCRIPT_DIR}/compile_sil.sh"
+  echo "${TAG} compile/stage done → bring-up EM (+ GMT depend unless GF_GMT_DEPEND=0)"
 fi
 
-# Behavior freeze from compose hpp (not tip JSON / .env).
+# deploy_config.hpp still grepped for Flow/EM (frame_ingest freeze is in binaries only).
 DEPLOY_HPP="${PROJECT_DIR}/generated/include/gf_gen/deploy_config.hpp"
-FRAME_HPP="${PROJECT_DIR}/generated/include/gf_gen/frame_ingest_config.hpp"
 _gf_hpp_bool() {
   local hpp="$1" key="$2" default="$3"
   if [[ -f "${hpp}" ]] && grep -qE "inline constexpr bool ${key} = true" "${hpp}"; then
@@ -150,58 +187,12 @@ _gf_hpp_u32() {
   fi
   echo "${default}"
 }
-# frame_ingest → export GF_* for carla_bridge child; user-set GF_* wins (debug).
-if [[ ! -f "${FRAME_HPP}" ]]; then
-  echo "${TAG} WARN: missing ${FRAME_HPP} — run compose so frame_ingest is frozen" >&2
-fi
-if [[ -z "${GF_START_CARLA_BRIDGE+x}" ]]; then
-  export GF_START_CARLA_BRIDGE="$(_gf_hpp_bool "${FRAME_HPP}" kBridgeEnabled 0)"
-fi
-if [[ -z "${GF_FRAME_SOURCE+x}" ]]; then
-  export GF_FRAME_SOURCE="$(_gf_hpp_cstr "${FRAME_HPP}" kFrameSource none)"
-fi
-if [[ -z "${GF_PERCEPTION_BACKEND+x}" ]]; then
-  export GF_PERCEPTION_BACKEND="$(_gf_hpp_cstr "${FRAME_HPP}" kPerceptionBackend stub)"
-fi
-if [[ -z "${GF_CARLA_FRAME_PATH+x}" ]]; then
-  export GF_CARLA_FRAME_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kFramePath /tmp/gf_front.yuv)"
-fi
-if [[ -z "${GF_CARLA_CMD_PATH+x}" ]]; then
-  export GF_CARLA_CMD_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kCmdPath /tmp/gf_carla_cmd.json)"
-fi
-if [[ -z "${GF_CARLA_EGO_PATH+x}" ]]; then
-  export GF_CARLA_EGO_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kEgoPath /tmp/gf_carla_ego.json)"
-fi
-if [[ -z "${GF_CARLA_TRUTH_PATH+x}" ]]; then
-  export GF_CARLA_TRUTH_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kTruthPath /tmp/gf_carla_truth.json)"
-fi
-if [[ -z "${GF_PLANNING_CTRL_PATH+x}" ]]; then
-  export GF_PLANNING_CTRL_PATH="$(_gf_hpp_cstr "${FRAME_HPP}" kCtrlPath /tmp/gf_planning_ctrl.json)"
-fi
-if [[ -z "${GF_PIXEL_FORMAT+x}" ]]; then
-  export GF_PIXEL_FORMAT="$(_gf_hpp_cstr "${FRAME_HPP}" kPixelFormat nv12)"
-fi
-if [[ -z "${GF_EGO_SOURCE+x}" ]]; then
-  export GF_EGO_SOURCE="$(_gf_hpp_cstr "${FRAME_HPP}" kEgoSource gateway)"
-fi
-if [[ -z "${GF_CARLA_CAM_W+x}" ]]; then
-  export GF_CARLA_CAM_W="$(_gf_hpp_u32 "${FRAME_HPP}" kFrameW 640)"
-fi
-if [[ -z "${GF_CARLA_CAM_H+x}" ]]; then
-  export GF_CARLA_CAM_H="$(_gf_hpp_u32 "${FRAME_HPP}" kFrameH 480)"
-fi
-# Product scenarios live under repo carla_scenarios/ (not gf-config).
-export GF_SAMPLES_DIR="${GF_SAMPLES_DIR:-${PROJECT_DIR}/samples}"
-export GF_SCENARIOS_DIR="${GF_SCENARIOS_DIR:-${ROOT}/carla_scenarios}"
-# HIL: two CARLA Python clients, one UE server.
-#   SKU carla.env     → this SIL / frame_ingest / carla_bridge (auto-loaded here)
-#   carla_scenarios/carla.env → scenario machine only (never steal its CARLA_HOST here)
-# Process env wins. Tip /tmp/gf_front.yuv is LOCAL on this SIL after RPC.
+
+# Optional CARLA host/python for EM-spawned gf_frame_ingest (children inherit).
+# Tip/cmd paths: compose→hpp→binary; debug override via env or carla.env (no shell defaults).
+_SKU_CARLA_ENV="${PROJECT_DIR}/carla.env"
 _gf_load_carla_env_file() {
   local f="$1"
-  shift
-  local skip_host=0
-  [[ "${1:-}" == "--skip-carla-host" ]] && skip_host=1
   [[ -f "${f}" ]] || return 1
   local line key val
   while IFS= read -r line || [[ -n "${line}" ]]; do
@@ -214,100 +205,64 @@ _gf_load_carla_env_file() {
     val="${line#*=}"
     key="$(echo "${key}" | sed -e 's/[[:space:]]//g')"
     val="$(echo "${val}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//')"
-    if [[ "${skip_host}" == "1" && "${key}" == "CARLA_HOST" ]]; then
-      continue
-    fi
     case "${key}" in
-      CARLA_HOST|CARLA_PORT|GF_CARLA_WAIT_S|GF_CARLA_CONNECT_TIMEOUT_S|GF_CARLA_PYTHON|GF_CARLA_FRAME_PATH|GF_CARLA_EGO_PATH|GF_CARLA_CMD_PATH|GF_CARLA_TRUTH_PATH|GF_PIXEL_FORMAT)
+      CARLA_HOST|CARLA_PORT|GF_CARLA_WAIT_S|GF_CARLA_CONNECT_TIMEOUT_S|GF_CARLA_PYTHON|GF_CARLA_FRAME_PATH|GF_CARLA_EGO_PATH|GF_CARLA_CMD_PATH|GF_CARLA_TRUTH_PATH|GF_PIXEL_FORMAT|GF_PLANNING_CTRL_PATH|GF_FRAME_SOURCE|GF_ACTIVE_SOURCE|GF_TIP_SOURCE)
         if [[ -z "${!key+x}" || -z "${!key}" ]]; then
           export "${key}=${val}"
         fi
         ;;
     esac
   done <"${f}"
-  echo "${TAG} loaded CARLA env ← ${f}${skip_host:+ (skip CARLA_HOST)}"
+  echo "${TAG} loaded CARLA env ← ${f}"
   return 0
 }
-_SKU_CARLA_ENV="${PROJECT_DIR}/carla.env"
-_SCEN_CARLA_ENV="${GF_SCENARIOS_DIR}/carla.env"
-[[ -f "${_SCEN_CARLA_ENV}" ]] || _SCEN_CARLA_ENV="${ROOT}/carla_scenarios/carla.env"
 _CARLA_ENV_SKU=""
-_CARLA_ENV_SCEN=""
 if _gf_load_carla_env_file "${_SKU_CARLA_ENV}"; then
   _CARLA_ENV_SKU="${_SKU_CARLA_ENV}"
 else
-  echo "${TAG} WARN: missing ${_SKU_CARLA_ENV}" >&2
-  echo "${TAG}       HIL SIL should: cp carla.env.example carla.env  # UE IP + GF_CARLA_PYTHON" >&2
-  echo "${TAG}       (do not use carla_scenarios/carla.env CARLA_HOST — that file is for the scenario machine)" >&2
-fi
-# Generic PORT/WAIT/etc. from product scenarios; never import scenario CARLA_HOST.
-if _gf_load_carla_env_file "${_SCEN_CARLA_ENV}" --skip-carla-host; then
-  _CARLA_ENV_SCEN="${_SCEN_CARLA_ENV}"
+  echo "${TAG} WARN: missing ${_SKU_CARLA_ENV} (optional; cp carla.env.example carla.env)" >&2
 fi
 export CARLA_HOST="${CARLA_HOST:-127.0.0.1}"
 export CARLA_PORT="${CARLA_PORT:-2000}"
-export GF_CARLA_WAIT_S="${GF_CARLA_WAIT_S:-0}"
-echo "${TAG} ========== frame_ingest status =========="
-echo "${TAG}   freeze: source=${GF_FRAME_SOURCE} pixel=${GF_PIXEL_FORMAT} ego=${GF_EGO_SOURCE}"
-echo "${TAG}   bridge.enabled(GF_START_CARLA_BRIDGE)=${GF_START_CARLA_BRIDGE}"
-echo "${TAG}   tip (SIL local file, written by carla_bridge AFTER UE connect):"
-echo "${TAG}     frame=${GF_CARLA_FRAME_PATH} ego=${GF_CARLA_EGO_PATH} truth=${GF_CARLA_TRUTH_PATH}"
-echo "${TAG}   cmd=${GF_CARLA_CMD_PATH}  cam=${GF_CARLA_CAM_W}x${GF_CARLA_CAM_H}"
-echo "${TAG}   CARLA_HOST=${CARLA_HOST} CARLA_PORT=${CARLA_PORT} GF_CARLA_WAIT_S=${GF_CARLA_WAIT_S}"
-echo "${TAG}   carla.env sku=${_CARLA_ENV_SKU:-none} scenarios=${_CARLA_ENV_SCEN:-none}"
-echo "${TAG}   roles: UE=server  carla_bridge=client  scenarios=client (often other host)"
-if [[ "${GF_START_CARLA_BRIDGE}" == "1" ]] && [[ -z "${_CARLA_ENV_SKU}" ]]; then
-  echo "${TAG}   WARN: no SKU carla.env — CARLA_HOST may be wrong for HIL (localhost = no remote UE)" >&2
-fi
-if [[ "${GF_START_CARLA_BRIDGE}" == "1" ]] && [[ "${CARLA_HOST}" == "127.0.0.1" || "${CARLA_HOST}" == "localhost" ]]; then
-  echo "${TAG}   WARN: CARLA_HOST is localhost — on Linux SIL, UE is usually Windows; set SKU carla.env" >&2
-  echo "${TAG}         tip stays missing until bridge connects to the UE RPC port :${CARLA_PORT}" >&2
-fi
-if [[ "${GF_START_CARLA_BRIDGE}" != "1" ]]; then
-  echo "${TAG}   WARN: bridge OFF — no tip writer; FCM will stay no_frame unless inject/file" >&2
-fi
-echo "${TAG} samples=${GF_SAMPLES_DIR} scenarios=${GF_SCENARIOS_DIR}"
-echo "${TAG} ========================================="
 
-# ego_source mutual exclusion (gateway | inject | carla).
-case "${GF_EGO_SOURCE}" in
-  inject)
-    if [[ "${INJECT_ON}" != "1" ]]; then
-      export GF_INJECT_MODE="${GF_INJECT_MODE:-playhead}"
-      DRIVE_HINT="${GF_INJECT_MODE}"
-      INJECT_ON=1
-      if [[ -n "${GF_INJECT_DUT:-}" || -n "${GF_INJECT_APPS:-}" ]]; then
-        INJECT_MODE="b2"
-      else
-        INJECT_MODE="b1"
-      fi
-      echo "${TAG} ego_source=inject → inject on mode=${INJECT_MODE} drive=${DRIVE_HINT} (gateway Ego off)"
-    fi
-    # Prefer frame volume replay over live carla_bridge when injecting images.
-    if [[ -n "${GF_INJECT_FRAMES_DIR:-}" ]]; then
-      export GF_START_CARLA_BRIDGE=0
-      echo "${TAG} inject frames ← ${GF_INJECT_FRAMES_DIR} (carla_bridge off)"
-    fi
-    ;;
-  carla)
-    if [[ "${INJECT_ON}" == "1" ]]; then
-      echo "${TAG} ERROR: ego_source=carla conflicts with inject (mutual exclusion)" >&2
-      exit 2
-    fi
-    ;;
-  gateway|"")
-    ;;
-  *)
-    echo "${TAG} WARN: unknown GF_EGO_SOURCE=${GF_EGO_SOURCE} (use gateway|inject|carla)" >&2
-    ;;
-esac
+# Frame source module (orthogonal to GF_INJECT_MODE ego/SOA inject).
+# Freeze SOP default is isp; SIL overrides via GF_FRAME_SOURCE / carla.env.
+#   carla | replay | colorbar (alias synth) | isp | none
+# Compat: GF_TIP_SOURCE / GF_ACTIVE_SOURCE → GF_FRAME_SOURCE
+if [[ -z "${GF_FRAME_SOURCE:-}" && -n "${GF_TIP_SOURCE:-}" ]]; then
+  export GF_FRAME_SOURCE="${GF_TIP_SOURCE}"
+fi
+if [[ -n "${GF_INJECT_FRAMES_DIR:-}" && -z "${GF_FRAME_SOURCE:-}" && -z "${GF_ACTIVE_SOURCE:-}" ]]; then
+  export GF_FRAME_SOURCE=replay
+  echo "${TAG} GF_INJECT_FRAMES_DIR set → GF_FRAME_SOURCE=replay"
+fi
+if [[ -z "${GF_FRAME_SOURCE:-}" ]]; then
+  if [[ -n "${GF_ACTIVE_SOURCE:-}" ]]; then
+    export GF_FRAME_SOURCE="${GF_ACTIVE_SOURCE}"
+  else
+    export GF_FRAME_SOURCE=isp
+  fi
+fi
+if [[ "${GF_FRAME_SOURCE}" == "synth" ]]; then
+  export GF_FRAME_SOURCE=colorbar
+fi
+export GF_ACTIVE_SOURCE="${GF_ACTIVE_SOURCE:-${GF_FRAME_SOURCE}}"
+
+echo "${TAG} ========== runtime / tip =========="
+echo "${TAG}   runtime=${RUNTIME}"
+echo "${TAG}   tip/ego freeze: gf_frame_ingest + FCM/gateway (EM starts ingest when tip enabled)"
+echo "${TAG}   GF_FRAME_SOURCE=${GF_FRAME_SOURCE} (ego inject mode=${DRIVE_HINT})"
+echo "${TAG}   CARLA_HOST=${CARLA_HOST} CARLA_PORT=${CARLA_PORT} carla.env=${_CARLA_ENV_SKU:-none}"
+echo "${TAG}   GF_CARLA_* paths: unset=hpp defaults; set only for debug override"
+echo "${TAG} ================================="
+
 
 # Flow/EM hints from deploy_config.hpp (soft for Flow; EM uses compiled table).
 _gf_deploy_bool() {
   _gf_hpp_bool "${DEPLOY_HPP}" "$1" "$2"
 }
 if [[ ! -f "${DEPLOY_HPP}" ]]; then
-  echo "${TAG} WARN: missing ${DEPLOY_HPP} — run compose + compile_sil (EM needs GF_HAS_DEPLOY_CONFIG)" >&2
+  echo "${TAG} WARN: missing ${DEPLOY_HPP} — gf-config Verify then compile_sil (EM needs GF_HAS_DEPLOY_CONFIG)" >&2
 fi
 EM_ON="$(_gf_deploy_bool kEm 1)"
 DLT_ON="$(_gf_deploy_bool kDlt 0)"
@@ -532,19 +487,30 @@ PY
   export GF_INJECT_SERVICES
 fi
 
-ROUDI="${BUILD}/iox-roudi"
-GW="${BUILD}/apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway"
-FCM="${BUILD}/apps/perception/fcm/gf_perception_fcm"
-USS="${BUILD}/apps/sensing/uss/gf_sensing_uss"
-PLAN="${BUILD}/apps/planning/driving/gf_planning_driving"
-TAP="${BUILD}/apps/debug_bridge/iox_obs_tap/gf_iox_obs_tap"
-INJ="${BUILD}/apps/debug_bridge/iox_obs_inject/gf_iox_obs_inject"
-DOIP="${BUILD}/gf_doip_ota_server"
-DLT_DAEMON="${BUILD}/_dep-manifest/dlt-daemon/src/daemon/dlt-daemon"
+# Product binaries live under runtime/ (board-complete tree).
+ROUDI="${RUNTIME}/bin/iox-roudi"
+GW="${RUNTIME}/bin/gf_vehicle_can_gateway"
+FCM="${RUNTIME}/bin/gf_perception_fcm"
+USS="${RUNTIME}/bin/gf_sensing_uss"
+PLAN="${RUNTIME}/bin/gf_planning_driving"
+TAP="${RUNTIME}/bin/gf_iox_obs_tap"
+INJ="${RUNTIME}/bin/gf_iox_obs_inject"
+DOIP="${RUNTIME}/bin/gf_doip_ota_server"
+DLT_DAEMON="${RUNTIME}/bin/dlt-daemon"
 DLT_RECEIVE="${BUILD}/_dep-manifest/dlt-daemon/src/console/dlt-receive"
-EM_BIN="${BUILD}/middleware/exec/gf_em_daemon"
-# EM/Flow flags already from deploy_config.hpp. Script starts EM only.
-IOX_TOML="${PROJECT_DIR}/generated/iox_roudi.toml"
+EM_BIN="${RUNTIME}/bin/gf_em_daemon"
+# EM build_dir must be runtime root so deploy_config bin/* resolves.
+export GF_BUILD_DIR="${RUNTIME}"
+IOX_TOML="${RUNTIME}/etc/iox_roudi.toml"
+export GF_IOX_TOML="${IOX_TOML}"
+# Staged platform/ only when GF_STAGE_PLATFORM=1; else unset for hpp-only EM.
+if [[ -d "${RUNTIME}/platform" ]]; then
+  export GF_PLATFORM_DIR="${RUNTIME}/platform"
+else
+  unset GF_PLATFORM_DIR || true
+fi
+export GF_RUNTIME_DIR="${RUNTIME}"
+export LD_LIBRARY_PATH="${RUNTIME}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
 NEED_BINS=()
 if [[ "${EM_ON}" == "1" ]]; then
@@ -599,11 +565,11 @@ for bin in "${NEED_BINS[@]}"; do
   fi
 done
 if [[ "${IOX_ON}" == "1" && ! -f "${IOX_TOML}" ]]; then
-  echo "${TAG} ERROR: missing ${IOX_TOML} (compose with req.bindings iceoryx)" >&2
+  echo "${TAG} ERROR: missing ${IOX_TOML} (gf-config Verify with req.bindings iceoryx)" >&2
   exit 1
 fi
 if [[ ! -f "${DEPLOY_HPP}" ]]; then
-  echo "${TAG} ERROR: missing ${DEPLOY_HPP} (compose) — EM needs compile-time deploy_config" >&2
+  echo "${TAG} ERROR: missing ${DEPLOY_HPP} (gf-config Verify) — EM needs compile-time deploy_config" >&2
   exit 1
 fi
 
@@ -640,176 +606,6 @@ host_info() {
 LIVE_PORT="${GF_LIVE_PORT:-8766}"
 INJ_PORT="${GF_INJECT_PORT:-8767}"
 
-# 释放上次 Ctrl+C 未清干净 / 重复开跑 留下的 bridge / inject / DoIP（EADDRINUSE / iceoryx same-name）
-gf_sil_preflight_ports() {
-  export GF_SIL_PORT_WS="${PORT}"
-  export GF_SIL_PORT_LIVE="${LIVE_PORT}"
-  export GF_SIL_PORT_INJ="${INJ_PORT}"
-  export GF_SIL_PORT_DOIP="${DOIP_PORT}"
-  export GF_SIL_KILL_STALE="${GF_SIL_KILL_STALE:-1}"
-  export GF_SIL_INJECT_ON="${INJECT_ON}"
-  export GF_SIL_LIVE_ON="${LIVE_ON}"
-  export GF_SIL_DOIP_ON="${DOIP_ON}"
-  python - <<'PY'
-import os, re, signal, subprocess, time
-
-tag = "[afc_no_uss]"
-
-def cmdline(pid: int) -> str:
-    try:
-        return open(f"/proc/{pid}/cmdline", "rb").read().replace(b"\0", b" ").decode(
-            "utf-8", "replace"
-        )
-    except OSError:
-        return ""
-
-def ss_listeners():
-    try:
-        out = subprocess.check_output(["ss", "-ltnp"], text=True, stderr=subprocess.DEVNULL)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return []
-    rows = []
-    for line in out.splitlines():
-        mport = re.search(r":(\d+)\s", line)
-        if not mport:
-            continue
-        port = int(mport.group(1))
-        for name, pid in re.findall(r'\("([^"]+)",pid=(\d+)', line):
-            rows.append((port, name, int(pid)))
-    return rows
-
-def ancestor_pids(start: int) -> set[int]:
-    """Exclude self + parents (e.g. bash run_sil / timeout wrapping this python)."""
-    seen: set[int] = set()
-    pid = start
-    while pid > 1 and pid not in seen:
-        seen.add(pid)
-        try:
-            with open(f"/proc/{pid}/stat", "r", encoding="utf-8") as f:
-                # pid (comm) state ppid ... — comm may contain spaces/parens
-                body = f.read()
-            rparen = body.rfind(")")
-            if rparen < 0:
-                break
-            parts = body[rparen + 2 :].split()
-            pid = int(parts[1])  # ppid
-        except (OSError, ValueError, IndexError):
-            break
-    return seen
-
-def pids_matching(pattern: str) -> list[int]:
-    try:
-        out = subprocess.check_output(["pgrep", "-f", pattern], text=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return []
-    me = ancestor_pids(os.getpid())
-    return [int(x) for x in out.split() if int(x) not in me]
-
-wanted = set()
-if os.environ.get("GF_SIL_LIVE_ON") == "1":
-    wanted.add(int(os.environ["GF_SIL_PORT_WS"]))
-    wanted.add(int(os.environ["GF_SIL_PORT_LIVE"]))
-if os.environ.get("GF_SIL_INJECT_ON") == "1":
-    wanted.add(int(os.environ["GF_SIL_PORT_INJ"]))
-if os.environ.get("GF_SIL_DOIP_ON") == "1":
-    wanted.add(int(os.environ["GF_SIL_PORT_DOIP"]))
-
-kill_stale = os.environ.get("GF_SIL_KILL_STALE", "1") == "1"
-listeners = [(p, n, pid) for p, n, pid in ss_listeners() if p in wanted]
-other_run_sil = pids_matching("afc_no_uss/scripts/run_sil.sh")
-
-if not listeners and not other_run_sil:
-    if os.environ.get("GF_SIL_INJECT_ON") == "1" and kill_stale:
-        subprocess.run(
-            ["pkill", "-f", "gf_iox_obs_inject"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    if os.environ.get("GF_SIL_DOIP_ON") == "1" and kill_stale:
-        subprocess.run(
-            ["pkill", "-f", "gf_doip_ota_server"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    raise SystemExit(0)
-
-if listeners:
-    print(f"{tag} port busy (leftover SIL/GMT?):", flush=True)
-    for p, n, pid in listeners:
-        print(f"{tag}   :{p}  {n} pid={pid}", flush=True)
-if other_run_sil:
-    print(f"{tag} other run_sil still running: pids={other_run_sil}", flush=True)
-
-ours, others = [], []
-for p, n, pid in listeners:
-    cmd = cmdline(pid)
-    if (
-        "GMT" in cmd
-        or "gf_gmt" in cmd
-        or "bridge" in cmd
-        or "gf_iox_obs_inject" in cmd
-        or "iox_obs_inject" in cmd
-        or "gf_doip_ota_server" in cmd
-        or n.startswith("gf_iox_obs")
-        or n.startswith("gf_doip")
-    ):
-        ours.append((p, n, pid, cmd))
-    else:
-        others.append((p, n, pid, cmd))
-
-if not kill_stale:
-    print(f"{tag} ERROR: Address already in use / previous SIL still up.", flush=True)
-    print(f"{tag}   → Ctrl+C the other terminal's run_sil, or re-run with:", flush=True)
-    print(f"{tag}   GF_SIL_KILL_STALE=1 bash projects/oem_a/afc_no_uss/scripts/run_sil.sh …", flush=True)
-    raise SystemExit(1)
-
-targets = {pid for _, _, pid, _ in ours} | {pid for _, _, pid, _ in others}
-targets.update(other_run_sil)
-print(f"{tag} GF_SIL_KILL_STALE=1 → stopping stale pids {sorted(targets)}", flush=True)
-for pid in sorted(targets):
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        pass
-subprocess.run(
-    ["pkill", "-f", "gf_iox_obs_inject"],
-    check=False,
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL,
-)
-subprocess.run(
-    ["pkill", "-f", "gf_doip_ota_server"],
-    check=False,
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL,
-)
-subprocess.run(
-    ["pkill", "-f", "GMT bridge"],
-    check=False,
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL,
-)
-time.sleep(0.6)
-for pid in sorted(targets):
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except OSError:
-        pass
-time.sleep(0.3)
-left = [(p, n, pid) for p, n, pid in ss_listeners() if p in wanted]
-if left:
-    print(f"{tag} ERROR: still busy after kill:", flush=True)
-    for p, n, pid in left:
-        print(f"{tag}   :{p} {n} pid={pid} — {cmdline(pid)[:100]}", flush=True)
-    raise SystemExit(1)
-print(f"{tag} stale listeners cleared", flush=True)
-PY
-}
-
-gf_sil_preflight_ports
-
 cleanup() {
   set +e
   for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${FRAME_INGEST_STAT_PID:-}" "${BRIDGE_TAIL_PID:-}" "${CARLA_BRIDGE_PID:-}" "${EM_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}" "${DLT_PID:-}"; do
@@ -836,19 +632,19 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
+echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR:-(hpp-only)} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
 
 # =============================================================================
 # --- EM (entry) -----------------------------------------------------------------
 # EM scope: Giraffe platform daemons (dlt?/RouDi?/…) + SOA apps (deploy_config.hpp).
-# NOT EM: tap / Foxglove / GMT inject / frame_ingest / carla_bridge / DoIP — those
-# are run_sil Flow/GMT segments (or app compile-time freeze), not em_launch rows.
+# NOT EM: tap / Foxglove / GMT inject / DoIP — those
+# are GMT_depend_launch. host.frame_ingest is EM when tip enabled.
 # systemd (board) is only a protection layer around the same EM entry.
 # =============================================================================
 DLT_PID=""
 ROUDI_PID=""
 EM_PID=""
-host_info "run_sil begin platform=${GF_PLATFORM_DIR} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
+host_info "run_sil begin platform=${GF_PLATFORM_DIR:-(hpp-only)} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
 
 # Stale dlt/RouDi + IPC reclaim is inside EM StartAll (before Spawn host.*).
 
@@ -863,12 +659,15 @@ fi
 host_info "start EM mode=deploy_config dlt=${DLT_ON} roudi=${IOX_ON}"
 echo "${TAG} [EM] gf_em_daemon (deploy_config.hpp) → dlt?=${DLT_ON} RouDi?=${IOX_ON} → apps"
 : >"${LOG_DIR}/em_daemon.stdout"
-"${EM_BIN}" \
-  --platform "${GF_PLATFORM_DIR}" \
-  --build-dir "${BUILD}" \
-  --log-dir "${GF_EM_LOG_DIR}" \
-  --deadline-ms 0 \
-  >"${LOG_DIR}/em_daemon.stdout" 2>&1 &
+_EM_ARGS=(
+  --build-dir "${RUNTIME}"
+  --log-dir "${GF_EM_LOG_DIR}"
+  --deadline-ms 0
+)
+if [[ -n "${GF_PLATFORM_DIR:-}" && -d "${GF_PLATFORM_DIR}" ]]; then
+  _EM_ARGS+=(--platform "${GF_PLATFORM_DIR}")
+fi
+"${EM_BIN}" "${_EM_ARGS[@]}" >"${LOG_DIR}/em_daemon.stdout" 2>&1 &
 EM_PID=$!
 # Wait until EM has spawned planning (or timeout)
 _em_ready=0
@@ -901,540 +700,16 @@ if [[ "${_em_ready}" != "1" ]]; then
 fi
 host_info "EM ok pid=${EM_PID} (dlt/RouDi/apps via deploy_config)"
 # =============================================================================
-# --- Flow / GMT (not EM) — DoIP / carla_bridge / live Foxglove -----------------
+
 # =============================================================================
-
-if [[ "${DOIP_ON}" == "1" ]]; then
-  # GMT DEM: real PHM AliveMissed in apps → PersistDtc → shared GF_PER_DIR;
-  # DoIP 0x19 uses ReloadDtcsFromPer (no fake seed).
-  # Opt-out: GF_PHM_FAULT_MS=0 before run_sil.
-  if [[ -z "${_PHM_FAULT_USER}" ]]; then
-    export GF_PHM_FAULT_MS=500
-    export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-planning}"
-  fi
-  echo "${TAG} DoIP OTA server → TCP ${DOIP_PORT} (GMT OTA: 127.0.0.1:${DOIP_PORT})"
-  echo "${TAG} DEM: PHM fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET} per=${GF_PER_DIR}"
-  host_info "start DoIP OTA server port=${DOIP_PORT} per=${GF_PER_DIR} phm_fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET}"
-  : >"${LOG_DIR}/doip_ota.log"
-  # DoIP/UDS params from deploy_config.hpp (export for gf_doip_ota_server).
-  if [[ -z "${GF_DIAG_S3_SERVER_MS+x}" ]]; then
-    export GF_DIAG_S3_SERVER_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagS3ServerMs 5000)"
-  fi
-  if [[ -z "${GF_DIAG_TP_PERIOD_MS+x}" ]]; then
-    export GF_DIAG_TP_PERIOD_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagTesterPresentPeriodMs 2000)"
-  fi
-  if [[ -z "${GF_DIAG_P2_SERVER_MS+x}" ]]; then
-    export GF_DIAG_P2_SERVER_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagP2ServerMs 50)"
-  fi
-  if [[ -z "${GF_DIAG_P2STAR_SERVER_MS+x}" ]]; then
-    export GF_DIAG_P2STAR_SERVER_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagP2StarServerMs 5000)"
-  fi
-  if [[ -z "${GF_DIAG_SECURITY_DELAY_MS+x}" ]]; then
-    export GF_DIAG_SECURITY_DELAY_MS="$(_gf_hpp_int "${DEPLOY_HPP}" kDiagSecurityDelayMs 10000)"
-  fi
-  if [[ -z "${GF_OTA_TRANSFER_MODE+x}" ]]; then
-    export GF_OTA_TRANSFER_MODE="$(_gf_hpp_cstr "${DEPLOY_HPP}" kOtaTransferMode request_file_transfer)"
-  fi
-  if [[ -z "${GF_OTA_REQUIRE_PROG_SESSION+x}" ]]; then
-    export GF_OTA_REQUIRE_PROG_SESSION="$(_gf_hpp_bool "${DEPLOY_HPP}" kOtaRequireProgSession 1)"
-  fi
-  if [[ -z "${GF_OTA_REQUIRE_SECURITY+x}" ]]; then
-    export GF_OTA_REQUIRE_SECURITY="$(_gf_hpp_bool "${DEPLOY_HPP}" kOtaRequireSecurity 1)"
-  fi
-  if [[ -z "${GF_OTA_MAX_BLOCK+x}" ]]; then
-    export GF_OTA_MAX_BLOCK="$(_gf_hpp_int "${DEPLOY_HPP}" kOtaMaxBlockLength 1024)"
-  fi
-  if [[ -z "${GF_DOIP_LOGICAL_ADDR+x}" ]]; then
-    export GF_DOIP_LOGICAL_ADDR="$(_gf_hpp_int "${DEPLOY_HPP}" kDoipLogicalAddr 3584)"
-  fi
-  if [[ -z "${GF_DOIP_TESTER_ADDR+x}" ]]; then
-    export GF_DOIP_TESTER_ADDR="$(_gf_hpp_int "${DEPLOY_HPP}" kDoipTesterAddr 3712)"
-  fi
-  # Mirror UDS steps to terminal (same lines as GMT OTA log) + keep file
-  (
-    if command -v stdbuf >/dev/null 2>&1; then
-      stdbuf -oL -eL env GF_DOIP_PORT="${DOIP_PORT}" "${DOIP}"
-    else
-      env GF_DOIP_PORT="${DOIP_PORT}" "${DOIP}"
-    fi
-  ) > >(tee -a "${LOG_DIR}/doip_ota.log" >&2) 2>&1 &
-  DOIP_PID=$!
-  sleep 0.3
-  if ! kill -0 "${DOIP_PID}" 2>/dev/null; then
-    host_info "DoIP server failed; see ${LOG_DIR}/doip_ota.log"
-    echo "${TAG} DoIP server failed; see ${LOG_DIR}/doip_ota.log" >&2
-    cat "${LOG_DIR}/doip_ota.log" >&2 || true
-    exit 1
-  fi
-  host_info "DoIP ok pid=${DOIP_PID} port=${DOIP_PORT}"
-fi
-
-# Per-process PHM fault (others get 0). Target via GF_PHM_FAULT_TARGET.
-_fault_ms_for() {
-  local name="$1"
-  if [[ "${GF_PHM_FAULT_MS}" == "0" ]]; then
-    echo 0
-  elif [[ "${name}" == "${GF_PHM_FAULT_TARGET}" ]]; then
-    echo "${GF_PHM_FAULT_MS}"
-  else
-    echo 0
-  fi
-}
-
-start_consumers() {
-  local apps="${1:-fcm,planning}"
-  local a
-  host_info "spawn apps (direct, no EM) apps=${apps}"
-  IFS=',' read -r -a _arr <<< "${apps}"
-  for a in "${_arr[@]}"; do
-    case "${a}" in
-      fcm)
-        echo "${TAG} start fcm (PHM fault_ms=$(_fault_ms_for fcm))"
-        host_info "start app=fcm fault_ms=$(_fault_ms_for fcm)"
-        # stdbuf: line-buffer stdout so smoke/timeout kill still leaves Trajectory lines on disk
-        if command -v stdbuf >/dev/null 2>&1; then
-          GF_DLT_APP_ID=FCM_ GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" stdbuf -oL -eL "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
-        else
-          GF_DLT_APP_ID=FCM_ GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
-        fi
-        FCM_PID=$!
-        ;;
-      uss)
-        echo "${TAG} start uss (PHM fault_ms=$(_fault_ms_for uss))"
-        host_info "start app=uss fault_ms=$(_fault_ms_for uss)"
-        if command -v stdbuf >/dev/null 2>&1; then
-          GF_DLT_APP_ID=USS_ GF_PHM_FAULT_MS="$(_fault_ms_for uss)" stdbuf -oL -eL "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
-        else
-          GF_DLT_APP_ID=USS_ GF_PHM_FAULT_MS="$(_fault_ms_for uss)" "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
-        fi
-        USS_PID=$!
-        ;;
-      planning)
-        echo "${TAG} start planning (PHM fault_ms=$(_fault_ms_for planning))"
-        host_info "start app=planning fault_ms=$(_fault_ms_for planning)"
-        if command -v stdbuf >/dev/null 2>&1; then
-          GF_DLT_APP_ID=PLAN GF_PHM_FAULT_MS="$(_fault_ms_for planning)" stdbuf -oL -eL "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
-        else
-          GF_DLT_APP_ID=PLAN GF_PHM_FAULT_MS="$(_fault_ms_for planning)" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
-        fi
-        PLAN_PID=$!
-        ;;
-    esac
-  done
-  sleep 0.5
-}
-
-if [[ "${INJECT_ON}" == "1" ]]; then
-  # GMT inject is not EM scope (no inject/tap in em_launch). Stop EM so product
-  # gateway does not dual-publish with inject; Flow starts RouDi+consumers+inject.
-  echo "${TAG} GMT inject (Flow, not EM): stop EM; RouDi+consumers+inject"
-  if [[ -n "${EM_PID:-}" ]]; then
-    kill "${EM_PID}" 2>/dev/null || true
-    pkill -P "${EM_PID}" >/dev/null 2>&1 || true
-    wait "${EM_PID}" 2>/dev/null || true
-    EM_PID=""
-  fi
-  if [[ "${IOX_ON}" == "1" ]]; then
-    : >"${LOG_DIR}/roudi.log"
-    "${ROUDI}" -c "${IOX_TOML}" >"${LOG_DIR}/roudi.log" 2>&1 &
-    ROUDI_PID=$!
-    sleep 0.8
-  fi
-  start_consumers "${RUN_APPS}"
-  DRIVE_MODE="${GF_INJECT_MODE:-continuous}"
-  INJ_PORT="${GF_INJECT_PORT:-8767}"
-  INJ_HOST="${GF_INJECT_HOST:-0.0.0.0}"
-  if [[ -n "${INJECT_SESSION}" ]]; then
-    echo "${TAG} inject from ${INJECT_SESSION} (services=${GF_INJECT_SERVICES} topology=${INJECT_MODE} drive=${DRIVE_MODE})"
-    export GF_INJECT_SESSION="${INJECT_SESSION}"
-  else
-    echo "${TAG} inject playhead stream (no session file; services=${GF_INJECT_SERVICES} topology=${INJECT_MODE})"
-    unset GF_INJECT_SESSION || true
-  fi
-  export GF_INJECT_MODE="${DRIVE_MODE}"
-  export GF_INJECT_PORT="${INJ_PORT}"
-  export GF_INJECT_HOST="${INJ_HOST}"
-  # Plain listen hint; colored LISTENING comes from inject (/dev/tty)
-  if [[ -t 2 ]]; then
-    export GF_STATUS_COLOR=1
-  fi
-  echo "${TAG} [GMT Inject] listen tcp://0.0.0.0:${INJ_PORT} (playhead)" >&2
-  : >"${LOG_DIR}/inject.log"
-  INJ_FIFO="${LOG_DIR}/inject.fifo"
-  rm -f "${INJ_FIFO}"
-  mkfifo "${INJ_FIFO}"
-  # tee starts reading before inject writes → no lost LISTENING/CONNECTED lines
-  tee -a "${LOG_DIR}/inject.log" <"${INJ_FIFO}" >&2 &
-  INJ_TEE_PID=$!
-  if command -v stdbuf >/dev/null 2>&1; then
-    _INJ_RUN=(stdbuf -oL -eL "${INJ}")
-  else
-    _INJ_RUN=("${INJ}")
-  fi
-  if [[ -n "${INJECT_SESSION}" ]]; then
-    GF_INJECT_SESSION="${INJECT_SESSION}" \
-      GF_INJECT_MODE="${DRIVE_MODE}" \
-      GF_INJECT_PORT="${INJ_PORT}" \
-      GF_INJECT_HOST="${INJ_HOST}" \
-      "${_INJ_RUN[@]}" "${INJECT_SESSION}" >"${INJ_FIFO}" 2>&1 &
-  else
-    # playhead stream-only: no argv path
-    GF_INJECT_MODE="${DRIVE_MODE}" \
-      GF_INJECT_PORT="${INJ_PORT}" \
-      GF_INJECT_HOST="${INJ_HOST}" \
-      "${_INJ_RUN[@]}" >"${INJ_FIFO}" 2>&1 &
-  fi
-  INJ_PID=$!
-
-  LIVE_FAN_PID=""
-  if [[ "${LIVE_ON}" == "1" ]]; then
-    export GF_OBS_LIVE_SERVICES="${LIVE_SVCS}"
-    LIVE_PORT="${GF_LIVE_PORT:-8766}"
-    LIVE_SESSION="${GF_LIVE_SESSION:-$(gf_obs_dir)/session_live.jsonl}"
-    LIVE_TEE="${GF_LIVE_TEE:-1}"
-    HINT_IP="127.0.0.1"
-    if [[ "${HOST}" == "0.0.0.0" || "${HOST}" == "::" ]]; then
-      HINT_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-      HINT_IP="${HINT_IP:-127.0.0.1}"
-    fi
-    echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
-    echo "${TAG} listen Foxglove ws://${HINT_IP}:${PORT}  GMT-Live ws://${HINT_IP}:${LIVE_PORT}"
-    # BEV from EgoMotion/Trajectory only. Scenario JSONL → GMT Open session / Inject
-    # (or GF_INJECT_SESSION for continuous); not attached here.
-    _FOX_BEV=()
-    if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
-      _FOX_BEV=(--synth-bev)
-      echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → /gf/camera/front/compressed; GF_SYNTH_BEV=0 to disable)"
-    fi
-    _FOX_TIP=()
-    if [[ "${GF_TIP_CAMERA:-1}" != "0" && -n "${GF_CARLA_FRAME_PATH:-}" ]]; then
-      _FOX_TIP=(--tip-frame "${GF_CARLA_FRAME_PATH}")
-      echo "${TAG} Foxglove tip camera ← ${GF_CARLA_FRAME_PATH} (/gf/camera/front/tip/compressed)"
-    fi
-    if [[ "${LIVE_TEE}" == "1" ]]; then
-      mkdir -p "$(dirname "${LIVE_SESSION}")"
-      : > "${LIVE_SESSION}"
-    fi
-    # Same fan isolation as non-inject path: GMT close must not kill Foxglove.
-    _tee_fan() {
-      if tee --help 2>&1 | grep -q -- '--output-error'; then
-        tee --output-error=warn "$@"
-      else
-        tee "$@"
-      fi
-    }
-    _gmt_live_bridge() {
-      while true; do
-        GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}"
-        local ec=$?
-        [[ "${ec}" -eq 0 ]] && break
-        echo "${TAG} WARN: GMT live bridge exited ec=${ec}; restart in 0.3s" >&2
-        sleep 0.3
-      done
-    }
-    (
-      if [[ "${LIVE_TEE}" == "1" ]]; then
-        "${TAP}" 2>"${LOG_DIR}/tap.log" \
-          | tee "${LIVE_SESSION}" \
-          | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
-      else
-        "${TAP}" 2>"${LOG_DIR}/tap.log" \
-          | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
-      fi
-    ) &
-    LIVE_FAN_PID=$!
-  fi
-
-  FRAME_REPLAY_PID=""
-  if [[ -n "${GF_INJECT_FRAMES_DIR:-}" ]]; then
-    REPLAY_PY="${PROJECT_DIR}/tools/carla_bridge/frame_replay.py"
-    PY="${GF_CARLA_PYTHON:-python3}"
-    if [[ -f "${REPLAY_PY}" && -d "${GF_INJECT_FRAMES_DIR}" ]]; then
-      echo "${TAG} frame_replay ← ${GF_INJECT_FRAMES_DIR} → ${GF_CARLA_FRAME_PATH}"
-      "${PY}" "${REPLAY_PY}" --frames-dir "${GF_INJECT_FRAMES_DIR}" \
-        --frame-path "${GF_CARLA_FRAME_PATH}" \
-        $([ "${GF_INJECT_LOOP:-0}" = "1" ] && echo --loop) \
-        >"${LOG_DIR}/frame_replay.log" 2>&1 &
-      FRAME_REPLAY_PID=$!
-    else
-      echo "${TAG} WARN: GF_INJECT_FRAMES_DIR set but replay missing/dir absent" >&2
-    fi
-  fi
-
-  if [[ "${DRIVE_MODE}" == "playhead" || "${DRIVE_MODE}" == "controlled" || "${DRIVE_MODE}" == "wait" ]]; then
-    echo "${TAG} Ctrl+C to stop (yellow=listen green=CONNECTED cyan=DISCONNECTED red=err)"
-    wait "${INJ_PID}" || true
-    kill "${INJ_TEE_PID}" 2>/dev/null || true
-    rm -f "${INJ_FIFO}"
-    if [[ -n "${LIVE_FAN_PID}" ]]; then
-      kill "${LIVE_FAN_PID}" 2>/dev/null || true
-    fi
-    if [[ -n "${FRAME_REPLAY_PID}" ]]; then
-      kill "${FRAME_REPLAY_PID}" 2>/dev/null || true
-    fi
-    echo "${TAG} inject stopped; logs: ${LOG_DIR}/ (apps=${RUN_APPS})"
-    exit 0
-  fi
-  # continuous: wait for inject to finish
-  wait "${INJ_PID}" || true
-  kill "${INJ_TEE_PID}" 2>/dev/null || true
-  rm -f "${INJ_FIFO}"
-  if [[ -n "${LIVE_FAN_PID}" ]]; then
-    kill "${LIVE_FAN_PID}" 2>/dev/null || true
-  fi
-  if [[ -n "${FRAME_REPLAY_PID}" ]]; then
-    kill "${FRAME_REPLAY_PID}" 2>/dev/null || true
-  fi
-  echo "${TAG} inject finished; logs: ${LOG_DIR}/ (apps=${RUN_APPS})"
-  exit 0
-fi
-
-# Optional CARLA / dry-run bridge — enabled by frame_ingest_config.hpp (or debug GF_*).
-# Optional CARLA / dry-run bridge — enabled by frame_ingest_config.hpp (or debug GF_*).
-CARLA_BRIDGE_PID=""
-BRIDGE_TAIL_PID=""
-FRAME_INGEST_STAT_PID=""
-if [[ "${GF_START_CARLA_BRIDGE:-0}" == "1" ]]; then
-  export GF_CARLA_FRAME_PATH="${GF_CARLA_FRAME_PATH:-/tmp/gf_front.yuv}"
-  export GF_CARLA_CMD_PATH="${GF_CARLA_CMD_PATH:-/tmp/gf_carla_cmd.json}"
-  export GF_FRAME_SOURCE="${GF_FRAME_SOURCE:-carla_file}"
-  export CARLA_HOST="${CARLA_HOST:-127.0.0.1}"
-  export CARLA_PORT="${CARLA_PORT:-2000}"
-  # Default: record tip frames next to live session for W4 inject replay.
-  if [[ -z "${GF_RECORD_FRAMES_DIR+x}" && "${GF_LIVE_TEE:-1}" == "1" ]]; then
-    export GF_RECORD_FRAMES_DIR="$(gf_obs_dir)/session_frames"
-  fi
-  if [[ -n "${GF_RECORD_FRAMES_DIR:-}" ]]; then
-    mkdir -p "${GF_RECORD_FRAMES_DIR}"
-    : >"${GF_RECORD_FRAMES_DIR}/frames.jsonl"
-    echo "${TAG} record tip frames → ${GF_RECORD_FRAMES_DIR}"
-  fi
-  BRIDGE_PY="${PROJECT_DIR}/tools/carla_bridge/carla_bridge.py"
-  # Prefer GF_CARLA_PYTHON; else active conda/venv; else ~/miniconda3/envs/carla_env.
-  # Bare `python3` is often /usr/bin/python3 — NOT the env where you `pip install carla`.
-  _gf_resolve_carla_python() {
-    local c
-    for c in \
-      "${GF_CARLA_PYTHON:-}" \
-      "${CONDA_PREFIX:+${CONDA_PREFIX}/bin/python}" \
-      "${VIRTUAL_ENV:+${VIRTUAL_ENV}/bin/python}" \
-      "${HOME}/miniconda3/envs/carla_env/bin/python" \
-      "${HOME}/anaconda3/envs/carla_env/bin/python" \
-      "python3"
-    do
-      [[ -n "${c}" ]] || continue
-      if [[ "${c}" == */* && ! -x "${c}" ]]; then
-        continue
-      fi
-      if "${c}" -c "import carla" >/dev/null 2>&1; then
-        echo "${c}"
-        return 0
-      fi
-    done
-    echo "${GF_CARLA_PYTHON:-python3}"
-    return 1
-  }
-  if PY="$(_gf_resolve_carla_python)"; then
-    export GF_CARLA_PYTHON="${PY}"
-  else
-    PY="${GF_CARLA_PYTHON:-python3}"
-    echo "${TAG} ERROR: no Python with 'import carla' (tried GF_CARLA_PYTHON/conda/venv/carla_env)." >&2
-    echo "${TAG}   You installed carla in (carla_env), but bridge uses: $(command -v "${PY}" || echo "${PY}")" >&2
-    echo "${TAG}   Fix:  export GF_CARLA_PYTHON=\$HOME/miniconda3/envs/carla_env/bin/python" >&2
-    echo "${TAG}   Or:   conda activate carla_env && re-run run_sil from that shell" >&2
-  fi
-  echo "${TAG} carla_bridge python → ${PY} ($("${PY}" -c 'import sys; print(sys.executable)' 2>/dev/null || echo '?'))"
-  echo "${TAG} carla_bridge start → host=${CARLA_HOST}:${CARLA_PORT} wait=${GF_CARLA_WAIT_S}"
-  echo "${TAG} carla_bridge tip → frame=${GF_CARLA_FRAME_PATH} fmt=${GF_PIXEL_FORMAT} ego_src=${GF_EGO_SOURCE}"
-  echo "${TAG} carla_bridge log → ${LOG_DIR}/carla_bridge.log (mirrored to console)"
-  : >"${LOG_DIR}/carla_bridge.log"
-  if [[ -f "${BRIDGE_PY}" ]]; then
-    # Real bridge PID (not tee). Mirror log to SIL console separately.
-    if command -v stdbuf >/dev/null 2>&1; then
-      stdbuf -oL -eL "${PY}" "${BRIDGE_PY}" >>"${LOG_DIR}/carla_bridge.log" 2>&1 &
-    else
-      "${PY}" "${BRIDGE_PY}" >>"${LOG_DIR}/carla_bridge.log" 2>&1 &
-    fi
-    CARLA_BRIDGE_PID=$!
-    tail -n +1 -F "${LOG_DIR}/carla_bridge.log" 2>/dev/null &
-    BRIDGE_TAIL_PID=$!
-    sleep 0.6
-    if ! kill -0 "${CARLA_BRIDGE_PID}" 2>/dev/null; then
-      echo "${TAG} WARN: carla_bridge exited early; see ${LOG_DIR}/carla_bridge.log (SIL continues)" >&2
-      kill "${BRIDGE_TAIL_PID}" 2>/dev/null || true
-      BRIDGE_TAIL_PID=""
-      CARLA_BRIDGE_PID=""
-    else
-      host_info "carla_bridge ok pid=${CARLA_BRIDGE_PID} host=${CARLA_HOST}:${CARLA_PORT}"
-    fi
-    # Periodic tip / FCM heartbeat: carla_fps / tip_write_fps / fcm_read_fps.
-    (
-      FCM_LOG="${LOG_DIR}/em/perception_fcm.log"
-      [[ -f "${FCM_LOG}" ]] || FCM_LOG="${LOG_DIR}/fcm.log"
-      STATS="${GF_CARLA_BRIDGE_STATS_PATH:-/tmp/gf_carla_bridge_stats.json}"
-      META="${GF_CARLA_FRAME_PATH:-/tmp/gf_front.yuv}"
-      META="${META%.yuv}.meta.json"
-      prev_fseq=""
-      prev_fseq_t=""
-      prev_tip_seq=""
-      prev_tip_t=""
-      while true; do
-        sleep 5
-        tip="${GF_CARLA_FRAME_PATH}"
-        tip_sz="missing"
-        tip_age="n/a"
-        if [[ -f "${tip}" ]]; then
-          tip_sz="$(wc -c <"${tip}" 2>/dev/null | tr -d ' ' || echo '?')"
-          tip_age="$(date -r "${tip}" '+%H:%M:%S' 2>/dev/null || echo '?')"
-        fi
-        br="down"
-        if [[ -n "${CARLA_BRIDGE_PID}" ]] && kill -0 "${CARLA_BRIDGE_PID}" 2>/dev/null; then
-          br="up pid=${CARLA_BRIDGE_PID}"
-        fi
-        br_why=""
-        if [[ "${br}" == down && -f "${LOG_DIR}/carla_bridge.log" ]]; then
-          br_why="$(grep -E 'not installed|connect .* failed|waiting for CARLA|connected |waiting for scenario hero|fps carla=' "${LOG_DIR}/carla_bridge.log" 2>/dev/null | tail -1 || true)"
-          [[ -n "${br_why}" ]] || br_why="$(tail -1 "${LOG_DIR}/carla_bridge.log" 2>/dev/null || true)"
-        fi
-        carla_fps="?"
-        tip_fps="?"
-        waiting_hero="?"
-        if [[ -f "${STATS}" ]]; then
-          # small JSON: {"carla_fps":..,"tip_fps":..,"waiting_hero":..}
-          carla_fps="$(sed -n 's/.*"carla_fps":\([0-9.]*\).*/\1/p' "${STATS}" 2>/dev/null | head -1)"
-          tip_fps="$(sed -n 's/.*"tip_fps":\([0-9.]*\).*/\1/p' "${STATS}" 2>/dev/null | head -1)"
-          waiting_hero="$(sed -n 's/.*"waiting_hero":\([a-z]*\).*/\1/p' "${STATS}" 2>/dev/null | head -1)"
-          carla_fps="${carla_fps:-?}"
-          tip_fps="${tip_fps:-?}"
-          waiting_hero="${waiting_hero:-?}"
-        fi
-        # ingest tip-read proxy: meta.json seq rate (what FCM/file consumer sees)
-        tip_read_fps="?"
-        if [[ -f "${META}" ]]; then
-          tip_seq="$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "${META}" 2>/dev/null | head -1)"
-          now_t="$(date +%s)"
-          if [[ -n "${tip_seq}" && -n "${prev_tip_seq}" && -n "${prev_tip_t}" && "${now_t}" -gt "${prev_tip_t}" ]]; then
-            tip_read_fps="$(awk -v a="${tip_seq}" -v b="${prev_tip_seq}" -v t0="${prev_tip_t}" -v t1="${now_t}" 'BEGIN{d=a-b; dt=t1-t0; if(dt>0&&d>=0) printf "%.1f", d/dt; else print "?"}')"
-          fi
-          prev_tip_seq="${tip_seq}"
-          prev_tip_t="${now_t}"
-        fi
-        fcm_line="(no fcm log yet)"
-        fcm_fps="?"
-        if [[ -f "${FCM_LOG}" ]]; then
-          fcm_line="$(grep -E 'stream negotiate|fseq=|no_frame|frame_timeout|frame_source=' "${FCM_LOG}" 2>/dev/null | tail -1 || true)"
-          [[ -n "${fcm_line}" ]] || fcm_line="$(tail -1 "${FCM_LOG}" 2>/dev/null || true)"
-          fseq="$(printf '%s' "${fcm_line}" | sed -n 's/.*fseq=\([0-9][0-9]*\).*/\1/p' | head -1)"
-          now_t="$(date +%s)"
-          if [[ -n "${fseq}" && -n "${prev_fseq}" && -n "${prev_fseq_t}" && "${now_t}" -gt "${prev_fseq_t}" ]]; then
-            fcm_fps="$(awk -v a="${fseq}" -v b="${prev_fseq}" -v t0="${prev_fseq_t}" -v t1="${now_t}" 'BEGIN{d=a-b; dt=t1-t0; if(dt>0&&d>=0) printf "%.1f", d/dt; else print "?"}')"
-          fi
-          if [[ -n "${fseq}" ]]; then
-            prev_fseq="${fseq}"
-            prev_fseq_t="${now_t}"
-          fi
-        fi
-        echo "${TAG} frame_ingest heartbeat: bridge=${br} waiting_hero=${waiting_hero} host=${CARLA_HOST}:${CARLA_PORT}"
-        echo "${TAG}   fps: carla=${carla_fps} tip_write=${tip_fps} tip_read=${tip_read_fps} fcm_read=${fcm_fps}"
-        echo "${TAG}   tip=${tip} bytes=${tip_sz} mtime=${tip_age}"
-        [[ -n "${br_why}" ]] && echo "${TAG}   bridge_log: ${br_why}"
-        echo "${TAG}   fcm: ${fcm_line}"
-        echo "${TAG}   fcm_log=${FCM_LOG}"
-      done
-    ) &
-    FRAME_INGEST_STAT_PID=$!
-  else
-    echo "${TAG} WARN: missing ${BRIDGE_PY}" >&2
-  fi
-else
-  echo "${TAG} frame_ingest: bridge not started (GF_START_CARLA_BRIDGE=${GF_START_CARLA_BRIDGE:-0})"
-fi
-
-# SOA apps already under EM. Do not direct-spawn gateway/fcm/planning.
-host_info "apps under EM — logs: ${GF_EM_LOG_DIR}/ and ${LOG_DIR}/em_daemon.stdout"
-echo "${TAG} [EM] apps managed by EM pid=${EM_PID} (no direct spawn)"
-
-if [[ "${LIVE_ON}" != "1" ]]; then
-  echo "${TAG} live_tap off — EM only. logs: ${LOG_DIR}/ ${GF_EM_LOG_DIR}/"
-  echo "${TAG} (enable live_tap in gf-config → Verify/compile → re-run for Foxglove)"
+# --- GMT depend (optional; same on host SIL and board early debug) ------------
+# =============================================================================
+# Prefer GF_GMT_DEPEND; accept legacy GF_SIL_FLOW as alias.
+_GMT_DEPEND="${GF_GMT_DEPEND:-${GF_SIL_FLOW:-1}}"
+if [[ "${_GMT_DEPEND}" == "0" ]]; then
+  echo "${TAG} GF_GMT_DEPEND=0 — EM only (no Foxglove/inject/DoIP GMT depend)"
   wait "${EM_PID}" || true
   exit 0
 fi
-
-export GF_OBS_LIVE_SERVICES="${LIVE_SVCS}"
-LIVE_PORT="${GF_LIVE_PORT:-8766}"
-HINT_IP="127.0.0.1"
-if [[ "${HOST}" == "0.0.0.0" || "${HOST}" == "::" ]]; then
-  HINT_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-  HINT_IP="${HINT_IP:-<this-host-LAN-IP>}"
-fi
-echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
-echo "${TAG} listen Foxglove ws://${HINT_IP}:${PORT}  GMT-Live ws://${HINT_IP}:${LIVE_PORT}"
-echo "${TAG} Ctrl+C to stop (yellow=listen green=CONNECTED cyan=DISCONNECTED red=err)"
-if [[ -t 2 ]]; then
-  export GF_STATUS_COLOR=1
-fi
-
-LIVE_SESSION="${GF_LIVE_SESSION:-$(gf_obs_dir)/session_live.jsonl}"
-LIVE_TEE="${GF_LIVE_TEE:-1}"
-if [[ "${LIVE_TEE}" == "1" ]]; then
-  mkdir -p "$(dirname "${LIVE_SESSION}")"
-  : > "${LIVE_SESSION}"
-fi
-
-_FOX_BEV=()
-if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
-  _FOX_BEV=(--synth-bev)
-  echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → BEV)"
-fi
-_FOX_TIP=()
-if [[ "${GF_TIP_CAMERA:-1}" != "0" && -n "${GF_CARLA_FRAME_PATH:-}" ]]; then
-  _FOX_TIP=(--tip-frame "${GF_CARLA_FRAME_PATH}")
-  echo "${TAG} Foxglove tip camera ← ${GF_CARLA_FRAME_PATH} (same WS as BEV)"
-fi
-
-# GNU tee: if GMT Live process-sub dies, do NOT collapse the pipe to Foxglove.
-_tee_fan() {
-  if tee --help 2>&1 | grep -q -- '--output-error'; then
-    tee --output-error=warn "$@"
-  else
-    tee "$@"
-  fi
-}
-
-# GMT GUI open/close must not kill this side-channel. Restart live bridge on crash;
-# exit 0 after clean stdin EOF (tap ended).
-_gmt_live_bridge() {
-  while true; do
-    GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}"
-    local ec=$?
-    if [[ "${ec}" -eq 0 ]]; then
-      break
-    fi
-    echo "${TAG} WARN: GMT live bridge exited ec=${ec}; restart in 0.3s (Foxglove kept)" >&2
-    sleep 0.3
-  done
-}
-
-_live_fan() {
-  if [[ "${LIVE_TEE}" == "1" ]]; then
-    "${TAP}" 2>"${LOG_DIR}/tap.log" \
-      | tee "${LIVE_SESSION}" \
-      | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
-  else
-    "${TAP}" 2>"${LOG_DIR}/tap.log" \
-      | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
-  fi
-}
-
-# Obs fan is side-channel: must NOT be the foreground waiter.
-# Otherwise tap/bridge exit (or pipe break) would tear down the whole SIL via EXIT trap.
-_live_fan &
-LIVE_FAN_PID=$!
-echo "${TAG} live fan pid=${LIVE_FAN_PID} (apps keep running if fan dies; Ctrl+C stops all)"
-echo "${TAG} GMT GUI can open/close anytime; this SIL keeps running"
-wait "${EM_PID}" || true
+# shellcheck source=GMT_depend_launch.sh
+source "${SCRIPT_DIR}/GMT_depend_launch.sh"
