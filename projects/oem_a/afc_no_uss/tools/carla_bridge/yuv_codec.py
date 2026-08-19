@@ -1,4 +1,4 @@
-"""RGB ↔ configurable YUV planar helpers for CARLA tip bridge (stdlib only)."""
+"""RGB ↔ configurable YUV planar helpers for CARLA camera bridge (stdlib only)."""
 
 from __future__ import annotations
 

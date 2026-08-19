@@ -11,7 +11,7 @@
 | 只要 EM、不要 GMT 旁路 | `GF_GMT_DEPEND=0` + `run_sil.sh`，或直接 `gf_em_daemon / gf_em_daemon / giraffe_launch(debug)(debug)` | 无 Foxglove / inject / DoIP |
 | GMT inject | `GF_INJECT_MODE=playhead` 等 | `GMT_depend_launch` 停 EM，再起 RouDi+consumers+inject |
 
-配置真源：`gf-config → compose → deploy_config.hpp`。`GF_CARLA_*` 仅调试覆盖；tip 路径默认在 ingest/gateway 二进制内。`carla_bridge` 以实体拷贝进 `share/frame_ingest/modules/`（非绝对 symlink）。
+配置真源：`gf-config → compose → deploy_config.hpp`。`GF_CARLA_*` 仅调试覆盖；相机路径默认在 ingest/gateway 二进制内。`carla_bridge` 以实体拷贝进 `share/frame_ingest/modules/`（非绝对 symlink）。
 
 ## Layout
 

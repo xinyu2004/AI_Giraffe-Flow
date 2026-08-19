@@ -595,15 +595,15 @@ class OtaPanel(QWidget):
     def _build_dem_page(self) -> QWidget:
         w = QWidget()
         lay = QVBoxLayout(w)
-        tip = QLabel(
+        help_lbl = QLabel(
             t(
                 "DEM-lite：经 DoIP 读/清 DTC（0x19 / 0x14）。"
                 "事件环缓请切到 Collector。"
             )
         )
-        tip.setWordWrap(True)
-        tip.setStyleSheet("color:#666;")
-        lay.addWidget(tip)
+        help_lbl.setWordWrap(True)
+        help_lbl.setStyleSheet("color:#666;")
+        lay.addWidget(help_lbl)
 
         bar = QHBoxLayout()
         bar.addWidget(QLabel(t("status_mask")))

@@ -5,7 +5,7 @@ P3-5：`Perception_*` + `Trajectory`；帧摄入 / CARLA / Foxglove。详见 [SI
 ## 验收（主路径）
 
 ```bash
-# 1) gf-config：打开本工程 → 页 1「帧摄入」确认 tip 源 → Verify
+# 1) gf-config：打开本工程 → 页 1「帧摄入」确认帧源 → Verify
 # 2) 编译并跑 SIL（增量；默认不跑 ctest）
 bash projects/oem_a/afc_no_uss/scripts/compile_sil.sh
 bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
@@ -27,6 +27,6 @@ bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
 
 - `req.yaml`（含 `frame_ingest` / `observability`）— **用 gf-config 编辑**
 - `integration/wiring.yaml` / `platform/*`
-- CARLA tip 实现：`tools/carla_bridge/`（由 `frame_ingest.bridge` 控制是否启动）
+- CARLA camera 实现：`tools/carla_bridge/`（由 `frame_ingest.bridge` 控制是否启动）
 
 参考（只读）：`projects/oem_a/afc_with_uss/`。

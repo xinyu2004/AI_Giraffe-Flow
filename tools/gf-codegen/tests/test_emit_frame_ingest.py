@@ -30,9 +30,9 @@ def test_emit_frame_ingest_carla(tmp_path: Path) -> None:
             "perception_backend": "stub",
             "pixel_format": "nv12",
             "ego_source": "carla",
-            "tip_transport": "shm",
+            "camera_transport": "shm",
             "active_source": "carla",
-            "tip_slots": [{"id": "front", "w": 640, "h": 480, "pixel_format": "nv12"}],
+            "camera_slots": [{"id": "front", "w": 640, "h": 480, "pixel_format": "nv12"}],
             "bridge": {
                 "enabled": True,
             },
@@ -48,19 +48,21 @@ def test_emit_frame_ingest_carla(tmp_path: Path) -> None:
     assert 'kPixelFormat = "nv12"' in hpp
     assert 'kEgoSource = "carla"' in hpp
     assert "kBridgeEnabled = true" in hpp
-    assert 'kTipTransport = "shm"' in hpp
+    assert 'kCameraTransport = "shm"' in hpp
     assert 'kActiveSource = "carla"' in hpp
-    assert 'kTipSlotFront = "gf.channel.front"' in hpp
-    assert "kTipSlots" in hpp
+    assert 'kCameraSlotFront = "gf.channel.front"' in hpp
+    assert "kCameraSlots" in hpp
     assert "kMountFov" in hpp
     assert "kBridgeDryRun" not in hpp
     assert "kDemoLaneChange" not in hpp
     assert "kFramePath" in hpp
+    assert "kTip" not in hpp
     assert not (tmp_path / "frame_ingest.env").exists()
     assert "camera_contract" in meta
     cam = json.loads(Path(meta["camera_contract"]).read_text(encoding="utf-8"))
     assert cam["schema"] == "camera_contract/v1"
     assert cam["slots"][0]["slot_name"] == "gf.channel.front"
+    assert cam["camera_transport"] == "shm"
 
 
 def test_normalize_active_source_enables_bridge() -> None:
@@ -81,14 +83,14 @@ def test_normalize_none_disables_bridge() -> None:
     assert cfg["bridge"]["enabled"] is False
 
 
-def test_normalize_tip_slots_default_front() -> None:
+def test_normalize_camera_slots_default_front() -> None:
     cfg = normalize_frame_ingest(
         {"frame_ingest": {"bridge": {"enabled": True}, "frame_source": "carla_file"}}
     )
     # SOP default when video contract present: isp (SIL overrides via GF_FRAME_SOURCE)
     assert cfg["active_source"] == "isp"
-    assert cfg["tip_transport"] == "shm"
-    assert cfg["tip_slots"][0]["id"] == "front"
+    assert cfg["camera_transport"] == "shm"
+    assert cfg["camera_slots"][0]["id"] == "front"
 
 
 def test_normalize_synth_alias_to_colorbar() -> None:
@@ -98,16 +100,22 @@ def test_normalize_synth_alias_to_colorbar() -> None:
     assert cfg["bridge"]["enabled"] is True
 
 
-def test_normalize_tip_slots_default_isp() -> None:
+def test_normalize_camera_slots_default_isp() -> None:
     cfg = normalize_frame_ingest(
         {
             "frame_ingest": {
-                "tip_slots": [{"id": "front", "w": 640, "h": 480}],
+                "camera_slots": [{"id": "front", "w": 640, "h": 480}],
             }
         }
     )
     assert cfg["active_source"] == "isp"
     assert cfg["bridge"]["enabled"] is True
+
+
+def test_normalize_rejects_missing_camera_slots_key_uses_default_front() -> None:
+    cfg = normalize_frame_ingest({"frame_ingest": {"camera_transport": "shm"}})
+    assert cfg["camera_transport"] == "shm"
+    assert cfg["camera_slots"][0]["id"] == "front"
 
 
 def test_legacy_tmp_paths_migrate_to_runtime_ipc(tmp_path: Path) -> None:

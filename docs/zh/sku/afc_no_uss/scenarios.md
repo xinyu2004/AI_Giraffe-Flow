@@ -164,7 +164,7 @@ python3 cases/longitudinal/acc.py
   - 底带：车速 kph · SET · TGT · **template 特性槽**（th/gap、TTC…）· CTRL  
 - 特性槽插件：`src/cluster_templates/`（与 `lib/` / `layouts/` / `judges/` 同级；未知 → `common`）。  
 - **CTRL**：有控车 **绿闪**；无信号 **红闪**。  
-- 不上仪表：fps、tip 安装、fov、CAM。  
+- 不上仪表：fps、相机安装、fov、CAM。  
 - 无 View 按钮；键盘 `V` 仍可静默切换 ChaseCam。
 
 ## 覆盖域
@@ -192,6 +192,6 @@ python3 cases/longitudinal/acc.py
 
 - 域收敛（眩光类 → `isp_env`）；按 **case 覆盖度** 取景，不绑「村庄↔日照」之类假关联  
 - 场景干净 = 少杂物、布景服务 case；环境车是正常的（非 FPS）  
-- FPS / tip 管线 / frame_ingest 性能（另开）  
+- FPS / 相机管线 / frame_ingest 性能（另开）  
 - planning 真 SET；横向 lat-offset / HLB 真 beam 决策  
 - results 写入更完整的 VERDICT 字段（reason 等）

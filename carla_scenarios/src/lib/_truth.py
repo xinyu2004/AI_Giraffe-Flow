@@ -1,4 +1,4 @@
-"""Shared truth-tip writer for carla_scenarios (no Giraffe / gf-* imports)."""
+"""Shared truth writer for carla_scenarios (no Giraffe / gf-* imports)."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def write_truth(
     duration_s: Optional[float] = None,
     extra: Optional[dict[str, Any]] = None,
 ) -> None:
-    """Write truth tip. Legacy flat fields kept for planning ACC/AEB."""
+    """Write truth snapshot. Legacy flat fields kept for planning ACC/AEB."""
     payload: dict[str, Any] = {
         "timestamp_ns": time.time_ns(),
         "seq": seq,

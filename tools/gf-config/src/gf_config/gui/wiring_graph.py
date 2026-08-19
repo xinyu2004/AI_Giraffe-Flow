@@ -174,13 +174,13 @@ def cubic_bezier_tangent(p0: QPointF, p1: QPointF, p2: QPointF, p3: QPointF, t: 
     )
 
 
-def append_chevron(path: QPainterPath, tip: QPointF, ux: float, uy: float, *, arrow_len: float = 10.0, arrow_w: float = 5.0) -> None:
-    """Open chevron arrow at tip, oriented by unit direction (ux, uy)."""
+def append_chevron(path: QPainterPath, apex: QPointF, ux: float, uy: float, *, arrow_len: float = 10.0, arrow_w: float = 5.0) -> None:
+    """Open chevron arrow at apex, oriented by unit direction (ux, uy)."""
     px, py = -uy, ux
-    base = QPointF(tip.x() - ux * arrow_len, tip.y() - uy * arrow_len)
-    path.moveTo(tip)
+    base = QPointF(apex.x() - ux * arrow_len, apex.y() - uy * arrow_len)
+    path.moveTo(apex)
     path.lineTo(QPointF(base.x() + px * arrow_w, base.y() + py * arrow_w))
-    path.moveTo(tip)
+    path.moveTo(apex)
     path.lineTo(QPointF(base.x() - px * arrow_w, base.y() - py * arrow_w))
 
 
@@ -1006,11 +1006,11 @@ class EdgeCurve(QGraphicsPathItem):
         path.cubicTo(p1, p2, p3)
 
         label_pt = cubic_bezier_point(p0, p1, p2, p3, 0.42)
-        tip = cubic_bezier_point(p0, p1, p2, p3, 0.68)
+        apex = cubic_bezier_point(p0, p1, p2, p3, 0.68)
         tang = cubic_bezier_tangent(p0, p1, p2, p3, 0.68)
         length = math.hypot(tang.x(), tang.y()) or 1.0
         ux, uy = tang.x() / length, tang.y() / length
-        append_chevron(path, tip, ux, uy)
+        append_chevron(path, apex, ux, uy)
         self.setPath(path)
 
         if self.scene() and self._label.scene() is None:
@@ -1181,11 +1181,11 @@ class MissingEdge(QGraphicsPathItem):
             )
 
         label_pt = q_point(0.42)
-        tip = q_point(0.68)
+        apex = q_point(0.68)
         tang = q_tang(0.68)
         length = math.hypot(tang.x(), tang.y()) or 1.0
         ux, uy = tang.x() / length, tang.y() / length
-        append_chevron(path, tip, ux, uy)
+        append_chevron(path, apex, ux, uy)
         self.setPath(path)
         if self.scene() and self._label.scene() is None:
             self.scene().addItem(self._label)
@@ -1299,11 +1299,11 @@ class McuPeerLink(QGraphicsPathItem):
         path = QPainterPath(p0)
         path.quadTo(mid + QPointF(0, -24), p3)
         # 双向示意箭头
-        for tip, base in ((p3, mid), (p0, mid)):
-            dx, dy = tip.x() - base.x(), tip.y() - base.y()
+        for apex, base in ((p3, mid), (p0, mid)):
+            dx, dy = apex.x() - base.x(), apex.y() - base.y()
             length = math.hypot(dx, dy) or 1.0
             ux, uy = dx / length, dy / length
-            append_chevron(path, tip, ux, uy, arrow_len=9.0, arrow_w=4.5)
+            append_chevron(path, apex, ux, uy, arrow_len=9.0, arrow_w=4.5)
         self.setPath(path)
         if self.scene() and self._label.scene() is None:
             self.scene().addItem(self._label)
@@ -1330,7 +1330,7 @@ class McuPeerLink(QGraphicsPathItem):
 
 
 class ChannelEdge(QGraphicsPathItem):
-    """GfChannel tip edge (camera → consumer); not an iceoryx dataflow."""
+    """GfChannel camera edge (camera → consumer); not an iceoryx dataflow."""
 
     def __init__(
         self,
@@ -1438,10 +1438,10 @@ class ChannelEdge(QGraphicsPathItem):
         p2 = EdgeCurve._approach_point(p3, dst_side, dist, 0.0)
         path = QPainterPath(p0)
         path.cubicTo(p1, p2, p3)
-        tip = cubic_bezier_point(p0, p1, p2, p3, 0.68)
+        apex = cubic_bezier_point(p0, p1, p2, p3, 0.68)
         tang = cubic_bezier_tangent(p0, p1, p2, p3, 0.68)
         length = math.hypot(tang.x(), tang.y()) or 1.0
-        append_chevron(path, tip, tang.x() / length, tang.y() / length)
+        append_chevron(path, apex, tang.x() / length, tang.y() / length)
         self.setPath(path)
         label_pt = cubic_bezier_point(p0, p1, p2, p3, 0.42)
         if self.scene() and self._label.scene() is None:
@@ -1808,7 +1808,7 @@ class ImportPortsDialog(QDialog):
 
 
 class FrameIngestDialog(QDialog):
-    """Configure host.frame_ingest lanes (id/WxH/pixel). Tip source = runtime GF_FRAME_SOURCE."""
+    """Configure host.frame_ingest lanes (id/WxH/pixel). Frame source = runtime GF_FRAME_SOURCE."""
 
     def __init__(
         self,
@@ -1824,7 +1824,7 @@ class FrameIngestDialog(QDialog):
         root = QVBoxLayout(self)
         hint = QLabel(
             "每路 = 一个 Out（gf.channel.{id}）→ 拖到消费方。\n"
-            "SOP 默认 tip=isp；SIL 用 GF_FRAME_SOURCE=carla|replay|colorbar|none（run_sil）。\n"
+            "SOP 默认帧源=isp；SIL 用 GF_FRAME_SOURCE=carla|replay|colorbar|none（run_sil）。\n"
             "无外参/内参/ego；buffers=AB 固定 2。"
         )
         hint.setWordWrap(True)
@@ -2542,7 +2542,7 @@ class WiringGraphView(QWidget):
             cur = cur.parentItem()
 
     def _set_wire_forbid_mark(self, scene_pos: QPointF | None) -> None:
-        """Illegal drop: red ✕ near tip (keep hand cursor — no ForbiddenCursor)."""
+        """Illegal drop: red ✕ near apex (keep hand cursor — no ForbiddenCursor)."""
         mark = self._wire_forbid_mark
         if scene_pos is None:
             if mark is not None and _qt_alive(mark):
@@ -3556,7 +3556,7 @@ class WiringGraphView(QWidget):
             self.edit_frame_ingest(self._nodes.get(name))
             return
         fi = dict(self._session.frame_ingest_cfg())
-        slots = list(self._session.tip_slots())
+        slots = list(self._session.camera_slots())
         if not slots:
             slots = [{"id": "front", "w": 640, "h": 480}]
         if str(fi.get("active_source") or "none") == "none":
@@ -3574,7 +3574,7 @@ class WiringGraphView(QWidget):
         if not self._session:
             return
         fi = dict(self._session.frame_ingest_cfg())
-        slots = list(self._session.tip_slots())
+        slots = list(self._session.camera_slots())
         dlg = FrameIngestDialog(fi, slots, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
@@ -3593,21 +3593,22 @@ class WiringGraphView(QWidget):
     ) -> None:
         assert self._session is not None
         self._session.migrate_legacy_camera_channel_flows()
-        old_ids = {str(s.get("id")) for s in self._session.tip_slots()}
+        old_ids = {str(s.get("id")) for s in self._session.camera_slots()}
         new_ids = {str(s.get("id")) for s in slots if str(s.get("id") or "").strip()}
-        # Preserve SIL paths / tip_transport from prior req
+        # Preserve SIL paths / camera_transport from prior req
         prev = self._session.frame_ingest_cfg()
         merged = dict(prev)
         merged.update(fields)
         if isinstance(prev.get("paths"), dict) and "paths" not in fields:
             merged["paths"] = prev["paths"]
-        if prev.get("tip_transport") and "tip_transport" not in fields:
-            merged["tip_transport"] = prev["tip_transport"]
+        legacy_transport = prev.get("camera_transport")
+        if legacy_transport and "camera_transport" not in fields:
+            merged["camera_transport"] = legacy_transport
         for k, v in merged.items():
-            if k == "tip_slots":
+            if k == "camera_slots":
                 continue
             self._session.update_frame_ingest(**{k: v})
-        self._session.set_tip_slots(slots)
+        self._session.set_camera_slots(slots)
         # Drop channel_flows for removed lane ids
         for sid in old_ids - new_ids:
             slot = ProjectSession.gf_channel_slot_name(sid)
@@ -3726,7 +3727,7 @@ class WiringGraphView(QWidget):
                 self,
                 "删除 frame_ingest",
                 "删除视频契约节点？\n"
-                "将清空 tip_slots / channel_flows，并把 active_source 设为 none。",
+                "将清空 camera_slots / channel_flows，并把 active_source 设为 none。",
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
@@ -3968,12 +3969,12 @@ class WiringGraphView(QWidget):
 
         self._session.migrate_legacy_camera_channel_flows()
 
-        # Ensure single frame_ingest canvas node when tip / active / channel_flows present
+        # Ensure single frame_ingest canvas node when frame source / active / channel_flows present
         fi_cfg = self._session.frame_ingest_cfg()
         active = str(fi_cfg.get("active_source") or "none").strip() or "none"
-        tip_slots = self._session.tip_slots()
+        camera_slots = self._session.camera_slots()
         ch_flows = self._session.channel_flows()
-        need_ingest = bool(tip_slots) or active != "none" or bool(ch_flows)
+        need_ingest = bool(camera_slots) or active != "none" or bool(ch_flows)
         ingest_name = ProjectSession.FRAME_INGEST_PROCESS
         if need_ingest:
             ui = self._session.node_ui(ingest_name)
@@ -4084,11 +4085,11 @@ class WiringGraphView(QWidget):
             self._scene.addItem(card)
             self._nodes[name] = card
 
-        # Single frame_ingest card: one Out per tip_slot
+        # Single frame_ingest card: one Out per camera_slot
         if need_ingest and ingest_name not in self._nodes:
             outs = [
                 ProjectSession.gf_channel_slot_name(str(s.get("id")))
-                for s in tip_slots
+                for s in camera_slots
                 if str(s.get("id") or "").strip()
             ]
             if not outs and active != "none":

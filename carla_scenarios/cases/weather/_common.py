@@ -55,7 +55,7 @@ def _on_sig(signum: int, _frame: object) -> None:
 
 
 def run_dry(tag: str, duration_s: float, period_s: float) -> int:
-    print(f"[{tag}] explicit --dry-run: truth tip only (no closed loop)", flush=True)
+    print(f"[{tag}] explicit --dry-run: truth only (no closed loop)", flush=True)
     print(f"[{tag}] READY dry-run", flush=True)
     t0 = time.time()
     seq = 0
@@ -103,7 +103,7 @@ def run_session(
     print(
         f"[{tag}] READY host={carla_host()}:{carla_port()} "
         f"ego={ego.id} lead={lead.id} duration_s={duration_s} "
-        f"weather={cfg.describe()} tip_ref={mount.describe()}",
+        f"weather={cfg.describe()} mount_ref={mount.describe()}",
         flush=True,
     )
 

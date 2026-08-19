@@ -1,4 +1,4 @@
-"""Poll tip frames (GfChannel shm or file bypass) → foxglove.CompressedImage."""
+"""Poll camera frames (GfChannel shm or file bypass) → foxglove.CompressedImage."""
 
 from __future__ import annotations
 
@@ -7,10 +7,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from gf_gmt.adas_scenarios import _png_rgb, compressed_image_msg
+from gf_gmt.adas_scenarios import TOPIC_DRIVING_CAM, _png_rgb, compressed_image_msg
 
-TOPIC_TIP_CAM = "/gf/camera/front/tip/compressed"
-DEFAULT_TIP_SLOT = "gf.channel.front"
+DEFAULT_CAMERA_SLOT = "gf.channel.front"
 
 
 def _stream_path(frame: Path) -> Path:
@@ -22,6 +21,7 @@ def _meta_path(frame: Path) -> Path:
 
 
 def _nv12_to_rgb(yuv: bytes, w: int, h: int, *, swap_uv: bool = False) -> bytes:
+    """Full-resolution NV12→RGB (tests / small frames). Prefer _nv12_preview_rgb for bridge."""
     y_sz = w * h
     need = y_sz + y_sz // 2
     if len(yuv) < need:
@@ -51,6 +51,46 @@ def _nv12_to_rgb(yuv: bytes, w: int, h: int, *, swap_uv: bool = False) -> bytes:
             out[i + 1] = clamp((298 * c - 100 * d - 208 * e + 128) >> 8)
             out[i + 2] = clamp((298 * c + 516 * d + 128) >> 8)
     return bytes(out)
+
+
+def _nv12_preview_rgb(
+    yuv: bytes, w: int, h: int, *, max_w: int = 320, swap_uv: bool = False
+) -> tuple[bytes, int, int]:
+    """Subsample then convert — Foxglove preview must stay real-time (pure Python)."""
+    y_sz = w * h
+    need = y_sz + y_sz // 2
+    if len(yuv) < need:
+        raise ValueError("nv12 short")
+    y_plane = yuv[:y_sz]
+    uv = yuv[y_sz:need]
+    step = max(1, (w + max_w - 1) // max_w)
+    nw = max(1, w // step)
+    nh = max(1, h // step)
+    out = bytearray(nw * nh * 3)
+
+    def clamp(v: int) -> int:
+        return 0 if v < 0 else 255 if v > 255 else v
+
+    for oy in range(nh):
+        sy = min(h - 1, oy * step)
+        for ox in range(nw):
+            sx = min(w - 1, ox * step)
+            yv = y_plane[sy * w + sx]
+            ui = (sy // 2) * w + (sx & ~1)
+            if swap_uv:
+                v = uv[ui]
+                u = uv[ui + 1]
+            else:
+                u = uv[ui]
+                v = uv[ui + 1]
+            c = yv - 16
+            d = u - 128
+            e = v - 128
+            i = (oy * nw + ox) * 3
+            out[i] = clamp((298 * c + 409 * e + 128) >> 8)
+            out[i + 1] = clamp((298 * c - 100 * d - 208 * e + 128) >> 8)
+            out[i + 2] = clamp((298 * c + 516 * d + 128) >> 8)
+    return bytes(out), nw, nh
 
 
 def _plane_to_rgb(fmt: str, plane: bytes, w: int, h: int) -> bytes:
@@ -100,38 +140,49 @@ def _downscale_rgb(rgb: bytes, w: int, h: int, max_w: int) -> tuple[bytes, int, 
     return bytes(out), nw, nh
 
 
-def _encode_tip_row(fmt: str, plane: bytes, w: int, h: int, t_ns: int) -> dict[str, Any] | None:
+def _encode_camera_row(fmt: str, plane: bytes, w: int, h: int, t_ns: int) -> dict[str, Any] | None:
     try:
-        rgb = _plane_to_rgb(fmt, plane, w, h)
-        max_w = 640
-        if w > max_w:
-            rgb, pw, ph = _downscale_rgb(rgb, w, h, max_w)
+        f = (fmt or "nv12").lower()
+        if f in ("nv12", "nv21") and w * h > 160 * 120:
+            rgb, pw, ph = _nv12_preview_rgb(
+                plane, w, h, max_w=320, swap_uv=(f == "nv21")
+            )
         else:
-            pw, ph = w, h
+            rgb = _plane_to_rgb(fmt, plane, w, h)
+            max_w = 640
+            if w > max_w:
+                rgb, pw, ph = _downscale_rgb(rgb, w, h, max_w)
+            else:
+                pw, ph = w, h
         png = _png_rgb(pw, ph, rgb)
     except Exception as exc:  # noqa: BLE001
-        print(f"[bridge-ws] tip decode error: {exc}", file=sys.stderr, flush=True)
+        print(f"[bridge-ws] camera decode error: {exc}", file=sys.stderr, flush=True)
         return None
+    # Foxglove Image panels often ignore / pile up at t=0 — use wall clock if writer has no ts.
+    if t_ns <= 0:
+        import time
+
+        t_ns = time.time_ns()
     return {
-        "topic": TOPIC_TIP_CAM,
-        "t_ns": t_ns if t_ns > 0 else 0,
-        "data": compressed_image_msg(t_ns, png, frame_id="front_tip"),
+        "topic": TOPIC_DRIVING_CAM,
+        "t_ns": t_ns,
+        "data": compressed_image_msg(t_ns, png, frame_id="driving_front"),
     }
 
 
-class TipFramePublisher:
-    """GfChannel shm (preferred) or filesystem tip → CompressedImage for Foxglove."""
+class CameraFramePublisher:
+    """GfChannel shm (preferred) or filesystem camera → CompressedImage for Foxglove."""
 
     def __init__(
         self,
         frame_path: str | Path | None = None,
         *,
-        tip_slot: str | None = None,
+        camera_slot: str | None = None,
     ) -> None:
-        self.tip_slot = (tip_slot or "").strip() or None
+        self.camera_slot = (camera_slot or "").strip() or None
         self.frame_path = Path(frame_path) if frame_path else None
-        if not self.tip_slot and self.frame_path is None:
-            raise ValueError("TipFramePublisher needs tip_slot or frame_path")
+        if not self.camera_slot and self.frame_path is None:
+            raise ValueError("CameraFramePublisher needs camera_slot or frame_path")
         self._fmt = "nv12"
         self._w = 0
         self._h = 0
@@ -141,19 +192,39 @@ class TipFramePublisher:
         self._shm = None
         self._shm_fail_logged = False
         self._shm_ok_logged = False
+        self._shm_next_try = 0.0  # monotonic; backoff while writer not ready
+        self._wait_logged_at = 0.0
+        self._frames_ok = 0
+        self._last_frame_mono = 0.0
+        self.last_seq_pub = -1
+        self.last_digest = 0  # cheap content fingerprint for heartbeats
+
+    def request_resend(self) -> None:
+        """Allow re-reading the current shm frame (e.g. after Studio subscribe)."""
+        self._last_seq = -1
+        if self._shm is not None:
+            self._shm.reset_seq_cursor()
 
     def _ensure_shm(self) -> bool:
         if self._shm is not None:
             return True
-        assert self.tip_slot
+        assert self.camera_slot
+        import time
+
+        now = time.monotonic()
+        if now < self._shm_next_try:
+            return False
         try:
             from gf_gmt.gf_channel_client import GfChannelReader
 
-            self._shm = GfChannelReader(self.tip_slot)
+            self._shm = GfChannelReader(self.camera_slot)
         except Exception as exc:  # noqa: BLE001
+            # Channel may appear after ingest starts — retry with backoff (not every poll).
+            self._shm_next_try = now + 1.0
             if not self._shm_fail_logged:
                 print(
-                    f"[bridge-ws] tip shm open pending ({self.tip_slot}): {exc}",
+                    f"[bridge-ws] camera shm open pending ({self.camera_slot}): {exc} "
+                    f"(retry ≤1 Hz until ready)",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -163,10 +234,11 @@ class TipFramePublisher:
         self._w = self._shm.width
         self._h = self._shm.height
         self._negotiated = True
+        self._shm_next_try = 0.0
         if not self._shm_ok_logged:
             print(
-                f"[bridge-ws] tip stream format={self._fmt} {self._w}x{self._h} "
-                f"slot={self.tip_slot} (GfChannel)",
+                f"[bridge-ws] camera stream format={self._fmt} {self._w}x{self._h} "
+                f"camera_slot={self.camera_slot} (GfChannel)",
                 file=sys.stderr,
                 flush=True,
             )
@@ -191,7 +263,7 @@ class TipFramePublisher:
             return False
         self._negotiated = True
         print(
-            f"[bridge-ws] tip stream format={self._fmt} {self._w}x{self._h} "
+            f"[bridge-ws] camera stream format={self._fmt} {self._w}x{self._h} "
             f"path={self.frame_path} (file bypass)",
             file=sys.stderr,
             flush=True,
@@ -199,7 +271,7 @@ class TipFramePublisher:
         return True
 
     def poll(self) -> dict[str, Any] | None:
-        if self.tip_slot:
+        if self.camera_slot:
             return self._poll_shm()
         return self._poll_file()
 
@@ -209,14 +281,51 @@ class TipFramePublisher:
         assert self._shm is not None
         got = self._shm.latest()
         if got is None:
+            import time
+
+            now = time.monotonic()
+            if self._frames_ok == 0 and now - self._wait_logged_at >= 3.0:
+                self._wait_logged_at = now
+                print(
+                    f"[bridge-ws] camera waiting: slot={self.camera_slot} open but no seq yet "
+                    f"(no writer publish yet — if GF_FRAME_SOURCE=carla, bridge may still be "
+                    f"connecting / waiting for role_name=hero in UE)",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            elif (
+                self._frames_ok > 0
+                and self._last_frame_mono > 0
+                and now - self._last_frame_mono >= 3.0
+                and now - self._wait_logged_at >= 3.0
+            ):
+                self._wait_logged_at = now
+                print(
+                    f"[bridge-ws] camera stalled ~{now - self._last_frame_mono:.0f}s "
+                    f"(had frames; often scenario hero/camera re-attach — check carla_bridge "
+                    f"for ego_lost / waiting for scenario hero)",
+                    file=sys.stderr,
+                    flush=True,
+                )
             return None
         plane, t_ns, seq = got
         if seq == self._last_seq:
             return None
-        row = _encode_tip_row(self._shm.format, plane, self._shm.width, self._shm.height, t_ns)
+        row = _encode_camera_row(self._shm.format, plane, self._shm.width, self._shm.height, t_ns)
         if row is None:
             return None
         self._last_seq = seq
+        self._frames_ok += 1
+        self.last_seq_pub = int(seq)
+        # Pixel-only fingerprint (do NOT fold seq in — seq always moves).
+        n = len(plane)
+        if n >= 3:
+            self.last_digest = plane[0] | (plane[n // 2] << 8) | (plane[n - 1] << 16)
+        else:
+            self.last_digest = plane[0] if n else 0
+        import time
+
+        self._last_frame_mono = time.monotonic()
         return row
 
     def _poll_file(self) -> dict[str, Any] | None:
@@ -242,7 +351,7 @@ class TipFramePublisher:
             return None
         if len(plane) < need:
             return None
-        row = _encode_tip_row(self._fmt, plane, self._w, self._h, t_ns)
+        row = _encode_camera_row(self._fmt, plane, self._w, self._h, t_ns)
         if row is None:
             return None
         self._last_seq = seq

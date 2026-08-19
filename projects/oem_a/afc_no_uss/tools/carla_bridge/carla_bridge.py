@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""CARLA tip bridge for afc_no_uss.
+"""CARLA camera bridge for afc_no_uss.
 
-Writes configurable YUV tip protocol for perception.fcm and executes
+Writes configurable YUV camera protocol for perception.fcm and executes
 throttle/brake/steer (+ lane_change) from vehicle_can_gateway.
 
 Stream negotiate once (format/w/h); per-frame meta is timestamp_ns/seq only.
 Does not decide lane changes.
 
 HIL default: keep reconnecting to remote UE (scenario switches / RPC timeouts
-must not kill tip→FCM). GF_CARLA_BRIDGE_ON_FAIL=exit|idle|reconnect.
+must not kill camera→FCM). GF_CARLA_BRIDGE_ON_FAIL=exit|idle|reconnect.
 """
 
 from __future__ import annotations
@@ -98,19 +98,19 @@ def write_frame(
     *,
     record_dir: Optional[Path] = None,
 ) -> None:
-    # TipChannel live path (frame_ingest Create; we Open+Publish).
-    tip_slot = os.environ.get("GF_CHANNEL_SLOT", "").strip()
+    # GfChannel live path (frame_ingest Create; we Open+Publish).
+    camera_slot = os.environ.get("GF_CAMERA_SLOT", "").strip()
     transport = (os.environ.get("GF_CHANNEL_TRANSPORT") or "shm").strip().lower()
-    if tip_slot and transport == "shm":
+    if camera_slot and transport == "shm":
         try:
-            pub = _tip_publisher()
+            pub = _camera_publisher()
             if callable(pub):
                 pub(plane, timestamp_ns, seq)
         except Exception as exc:  # noqa: BLE001
-            _log(f"tip publish error: {exc}", error=True)
-    # File tip / tee only when transport=file or GF_TIP_FILE_TEE=1 (Foxglove uses GfChannel).
-    tee = transport == "file" or os.environ.get("GF_TIP_FILE_TEE", "0") == "1"
-    if tee or not tip_slot or transport != "shm":
+            _log(f"camera publish error: {exc}", error=True)
+    # File camera / tee only when transport=file or GF_CAMERA_FILE_TEE=1 (Foxglove uses GfChannel).
+    tee = transport == "file" or os.environ.get("GF_CAMERA_FILE_TEE", "0") == "1"
+    if tee or not camera_slot or transport != "shm":
         atomic_write_bytes(frame_path, plane)
         meta = {"timestamp_ns": timestamp_ns, "seq": seq}
         atomic_write_text(meta_path(frame_path), json.dumps(meta, separators=(",", ":")))
@@ -127,37 +127,37 @@ def write_frame(
             )
 
 
-_TIP_PUB = None
+_CAMERA_PUB = None
 
 
-def _tip_publisher():
-    """Lazy Open TipChannel for GF_CHANNEL_SLOT; returns publish(plane, ts, seq)."""
-    global _TIP_PUB
-    if _TIP_PUB is not None:
-        return _TIP_PUB
-    slot = os.environ.get("GF_CHANNEL_SLOT", "").strip()
+def _camera_publisher():
+    """Lazy Open GfChannel for GF_CAMERA_SLOT; returns publish(plane, ts, seq)."""
+    global _CAMERA_PUB
+    if _CAMERA_PUB is not None:
+        return _CAMERA_PUB
+    slot = os.environ.get("GF_CAMERA_SLOT", "").strip()
     if not slot:
         return None
     try:
         fi = Path(__file__).resolve().parents[2] / "apps" / "frame_ingest"
         if str(fi) not in sys.path:
             sys.path.insert(0, str(fi))
-        from gf_channel_py import GfChannel as TipChannel  # noqa: WPS433
+        from gf_channel_py import GfChannel  # noqa: WPS433
 
-        ch = TipChannel.open(slot)
+        ch = GfChannel.open(slot)
         def _pub(plane: bytes, timestamp_ns: int, seq: int) -> None:
             ch.publish(plane, int(timestamp_ns), int(seq))
 
-        _TIP_PUB = _pub
-        _log(f"tip channel open {slot}")
-        return _TIP_PUB
+        _CAMERA_PUB = _pub
+        _log(f"camera channel open {slot}")
+        return _CAMERA_PUB
     except Exception as exc:  # noqa: BLE001
-        _log(f"tip channel unavailable ({exc}); file tip only")
-        _TIP_PUB = False  # type: ignore[assignment]
+        _log(f"camera channel unavailable ({exc}); file camera only")
+        _CAMERA_PUB = False  # type: ignore[assignment]
         return None
 
 
-def write_ego_tip(
+def write_ego(
     ego_path: Path,
     *,
     speed_mps: float,
@@ -178,7 +178,7 @@ def write_ego_tip(
     atomic_write_text(ego_path, json.dumps(payload, separators=(",", ":")) + "\n")
 
 
-def write_truth_tip(
+def write_truth(
     truth_path: Path,
     *,
     lead_distance_m: float,
@@ -290,7 +290,7 @@ def run_dry(
         plane = rgb_to_yuv(fmt, rgb, w, h)
         write_frame(frame_path, plane, seq, ts, record_dir=record_dir)
 
-        # Dry-run longitudinal response from last cmd (log only + ego tip).
+        # Dry-run longitudinal response from last cmd (log only + ego write).
         cmd, last_cmd_seq, last_cmd_mtime = load_cmd(
             cmd_path, last_cmd_seq, last_cmd_mtime
         )
@@ -306,7 +306,7 @@ def run_dry(
         else:
             speed = max(0.0, speed - 0.01)
 
-        write_ego_tip(
+        write_ego(
             ego_path,
             speed_mps=speed,
             yaw_rate_degps=0.05 * math.sin(seq * 0.02),
@@ -316,7 +316,7 @@ def run_dry(
             timestamp_ns=ts,
         )
         dist, rel = scenario_lead(scenario, t0, seq)
-        write_truth_tip(
+        write_truth(
             truth_path,
             lead_distance_m=dist,
             lead_rel_speed_mps=rel,
@@ -338,17 +338,29 @@ def _actor_alive(actor: Any) -> bool:
 
 
 def _find_role(world: Any, role: str) -> Any:
+    heroes = _find_roles(world, role)
+    if not heroes:
+        return None
+    # Prefer highest actor id (= newest spawn) when leftovers share the role.
+    try:
+        return max(heroes, key=lambda v: int(v.id))
+    except Exception:  # noqa: BLE001
+        return heroes[0]
+
+
+def _find_roles(world: Any, role: str) -> list[Any]:
+    out: list[Any] = []
     try:
         vehicles = world.get_actors().filter("vehicle.*")
     except Exception:  # noqa: BLE001
-        return None
+        return out
     for v in vehicles:
         try:
             if v.attributes.get("role_name") == role:
-                return v
+                out.append(v)
         except Exception:  # noqa: BLE001
             continue
-    return None
+    return out
 
 
 def _connect_world(
@@ -399,7 +411,7 @@ def _stats_path() -> Path:
 def _write_bridge_stats(
     *,
     carla_fps: float,
-    tip_fps: float,
+    cam_fps: float,
     hero_id: int,
     seq: int,
     waiting_hero: bool = False,
@@ -408,7 +420,7 @@ def _write_bridge_stats(
 ) -> None:
     payload = {
         "carla_fps": round(float(carla_fps), 2),
-        "tip_fps": round(float(tip_fps), 2),
+        "cam_fps": round(float(cam_fps), 2),
         "hero_id": int(hero_id),
         "seq": int(seq),
         "waiting_hero": bool(waiting_hero),
@@ -437,7 +449,7 @@ def _run_carla_session(
     scenario: str,
     record_dir: Optional[Path],
 ) -> str:
-    """One tip session. Scheme-1: never spawn hero/lead — scenario owns world.
+    """One camera session. Scheme-1: never spawn hero/lead — scenario owns world.
 
     Returns: stop | ego_lost | rpc_error | waiting_hero
     """
@@ -463,7 +475,7 @@ def _run_carla_session(
         now = time.monotonic()
         if now - last_wait_log >= 5.0:
             _write_bridge_stats(
-                carla_fps=0.0, tip_fps=0.0, hero_id=-1, seq=0, waiting_hero=True
+                carla_fps=0.0, cam_fps=0.0, hero_id=-1, seq=0, waiting_hero=True
             )
             _log("still waiting for scenario hero…")
             last_wait_log = now
@@ -474,7 +486,7 @@ def _run_carla_session(
         _log(f"no scenario hero after {wait_hero_s:.0f}s → retry session")
         return "waiting_hero"
 
-    _log(f"attached tip camera to scenario hero id={vehicle.id}")
+    _log(f"attached driving camera to scenario hero id={vehicle.id}")
     try:
         vehicle.set_autopilot(False)
     except Exception:  # noqa: BLE001
@@ -498,27 +510,27 @@ def _run_carla_session(
     last_cmd = {"seq": -1, "mtime": -1.0}
     need = plane_size(fmt, w, h)
     ego_ref: dict[str, Any] = {"v": vehicle}
-    # FPS: CARLA camera callbacks vs successful tip writes (windowed).
-    fps_win = {"t0": time.monotonic(), "carla_n": 0, "tip_n": 0}
-    fps_pub = {"carla": 0.0, "tip": 0.0, "last_log": 0.0, "t_convert_ms": 0.0, "t_write_ms": 0.0}
+    # FPS: CARLA camera callbacks vs successful camera writes (windowed).
+    fps_win = {"t0": time.monotonic(), "carla_n": 0, "cam_n": 0}
+    fps_pub = {"carla": 0.0, "cam": 0.0, "last_log": 0.0, "t_convert_ms": 0.0, "t_write_ms": 0.0}
 
-    def _bump_fps(*, carla: bool = False, tip_ok: bool = False) -> None:
+    def _bump_fps(*, carla: bool = False, cam_ok: bool = False) -> None:
         if carla:
             fps_win["carla_n"] += 1
-        if tip_ok:
-            fps_win["tip_n"] += 1
+        if cam_ok:
+            fps_win["cam_n"] += 1
         now = time.monotonic()
         dt = now - float(fps_win["t0"])
         if dt < 1.0:
             return
         fps_pub["carla"] = float(fps_win["carla_n"]) / dt
-        fps_pub["tip"] = float(fps_win["tip_n"]) / dt
+        fps_pub["cam"] = float(fps_win["cam_n"]) / dt
         fps_win["t0"] = now
         fps_win["carla_n"] = 0
-        fps_win["tip_n"] = 0
+        fps_win["cam_n"] = 0
         _write_bridge_stats(
             carla_fps=float(fps_pub["carla"]),
-            tip_fps=float(fps_pub["tip"]),
+            cam_fps=float(fps_pub["cam"]),
             hero_id=int(getattr(ego_ref["v"], "id", -1)),
             seq=int(seq_holder["seq"]),
             t_convert_ms=float(fps_pub.get("t_convert_ms", 0.0)),
@@ -526,7 +538,7 @@ def _run_carla_session(
         )
         if now - float(fps_pub["last_log"]) >= 2.0:
             _log(
-                f"fps carla={fps_pub['carla']:.1f} tip_write={fps_pub['tip']:.1f} "
+                f"fps carla={fps_pub['carla']:.1f} cam_write={fps_pub['cam']:.1f} "
                 f"convert_ms={fps_pub.get('t_convert_ms', 0):.1f} "
                 f"write_ms={fps_pub.get('t_write_ms', 0):.1f} "
                 f"hero={getattr(ego_ref['v'], 'id', '?')} seq={seq_holder['seq']}"
@@ -568,13 +580,13 @@ def _run_carla_session(
             fps_pub["t_write_ms"] = (
                 0.8 * float(fps_pub.get("t_write_ms", t_write_ms)) + 0.2 * t_write_ms
             )
-            _bump_fps(tip_ok=True)
+            _bump_fps(cam_ok=True)
 
             vel = veh.get_velocity()
             speed = math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z)
             ang = veh.get_angular_velocity()
             ctrl = veh.get_control()
-            write_ego_tip(
+            write_ego(
                 ego_path,
                 speed_mps=speed,
                 yaw_rate_degps=float(ang.z),
@@ -595,6 +607,29 @@ def _run_carla_session(
             if not _actor_alive(vehicle) or not _actor_alive(camera):
                 reason = "ego_lost"
                 _log("ego/camera gone (scenario switch?) → re-session")
+                break
+            # New case often spawns a new hero while the old wreck is still "alive".
+            # Follow newest role_name=hero — same world as pygame — or Foxglove stays on case-1.
+            try:
+                heroes = _find_roles(world, "hero")
+            except Exception:  # noqa: BLE001
+                heroes = []
+            if not heroes:
+                reason = "ego_lost"
+                _log("no role_name=hero in world → re-session")
+                break
+            try:
+                old_id = int(vehicle.id)
+                newest = max(heroes, key=lambda v: int(v.id))
+                cur_id = int(newest.id)
+            except Exception:  # noqa: BLE001
+                cur_id, old_id = -1, -2
+            if cur_id != old_id:
+                reason = "hero_changed"
+                _log(
+                    f"hero id {old_id} → {cur_id} "
+                    f"(heroes={len(heroes)}; new case?) → re-session"
+                )
                 break
             try:
                 cmd, last_cmd["seq"], last_cmd["mtime"] = load_cmd(
@@ -623,7 +658,7 @@ def _run_carla_session(
                 break
             time.sleep(0.05)
     finally:
-        _log("teardown tip camera (hero owned by scenario — not destroyed)")
+        _log("teardown driving camera (hero owned by scenario — not destroyed)")
         try:
             camera.stop()
         except Exception:  # noqa: BLE001
@@ -669,12 +704,12 @@ def run_carla(
 
     wait_s = float(_env("GF_CARLA_WAIT_S", "0"))
     reconnect_s = float(_env("GF_CARLA_RECONNECT_S", "2"))
-    # Default reconnect: HIL remote UE + scenario switches must not kill tip→FCM.
+    # Default reconnect: HIL remote UE + scenario switches must not kill camera→FCM.
     mode = (on_fail or "reconnect").strip().lower()
     forever = mode in ("reconnect", "retry", "idle")
     _log(
         f"link mode={mode} wait_s={wait_s} reconnect_s={reconnect_s} "
-        f"rpc_timeout_s={timeout_s} (tip stays alive across scenario switches)"
+        f"rpc_timeout_s={timeout_s} (camera stays alive across scenario switches)"
     )
 
     while not STOP:
@@ -707,7 +742,7 @@ def run_carla(
             time.sleep(max(0.5, reconnect_s))
             continue
 
-        # Optional sync / fixed-delta recording (25fps tip volume timebase).
+        # Optional sync / fixed-delta recording (25fps camera volume timebase).
         if _env("GF_CARLA_SYNC", "0") == "1":
             try:
                 fps = float(_env("GF_CHANNEL_RECORD_FPS", "25"))
@@ -752,7 +787,7 @@ def run_carla(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    p = argparse.ArgumentParser(description="afc_no_uss CARLA YUV tip + cmd bridge")
+    p = argparse.ArgumentParser(description="afc_no_uss CARLA YUV camera + cmd bridge")
     p.add_argument("--dry-run", action="store_true", help="synth frames, no CARLA")
     args = p.parse_args(argv)
 

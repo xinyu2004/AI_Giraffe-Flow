@@ -50,7 +50,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | **2 · Platform runtime** | Top `runtime_modules` (incl. trimable **per / tsync**); subpages: exec/FG · **EM launch map** · PHM · diag · **log** · OTA · **Event collector** · **Memory bounds** |
 
 Shortcuts: Ctrl+1 / Ctrl+2. Verify / Generate returns to tab 1 Lineage.  
-**Edit menu:** Undo / Redo (Ctrl+Z / Ctrl+Y) — jumps to the changed page (incl. platform subpages); status-bar tip is i18n’d.
+**Edit menu:** Undo / Redo (Ctrl+Z / Ctrl+Y) — jumps to the changed page (incl. platform subpages); status-bar hint is i18n’d.
 
 **File menu:** Open · Save (Ctrl+S) · Save & Verify · Verify (Ctrl+R) · Generate (Ctrl+G) · Import hpp/fidl  
 

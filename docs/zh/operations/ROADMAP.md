@@ -217,8 +217,27 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 ## 下一步
 
-1. **P3z / wave E**：AM62 EdgeAI（同一 `frame_ingest`）/ 真板 / vsomeip / RAUC / soak。
-2. 配置策略 backlog：live/DoIP 等行为开关亦编译冻结（见 CONFIG_RUNTIME_POLICY）。
-3. 云 CI：L0 + 路径 L0b + nightly/发版门禁（见 [devops/ci/README.md](../../../devops/ci/README.md)）；（可选）真 ORT / CARLA 图进 Foxglove topic。
+1. **产品 demo：** CARLA + Foxglove（假感知→FCM 透传→planning lite）；C2 运行时加深后置。
+2. **板端零 Python：** 上板 `runtime/`（含 **frame_ingest** 及一切 GMT/EM 会拉起的板端二进制）**不得依赖 Python** — 见 [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md) `BL-BOARD-NO-PY`。Python 仅宿主机 SIL（`carla_bridge` / scenarios / gf-config / GMT PC 侧）。
+3. 云 CI：L0 + 路径 L0b + nightly/发版（见 [devops/ci/README.md](../../../devops/ci/README.md)）。
+4. **后期（登记，本轮不做）：**
+   - [BL-CFG-YAML-FALLBACK](AP_LITE_BACKLOG.md)：删 bringup/DoIP 的 `GF_PLATFORM_DIR`→yaml 回落（强制 hpp 齐全）
+   - [BL-IOX-SHM-USED](AP_LITE_BACKLOG.md)：iceoryx SHM 度量从 **allocated/reserve** 进到 **used**
+   - [BL-STAGE-PY-MTIME](AP_LITE_BACKLOG.md)：SIL stage 对主机侧 carla_bridge py 做 mtime 拷贝（不上板）
+5. **P3z / wave E**：AM62 / 真板 / vsomeip / RAUC / soak。
 
+### 里程碑备忘（上传前口径 · 2026-08）
+
+**一句话：** 作者态 yaml → compose → hpp → 二进制；SIL 可跑 CARLA/Foxglove 相机链；**上板载荷按零 Python / 零行为 yaml 收口（政策已定，实现见 backlog）。**
+
+| 已收口（本轮可述） | 仍后置 |
+|--------------------|--------|
+| 配置 freeze → hpp；白名单可运行期 JSON；行为进 constexpr | `BL-CFG-YAML-FALLBACK`（删 yaml 回落） |
+| `camera_slot` / driving·parking topic；产品 tip 词清退 | — |
+| Foxglove 相机主路径 + hero 换场重挂（SIL） | 换场相机空窗压到可接受 |
+| Client A（scenarios）/ B（ingest）职责与相机契约文档 | 假感知→FCM→planning demo 深化 |
+| **政策：**板端 runtime / GMT 依赖 **零 Python**（含 **整条 frame_ingest**，非仅 ISP） | **实现** `BL-BOARD-NO-PY`（板端 C++ ISP/V4L，SIL py 模块不上板） |
+| — | `BL-STAGE-PY-MTIME`；云 CI；P3z 真板 |
+
+入口文档：[CONFIG_RUNTIME_POLICY.md](CONFIG_RUNTIME_POLICY.md) · [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md) · [frame_ingest_roles.md](../sku/afc_no_uss/frame_ingest_roles.md)。  
 P3-4 桌面 DoIP/OTA 已收口 → [DOIP_OTA.md](DOIP_OTA.md)。

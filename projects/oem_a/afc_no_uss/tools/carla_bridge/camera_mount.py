@@ -1,8 +1,8 @@
-"""Camera mount (extrinsics) for SIL carla tip module — **compose freeze only**.
+"""Camera mount (extrinsics) for SIL carla camera module — **compose freeze only**.
 
 Order (one geometry truth, no local preset table):
   1. Full ``GF_CAMERA_MOUNT_{X,Y,Z,PITCH,YAW,ROLL,FOV}`` from gf_frame_ingest
-     (exported from ``frame_ingest_config.hpp``; legacy ``GF_CARLA_TIP_*`` accepted)
+     (exported from ``frame_ingest_config.hpp``)
   2. Else ``camera_contract.json`` via ``GF_CAMERA_CONTRACT`` /
      ``$GF_PROJECT_DIR/generated/camera_contract.json``
 
@@ -18,15 +18,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Tuple
 
-# Primary env keys; legacy GF_CARLA_TIP_* kept as read aliases.
 _ENV_KEYS = (
-    (("GF_CAMERA_MOUNT_X", "GF_CARLA_TIP_X"), "x"),
-    (("GF_CAMERA_MOUNT_Y", "GF_CARLA_TIP_Y"), "y"),
-    (("GF_CAMERA_MOUNT_Z", "GF_CARLA_TIP_Z"), "z"),
-    (("GF_CAMERA_MOUNT_PITCH", "GF_CARLA_TIP_PITCH"), "pitch"),
-    (("GF_CAMERA_MOUNT_YAW", "GF_CARLA_TIP_YAW"), "yaw"),
-    (("GF_CAMERA_MOUNT_ROLL", "GF_CARLA_TIP_ROLL"), "roll"),
-    (("GF_CAMERA_MOUNT_FOV", "GF_CARLA_TIP_FOV"), "fov"),
+    ("GF_CAMERA_MOUNT_X", "x"),
+    ("GF_CAMERA_MOUNT_Y", "y"),
+    ("GF_CAMERA_MOUNT_Z", "z"),
+    ("GF_CAMERA_MOUNT_PITCH", "pitch"),
+    ("GF_CAMERA_MOUNT_YAW", "yaw"),
+    ("GF_CAMERA_MOUNT_ROLL", "roll"),
+    ("GF_CAMERA_MOUNT_FOV", "fov"),
 )
 _REQUIRED = ("x", "y", "z", "pitch", "yaw", "roll", "fov")
 
@@ -58,30 +57,24 @@ class CameraMount:
         )
 
 
-def _env_float(*keys: str) -> float | None:
-    for key in keys:
-        raw = os.environ.get(key)
-        if raw is None or str(raw).strip() == "":
-            continue
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
+def _env_float(key: str) -> float | None:
+    raw = os.environ.get(key)
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
 
 
 def _from_ingest_env() -> dict[str, Any] | None:
     vals: dict[str, Any] = {}
-    for env_keys, field in _ENV_KEYS:
-        v = _env_float(*env_keys)
+    for env_key, field in _ENV_KEYS:
+        v = _env_float(env_key)
         if v is None:
             return None
         vals[field] = v
-    mid = (
-        os.environ.get("GF_CAMERA_MOUNT_ID")
-        or os.environ.get("GF_CARLA_TIP_MOUNT")
-        or ""
-    ).strip() or "1"
+    mid = (os.environ.get("GF_CAMERA_MOUNT_ID") or "").strip() or "1"
     vals["id"] = mid
     return vals
 

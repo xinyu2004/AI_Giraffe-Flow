@@ -451,7 +451,7 @@ class ReqEditor(QWidget):
             if isinstance(req.get("frame_ingest"), dict)
             else {}
         )
-        # B-page owns frame_ingest; A-page Save must not clobber tip/ego/slots.
+        # B-page owns frame_ingest; A-page Save must not clobber frame source/ego/slots.
         if prev_fi:
             req["frame_ingest"] = prev_fi
         prev_acc = req.get("acceptance") if isinstance(req.get("acceptance"), dict) else {}

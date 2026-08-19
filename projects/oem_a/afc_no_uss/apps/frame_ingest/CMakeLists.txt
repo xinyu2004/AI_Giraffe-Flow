@@ -13,8 +13,6 @@ target_compile_features(gf_frame_ingest PRIVATE cxx_std_17)
 
 if(TARGET gf_channel::channel)
   target_link_libraries(gf_frame_ingest PRIVATE gf_channel::channel)
-elseif(TARGET gf_tip::channel)
-  target_link_libraries(gf_frame_ingest PRIVATE gf_tip::channel)
 else()
   message(FATAL_ERROR "gf_frame_ingest requires gf_channel::channel")
 endif()

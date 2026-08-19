@@ -28,14 +28,14 @@ class InjectPanel(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        tip = QLabel(
+        help_lbl = QLabel(
             t(
                 "未连接时此表为空。顶栏「回灌 tcp」连接后，"
                 "勾选 Follow playhead 并回放/单步，结果才会出现。"
             )
         )
-        tip.setWordWrap(True)
-        tip.setStyleSheet("color:#555;")
+        help_lbl.setWordWrap(True)
+        help_lbl.setStyleSheet("color:#555;")
 
         tools = QHBoxLayout()
         self.follow_playhead = QCheckBox(t("Follow playhead"))
@@ -73,7 +73,7 @@ class InjectPanel(QWidget):
         self._table.cellClicked.connect(self._on_cell_clicked)
 
         lay = QVBoxLayout(self)
-        lay.addWidget(tip)
+        lay.addWidget(help_lbl)
         lay.addLayout(tools)
         lay.addWidget(self.state)
         lay.addWidget(self.detail)

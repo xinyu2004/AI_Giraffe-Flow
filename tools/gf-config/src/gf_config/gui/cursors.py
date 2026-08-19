@@ -34,7 +34,7 @@ def port_move_cursor() -> QCursor:
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    _paint_four_way(p, s / 2.0, arm=7.0, tip_len=4.5, tip_w=3.2)
+    _paint_four_way(p, s / 2.0, arm=7.0, apex_len=4.5, apex_w=3.2)
     p.end()
     hot = s // 2
     _move = QCursor(pm, hot, hot)
@@ -46,8 +46,8 @@ def _paint_four_way(
     c: float,
     *,
     arm: float,
-    tip_len: float,
-    tip_w: float,
+    apex_len: float,
+    apex_w: float,
 ) -> None:
     """White halo then black core so the cross stays visible on light/dark chrome."""
 
@@ -65,15 +65,15 @@ def _paint_four_way(
             (c - arm, c, -1.0, 0.0),
             (c + arm, c, 1.0, 0.0),
         ):
-            tip = QPointF(tx + ux * tip_len * 0.35, ty + uy * tip_len * 0.35)
-            base = QPointF(tx - ux * tip_len * 0.15, ty - uy * tip_len * 0.15)
+            apex = QPointF(tx + ux * apex_len * 0.35, ty + uy * apex_len * 0.35)
+            base = QPointF(tx - ux * apex_len * 0.15, ty - uy * apex_len * 0.15)
             px_, py_ = -uy, ux
             p.drawPolygon(
                 QPolygonF(
                     [
-                        tip,
-                        QPointF(base.x() + px_ * tip_w, base.y() + py_ * tip_w),
-                        QPointF(base.x() - px_ * tip_w, base.y() - py_ * tip_w),
+                        apex,
+                        QPointF(base.x() + px_ * apex_w, base.y() + py_ * apex_w),
+                        QPointF(base.x() - px_ * apex_w, base.y() - py_ * apex_w),
                     ]
                 )
             )

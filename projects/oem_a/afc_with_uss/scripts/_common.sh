@@ -115,7 +115,7 @@ gf_sil_need_stage() {
   em_dst="${rt}/bin/gf_em_daemon"
   [[ -x "${em_dst}" ]] || return 0
   [[ -x "${rt}/bin/iox-roudi" ]] || return 0
-  # tip_channel only required if this SKU built it
+  # gf_channel only required if this SKU built it
   if [[ -e "${build}/lib/libgf_channel.so" || -e "${build}/lib/libgf_channel.so.0" ]]; then
     [[ -e "${rt}/lib/libgf_channel.so" || -e "${rt}/lib/libgf_channel.so.0" ]] || return 0
   fi

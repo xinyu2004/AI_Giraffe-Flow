@@ -1597,9 +1597,9 @@ class GmtMainWindow(QMainWindow):
             )
             self._fox_proc = None
             return
-        tip = ""
+        hint = ""
         if port != 8765:
-            tip = (
+            hint = (
                 t("\n（检测到 :8765 已被占用，多半是 SIL live；"
                 "离线回放改用本端口，勿与 live 混连。）")
             )
@@ -1608,7 +1608,7 @@ class GmtMainWindow(QMainWindow):
             "Foxglove",
             t("已启动 WS 回放：ws://127.0.0.1:{port}\n").format(port=port)
             + t("Foxglove Studio → Open connection。")
-            + tip,
+            + hint,
         )
         self.statusBar().showMessage(
             t("Foxglove 回放已启动 ws://127.0.0.1:{port}").format(port=port),

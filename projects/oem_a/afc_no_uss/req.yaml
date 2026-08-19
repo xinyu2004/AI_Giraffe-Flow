@@ -32,17 +32,17 @@ observability:
     - services.semantic.EgoMotion
     - services.semantic.Perception_MESSAGE_Out_St
     - services.semantic.Trajectory
-# Behavior freeze (gf-config → compose → compile). Not a runtime tip JSON.
+# Behavior freeze (gf-config → compose → compile). Not a runtime camera JSON.
 frame_ingest:
   frame_source: carla_file
   pixel_format: nv12
   ego_source: carla
   frame_w: 640
   frame_h: 480
-  tip_transport: shm
+  camera_transport: shm
   # SOP freeze default; SIL overrides via GF_FRAME_SOURCE=carla|replay|colorbar
   active_source: isp
-  tip_slots:
+  camera_slots:
   - id: front
     w: 640
     h: 480

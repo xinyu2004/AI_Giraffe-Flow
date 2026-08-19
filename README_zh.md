@@ -118,7 +118,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 `projects/oem_a/` 下 SKU 同一合同：**mtime compose / 按需 cmake configure / 增量 build**；`GF_CTEST=1` 才跑 ctest；stage 出 `runtime/bin/giraffe_launch`；GMT 旁路为 `GMT_depend_launch`（`GF_GMT_DEPEND=0` → 只 EM）。
 
 ```bash
-# afc_with_uss（含 USS）或 afc_no_uss（无 USS / tip 向）
+# afc_with_uss（含 USS）或 afc_no_uss（无 USS / 相机向）
 bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
 
 # 普通主链（gateway 开车态）+ 默认挂 GMT depend

@@ -418,22 +418,22 @@ TIP_EN: dict[str, str] = {
         "Live tap: mirror canvas services to observability tools. "
         "On → compose adds debug_bridge/iox_obs_tap; run_sil can attach Foxglove WS."
     ),
-    "帧摄入（frame_ingest）：CARLA / 文件 / 未来 ISP·摄像头的 tip 入口。"
+    "帧摄入（frame_ingest）：CARLA / 文件 / 未来 ISP·摄像头的相机入口。"
     "与 live_tap 白名单不同——这里是行为轨迹，经 compose 冻结为 "
     "frame_ingest_config.hpp（apps + run_sil）。改完请 Verify + compile_sil，再 run_sil。"
     "功能场景（ACC/AEB）不在此配置，见仓库 carla_scenarios/。": (
-        "Frame ingest: pick tip source + ego_source; compose freezes "
+        "Frame ingest: pick frame source + ego_source; compose freezes "
         "frame_ingest_config.hpp (C++ ingest / FCM / gateway). "
         "After edits: Verify + compile_sil, then run_sil. "
         "carla_scenarios/ is an independent scenario machine — not configured here."
     ),
     "视频源：freeze 默认 isp；SIL 用 GF_FRAME_SOURCE=carla|replay|colorbar|none。": (
-        "Tip video: freeze SOP default isp; SIL overrides via "
+        "Video source: freeze SOP default isp; SIL overrides via "
         "GF_FRAME_SOURCE=carla|replay|colorbar|none (synth→colorbar)."
     ),
     "帧从哪来：none=无帧 SIL stub；synth=进程内彩条；"
-    "file/carla_file=读 tip 平面（stream 协商 format/w/h + 每帧 meta）。": (
-        "Tip source: none=no frame; carla=CARLA module; isp=board/ISP; "
+    "file/carla_file=读相机平面（stream 协商 format/w/h + 每帧 meta）。": (
+        "Frame source: none=no frame; carla=CARLA module; isp=board/ISP; "
         "colorbar=bars (alias synth); replay=volume replay."
     ),
     "像素怎么用：stub=帧驱动计数；onnx=检测路径（需 -DGF_WITH_ONNX）。": (
@@ -445,14 +445,14 @@ TIP_EN: dict[str, str] = {
         "Configurable pixel_format enum: nv12 default; nv21/yuv422/yuv444/rgb8 reserved. "
         "Path has no format meaning — freeze field + stream.json win."
     ),
-    "Ego 源互斥：gateway=网关自造；carla=bridge tip→gateway 发布；"
+    "Ego 源互斥：gateway=网关自造；carla=bridge→gateway 发布；"
     "inject=回灌独占（gateway 不发 Ego）。运行时三选一。": (
-        "Ego source mutex: gateway=fabricated; carla=bridge tip→gateway; "
-        "inject=GMT replay owns Ego. Independent of tip source."
+        "Ego source mutex: gateway=fabricated; carla=bridge→gateway; "
+        "inject=GMT replay owns Ego. Independent of frame source."
     ),
-    "完整前视产品路径下 tip 写端：run_sil 是否启动 carla_bridge"
-    "（相机→YUV tip、ego tip、执行 cmd）。世界/变道/ACC 由 carla_scenarios/ 脚本定义，不在此。": (
-        "Derived from tip source — whether ingest runs; no manual toggle. "
+    "完整前视产品路径下相机写端：run_sil 是否启动 carla_bridge"
+    "（相机→YUV 帧、ego、执行 cmd）。世界/变道/ACC 由 carla_scenarios/ 脚本定义，不在此。": (
+        "Derived from frame source — whether ingest runs; no manual toggle. "
         "carla_scenarios/ remains a separate scenario machine."
     ),
     "中性帧路径（如 .yuv）；格式不靠后缀。"
@@ -465,30 +465,30 @@ TIP_EN: dict[str, str] = {
     "gateway→bridge 控车 cmd JSON（throttle/brake/steer/lane_change）。": (
         "gateway→bridge vehicle cmd JSON (throttle/brake/steer/lane_change)."
     ),
-    # New tip strings (primary UI)
-    "帧摄入（frame_ingest）：选 tip 源与 ego_source，经 compose 冻结为 "
+    # New hover strings (primary UI)
+    "帧摄入（frame_ingest）：选帧源与 ego_source，经 compose 冻结为 "
     "frame_ingest_config.hpp（C++ ingest / FCM / gateway）。"
     "改完请 Verify + compile_sil，再 run_sil。"
     "carla_scenarios/ 是独立场景机，不在此配置、不进入 compose。": (
-        "Frame ingest: pick tip source + ego_source; compose freezes "
+        "Frame ingest: pick frame source + ego_source; compose freezes "
         "frame_ingest_config.hpp (C++ ingest / FCM / gateway). "
         "After edits: Verify + compile_sil, then run_sil. "
         "carla_scenarios/ is an independent scenario machine — not configured here."
     ),
-    "tip 源（active_source）：none=无帧；carla=CARLA 相机模块；"
+    "帧源（active_source）：none=无帧；carla=CARLA 相机模块；"
     "isp=板端/ISP（占位）；synth=彩条；replay=卷回灌。": (
-        "Tip source: freeze default isp; SIL GF_FRAME_SOURCE="
+        "Frame source: freeze default isp; SIL GF_FRAME_SOURCE="
         "carla|replay|colorbar|isp|none (synth→colorbar)."
     ),
-    "Ego 源互斥：gateway=网关自造；carla=bridge tip→gateway 发布；"
-    "inject=GMT 回灌独占（gateway 不发 Ego）。与 tip 源独立选型。": (
-        "Ego source mutex: gateway=fabricated; carla=bridge tip→gateway; "
-        "inject=GMT replay owns Ego. Independent of tip source."
+    "Ego 源互斥：gateway=网关自造；carla=bridge→gateway 发布；"
+    "inject=GMT 回灌独占（gateway 不发 Ego）。与帧源独立选型。": (
+        "Ego source mutex: gateway=fabricated; carla=bridge→gateway; "
+        "inject=GMT replay owns Ego. Independent of frame source."
     ),
-    "（已由 tip 源推导）ingest 是否启用；勿再手勾。": (
-        "Derived from tip source — whether ingest runs; no manual toggle."
+    "（已由帧源推导）ingest 是否启用；勿再手勾。": (
+        "Derived from frame source — whether ingest runs; no manual toggle."
     ),
-    # Legacy tip keys (kept so older tipify caches still translate)
+    # Legacy hover keys (kept so older tipify caches still translate)
     "raw RGB 路径（旁路 .json sidecar）；bridge 写、fcm 读。": (
         "Raw RGB path (+ .json sidecar); bridge writes, fcm reads."
     ),

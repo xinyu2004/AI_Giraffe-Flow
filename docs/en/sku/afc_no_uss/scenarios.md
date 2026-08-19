@@ -172,6 +172,6 @@ See `carla_scenarios/results/README.md`.
 
 - Domain cleanup (glare → `isp_env`); pick scenery by **case coverage**, not fake ties like village↔sun  
 - Scene cleanliness = less clutter; ambient traffic is normal (not FPS work)  
-- FPS / tip / frame_ingest (separate track)  
+- FPS / camera / frame_ingest (separate track)  
 - Real SET / lat-offset / HLB beam from planning  
 - Richer `results/` verdict fields

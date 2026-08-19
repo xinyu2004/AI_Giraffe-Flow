@@ -47,7 +47,7 @@ AI_Giraffe-Flow/
 │   └── bootstrap.sh              # real installer
 │
 ├── middleware/                   # board / SIL runtime (product core)
-│   ├── bindings/ iceoryx, gf_channel (ex tip_channel), …
+│   ├── bindings/ iceoryx, gf_channel, …
 │   ├── exec/ phm/ sm/ collector/ diag/ ucm/ log/ per/ tsync/
 │   ├── runtime/                  # process bring-up (SIL/HIL shared)
 │   ├── trace/                    # timing → VCD / GMT (debug-path adjacent)

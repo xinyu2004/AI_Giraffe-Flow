@@ -2,9 +2,6 @@ add_library(gf_channel SHARED
   src/gf_channel.cpp
 )
 add_library(gf_channel::channel ALIAS gf_channel)
-# Compat alias for existing target_link_libraries(... gf_tip::channel)
-add_library(gf_tip_channel ALIAS gf_channel)
-add_library(gf_tip::channel ALIAS gf_channel)
 
 target_include_directories(gf_channel PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

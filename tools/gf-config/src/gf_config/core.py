@@ -406,14 +406,14 @@ class ProjectSession:
             return s[len("gf.channel.") :] or "front"
         return s or "front"
 
-    def tip_slots(self) -> list[dict[str, Any]]:
+    def camera_slots(self) -> list[dict[str, Any]]:
         fi = self.req.get("frame_ingest")
         if not isinstance(fi, dict):
             return []
-        slots = fi.get("tip_slots")
+        slots = fi.get("camera_slots")
         return [s for s in slots if isinstance(s, dict)] if isinstance(slots, list) else []
 
-    def set_tip_slots(self, slots: list[dict[str, Any]]) -> None:
+    def set_camera_slots(self, slots: list[dict[str, Any]]) -> None:
         fi = self.req.get("frame_ingest")
         if not isinstance(fi, dict):
             fi = {}
@@ -435,7 +435,7 @@ class ProjectSession:
             if pix:
                 entry["pixel_format"] = pix
             cleaned.append(entry)
-        fi["tip_slots"] = cleaned
+        fi["camera_slots"] = cleaned
         self.dirty_req = True
 
     def frame_ingest_cfg(self) -> dict[str, Any]:
@@ -454,11 +454,11 @@ class ProjectSession:
                 fi[k] = v
         self.dirty_req = True
 
-    def upsert_tip_slot(self, slot: dict[str, Any]) -> None:
+    def upsert_camera_slot(self, slot: dict[str, Any]) -> None:
         sid = str(slot.get("id") or "").strip()
         if not sid:
-            raise ValueError("tip_slot id required")
-        slots = self.tip_slots()
+            raise ValueError("camera_slot id required")
+        slots = self.camera_slots()
         found = None
         for s in slots:
             if str(s.get("id")) == sid:
@@ -469,11 +469,11 @@ class ProjectSession:
         else:
             found.update(slot)
             found["id"] = sid
-        self.set_tip_slots(slots)
+        self.set_camera_slots(slots)
 
-    def remove_tip_slot(self, slot_id: str) -> None:
+    def remove_camera_slot(self, slot_id: str) -> None:
         sid = (slot_id or "").strip()
-        self.set_tip_slots([s for s in self.tip_slots() if str(s.get("id")) != sid])
+        self.set_camera_slots([s for s in self.camera_slots() if str(s.get("id")) != sid])
 
     def channel_flows(self) -> list[dict[str, Any]]:
         raw = self.wiring.get("channel_flows")
@@ -584,10 +584,10 @@ class ProjectSession:
         self.set_channel_flows(flows)
 
     def remove_frame_ingest_node(self) -> None:
-        """Remove optional video-contract node: tip_slots + channel_flows + canvas."""
+        """Remove optional video-contract node: camera_slots + channel_flows + canvas."""
         ingest = self.FRAME_INGEST_PROCESS
         self.update_frame_ingest(active_source="none")
-        self.set_tip_slots([])
+        self.set_camera_slots([])
         flows = [
             f
             for f in self.channel_flows()
@@ -607,13 +607,13 @@ class ProjectSession:
                     self.dirty_wiring = True
 
     def remove_camera_node(self, process: str) -> None:
-        """Compat: per-lane camera.* → strip that tip_slot; ingest node uses remove_frame_ingest_node."""
+        """Compat: per-lane camera.* → strip that camera_slot; ingest node uses remove_frame_ingest_node."""
         process = process.strip()
         if self.is_frame_ingest_process(process=process) and not process.startswith("camera."):
             self.remove_frame_ingest_node()
             return
         sid = self.slot_id_from_camera_process(process)
-        self.remove_tip_slot(sid)
+        self.remove_camera_slot(sid)
         slot = self.gf_channel_slot_name(sid)
         flows = []
         for f in self.channel_flows():

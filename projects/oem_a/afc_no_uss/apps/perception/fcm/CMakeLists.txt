@@ -1,4 +1,4 @@
-# perception.fcm — SIL stub + optional frame tip / ORT (P3-5 wave B)
+# perception.fcm — SIL stub + optional camera frame / ORT (P3-5 wave B)
 
 option(GF_WITH_ONNX "Link onnxruntime for GF_PERCEPTION_BACKEND=onnx" OFF)
 
@@ -16,8 +16,6 @@ target_link_libraries(gf_perception_fcm PRIVATE
 )
 if(TARGET gf_channel::channel)
   target_link_libraries(gf_perception_fcm PRIVATE gf_channel::channel)
-elseif(TARGET gf_tip::channel)
-  target_link_libraries(gf_perception_fcm PRIVATE gf_tip::channel)
 endif()
 add_dependencies(gf_perception_fcm iox-roudi)
 

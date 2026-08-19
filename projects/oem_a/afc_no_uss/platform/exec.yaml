@@ -1,5 +1,5 @@
 # exec + SM（function_groups → middleware/sm StateClient）
-# host.frame_ingest optional — compose drops when tip source disabled.
+# host.frame_ingest optional — compose drops when frame source disabled.
 schema_version: "0.1"
 function_groups:
   - id: MachineFG

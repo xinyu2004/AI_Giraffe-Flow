@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Wave B: colorbar tip → Perception_MESSAGE_Out (frame-driven stub).
+# Wave B: colorbar camera → Perception_MESSAGE_Out (frame-driven stub).
 #   bash projects/oem_a/afc_no_uss/scripts/smoke_frame_sil.sh
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -225,7 +225,7 @@ def apply_wiper(vehicle: Any, speed: int) -> bool:
                 return True
             except Exception:  # noqa: BLE001
                 pass
-    # Record intent for labs / future bridge tip; precipitation still hits glass.
+    # Record intent for labs / future bridge camera; precipitation still hits glass.
     print(
         f"[weather] wiper_speed={speed} (no vehicle API; rain still on windshield)",
         flush=True,

@@ -1,6 +1,6 @@
 # OS EM launch map — binaries relative to $GF_BUILD_DIR (= runtime/ on board).
 # Product freeze (compose → generated/em_launch.yaml) forces gateway args ["0"].
-# host.frame_ingest: kept when req.frame_ingest tip source enabled (compose filter).
+# host.frame_ingest: kept when req.frame_ingest frame source enabled (compose filter).
 schema_version: "0.1"
 processes:
   - name: host.dlt_daemon

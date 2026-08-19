@@ -213,7 +213,7 @@ def connect_world(
     except ImportError as exc:
         raise RuntimeError(
             "carla Python module not installed. "
-            "Use the UE-matching egg/wheel, or pass --dry-run explicitly for tip-only."
+            "Use the UE-matching egg/wheel, or pass --dry-run explicitly for camera-less dry-run."
         ) from exc
 
     h = host if host is not None else carla_host()
@@ -285,7 +285,7 @@ def connect_world(
         f"Edit {_AFC_ROOT}/carla.env (CARLA_HOST/PORT, "
         f"GF_CARLA_CONNECT_TIMEOUT_S) or set process env. "
         f"Optional retry window: --wait-s. "
-        f"Tip-only without UE: pass --dry-run explicitly."
+        f"Camera-less dry-run without UE: pass --dry-run explicitly."
     )
 
 

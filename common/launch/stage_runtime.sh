@@ -84,7 +84,7 @@ if [[ -d "${BUILD}/apps" ]]; then
   done < <(find "${BUILD}/apps" -type f -name 'gf_*' -executable -print0 2>/dev/null)
 fi
 
-# --- shared libraries: Giraffe + tip + ldd deps of staged bins ---
+# --- shared libraries: Giraffe + camera + ldd deps of staged bins ---
 stage_lib_file() {
   local src="$1"
   [[ -f "${src}" ]] || return 0
@@ -142,7 +142,7 @@ if command -v ldd >/dev/null 2>&1; then
   _LD_EXTRA=""
   while IFS= read -r -d '' d; do
     _LD_EXTRA="${d}${_LD_EXTRA:+:}${_LD_EXTRA}"
-  done < <(find "${BUILD}/middleware" -type d \( -name tip_channel -o -path '*/middleware/*' \) -print0 2>/dev/null | head -z -c 1000000)
+  done < <(find "${BUILD}/middleware" -type d -name gf_channel -print0 2>/dev/null)
   # Collect all dirs that contain libgf_*.so
   while IFS= read -r -d '' so; do
     _LD_EXTRA="$(dirname "${so}"):${_LD_EXTRA}"

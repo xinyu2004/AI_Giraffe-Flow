@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tip-protocol smoke without CARLA UE (developer only — not a SKU freeze).
+# Camera-protocol smoke without CARLA UE (developer only — not a SKU freeze).
 # Uses carla_bridge CLI/env dry-run; product path requires real CARLA.
 #   bash projects/oem_a/afc_no_uss/scripts/smoke_carla_sil.sh
 set -euo pipefail
@@ -36,7 +36,7 @@ rm -f "${GF_CARLA_FRAME_PATH}" \
   "${GF_CARLA_FRAME_PATH%.yuv}.meta.json" \
   "${GF_CARLA_CMD_PATH}" 2>/dev/null || true
 
-echo "${TAG} smoke_carla_sil: tip dry-run bridge ~${SECONDS_WIN}s (dev only)"
+echo "${TAG} smoke_carla_sil: camera dry-run bridge ~${SECONDS_WIN}s (dev only)"
 set +e
 timeout --signal=INT --kill-after=5 "${SECONDS_WIN}" bash "${SCRIPT_DIR}/run_sil.sh"
 rc=$?
@@ -64,5 +64,5 @@ if ! grep -q 'Trajectory' "${LOG_DIR}/em/planning_driving.log" 2>/dev/null \
   echo "${TAG} ERROR: no Trajectory" >&2
   exit 1
 fi
-echo "${TAG} smoke_carla_sil OK (dev tip dry-run; product = real CARLA + carla_scenarios/)"
+echo "${TAG} smoke_carla_sil OK (dev camera dry-run; product = real CARLA + carla_scenarios/)"
 exit 0

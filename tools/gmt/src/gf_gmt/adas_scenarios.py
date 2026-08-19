@@ -19,7 +19,11 @@ from typing import Any, Callable, Iterable, Iterator
 TOPIC_EGO = "/gf/EgoMotion"
 TOPIC_TRAJ = "/gf/Trajectory"
 TOPIC_ADAS = "/gf/AdasDemo"
-TOPIC_CAM = "/gf/camera/front/compressed"
+# Domains: driving = front ADAS; parking = surround (slots/topics reserved).
+TOPIC_DRIVING_CAM = "/gf/driving/camera/front/compressed"
+TOPIC_DRIVING_BEV = "/gf/driving/bev/compressed"
+TOPIC_CAM = TOPIC_DRIVING_BEV  # synth BEV output (compat name for composers/tests)
+TOPIC_PARKING_BEV = "/gf/parking/bev/compressed"  # reserved; not published yet
 
 HZ = 10
 DT_NS = int(1e9 / HZ)

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Replay recorded tip frames into the live tip path (inject + images).
+"""Replay recorded camera frames into the live camera path (inject + images).
 
 Reads a frame volume written by carla_bridge (GF_RECORD_FRAMES_DIR):
   stream.json          {"format","w","h"}
   frames.jsonl         {"seq","timestamp_ns","file"}
   NNNNNNNN.bin         planar bytes
 
-Writes the same tip protocol consumers expect (stream + meta + plane).
+Writes the same frame protocol consumers expect (stream + meta + plane).
 Mutual exclusion: use with ego_source=inject (gateway Ego off).
 """
 
@@ -58,7 +58,7 @@ def atomic_write_text(path: Path, text: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Replay tip frame volume → live tip path")
+    p = argparse.ArgumentParser(description="Replay camera frame volume → live camera path")
     p.add_argument("--frames-dir", required=True, type=Path)
     p.add_argument(
         "--frame-path",
@@ -104,24 +104,24 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
-    tip_pub = None
-    tip_slot = (os.environ.get("GF_CHANNEL_SLOT") or "").strip()
+    cam_pub = None
+    camera_slot = (os.environ.get("GF_CAMERA_SLOT") or "").strip()
     transport = (os.environ.get("GF_CHANNEL_TRANSPORT") or "shm").strip().lower()
-    if tip_slot and transport == "shm":
+    if camera_slot and transport == "shm":
         try:
             fi = Path(__file__).resolve().parents[2] / "apps" / "frame_ingest"
             if str(fi) not in sys.path:
                 sys.path.insert(0, str(fi))
-            from gf_channel_py import GfChannel as TipChannel  # noqa: WPS433
+            from gf_channel_py import GfChannel  # noqa: WPS433
 
-            tip_ch = TipChannel.open(tip_slot)
-            tip_pub = tip_ch.publish
-            print(f"[frame_replay] tip slot {tip_slot}", flush=True)
+            cam_ch = GfChannel.open(camera_slot)
+            cam_pub = cam_ch.publish
+            print(f"[frame_replay] camera_slot {camera_slot}", flush=True)
         except Exception as exc:  # noqa: BLE001
-            print(f"[frame_replay] tip open failed: {exc}", flush=True)
+            print(f"[frame_replay] camera open failed: {exc}", flush=True)
 
-    # Timebase: prefer recorded deltas; fallback --period-s / GF_CHANNEL_RECORD_FPS.
-    record_fps = float(os.environ.get("GF_CHANNEL_RECORD_FPS") or "0")
+    # Timebase: prefer recorded deltas; fallback --period-s / GF_CAMERA_RECORD_FPS.
+    record_fps = float(os.environ.get("GF_CAMERA_RECORD_FPS") or "0")
     use_record_dt = len(rows) >= 2 and all(
         isinstance(r.get("timestamp_ns"), (int, float)) for r in rows[: min(8, len(rows))]
     )
@@ -140,9 +140,9 @@ def main(argv: list[str] | None = None) -> int:
             seq = int(row.get("seq") or 0)
             ts = int(row.get("timestamp_ns") or time.time_ns())
             live_ts = time.time_ns()
-            if callable(tip_pub):
-                tip_pub(plane, live_ts, seq)
-            if transport == "file" or not tip_slot or os.environ.get("GF_TIP_FILE_TEE", "0") == "1":
+            if callable(cam_pub):
+                cam_pub(plane, live_ts, seq)
+            if transport == "file" or not camera_slot or os.environ.get("GF_CAMERA_FILE_TEE", "0") == "1":
                 atomic_write_bytes(out, plane)
                 atomic_write_text(
                     meta_out,

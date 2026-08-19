@@ -385,7 +385,7 @@ if [[ "${INJECT_ON}" == "1" ]]; then
     _FOX_BEV=()
     if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
       _FOX_BEV=(--synth-bev)
-      echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → /gf/camera/front/compressed; GF_SYNTH_BEV=0 to disable)"
+      echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → /gf/driving/bev/compressed; GF_SYNTH_BEV=0 to disable)"
     fi
     if [[ "${LIVE_TEE}" == "1" ]]; then
       mkdir -p "$(dirname "${LIVE_SESSION}")"

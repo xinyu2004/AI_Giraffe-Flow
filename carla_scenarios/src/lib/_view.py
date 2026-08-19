@@ -1,6 +1,6 @@
 """Pygame scenario window: toggle scene chase ↔ windshield.
 
-Lab HMI only. Product tip camera stays on carla_bridge — view mode never moves tip.
+Lab HMI only. Product camera stays on carla_bridge — view mode never moves camera.
 
 ChaseCam (carla.env): 1=windshield (default), 2=scene.
 """
@@ -108,8 +108,8 @@ class ScenarioView:
         )
         self._sync_spectator()
         print(
-            f"[view] pygame ChaseCam modes=1|2 tip_ref={self._mount.describe()} "
-            f"(tip owned by bridge)",
+            f"[view] pygame ChaseCam modes=1|2 mount_ref={self._mount.describe()} "
+            f"(camera owned by bridge)",
             flush=True,
         )
 
@@ -146,7 +146,7 @@ class ScenarioView:
             MODE_WINDSHIELD if self._mode == MODE_SCENE else MODE_SCENE
         )
         self._sync_spectator()
-        print(f"[view] display={self._mode} (perception tip unchanged)", flush=True)
+        print(f"[view] display={self._mode} (perception camera unchanged)", flush=True)
         return self._mode
 
     def _sync_spectator(self) -> None:
@@ -157,7 +157,7 @@ class ScenarioView:
             fwd = tf.get_forward_vector()
             loc = tf.location
             if self._mode == MODE_WINDSHIELD:
-                # Approx world pose of windshield tip mount.
+                # Approx world pose of windshield camera_mount.
                 m = self._mount
                 right = tf.get_right_vector()
                 up = tf.get_up_vector()

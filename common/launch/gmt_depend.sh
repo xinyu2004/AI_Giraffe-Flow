@@ -385,17 +385,17 @@ if [[ "${INJECT_ON}" == "1" ]]; then
     _FOX_BEV=()
     if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
       _FOX_BEV=(--synth-bev)
-      echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → /gf/camera/front/compressed; GF_SYNTH_BEV=0 to disable)"
+      echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → /gf/driving/bev/compressed; GF_SYNTH_BEV=0 to disable)"
     fi
-    _FOX_TIP=()
-    if [[ "${GF_TIP_CAMERA:-1}" != "0" ]]; then
-      if [[ -n "${GF_TIP_FRAME:-}" ]]; then
-        _FOX_TIP=(--tip-frame "${GF_TIP_FRAME}")
-        echo "${TAG} Foxglove tip camera ← ${GF_TIP_FRAME} (file bypass)"
+    _FOX_CAM=()
+    if [[ "${GF_CAMERA_PUBLISH:-1}" != "0" ]]; then
+      if [[ -n "${GF_CAMERA_FRAME:-}" ]]; then
+        _FOX_CAM=(--camera-frame "${GF_CAMERA_FRAME}")
+        echo "${TAG} Foxglove driving camera ← ${GF_CAMERA_FRAME} (file bypass)"
       else
-        _TIP_SLOT="${GF_CHANNEL_SLOT:-${GF_TIP_SLOT:-gf.channel.front}}"
-        _FOX_TIP=(--tip-slot "${_TIP_SLOT}")
-        echo "${TAG} Foxglove tip camera ← ${_TIP_SLOT} (GfChannel shm)"
+        _CAM_SLOT="${GF_CAMERA_SLOT:-gf.channel.front}"
+        _FOX_CAM=(--camera-slot "${_CAM_SLOT}")
+        echo "${TAG} Foxglove driving camera ← ${_CAM_SLOT} (GfChannel shm)"
       fi
     fi
     if [[ "${LIVE_TEE}" == "1" ]]; then
@@ -424,11 +424,11 @@ if [[ "${INJECT_ON}" == "1" ]]; then
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
           | tee "${LIVE_SESSION}" \
           | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
+          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_CAM[@]}" --host "${HOST}" --port "${PORT}"
       else
         "${TAP}" 2>"${LOG_DIR}/tap.log" \
           | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
+          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_CAM[@]}" --host "${HOST}" --port "${PORT}"
       fi
     ) &
     LIVE_FAN_PID=$!
@@ -502,7 +502,7 @@ elif [[ -x "${INGEST_BIN}" ]]; then
   if [[ -n "${GF_RECORD_FRAMES_DIR:-}" ]]; then
     mkdir -p "${GF_RECORD_FRAMES_DIR}"
     : >"${GF_RECORD_FRAMES_DIR}/frames.jsonl"
-    echo "${TAG} record tip frames → ${GF_RECORD_FRAMES_DIR}"
+    echo "${TAG} record camera frames → ${GF_RECORD_FRAMES_DIR}"
   fi
   _gf_resolve_carla_python() {
     local c
@@ -530,7 +530,7 @@ elif [[ -x "${INGEST_BIN}" ]]; then
     export GF_CARLA_PYTHON="${PY}"
   else
     PY="${GF_CARLA_PYTHON:-python3}"
-    echo "${TAG} WARN: no Python with 'import carla' — carla tip module may fail" >&2
+    echo "${TAG} WARN: no Python with 'import carla' — carla camera module may fail" >&2
   fi
   echo "${TAG} gf_frame_ingest → ${INGEST_BIN} (python=${PY})"
   echo "${TAG} frame_ingest log → ${LOG_DIR}/frame_ingest.log"
@@ -566,8 +566,8 @@ elif [[ -x "${INGEST_BIN}" ]]; then
       STATS="${GF_CARLA_BRIDGE_STATS_PATH:-${GF_PROJECT_DIR:-.}/runtime_ipc/carla_bridge_stats.json}"
       while kill -0 "${CARLA_BRIDGE_PID}" 2>/dev/null; do
         sleep 5
-        tip_slot="${GF_CHANNEL_SLOT:-${GF_TIP_SLOT:-gf.channel.front}}"
-        echo "${TAG} frame_ingest heartbeat: pid=${CARLA_BRIDGE_PID} tip_slot=${tip_slot} host=${CARLA_HOST}:${CARLA_PORT}"
+        camera_slot="${GF_CAMERA_SLOT:-gf.channel.front}"
+        echo "${TAG} frame_ingest heartbeat: pid=${CARLA_BRIDGE_PID} camera_slot=${camera_slot} host=${CARLA_HOST}:${CARLA_PORT}"
       done
     ) &
     FRAME_INGEST_STAT_PID=$!
@@ -614,15 +614,15 @@ if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
   _FOX_BEV=(--synth-bev)
   echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → BEV)"
 fi
-_FOX_TIP=()
-if [[ "${GF_TIP_CAMERA:-1}" != "0" ]]; then
-  if [[ -n "${GF_TIP_FRAME:-}" ]]; then
-    _FOX_TIP=(--tip-frame "${GF_TIP_FRAME}")
-    echo "${TAG} Foxglove tip camera ← ${GF_TIP_FRAME} (file bypass)"
+_FOX_CAM=()
+if [[ "${GF_CAMERA_PUBLISH:-1}" != "0" ]]; then
+  if [[ -n "${GF_CAMERA_FRAME:-}" ]]; then
+    _FOX_CAM=(--camera-frame "${GF_CAMERA_FRAME}")
+    echo "${TAG} Foxglove driving camera ← ${GF_CAMERA_FRAME} (file bypass)"
   else
-    _TIP_SLOT="${GF_CHANNEL_SLOT:-${GF_TIP_SLOT:-gf.channel.front}}"
-    _FOX_TIP=(--tip-slot "${_TIP_SLOT}")
-    echo "${TAG} Foxglove tip camera ← ${_TIP_SLOT} (GfChannel shm)"
+    _CAM_SLOT="${GF_CAMERA_SLOT:-gf.channel.front}"
+    _FOX_CAM=(--camera-slot "${_CAM_SLOT}")
+    echo "${TAG} Foxglove driving camera ← ${_CAM_SLOT} (GfChannel shm)"
   fi
 fi
 
@@ -654,11 +654,11 @@ _live_fan() {
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
       | tee "${LIVE_SESSION}" \
       | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
+      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_CAM[@]}" --host "${HOST}" --port "${PORT}"
   else
     "${TAP}" 2>"${LOG_DIR}/tap.log" \
       | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_TIP[@]}" --host "${HOST}" --port "${PORT}"
+      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_CAM[@]}" --host "${HOST}" --port "${PORT}"
   fi
 }
 

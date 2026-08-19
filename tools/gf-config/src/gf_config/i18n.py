@@ -660,7 +660,6 @@ _EN: dict[str, str] = {
     "已写入：\n{path}": "Wrote:\n{path}",
     # frame_ingest UI labels (zh source → en)
     "帧摄入 frame_ingest": "Frame ingest (frame_ingest)",
-    "tip 源": "Tip source",
     "帧源": "Frame source",
     "感知后端": "Perception backend",
     "none（无帧）": "none (no frame)",
@@ -675,17 +674,17 @@ _EN: dict[str, str] = {
     "cmd 路径": "Cmd path",
     "pixel_format": "pixel_format",
     "ego_source": "ego_source",
-    "改 tip/ego → Save/Verify → compile_sil → run_sil（冻结进二进制；与 carla_scenarios 无关）": (
-        "Edit tip/ego → Save/Verify → compile_sil → run_sil "
+    "改帧源/ego → Save/Verify → compile_sil → run_sil（冻结进二进制；与 carla_scenarios 无关）": (
+        "Edit frame source/ego → Save/Verify → compile_sil → run_sil "
         "(frozen into binaries; unrelated to carla_scenarios)"
     ),
-    "图像主路径=GfChannel；SIL 文件旁路(runtime_ipc)由 compose 默认。改 tip/ego → Save/Verify → compile_sil → run_sil": (
+    "图像主路径=GfChannel；SIL 文件旁路(runtime_ipc)由 compose 默认。改帧源/ego → Save/Verify → compile_sil → run_sil": (
         "Image path=GfChannel; SIL file bypass (runtime_ipc) from compose defaults. "
-        "Edit tip/ego → Save/Verify → compile_sil → run_sil"
+        "Edit frame source/ego → Save/Verify → compile_sil → run_sil"
     ),
-    "改此处 → Save/Verify → compile → run_sil（行为编译冻结，勿手改 tip JSON）": (
+    "改此处 → Save/Verify → compile → run_sil（行为编译冻结，勿手改相机 JSON）": (
         "Edit here → Save/Verify → compile → run_sil "
-        "(behavior is compile-frozen; do not hand-edit tip JSON)"
+        "(behavior is compile-frozen; do not hand-edit camera JSON)"
     ),
 }
 

@@ -7,7 +7,7 @@
 
 #if __has_include("gf_channel/gf_channel.h")
 #include "gf_channel/gf_channel.h"
-#define GF_FCM_HAS_TIP_CHANNEL 1
+#define GF_FCM_HAS_GF_CHANNEL 1
 #endif
 
 #include <chrono>
@@ -227,10 +227,9 @@ std::string StemSibling(const std::string& path, const char* suffix) {
 
 FrameSourceKind ParseFrameSource(const char* env_or_null) {
   const char* transport = std::getenv("GF_CHANNEL_TRANSPORT");
-  if (!transport || !transport[0]) transport = std::getenv("GF_TIP_TRANSPORT");
 #if defined(GF_FCM_HAS_FRAME_INGEST)
   if (!transport || !transport[0]) {
-    transport = gf_gen::frame_ingest::kTipTransport;
+    transport = gf_gen::frame_ingest::kCameraTransport;
   }
 #endif
   const char* v = env_or_null;
@@ -238,7 +237,7 @@ FrameSourceKind ParseFrameSource(const char* env_or_null) {
     v = std::getenv("GF_FRAME_SOURCE");
   }
   if (!v || !v[0]) {
-    v = std::getenv("GF_TIP_SOURCE");  // compat alias
+    v = std::getenv("GF_ACTIVE_SOURCE");  // secondary override
   }
 #if defined(GF_FCM_HAS_FRAME_INGEST)
   // Prefer freeze active_source (isp|carla|…) over legacy kFrameSource IPC label.
@@ -248,14 +247,14 @@ FrameSourceKind ParseFrameSource(const char* env_or_null) {
 #endif
   std::string src = (v && v[0]) ? v : "none";
   if (src == "synth") {
-    // FCM-internal color bars (no tip). Prefer GF_FRAME_SOURCE=colorbar + tip for product.
+    // FCM-internal color bars (no camera shm). Prefer GF_FRAME_SOURCE=colorbar + camera for product.
     return FrameSourceKind::Synth;
   }
-  // Product live path: shm tip when transport says so.
+  // Product live path: shm camera when transport says so.
   if (transport && std::strcmp(transport, "shm") == 0) {
     if (src != "none" && src != "file") {
       // isp|carla|replay|colorbar|carla_file → Open GfChannel
-      return FrameSourceKind::TipShm;
+      return FrameSourceKind::CameraShm;
     }
   }
   if (src == "none") {
@@ -268,7 +267,7 @@ FrameSourceKind ParseFrameSource(const char* env_or_null) {
     return FrameSourceKind::CarlaFile;
   }
   if (src == "isp" || src == "colorbar") {
-    // No shm transport: cannot consume tip; idle.
+    // No shm transport: cannot consume camera; idle.
     return FrameSourceKind::None;
   }
   std::cerr << "[ERROR] perception.fcm: unknown GF_FRAME_SOURCE=" << src
@@ -286,13 +285,13 @@ std::uint64_t FrameSource::NowNs() {
 }
 
 FrameSource::FrameSource(FrameSourceKind kind) : kind_(kind) {
-  if (kind_ == FrameSourceKind::TipShm) {
+  if (kind_ == FrameSourceKind::CameraShm) {
 #if defined(GF_FCM_HAS_FRAME_INGEST)
-    tip_slot_ = EnvOr("GF_CHANNEL_SLOT", gf_gen::frame_ingest::kTipSlotFront);
+    camera_slot_ = EnvOr("GF_CAMERA_SLOT", gf_gen::frame_ingest::kCameraSlotFront);
 #else
-    tip_slot_ = EnvOr("GF_CHANNEL_SLOT", "gf.tip.front");
+    camera_slot_ = EnvOr("GF_CAMERA_SLOT", "gf.channel.front");
 #endif
-    std::cout << "gf-perception-fcm: tip_transport=shm slot=" << tip_slot_ << std::endl;
+    std::cout << "gf-perception-fcm: camera_transport=shm camera_slot=" << camera_slot_ << std::endl;
   }
   if (kind_ == FrameSourceKind::File || kind_ == FrameSourceKind::CarlaFile) {
 #if defined(GF_FCM_HAS_FRAME_INGEST)
@@ -325,10 +324,10 @@ FrameSource::FrameSource(FrameSourceKind kind) : kind_(kind) {
 }
 
 FrameSource::~FrameSource() {
-#if defined(GF_FCM_HAS_TIP_CHANNEL)
-  if (tip_ch_) {
-    gf_channel_close(static_cast<GfChannel*>(tip_ch_));
-    tip_ch_ = nullptr;
+#if defined(GF_FCM_HAS_GF_CHANNEL)
+  if (camera_ch_) {
+    gf_channel_close(static_cast<GfChannel*>(camera_ch_));
+    camera_ch_ = nullptr;
   }
 #endif
 }
@@ -376,8 +375,8 @@ std::optional<Frame> FrameSource::Poll() {
     case FrameSourceKind::File:
     case FrameSourceKind::CarlaFile:
       return PollFile();
-    case FrameSourceKind::TipShm:
-      return PollTipShm();
+    case FrameSourceKind::CameraShm:
+      return PollCameraShm();
   }
   return std::nullopt;
 }
@@ -522,38 +521,38 @@ std::optional<Frame> FrameSource::PollFile() {
   return f;
 }
 
-bool FrameSource::EnsureTipOpen() {
-#if defined(GF_FCM_HAS_TIP_CHANNEL)
-  if (tip_ch_) {
+bool FrameSource::EnsureCameraOpen() {
+#if defined(GF_FCM_HAS_GF_CHANNEL)
+  if (camera_ch_) {
     return true;
   }
-  tip_ch_ = gf_channel_open(tip_slot_.c_str());
-  if (!tip_ch_) {
+  camera_ch_ = gf_channel_open(camera_slot_.c_str());
+  if (!camera_ch_) {
     return false;
   }
   std::uint32_t w = 0, h = 0, plane_bytes = 0, buffers = 0;
   std::uint16_t fmt = 0;
-  if (gf_channel_info(static_cast<GfChannel*>(tip_ch_), &w, &h, &fmt, &plane_bytes,
+  if (gf_channel_info(static_cast<GfChannel*>(camera_ch_), &w, &h, &fmt, &plane_bytes,
                   &buffers) != 0) {
     return false;
   }
   negotiated_w_ = w;
   negotiated_h_ = h;
   negotiated_fmt_ = ParsePixelFormat(gf_channel_format_name(fmt));
-  tip_plane_.resize(plane_bytes);
+  camera_plane_.resize(plane_bytes);
   negotiated_ = true;
-  std::cout << "gf-perception-fcm: tip_channel open " << tip_slot_ << " " << w
+  std::cout << "gf-perception-fcm: camera channel open " << camera_slot_ << " " << w
             << "x" << h << " " << gf_channel_format_name(fmt) << std::endl;
   return true;
 #else
-  (void)tip_slot_;
+  (void)camera_slot_;
   return false;
 #endif
 }
 
-std::optional<Frame> FrameSource::PollTipShm() {
-#if defined(GF_FCM_HAS_TIP_CHANNEL)
-  if (!EnsureTipOpen()) {
+std::optional<Frame> FrameSource::PollCameraShm() {
+#if defined(GF_FCM_HAS_GF_CHANNEL)
+  if (!EnsureCameraOpen()) {
     return std::nullopt;
   }
   std::uint32_t plane_bytes = 0;
@@ -561,8 +560,8 @@ std::optional<Frame> FrameSource::PollTipShm() {
   std::uint32_t w = 0, h = 0;
   std::uint16_t fmt = 0;
   const int got = gf_channel_latest(
-      static_cast<GfChannel*>(tip_ch_), tip_plane_.data(),
-      static_cast<std::uint32_t>(tip_plane_.size()), &plane_bytes, &last_seq_, &ts,
+      static_cast<GfChannel*>(camera_ch_), camera_plane_.data(),
+      static_cast<std::uint32_t>(camera_plane_.size()), &plane_bytes, &last_seq_, &ts,
       &w, &h, &fmt);
   if (got != 1) {
     return std::nullopt;
@@ -577,7 +576,7 @@ std::optional<Frame> FrameSource::PollTipShm() {
   f.meta.timestamp_ns = ts;
   f.meta.seq = last_seq_;
   f.meta.format = negotiated_fmt_;
-  if (!ConvertPlaneToRgb(negotiated_fmt_, tip_plane_, w, h, &f.rgb)) {
+  if (!ConvertPlaneToRgb(negotiated_fmt_, camera_plane_, w, h, &f.rgb)) {
     return std::nullopt;
   }
   return f;

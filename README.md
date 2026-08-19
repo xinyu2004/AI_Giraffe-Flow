@@ -118,7 +118,7 @@ Production perception/planning: **external packages**. See [apps/](apps/README.m
 Primary SKUs under `projects/oem_a/` share the same contract: **mtime compose / configure-on-need / incremental build**; `ctest` only with `GF_CTEST=1`; staged `runtime/bin/giraffe_launch`; GMT extras via `GMT_depend_launch` (`GF_GMT_DEPEND=0` → EM only).
 
 ```bash
-# afc_with_uss (USS in chain) or afc_no_uss (no USS / tip-oriented)
+# afc_with_uss (USS in chain) or afc_no_uss (no USS / camera-oriented)
 bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 

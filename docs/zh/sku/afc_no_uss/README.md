@@ -11,5 +11,5 @@
 | [samples.md](./samples.md) | `samples/`、变量、`stage.sh` |
 | [inject.md](./inject.md) | inject 三种模式目录与用法 |
 | [scenarios.md](./scenarios.md) | 产品场景在仓库 `carla_scenarios/`（gf-config 不关心） |
-| [frame_ingest_roles.md](./frame_ingest_roles.md) | bridge / scenarios / pygame 职责与后续计划 |
+| [frame_ingest_roles.md](./frame_ingest_roles.md) | ingest / camera_slot / scenarios；板端零 Python vs SIL |
 | [SIM 入口](../../../../projects/oem_a/afc_no_uss/SIM_SPIKE.md) | SIL 主验收路径 |

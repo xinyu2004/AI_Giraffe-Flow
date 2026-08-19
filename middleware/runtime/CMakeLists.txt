@@ -25,3 +25,13 @@ if(DEFINED GF_GENERATED_DIR AND EXISTS
   target_include_directories(gf_ara_runtime PRIVATE "${GF_GENERATED_DIR}/include")
   target_compile_definitions(gf_ara_runtime PRIVATE GF_HAS_PLATFORM_TABLES=1)
 endif()
+if(DEFINED GF_GENERATED_DIR AND EXISTS
+   "${GF_GENERATED_DIR}/include/gf_gen/collector_config.hpp")
+  target_include_directories(gf_ara_runtime PRIVATE "${GF_GENERATED_DIR}/include")
+  target_compile_definitions(gf_ara_runtime PRIVATE GF_HAS_COLLECTOR_CONFIG=1)
+endif()
+if(DEFINED GF_GENERATED_DIR AND EXISTS
+   "${GF_GENERATED_DIR}/include/gf_gen/bounds_config.hpp")
+  target_include_directories(gf_ara_runtime PRIVATE "${GF_GENERATED_DIR}/include")
+  target_compile_definitions(gf_ara_runtime PRIVATE GF_HAS_BOUNDS_CONFIG=1)
+endif()

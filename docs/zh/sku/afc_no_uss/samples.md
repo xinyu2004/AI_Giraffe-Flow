@@ -4,7 +4,7 @@
 
 - **用途**：inject 金样、collector/DTC 演示片段、`stage.sh` 拷到与 HIL 同构的真实路径。
 - **不放**：产品功能场景（ACC/AEB）——见仓库根 `carla_scenarios/`。
-- **不冻结进 gf-config**：运行 tip 路径仍是 `/tmp/...` 或板端路径；金样用变量 + stage。
+- **不冻结进 gf-config**：运行相机路径仍是 `/tmp/...` 或板端路径；金样用变量 + stage。
 
 ## 变量
 

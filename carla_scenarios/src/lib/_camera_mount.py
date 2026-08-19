@@ -1,7 +1,7 @@
 """Camera mount (extrinsics) — **only** from SKU ``camera_contract.json``.
 
 Truth: gf-config → compose → ``generated/camera_contract.json``.
-No local presets, no ``GF_CAMERA_MOUNT_*`` / ``GF_CARLA_TIP_*`` authoring here.
+No local presets, no ``GF_CAMERA_MOUNT_*`` authoring here.
 
 Resolve path (first hit):
   1. ``GF_CAMERA_CONTRACT`` — absolute/relative file path

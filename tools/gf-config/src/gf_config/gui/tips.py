@@ -407,11 +407,11 @@ SKU_FI_PIXEL = (
     "路径不含格式语义；以冻结字段 + stream.json 为准。"
 )
 SKU_FI_EGO = (
-    "Ego 源互斥：gateway=网关自造；carla=bridge tip→gateway 发布；"
-    "inject=GMT 回灌独占（gateway 不发 Ego）。与 tip 源独立选型。"
+    "Ego 源互斥：gateway=网关自造；carla=bridge→gateway 发布；"
+    "inject=GMT 回灌独占（gateway 不发 Ego）。与帧源独立选型。"
 )
 SKU_FI_BRIDGE = (
-    "（已由 tip 源推导）ingest 是否启用；勿再手勾。"
+    "（已由帧源推导）ingest 是否启用；勿再手勾。"
 )
 SKU_FI_PATH_FRAME = (
     "SIL 文件旁路帧路径（默认 project/runtime_ipc/；非 GfChannel）。"

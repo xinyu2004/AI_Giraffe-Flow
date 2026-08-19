@@ -33,7 +33,7 @@ flowchart TD
 
 1. **入口 = EM** — OS/`run_sil`/后期单一 systemd unit **只起 EM**；daemons（dlt?/RouDi?/…）与 SOA apps 按 gf-config 由 EM Spawn。
 2. **进程原语只经 OSAL** — `EmDaemon` 不直接 `fork`/`exec`/`waitpid`/`kill`。
-3. **配置** — 作者：`platform/*.yaml`；产品冻结：`generated/include/gf_gen/deploy_config.hpp`（compose → 编进 `gf_em_daemon`）。板端默认 **不** 带 `platform/`（`GF_STAGE_PLATFORM=1` 才 stage）；YAML dump 仅人读；smoke 可用 `--launch` / `GF_EM_USE_YAML=1`。
+3. **配置** — 作者：`platform/*.yaml`；产品冻结：`generated/include/gf_gen/deploy_config.hpp`（compose → 编进 `gf_em_daemon`）。板端默认 **不** 带 `platform/`（`GF_STAGE_PLATFORM=1` 才 stage）；YAML dump 仅人读；smoke 可用显式 `--launch` / `GF_EM_LAUNCH`（无 `GF_EM_USE_YAML`）。
 4. **异常退出** — 子进程异常且不可 relaunch → Error + 停 EM；板端靠 systemd `Restart=on-failure` 整树恢复。详见 [CONFIG_RUNTIME_POLICY](../../docs/zh/operations/CONFIG_RUNTIME_POLICY.md)。
 5. **CI**：`ctest -R gf_em_daemon_smoke`（最严模块门禁）；功能验收走 `run_sil`，不用 smoke 冒充。
 

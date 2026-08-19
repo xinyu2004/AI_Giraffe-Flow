@@ -48,10 +48,10 @@
 #   GF_PHM_FAULT_MS    DoIP 开且未显式设置时默认 500 — 真实 AliveMissed → GF_PER_DIR → DEM 0x19
 #   GF_PHM_FAULT_TARGET  默认 planning（fcm|planning|gateway）；其它进程 fault=0
 #                      关闭 PHM 注入：GF_PHM_FAULT_MS=0
-#   frame_ingest：tip 开时由 EM 启 bin/gf_frame_ingest（compose filter）
+#   frame_ingest：相机开时由 EM 启 bin/gf_frame_ingest（compose filter）
 #   GF_FRAME_SOURCE   帧源（与 GF_INJECT_MODE 正交）：isp|carla|replay|colorbar|none
 #                    默认 isp（freeze SOP）；CARLA SIL 设 carla；GF_INJECT_FRAMES_DIR 未设时暗示 replay
-#                    兼容别名：GF_ACTIVE_SOURCE / GF_TIP_SOURCE；synth → colorbar
+#                    次要覆盖：GF_ACTIVE_SOURCE；synth → colorbar
 #   GF_CARLA_*：仅调试覆盖；默认路径在 ingest/gateway 二进制内
 #   GF_GMT_DEPEND=0：只跑 EM（不挂 GMT 旁路）；默认 1 → GMT_depend_launch.sh
 #                    （旧名 GF_SIL_FLOW 仍可作别名）
@@ -80,10 +80,7 @@ export GF_RUNTIME_DIR="${RUNTIME}"
 export GF_PROJECT_DIR="${PROJECT_DIR}"
 HOST="${GF_WS_HOST:-0.0.0.0}"
 PORT="${GF_WS_PORT:-8765}"
-# Authoring tree only if present; product EM uses deploy_config.hpp (no board yaml).
-if [[ -z "${GF_PLATFORM_DIR:-}" && -d "${PROJECT_DIR}/platform" ]]; then
-  export GF_PLATFORM_DIR="${PROJECT_DIR}/platform"
-fi
+# Product path: hpp-only (no default GF_PLATFORM_DIR). Smoke may export GF_PLATFORM_DIR explicitly.
 # Remember whether caller set PHM fault (empty = unset) before applying defaults.
 _PHM_FAULT_USER="${GF_PHM_FAULT_MS-}"
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
@@ -189,7 +186,7 @@ _gf_hpp_u32() {
 }
 
 # Optional CARLA host/python for EM-spawned gf_frame_ingest (children inherit).
-# Tip/cmd paths: compose→hpp→binary; debug override via env or carla.env (no shell defaults).
+# Camera/cmd paths: compose→hpp→binary; debug override via env or carla.env (no shell defaults).
 _SKU_CARLA_ENV="${PROJECT_DIR}/carla.env"
 _gf_load_carla_env_file() {
   local f="$1"
@@ -206,7 +203,7 @@ _gf_load_carla_env_file() {
     key="$(echo "${key}" | sed -e 's/[[:space:]]//g')"
     val="$(echo "${val}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//')"
     case "${key}" in
-      CARLA_HOST|CARLA_PORT|GF_CARLA_WAIT_S|GF_CARLA_CONNECT_TIMEOUT_S|GF_CARLA_PYTHON|GF_CARLA_FRAME_PATH|GF_CARLA_EGO_PATH|GF_CARLA_CMD_PATH|GF_CARLA_TRUTH_PATH|GF_PIXEL_FORMAT|GF_PLANNING_CTRL_PATH|GF_FRAME_SOURCE|GF_ACTIVE_SOURCE|GF_TIP_SOURCE)
+      CARLA_HOST|CARLA_PORT|GF_CARLA_WAIT_S|GF_CARLA_CONNECT_TIMEOUT_S|GF_CARLA_PYTHON|GF_CARLA_FRAME_PATH|GF_CARLA_EGO_PATH|GF_CARLA_CMD_PATH|GF_CARLA_TRUTH_PATH|GF_PIXEL_FORMAT|GF_PLANNING_CTRL_PATH|GF_FRAME_SOURCE|GF_ACTIVE_SOURCE)
         if [[ -z "${!key+x}" || -z "${!key}" ]]; then
           export "${key}=${val}"
         fi
@@ -228,9 +225,9 @@ export CARLA_PORT="${CARLA_PORT:-2000}"
 # Frame source module (orthogonal to GF_INJECT_MODE ego/SOA inject).
 # Freeze SOP default is isp; SIL overrides via GF_FRAME_SOURCE / carla.env.
 #   carla | replay | colorbar (alias synth) | isp | none
-# Compat: GF_TIP_SOURCE / GF_ACTIVE_SOURCE → GF_FRAME_SOURCE
-if [[ -z "${GF_FRAME_SOURCE:-}" && -n "${GF_TIP_SOURCE:-}" ]]; then
-  export GF_FRAME_SOURCE="${GF_TIP_SOURCE}"
+# Secondary: GF_ACTIVE_SOURCE → GF_FRAME_SOURCE if primary unset
+if [[ -z "${GF_FRAME_SOURCE:-}" && -n "${GF_ACTIVE_SOURCE:-}" ]]; then
+  export GF_FRAME_SOURCE="${GF_ACTIVE_SOURCE}"
 fi
 if [[ -n "${GF_INJECT_FRAMES_DIR:-}" && -z "${GF_FRAME_SOURCE:-}" && -z "${GF_ACTIVE_SOURCE:-}" ]]; then
   export GF_FRAME_SOURCE=replay
@@ -248,10 +245,14 @@ if [[ "${GF_FRAME_SOURCE}" == "synth" ]]; then
 fi
 export GF_ACTIVE_SOURCE="${GF_ACTIVE_SOURCE:-${GF_FRAME_SOURCE}}"
 
-echo "${TAG} ========== runtime / tip =========="
+echo "${TAG} ========== runtime / camera =========="
 echo "${TAG}   runtime=${RUNTIME}"
-echo "${TAG}   tip/ego freeze: gf_frame_ingest + FCM/gateway (EM starts ingest when tip enabled)"
+echo "${TAG}   camera/ego freeze: gf_frame_ingest + FCM/gateway (EM starts ingest when camera enabled)"
 echo "${TAG}   GF_FRAME_SOURCE=${GF_FRAME_SOURCE} (ego inject mode=${DRIVE_HINT})"
+if [[ "${GF_FRAME_SOURCE}" == "isp" ]]; then
+  echo "${TAG}   WARN: isp on SIL = stub (shm open, no pixels). Foxglove Image stays blank."
+  echo "${TAG}         Use GF_FRAME_SOURCE=colorbar (no CARLA) or carla|replay for real frames."
+fi
 echo "${TAG}   CARLA_HOST=${CARLA_HOST} CARLA_PORT=${CARLA_PORT} carla.env=${_CARLA_ENV_SKU:-none}"
 echo "${TAG}   GF_CARLA_* paths: unset=hpp defaults; set only for debug override"
 echo "${TAG} ================================="
@@ -366,7 +367,7 @@ PY
         echo "${TAG} inject+live: downstream tap only → ${LIVE_SVCS} (excluded injectable; GF_INJECT_LIVE=all to keep EgoMotion)"
       else
         echo "${TAG} inject+live: no downstream services left after filter — live_tap OFF"
-        echo "${TAG} tip: for scenario demo use GF_INJECT_LIVE=all bash …/run_sil.sh"
+        echo "${TAG} camera: for scenario demo use GF_INJECT_LIVE=all bash …/run_sil.sh"
       fi
     fi
   fi
@@ -638,7 +639,7 @@ echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR:-(hpp-only)} live=${LIVE_ON} in
 # --- EM (entry) -----------------------------------------------------------------
 # EM scope: Giraffe platform daemons (dlt?/RouDi?/…) + SOA apps (deploy_config.hpp).
 # NOT EM: tap / Foxglove / GMT inject / DoIP — those
-# are GMT_depend_launch. host.frame_ingest is EM when tip enabled.
+# are GMT_depend_launch. host.frame_ingest is EM when camera enabled.
 # systemd (board) is only a protection layer around the same EM entry.
 # =============================================================================
 DLT_PID=""

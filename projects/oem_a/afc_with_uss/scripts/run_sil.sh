@@ -70,10 +70,7 @@ ROOT="${ROOT}"
 BUILD="${GF_BUILD_DIR:-${BUILD_SIL}}"
 HOST="${GF_WS_HOST:-0.0.0.0}"
 PORT="${GF_WS_PORT:-8765}"
-# Authoring tree only if present; product EM uses deploy_config.hpp (no board yaml).
-if [[ -z "${GF_PLATFORM_DIR:-}" && -d "${PROJECT_DIR}/platform" ]]; then
-  export GF_PLATFORM_DIR="${PROJECT_DIR}/platform"
-fi
+# Product path: hpp-only (no default GF_PLATFORM_DIR). Smoke may export GF_PLATFORM_DIR explicitly.
 # Remember whether caller set PHM fault (empty = unset) before applying defaults.
 _PHM_FAULT_USER="${GF_PHM_FAULT_MS-}"
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
@@ -121,7 +118,7 @@ if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
   echo "${TAG} compile/stage done → bring-up EM (+ GMT depend unless GF_GMT_DEPEND=0)"
 fi
 
-# Behavior freeze from compose hpp (not tip JSON / .env).
+# Behavior freeze from compose hpp (not camera JSON / .env).
 DEPLOY_HPP="${PROJECT_DIR}/generated/include/gf_gen/deploy_config.hpp"
 FRAME_HPP="${PROJECT_DIR}/generated/include/gf_gen/frame_ingest_config.hpp"
 _gf_hpp_bool() {
@@ -297,7 +294,7 @@ PY
         echo "${TAG} inject+live: downstream tap only → ${LIVE_SVCS} (excluded injectable; GF_INJECT_LIVE=all to keep EgoMotion)"
       else
         echo "${TAG} inject+live: no downstream services left after filter — live_tap OFF"
-        echo "${TAG} tip: for scenario demo use GF_INJECT_LIVE=all bash …/run_sil.sh"
+        echo "${TAG} camera: for scenario demo use GF_INJECT_LIVE=all bash …/run_sil.sh"
       fi
     fi
   fi

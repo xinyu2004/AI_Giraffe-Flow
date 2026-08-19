@@ -153,7 +153,7 @@ int main() {
       continue;
     }
 
-    // --- Frame tip mode: new frame → detect; timeout → periodic empty ---
+    // --- Frame camera mode: new frame → detect; timeout → periodic empty ---
     if (auto frame = frames.Poll()) {
       last_frame_ns = gf_fcm::FrameSource::NowNs();
       logged_timeout = false;

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """gf_frame_ingest Python module runner (carla / isp / replay / colorbar).
 
-When spawned by C++ gf_frame_ingest: use --module-only (parent Created TipChannel).
+When spawned by C++ gf_frame_ingest: use --module-only (parent Created GfChannel).
 Standalone: Create slots then run module (dev fallback).
 """
 
@@ -19,7 +19,7 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
-from gf_channel_py import GfChannel, TipChannel  # noqa: E402
+from gf_channel_py import GfChannel  # noqa: E402
 
 STOP = False
 
@@ -36,7 +36,7 @@ def _env(key: str, default: str = "") -> str:
 
 
 def _parse_slots() -> List[dict[str, Any]]:
-    raw = _env("GF_TIP_SLOTS_JSON", "")
+    raw = _env("GF_CAMERA_SLOTS_JSON", "")
     if raw:
         import json
 
@@ -48,12 +48,12 @@ def _parse_slots() -> List[dict[str, Any]]:
             pass
     return [
         {
-            "id": _env("GF_TIP_SLOT_ID", "front"),
-            "slot_name": _env("GF_TIP_SLOT", "gf.tip.front"),
+            "id": _env("GF_CAMERA_SLOT_ID", "front"),
+            "slot_name": _env("GF_CAMERA_SLOT", "gf.channel.front"),
             "w": int(_env("GF_CARLA_CAM_W", _env("GF_FRAME_W", "640"))),
             "h": int(_env("GF_CARLA_CAM_H", _env("GF_FRAME_H", "480"))),
             "pixel_format": _env("GF_PIXEL_FORMAT", "nv12"),
-            "buffers": int(_env("GF_TIP_BUFFERS", "2")),
+            "buffers": int(_env("GF_CAMERA_BUFFERS", "2")),
         }
     ]
 
@@ -62,7 +62,7 @@ def create_slots(slots: List[dict[str, Any]]) -> List[GfChannel]:
     lib = GfChannel.load_lib()
     out: List[GfChannel] = []
     for s in slots:
-        name = str(s.get("slot_name") or f"gf.tip.{s.get('id', 'front')}")
+        name = str(s.get("slot_name") or f"gf.channel.{s.get('id', 'front')}")
         ch = GfChannel.create(
             name,
             int(s["w"]),
@@ -72,25 +72,25 @@ def create_slots(slots: List[dict[str, Any]]) -> List[GfChannel]:
             lib=lib,
         )
         print(
-            f"[frame_ingest] TipChannel created {name} "
+            f"[frame_ingest] GfChannel created {name} "
             f"{s['w']}x{s['h']} {s.get('pixel_format')} buf={s.get('buffers', 2)}",
             flush=True,
         )
         out.append(ch)
         if name.endswith(".front") or s.get("id") == "front":
-            os.environ["GF_TIP_SLOT"] = name
-    if out and "GF_TIP_SLOT" not in os.environ:
-        os.environ["GF_TIP_SLOT"] = str(
-            slots[0].get("slot_name") or f"gf.tip.{slots[0].get('id', 'front')}"
+            os.environ["GF_CAMERA_SLOT"] = name
+    if out and "GF_CAMERA_SLOT" not in os.environ:
+        os.environ["GF_CAMERA_SLOT"] = str(
+            slots[0].get("slot_name") or f"gf.channel.{slots[0].get('id', 'front')}"
         )
-    os.environ["GF_TIP_TRANSPORT"] = _env("GF_TIP_TRANSPORT", "shm")
+    os.environ["GF_CHANNEL_TRANSPORT"] = _env("GF_CHANNEL_TRANSPORT", "shm")
     return out
 
 
-def open_front_slot() -> TipChannel:
-    slot = _env("GF_TIP_SLOT", "gf.tip.front")
+def open_front_slot() -> GfChannel:
+    slot = _env("GF_CAMERA_SLOT", "gf.channel.front")
     ch = GfChannel.open(slot)
-    print(f"[frame_ingest] TipChannel opened {slot} (module-only)", flush=True)
+    print(f"[frame_ingest] GfChannel opened {slot} (module-only)", flush=True)
     return ch
 
 
@@ -114,7 +114,8 @@ def run_colorbar(channels: List[GfChannel], period_s: float) -> int:
 
 def run_isp_stub(_channels: List[GfChannel]) -> int:
     print(
-        "[frame_ingest] module=isp (stub) — waiting; wire real ISP adapter later",
+        "[frame_ingest] module=isp (stub) — SIL has no ISP pixels; "
+        "shm stays empty (seq=0). Use GF_FRAME_SOURCE=colorbar|carla|replay for Foxglove.",
         flush=True,
     )
     while not STOP:
@@ -133,7 +134,7 @@ def run_carla_module() -> int:
         return 2
     print(f"[frame_ingest] module=carla → {bridge}", flush=True)
     sys.path.insert(0, str(bridge.parent))
-    # tip_channel_py for carla_bridge Open path
+    # gf_channel_py for carla_bridge Open path
     sys.path.insert(0, str(_HERE))
     import carla_bridge as cb  # type: ignore  # noqa: E402
 
@@ -170,19 +171,19 @@ def _normalize_source(raw: str) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    p = argparse.ArgumentParser(description="Giraffe frame_ingest (tip ingress)")
+    p = argparse.ArgumentParser(description="Giraffe frame_ingest (camera ingress)")
     p.add_argument(
         "--source",
         default=_env(
             "GF_FRAME_SOURCE",
-            _env("GF_TIP_SOURCE", _env("GF_ACTIVE_SOURCE", _env("GF_FRAME_INGEST_SOURCE", "isp"))),
+            _env("GF_ACTIVE_SOURCE", _env("GF_FRAME_INGEST_SOURCE", "isp")),
         ),
         choices=["none", "carla", "isp", "replay", "colorbar", "synth", "file", "carla_file"],
     )
     p.add_argument(
         "--module-only",
         action="store_true",
-        help="TipChannel already Created by C++ parent; only run module",
+        help="GfChannel already Created by C++ parent; only run module",
     )
     p.add_argument("--dry-run", action="store_true", help="pass through to carla dry-run")
     args, rest = p.parse_known_args(argv)
@@ -195,12 +196,12 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     source = _normalize_source(args.source)
     if source == "none":
-        print("[frame_ingest] tip_source=none — idle", flush=True)
+        print("[frame_ingest] frame_source=none — idle", flush=True)
         while not STOP:
             time.sleep(1.0)
         return 0
 
-    module_only = args.module_only or _env("GF_TIP_INGEST_OWNER") == "cpp"
+    module_only = args.module_only or _env("GF_CHANNEL_INGEST_OWNER") == "cpp"
     channels: List[GfChannel] = []
     try:
         if source in ("colorbar", "isp"):
@@ -209,7 +210,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             else:
                 channels = create_slots(_parse_slots())
         elif not module_only:
-            # carla/replay Open tip; still Create here when standalone so shm exists
+            # carla/replay Open camera; still Create here when standalone so shm exists
             channels = create_slots(_parse_slots())
 
         if source == "colorbar":

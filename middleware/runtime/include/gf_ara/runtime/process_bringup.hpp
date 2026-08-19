@@ -1,10 +1,10 @@
 #pragma once
 
 // Process bring-up (SIL/HIL shared): Offer→Running + SM FG + PHM Alive/Logical + Collector/Log.
-// Config: prefer compose-frozen gf_gen/platform_tables.hpp (SKU build); else YAML under
-// GF_PLATFORM_DIR (smoke / no tables).
-// Env:
-//   GF_PLATFORM_DIR     path to platform/ (YAML fallback when tables not compiled in)
+// Product: compose → gf_gen/platform_tables.hpp + collector/bounds configs.
+// Smoke: optional GF_PLATFORM_DIR → authoring platform/*.yaml when freeze headers absent.
+// Env (host debug / smoke):
+//   GF_PLATFORM_DIR     optional YAML fallback when freeze headers not compiled in
 //   GF_PHM_FAULT_MS     skip ReportAlive for N ms after first Alive (0=off)
 //   GF_PHM_FAULT_INJECT_MS  alias of GF_PHM_FAULT_MS
 //   GF_SM_ENTER_UPDATING_ON_FAULT  if 1, health_fault enters Updating (+ pause PHM)
@@ -45,7 +45,7 @@ struct PhmEntityConfig {
 [[nodiscard]] ExecProcessConfig LoadExecProcess(std::string_view process_name);
 [[nodiscard]] PhmEntityConfig LoadPhmEntity(std::string_view process_name);
 void LoadCollectorConfig();
-/// BL-MEM-BOUND: apply platform/bounds.yaml → LoopbackBus + KeyValueStorage (+ DLT ctx cap).
+/// BL-MEM-BOUND: prefer gf_gen/bounds_config.hpp; else GF_PLATFORM_DIR/bounds.yaml.
 void LoadMemoryBounds();
 
 /// Offer + Running + SM Ensure; SupervisedEntity when phm.yaml lists process.

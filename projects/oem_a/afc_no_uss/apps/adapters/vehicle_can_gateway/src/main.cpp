@@ -108,15 +108,15 @@ std::optional<std::string> ReadText(const std::string& path) {
   return oss.str();
 }
 
-struct CtrlTip {
+struct CtrlSnapshot {
   float throttle{0.0f};
   float brake{0.0f};
   float steer{0.0f};
   bool has_longitudinal{false};
 };
 
-CtrlTip ReadCtrlTip(const std::string& path) {
-  CtrlTip c{};
+CtrlSnapshot ReadCtrl(const std::string& path) {
+  CtrlSnapshot c{};
   if (path.empty()) {
     return c;
   }
@@ -287,7 +287,7 @@ int main(int argc, char** argv) {
           ego = last_ego;
           ego.timestamp_ns = now_ns();
         } else {
-          // Wait for first tip from carla_bridge.
+          // Wait for first camera frame from carla_bridge.
           std::this_thread::sleep_for(std::chrono::milliseconds(20));
           ++frame;
           continue;
@@ -336,9 +336,9 @@ int main(int argc, char** argv) {
     }
 
     if (!cmd_path.empty()) {
-      // Lane / longitudinal intent from planning (+ optional ctrl tip).
+      // Lane / longitudinal intent from planning (+ optional ctrl snapshot).
       // World scripted maneuvers belong in carla_scenarios/*.py — not gateway demos.
-      const CtrlTip ctrl = ReadCtrlTip(ctrl_path);
+      const CtrlSnapshot ctrl = ReadCtrl(ctrl_path);
       float thr = ctrl.has_longitudinal ? ctrl.throttle : 0.35f;
       float brk = ctrl.has_longitudinal ? ctrl.brake : 0.0f;
       float st = ctrl.has_longitudinal ? ctrl.steer : 0.0f;

@@ -18,12 +18,11 @@ def _find_lib() -> Path:
     rt = (os.environ.get("GF_RUNTIME_DIR") or "").strip()
     if rt:
         candidates.append(Path(rt) / "lib" / "libgf_channel.so")
-        candidates.append(Path(rt) / "lib" / "libgf_tip_channel.so")
     build = (os.environ.get("GF_BUILD_DIR") or os.environ.get("BUILD_SIL") or "").strip()
     if build:
         candidates.append(Path(build) / "runtime" / "lib" / "libgf_channel.so")
         candidates.append(
-            Path(build) / "middleware" / "bindings" / "tip_channel" / "libgf_channel.so"
+            Path(build) / "middleware" / "bindings" / "gf_channel" / "libgf_channel.so"
         )
     # Adjacent to this script when staged: share/frame_ingest → ../lib
     here = Path(__file__).resolve().parent
@@ -37,7 +36,7 @@ def _find_lib() -> Path:
     try:
         repo = here.parents[5]
         candidates.append(
-            repo / "middleware" / "bindings" / "tip_channel" / "libgf_channel.so"
+            repo / "middleware" / "bindings" / "gf_channel" / "libgf_channel.so"
         )
     except IndexError:
         pass
@@ -129,6 +128,3 @@ class GfChannel:
 
     def __exit__(self, *args: object) -> None:
         self.close()
-
-# Compat
-TipChannel = GfChannel

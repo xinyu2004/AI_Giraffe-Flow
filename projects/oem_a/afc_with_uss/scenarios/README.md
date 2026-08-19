@@ -31,7 +31,7 @@ GMT **变量轨**可读本地 jsonl 里的 AdasDemo；Foxglove topic 列表里�
 GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
   bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 # GMT：打开 overtake_acc_aeb.jsonl → 回灌 → 播放
-# Studio → ws://…:8765 → Image /gf/camera/front/compressed + Plot EgoMotion/Trajectory
+# Studio → ws://…:8765 → Image /gf/driving/bev/compressed + Plot EgoMotion/Trajectory
 
 # 离线（无 SIL）也可：同样合成 BEV，且不广告 AdasDemo topic
 GMT bridge foxglove --ws --synth-bev \

@@ -27,7 +27,7 @@ def time_headway_s(gap_m: float, ego_mps: float, v_min: float = 1.0) -> float:
 
 @dataclass
 class CmdProbe:
-    """Detect Giraffe→bridge cmd tip freshness during the case window.
+    """Detect Giraffe→bridge cmd freshness during the case window.
 
     First poll only baselines seq/mtime (stale files do NOT count as control).
     """

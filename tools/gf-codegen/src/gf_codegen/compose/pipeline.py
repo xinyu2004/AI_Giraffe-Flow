@@ -17,6 +17,7 @@ from gf_codegen.compose.emit_frame_ingest import emit_frame_ingest
 from gf_codegen.compose.emit_iox import emit_iox_assets
 from gf_codegen.compose.emit_log_config import emit_log_config
 from gf_codegen.compose.emit_platform_tables import emit_platform_tables
+from gf_codegen.compose.emit_runtime_freeze import emit_runtime_freeze
 from gf_codegen.compose.import_oem import import_oem
 from gf_codegen.compose.lineage import run_lineage
 from gf_codegen.compose.load_project import ProjectPaths, load_project
@@ -135,6 +136,7 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     log_meta = emit_log_config(plat_loaded, gen_dir)
     # exec/phm tables: prefer generated/exec.yaml written by deploy_config.
     pt_path = emit_platform_tables(plat_loaded, gen_dir)
+    freeze_meta = emit_runtime_freeze(plat_loaded, gen_dir)
     iox_meta = emit_iox_assets(gen_dir, plat_loaded, req)
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)
     report.setdefault("outputs", {})["observability"] = str(obs_json)
@@ -143,6 +145,10 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     report.setdefault("outputs", {})["log_config_hpp"] = log_meta["hpp"]
     report.setdefault("outputs", {})["em_launch"] = deploy_meta["em_launch"]
     report.setdefault("outputs", {})["exec_generated"] = deploy_meta["exec"]
+    report.setdefault("outputs", {})["collector_config_hpp"] = freeze_meta["collector"]
+    report.setdefault("outputs", {})["bounds_config_hpp"] = freeze_meta["bounds"]
+    report.setdefault("outputs", {})["ucm_config_hpp"] = freeze_meta["ucm"]
+    report.setdefault("outputs", {})["diag_seed_hpp"] = freeze_meta["diag_seed"]
     if pt_path is not None:
         report.setdefault("outputs", {})["platform_tables_hpp"] = str(pt_path)
     if iox_meta:
@@ -157,6 +163,10 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     print(f"frame_ingest wrote: {fi_meta['hpp']}")
     print(f"deploy_config wrote: {deploy_meta['hpp']}")
     print(f"log_config wrote: {log_meta['hpp']}")
+    print(f"collector_config wrote: {freeze_meta['collector']}")
+    print(f"bounds_config wrote: {freeze_meta['bounds']}")
+    print(f"ucm_config wrote: {freeze_meta['ucm']}")
+    print(f"diag_seed wrote: {freeze_meta['diag_seed']}")
     print(f"em_launch (human dump) wrote: {deploy_meta['em_launch']}")
     print(f"exec (human dump) wrote: {deploy_meta['exec']}")
     if pt_path is not None:

@@ -8,6 +8,12 @@
 #if defined(GF_HAS_PLATFORM_TABLES)
 #include "gf_gen/platform_tables.hpp"
 #endif
+#if defined(GF_HAS_COLLECTOR_CONFIG)
+#include "gf_gen/collector_config.hpp"
+#endif
+#if defined(GF_HAS_BOUNDS_CONFIG)
+#include "gf_gen/bounds_config.hpp"
+#endif
 
 #include <chrono>
 #include <cstdlib>
@@ -97,8 +103,8 @@ ExecProcessConfig LoadExecProcess(std::string_view process_name) {
     cfg.execution_client = row->execution_client;
     return cfg;
   }
-  // Product path: tables are truth. YAML only with GF_PLATFORM_USE_YAML=1 (smoke).
-  if (!EnvFlag("GF_PLATFORM_USE_YAML")) {
+  // Product path: tables are truth. YAML only when smoke sets GF_PLATFORM_DIR.
+  if (PlatformDir().empty()) {
     return cfg;
   }
 #endif
@@ -150,7 +156,7 @@ PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
     cfg.on_failure = row->on_failure ? row->on_failure : "log";
     return cfg;
   }
-  if (!EnvFlag("GF_PLATFORM_USE_YAML")) {
+  if (PlatformDir().empty()) {
     return cfg;  // no PHM entity for this process — OK
   }
 #endif
@@ -203,6 +209,43 @@ PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
 }
 
 void LoadCollectorConfig() {
+#if defined(GF_HAS_COLLECTOR_CONFIG)
+  gf_ara::collector::CollectorConfig cfg;
+  cfg.forward = gf_gen::collector::kForward ? gf_gen::collector::kForward : "local_store";
+  cfg.local_enabled = gf_gen::collector::kLocalEnabled;
+  cfg.max_entries = gf_gen::collector::kMaxEntries;
+  cfg.debounce_max_keys = gf_gen::collector::kDebounceMaxKeys;
+  cfg.store_max_bytes = gf_gen::collector::kStoreMaxBytes;
+  for (std::size_t i = 0; i < gf_gen::collector::kSourceCount; ++i) {
+    if (gf_gen::collector::kSources[i] && gf_gen::collector::kSources[i][0]) {
+      cfg.sources.emplace_back(gf_gen::collector::kSources[i]);
+    }
+  }
+  for (std::size_t i = 0; i < gf_gen::collector::kDtcMapCount; ++i) {
+    const auto& row = gf_gen::collector::kDtcMap[i];
+    if (!row.event || !row.event[0] || row.dtc == 0) {
+      continue;
+    }
+    gf_ara::collector::DtcMapEntry e;
+    e.dtc = row.dtc;
+    e.debounce_count = row.debounce_count;
+    e.fdc_threshold = row.fdc_threshold;
+    e.aging_cycles = row.aging_cycles;
+    cfg.dtc_map[row.event] = e;
+  }
+  for (std::size_t i = 0; i < gf_gen::collector::kFreezeDidCount; ++i) {
+    cfg.freeze_dids.push_back(gf_gen::collector::kFreezeDids[i]);
+  }
+  gf_ara::collector::EventCollector::Instance().Configure(std::move(cfg));
+  const auto& got = gf_ara::collector::EventCollector::Instance().Config();
+  gf_ara::log::Logger::Instance().Info(
+      "collector",
+      "configured(from hpp) forward=" + got.forward +
+          " max_entries=" + std::to_string(got.max_entries) +
+          " sources=" + std::to_string(got.sources.size()) +
+          " dtc_map=" + std::to_string(got.dtc_map.size()));
+#else
+  // Smoke / middleware-only: optional authoring YAML via GF_PLATFORM_DIR.
   const std::string dir = PlatformDir();
   if (dir.empty()) {
     return;
@@ -212,19 +255,20 @@ void LoadCollectorConfig() {
     gf_ara::collector::EventCollector::Instance().Configure({});
     return;
   }
-  // Full scrape incl. dtc_map (same path as gf_doip_ota_server).
   gf_ara::collector::EventCollector::Instance().ConfigureFromYaml(text);
-  const auto& cfg = gf_ara::collector::EventCollector::Instance().Config();
+  const auto& ccfg = gf_ara::collector::EventCollector::Instance().Config();
   gf_ara::log::Logger::Instance().Info(
       "collector",
-      "configured forward=" + cfg.forward + " max_entries=" + std::to_string(cfg.max_entries) +
-          " dtc_map=" + std::to_string(cfg.dtc_map.size()));
+      "configured(from yaml) forward=" + ccfg.forward +
+          " max_entries=" + std::to_string(ccfg.max_entries) +
+          " dtc_map=" + std::to_string(ccfg.dtc_map.size()));
+#endif
 }
 
 void LoadLogConfig() {
   auto& log = gf_ara::log::Logger::Instance();
   if (!log.ConfigureFromGenerated()) {
-    // Middleware-only / smoke: no log_config.hpp → authoring YAML.
+    // Middleware-only / smoke: no log_config.hpp → authoring YAML via GF_PLATFORM_DIR.
     const std::string dir = PlatformDir();
     if (!dir.empty()) {
       const std::string text = ReadFile(dir + "/log.yaml");
@@ -241,6 +285,27 @@ void LoadLogConfig() {
 }
 
 void LoadMemoryBounds() {
+#if defined(GF_HAS_BOUNDS_CONFIG)
+  const std::uint32_t com_depth = gf_gen::bounds::kComQueueDepth;
+  const std::uint32_t com_keys = gf_gen::bounds::kComMaxTopicKeys;
+  const std::uint32_t per_keys = gf_gen::bounds::kPerMaxKeys;
+  const std::uint32_t per_val = gf_gen::bounds::kPerMaxValueBytes;
+  const std::uint32_t dlt_ctx = gf_gen::bounds::kDltMaxContexts;
+  gf_ara::com::LoopbackBus::Instance().ConfigureBounds(com_depth, com_keys);
+  gf_ara::per::KeyValueStorage::Instance().ConfigureBounds(per_keys, per_val);
+  if (dlt_ctx > 0) {
+    auto& log = gf_ara::log::Logger::Instance();
+    auto cfg = log.Config();
+    cfg.dlt_max_contexts = dlt_ctx;
+    log.Configure(cfg);
+  }
+  gf_ara::log::Logger::Instance().Info(
+      "runtime",
+      "mem bounds(from hpp) com_depth=" + std::to_string(com_depth) +
+          " com_keys=" + std::to_string(com_keys) + " per_keys=" + std::to_string(per_keys) +
+          " per_val=" + std::to_string(per_val) +
+          (dlt_ctx ? " dlt_ctx=" + std::to_string(dlt_ctx) : ""));
+#else
   const std::string dir = PlatformDir();
   if (dir.empty()) {
     return;
@@ -280,10 +345,11 @@ void LoadMemoryBounds() {
   }
   gf_ara::log::Logger::Instance().Info(
       "runtime",
-      "mem bounds com_depth=" + std::to_string(com_depth) +
+      "mem bounds(from yaml) com_depth=" + std::to_string(com_depth) +
           " com_keys=" + std::to_string(com_keys) + " per_keys=" + std::to_string(per_keys) +
           " per_val=" + std::to_string(per_val) +
           (dlt_ctx ? " dlt_ctx=" + std::to_string(dlt_ctx) : ""));
+#endif
 }
 
 bool ProcessSupervisor::Start(std::string_view process_name) {

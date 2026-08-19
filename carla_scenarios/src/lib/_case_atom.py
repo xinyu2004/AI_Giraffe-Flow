@@ -73,7 +73,7 @@ class AtomCase:
 
     def run_dry(self, duration_s: float, period_s: float) -> int:
         print(
-            f"[{self.tag}] explicit --dry-run: truth tip only (no closed loop)",
+            f"[{self.tag}] explicit --dry-run: truth only (no closed loop)",
             flush=True,
         )
         print(f"[{self.tag}] READY dry-run", flush=True)
@@ -143,7 +143,7 @@ class AtomCase:
         print(
             f"[{self.tag}] READY host={carla_host()}:{carla_port()} "
             f"ego={ego.id} target={getattr(target, 'id', None)} "
-            f"duration_s={duration_s} tip_ref={mount.describe()} "
+            f"duration_s={duration_s} mount_ref={mount.describe()} "
             f"keep_ego={int(keep_ego)}",
             flush=True,
         )
@@ -307,6 +307,24 @@ class AtomCase:
             **{k: v for k, v in meta.items() if isinstance(v, (int, float, str, bool))},
         }
         print_verdict(self.tag, ok, reason, **extra)
+        # Single-run / non-keep_ego: leave UE clean so next acc.py + carla_bridge
+        # cannot stay glued to a wrecked leftover hero (Foxglove≠pygame scene).
+        if not keep_ego:
+            try:
+                from spawn.roles import ROLE_EGO, ROLE_LEAD, destroy_role
+
+                destroy_role(world, ROLE_LEAD)
+                destroy_role(world, ROLE_EGO)
+                print(
+                    f"[{self.tag}] cleanup: destroyed leftover hero/lead "
+                    f"(keep_ego=0)",
+                    flush=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(
+                    f"[{self.tag}] cleanup warn: {type(exc).__name__}: {exc}",
+                    flush=True,
+                )
         return (0 if ok else 1), view
 
     def run_carla(

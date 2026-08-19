@@ -55,7 +55,7 @@ def ctrl_path() -> Path:
 
 @dataclass
 class CtrlProbe:
-    """Read planning ctrl tip (target_speed / mode)."""
+    """Read planning ctrl (target_speed / mode)."""
 
     path: Path = field(default_factory=ctrl_path)
     last_mtime: float = -1.0

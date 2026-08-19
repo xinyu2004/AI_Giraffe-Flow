@@ -14,7 +14,7 @@ P2 **不做**真台架 OTA；`ucm.yaml` 仍是空壳。Pause API 已在 `Supervi
 
 ## 与主链 SIL
 
-- 多进程脚本设 `GF_PLATFORM_DIR=…/platform`，gateway / planning 读 `exec.yaml` + `phm.yaml`。
+- 多进程脚本产品路径 **不**默认挂作者 `platform/`（hpp 冻结）；smoke 可显式 `GF_PLATFORM_DIR=…/platform`。
 - `GF_PHM_FAULT_INJECT_MS`：planning 故意停 Alive 一段时间，验证 miss → recover（**不是** OTA Pause）。
 - OTA Pause 与 fault inject 正交：Pause 是策略豁免；fault inject 是测试缺狗。
 

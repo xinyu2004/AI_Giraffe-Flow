@@ -39,10 +39,13 @@ def safe_destroy(actor: Any) -> None:
 
 
 def destroy_role(world: Any, role: str) -> None:
-    v = find_by_role(world, role)
-    if v is None:
-        return
-    safe_destroy(v)
+    """Destroy every vehicle with role_name==role (not just the first)."""
+    for v in list(world.get_actors().filter("vehicle.*")):
+        try:
+            if v.attributes.get("role_name") == role:
+                safe_destroy(v)
+        except Exception:  # noqa: BLE001
+            continue
 
 
 def tick_world(world: Any) -> None:

@@ -17,7 +17,9 @@
 | [architecture/DESIGN.md](architecture/DESIGN.md) | 总体设计 |
 | [architecture/sor-authoring.md](architecture/sor-authoring.md) | SOR / compose |
 | [architecture/heterogeneous-compute.md](architecture/heterogeneous-compute.md) | AP + MCU |
-| [operations/ROADMAP.md](operations/ROADMAP.md) | 路线图 |
+| [operations/ROADMAP.md](operations/ROADMAP.md) | 路线图（含上传里程碑备忘） |
+| [operations/CONFIG_RUNTIME_POLICY.md](operations/CONFIG_RUNTIME_POLICY.md) | 白名单 vs 行为；板端零 yaml / 零 Python |
+| [operations/AP_LITE_BACKLOG.md](operations/AP_LITE_BACKLOG.md) | 后置项（含 `BL-BOARD-NO-PY`） |
 | [operations/WORKFLOW.md](operations/WORKFLOW.md) | 操作流程 |
 | [operations/OBSERVABILITY_DEMO.md](operations/OBSERVABILITY_DEMO.md) | Live / Foxglove / 回灌 |
 | [dependencies/THIRD_PARTY_EVALUATION.md](dependencies/THIRD_PARTY_EVALUATION.md) | 三方库 |

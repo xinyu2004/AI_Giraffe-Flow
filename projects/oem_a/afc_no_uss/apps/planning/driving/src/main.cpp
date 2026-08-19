@@ -31,7 +31,7 @@ constexpr int kTrajPoints = 16;
 constexpr float kWheelbaseM = 2.8f;
 constexpr float kDeg2Rad = 0.017453292519943295f;
 
-struct TruthTip {
+struct TruthSnapshot {
   float lead_distance_m{120.0f};
   float lead_rel_speed_mps{0.0f};
   std::string scenario{"none"};
@@ -91,8 +91,8 @@ bool JsonStr(const std::string& js, const char* key, std::string* out) {
   return true;
 }
 
-TruthTip ReadTruth(const std::string& path) {
-  TruthTip t{};
+TruthSnapshot ReadTruth(const std::string& path) {
+  TruthSnapshot t{};
   if (path.empty()) {
     return t;
   }
@@ -137,7 +137,7 @@ void WriteCtrl(const std::string& path, const LongitudinalCtrl& c, std::uint64_t
   }
 }
 
-LongitudinalCtrl ComputeAccAeb(const gf_gen::EgoMotion& ego, const TruthTip& truth) {
+LongitudinalCtrl ComputeAccAeb(const gf_gen::EgoMotion& ego, const TruthSnapshot& truth) {
   LongitudinalCtrl c{};
   const float v = std::max(0.0f, ego.speed_mps);
   c.steer = std::clamp(ego.steer_angle_deg / 25.0f, -1.0f, 1.0f);
@@ -279,7 +279,7 @@ int main() {
       const auto& ego = *last_ego;
       const int dyn =
           last_perc ? static_cast<int>(last_perc->dyn_obj_count) : 0;
-      const TruthTip truth = ReadTruth(truth_path);
+      const TruthSnapshot truth = ReadTruth(truth_path);
       const LongitudinalCtrl ctrl = ComputeAccAeb(ego, truth);
       WriteCtrl(ctrl_path, ctrl, ego.timestamp_ns);
 

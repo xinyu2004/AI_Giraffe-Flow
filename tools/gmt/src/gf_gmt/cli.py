@@ -150,16 +150,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Scenario JSONL (AdasDemo) → enrich BEV Image only; not published to Studio",
     )
     p_fox.add_argument(
-        "--tip-frame",
+        "--camera-frame",
         type=Path,
         default=None,
-        help="SIL file bypass tip YUV/RGB (prefer --tip-slot GfChannel)",
+        help="SIL file bypass camera YUV/RGB (prefer --camera-slot GfChannel)",
     )
     p_fox.add_argument(
-        "--tip-slot",
+        "--camera-slot",
         type=str,
         default=None,
-        help="GfChannel shm slot for tip camera (e.g. gf.channel.front)",
+        help="GfChannel shm slot for driving camera (e.g. gf.channel.front)",
     )
 
     p_live = br_sub.add_parser(
@@ -326,10 +326,10 @@ def main(argv: list[str] | None = None) -> int:
             fox_argv.append("--synth-bev")
         if getattr(args, "bev_script", None) is not None:
             fox_argv += ["--bev-script", str(args.bev_script)]
-        if getattr(args, "tip_frame", None) is not None:
-            fox_argv += ["--tip-frame", str(args.tip_frame)]
-        if getattr(args, "tip_slot", None):
-            fox_argv += ["--tip-slot", str(args.tip_slot)]
+        if getattr(args, "camera_frame", None) is not None:
+            fox_argv += ["--camera-frame", str(args.camera_frame)]
+        if getattr(args, "camera_slot", None):
+            fox_argv += ["--camera-slot", str(args.camera_slot)]
         fox_argv += ["--host", args.host, "--port", str(args.port), "--speed", str(args.speed)]
         return main_bridge(fox_argv)
 

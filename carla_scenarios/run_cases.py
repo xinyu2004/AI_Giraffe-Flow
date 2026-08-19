@@ -400,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
         print(
-            "[run_cases] tip: GF_SCENARIO_STOP_ON_FAIL=0 continue (default), "
+            "[run_cases] hint: GF_SCENARIO_STOP_ON_FAIL=0 continue (default), "
             "=1 or --stop-on-fail abort after first fail",
             flush=True,
         )

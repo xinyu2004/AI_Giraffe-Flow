@@ -6,6 +6,22 @@
 #include "gf_ara/collector/event_collector.hpp"
 #include "gf_ara/log/logger.hpp"
 
+#if defined(GF_HAS_DEPLOY_CONFIG) && GF_HAS_DEPLOY_CONFIG
+#include "gf_gen/deploy_config.hpp"
+#endif
+#if defined(GF_HAS_COLLECTOR_CONFIG)
+#include "gf_gen/collector_config.hpp"
+#endif
+#if defined(GF_HAS_BOUNDS_CONFIG)
+#include "gf_gen/bounds_config.hpp"
+#endif
+#if defined(GF_HAS_UCM_CONFIG)
+#include "gf_gen/ucm_config.hpp"
+#endif
+#if defined(GF_HAS_DIAG_SEED)
+#include "gf_gen/diag_seed.hpp"
+#endif
+
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
@@ -57,6 +73,11 @@ bool EnvBool(const char* key, bool def) {
   return def;
 }
 
+bool EnvPresent(const char* key) {
+  const char* e = std::getenv(key);
+  return e && *e;
+}
+
 std::vector<std::uint8_t> OtaRoutine(const std::vector<std::uint8_t>& uds) {
   if (uds.size() >= 4 && uds[0] == 0x31 && uds[1] == 0x01 && uds[2] == 0xF1 &&
       uds[3] == 0x00) {
@@ -84,9 +105,37 @@ std::vector<std::uint8_t> OtaRoutine(const std::vector<std::uint8_t>& uds) {
   return {0x7F, 0x31, 0x31};
 }
 
-}  // namespace
-
-int main() {
+void ConfigureCollector() {
+#if defined(GF_HAS_COLLECTOR_CONFIG)
+  gf_ara::collector::CollectorConfig cfg;
+  cfg.forward = gf_gen::collector::kForward ? gf_gen::collector::kForward : "local_store";
+  cfg.local_enabled = gf_gen::collector::kLocalEnabled;
+  cfg.max_entries = gf_gen::collector::kMaxEntries;
+  cfg.debounce_max_keys = gf_gen::collector::kDebounceMaxKeys;
+  cfg.store_max_bytes = gf_gen::collector::kStoreMaxBytes;
+  for (std::size_t i = 0; i < gf_gen::collector::kSourceCount; ++i) {
+    if (gf_gen::collector::kSources[i] && gf_gen::collector::kSources[i][0]) {
+      cfg.sources.emplace_back(gf_gen::collector::kSources[i]);
+    }
+  }
+  for (std::size_t i = 0; i < gf_gen::collector::kDtcMapCount; ++i) {
+    const auto& row = gf_gen::collector::kDtcMap[i];
+    if (!row.event || !row.event[0] || row.dtc == 0) {
+      continue;
+    }
+    gf_ara::collector::DtcMapEntry e;
+    e.dtc = row.dtc;
+    e.debounce_count = row.debounce_count;
+    e.fdc_threshold = row.fdc_threshold;
+    e.aging_cycles = row.aging_cycles;
+    cfg.dtc_map[row.event] = e;
+  }
+  for (std::size_t i = 0; i < gf_gen::collector::kFreezeDidCount; ++i) {
+    cfg.freeze_dids.push_back(gf_gen::collector::kFreezeDids[i]);
+  }
+  gf_ara::collector::EventCollector::Instance().Configure(std::move(cfg));
+  return;
+#endif
   gf_ara::collector::CollectorConfig ccfg;
   ccfg.forward = "local_store";
   ccfg.local_enabled = true;
@@ -96,14 +145,28 @@ int main() {
   } else {
     gf_ara::collector::EventCollector::Instance().Configure(ccfg);
   }
+}
+
+}  // namespace
+
+int main() {
+  ConfigureCollector();
   // DEM DTCs come from apps via shared GF_PER_DIR (PHM → ReportEvent → PersistDtc).
   // 0x19 reloads with EventCollector::ReloadDtcsFromPer — no in-process seed.
 
   gf_ara::ucm::OtaConfig oc;
+  gf_ara::ucm::UcmRuntimeConfig ur;
+#if defined(GF_HAS_UCM_CONFIG)
+  oc.enabled = ur.enabled = gf_gen::ucm::kEnabled;
+  oc.allow_rollback = ur.allow_rollback = gf_gen::ucm::kAllowRollback;
+  oc.function_group = ur.function_group =
+      gf_gen::ucm::kFunctionGroup ? gf_gen::ucm::kFunctionGroup : "MachineFG";
+  ur.package_source =
+      gf_gen::ucm::kPackageSource ? gf_gen::ucm::kPackageSource : "sil://artifact";
+#else
   oc.enabled = true;
   oc.allow_rollback = true;
   oc.function_group = "MachineFG";
-  gf_ara::ucm::UcmRuntimeConfig ur;
   ur.enabled = true;
   ur.allow_rollback = true;
   ur.function_group = "MachineFG";
@@ -123,6 +186,7 @@ int main() {
       ur.package_source = m[1].str();
     }
   }
+#endif
   if (const char* m = std::getenv("GF_UCM_MANIFEST"); m && *m) {
     oc.manifest_path = m;
     ur.manifest_path = m;
@@ -130,25 +194,55 @@ int main() {
   gf_ara::ucm::PackageManager::SetRuntimeConfig(ur);
   gf_ara::ucm::OtaOrchestrator::Configure(oc);
 
+  // DoIP / UDS timing: deploy_config.hpp is truth; GF_DIAG_* / GF_DOIP_* / GF_OTA_* override for host debug.
+#if defined(GF_HAS_DEPLOY_CONFIG) && GF_HAS_DEPLOY_CONFIG
+  const std::uint32_t def_s3 = gf_gen::deploy::kDiagS3ServerMs;
+  const std::uint32_t def_tp = gf_gen::deploy::kDiagTesterPresentPeriodMs;
+  const std::uint32_t def_p2 = gf_gen::deploy::kDiagP2ServerMs;
+  const std::uint32_t def_p2s = gf_gen::deploy::kDiagP2StarServerMs;
+  const std::uint32_t def_sec_delay = gf_gen::deploy::kDiagSecurityDelayMs;
+  const char* def_ota_mode = gf_gen::deploy::kOtaTransferMode;
+  const bool def_req_prog = gf_gen::deploy::kOtaRequireProgSession;
+  const bool def_req_sec = gf_gen::deploy::kOtaRequireSecurity;
+  const std::uint32_t def_max_block = gf_gen::deploy::kOtaMaxBlockLength;
+  const std::uint16_t def_port = gf_gen::deploy::kDoipTcpPort;
+  const std::uint16_t def_logical = gf_gen::deploy::kDoipLogicalAddr;
+  const std::uint16_t def_tester = gf_gen::deploy::kDoipTesterAddr;
+#else
+  const std::uint32_t def_s3 = 5000;
+  const std::uint32_t def_tp = 2000;
+  const std::uint32_t def_p2 = 50;
+  const std::uint32_t def_p2s = 5000;
+  const std::uint32_t def_sec_delay = 10000;
+  const char* def_ota_mode = "request_file_transfer";
+  const bool def_req_prog = true;
+  const bool def_req_sec = true;
+  const std::uint32_t def_max_block = 1024;
+  const std::uint16_t def_port = 13400;
+  const std::uint16_t def_logical = 0x0E00;
+  const std::uint16_t def_tester = 0x0E80;
+#endif
+
   gf_ara::diag::UdsConfig ucfg;
   ucfg.iso_14229_uds = true;
   ucfg.iso_13400_doip = true;
   if (const char* p = std::getenv("GF_DIAG_SEC_PLUGIN"); p && *p) {
     ucfg.security_plugin_path = p;
   }
-  ucfg.s3_server_ms = EnvU32("GF_DIAG_S3_SERVER_MS", 5000);
-  ucfg.tester_present_period_ms = EnvU32("GF_DIAG_TP_PERIOD_MS", 2000);
-  ucfg.p2_server_ms = EnvU32("GF_DIAG_P2_SERVER_MS", 50);
-  ucfg.p2_star_server_ms = EnvU32("GF_DIAG_P2STAR_SERVER_MS", 5000);
-  ucfg.security_delay_ms = EnvU32("GF_DIAG_SECURITY_DELAY_MS", 10000);
-  if (const char* m = std::getenv("GF_OTA_TRANSFER_MODE"); m && *m) {
-    ucfg.ota_mode = gf_ara::diag::UdsDispatcher::ParseOtaMode(m);
+  ucfg.s3_server_ms = EnvU32("GF_DIAG_S3_SERVER_MS", def_s3);
+  ucfg.tester_present_period_ms = EnvU32("GF_DIAG_TP_PERIOD_MS", def_tp);
+  ucfg.p2_server_ms = EnvU32("GF_DIAG_P2_SERVER_MS", def_p2);
+  ucfg.p2_star_server_ms = EnvU32("GF_DIAG_P2STAR_SERVER_MS", def_p2s);
+  ucfg.security_delay_ms = EnvU32("GF_DIAG_SECURITY_DELAY_MS", def_sec_delay);
+  if (EnvPresent("GF_OTA_TRANSFER_MODE")) {
+    ucfg.ota_mode = gf_ara::diag::UdsDispatcher::ParseOtaMode(std::getenv("GF_OTA_TRANSFER_MODE"));
   } else {
-    ucfg.ota_mode = gf_ara::diag::OtaTransferMode::kRequestFileTransfer;
+    ucfg.ota_mode = gf_ara::diag::UdsDispatcher::ParseOtaMode(def_ota_mode ? def_ota_mode
+                                                                           : "request_file_transfer");
   }
-  ucfg.ota_require_programming_session = EnvBool("GF_OTA_REQUIRE_PROG_SESSION", true);
-  ucfg.ota_require_security = EnvBool("GF_OTA_REQUIRE_SECURITY", true);
-  ucfg.ota_max_block_length = EnvU32("GF_OTA_MAX_BLOCK", 1024);
+  ucfg.ota_require_programming_session = EnvBool("GF_OTA_REQUIRE_PROG_SESSION", def_req_prog);
+  ucfg.ota_require_security = EnvBool("GF_OTA_REQUIRE_SECURITY", def_req_sec);
+  ucfg.ota_max_block_length = EnvU32("GF_OTA_MAX_BLOCK", def_max_block);
 
   if (!gf_ara::diag::UdsDispatcher::StandardsValid(ucfg.iso_14229_uds, ucfg.iso_13400_doip)) {
     std::cerr << "invalid standards: 13400 requires 14229\n";
@@ -156,7 +250,11 @@ int main() {
   }
   gf_ara::diag::UdsDispatcher::Instance().Configure(ucfg);
 
-  // BL-MEM-BOUND: DID map + DoIP rx from bounds.yaml / diag.yaml
+#if defined(GF_HAS_BOUNDS_CONFIG)
+  std::uint32_t did_entries = gf_gen::bounds::kDidMaxEntries;
+  std::uint32_t did_payload = gf_gen::bounds::kDidMaxPayload;
+  std::uint32_t rx_max = gf_gen::bounds::kDiagRxMaxBytes;
+#else
   std::uint32_t did_entries = 256;
   std::uint32_t did_payload = 4096;
   std::uint32_t rx_max = 65536;
@@ -176,9 +274,20 @@ int main() {
       rx_max = static_cast<std::uint32_t>(std::stoul(bm[1].str()));
     }
   }
+#endif
   gf_ara::diag::UdsDispatcher::Instance().ConfigureDidBounds(did_entries, did_payload);
 
-  // Optional DID seed from diag.yaml (id: 0xF191 style lines)
+#if defined(GF_HAS_DIAG_SEED)
+  for (std::size_t i = 0; i < gf_gen::diag::kDidSeedCount; ++i) {
+    const auto& seed = gf_gen::diag::kDidSeeds[i];
+    if (!seed.name || !seed.name[0]) {
+      continue;
+    }
+    const std::string name = seed.name;
+    gf_ara::diag::UdsDispatcher::Instance().SetDid(
+        seed.id, std::vector<std::uint8_t>(name.begin(), name.end()));
+  }
+#else
   const auto diag_yaml = ReadFile(PlatformPath("diag.yaml"));
   if (!diag_yaml.empty()) {
     std::smatch dm;
@@ -194,6 +303,7 @@ int main() {
           did, std::vector<std::uint8_t>(name.begin(), name.end()));
     }
   }
+#endif
   // Version DID 0xF191 from UCM stored version when present
   {
     const auto ver = gf_ara::ucm::PackageManager::StoredVersion("pkg.xfer");
@@ -214,8 +324,8 @@ int main() {
 
   gf_ara::diag::DoipConfig dcfg;
   dcfg.logical_address = "GF-ECU-SIL";
-  dcfg.source_address = EnvU16("GF_DOIP_LOGICAL_ADDR", 0x0E00);
-  dcfg.tcp_port = EnvU16("GF_DOIP_PORT", 13400);
+  dcfg.source_address = EnvU16("GF_DOIP_LOGICAL_ADDR", def_logical);
+  dcfg.tcp_port = EnvU16("GF_DOIP_PORT", def_port);
   if (!gf_ara::diag::DoipStack::Initialize(dcfg)) {
     std::cerr << "DoipStack::Initialize failed\n";
     return EXIT_FAILURE;
@@ -229,7 +339,7 @@ int main() {
   gf_ara::diag::DoipSessionConfig scfg;
   scfg.listen_port = dcfg.tcp_port;
   scfg.entity_address = dcfg.source_address;
-  scfg.expected_tester = EnvU16("GF_DOIP_TESTER_ADDR", 0x0E80);
+  scfg.expected_tester = EnvU16("GF_DOIP_TESTER_ADDR", def_tester);
   scfg.rx_max_bytes = rx_max;
   auto port = server.Start(scfg);
   if (!port) {

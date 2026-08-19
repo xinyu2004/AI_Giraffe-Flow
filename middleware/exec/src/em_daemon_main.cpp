@@ -18,8 +18,8 @@ void Usage(const char* argv0) {
       << " --build-dir DIR [--platform DIR] [--log-dir DIR] [--deadline-ms N]\n"
       << "       (product: LoadFromDeployConfig / deploy_config.hpp)\n"
       << "   or: " << argv0
-      << " --platform DIR --launch FILE --build-dir DIR  (YAML; smoke / GF_EM_USE_YAML=1)\n"
-      << "Env: GF_PLATFORM_DIR GF_BUILD_DIR GF_EM_LOG_DIR GF_EM_LAUNCH GF_EM_USE_YAML\n";
+      << " --platform DIR --launch FILE --build-dir DIR  (YAML smoke; explicit --launch)\n"
+      << "Env: GF_PLATFORM_DIR GF_BUILD_DIR GF_EM_LOG_DIR GF_EM_LAUNCH\n";
 }
 
 std::string OptOrEnv(int argc, char** argv, const char* flag, const char* env,
@@ -53,7 +53,8 @@ bool UseYaml(int argc, char** argv) {
       return true;  // explicit CLI → smoke / opt-in YAML
     }
   }
-  if (const char* v = std::getenv("GF_EM_USE_YAML"); v && v[0] == '1') {
+  // GF_EM_LAUNCH alone also selects YAML smoke (no GF_EM_USE_YAML).
+  if (const char* v = std::getenv("GF_EM_LAUNCH"); v && v[0]) {
     return true;
   }
   return false;

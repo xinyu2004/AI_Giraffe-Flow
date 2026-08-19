@@ -8,7 +8,7 @@ Primary inputs (iceoryx → tap NDJSON):
 Optional story enrichment (NOT published to Foxglove):
   --bev-script JSONL AdasDemo frames → phase / lead / lane_offset drawn into Image
 
-Output topic: /gf/camera/front/compressed (foxglove.CompressedImage JSON).
+Output topic: /gf/driving/bev/compressed (foxglove.CompressedImage JSON).
 """
 
 from __future__ import annotations

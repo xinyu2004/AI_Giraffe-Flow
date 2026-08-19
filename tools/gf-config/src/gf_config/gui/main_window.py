@@ -314,7 +314,7 @@ class MainWindow(QMainWindow):
     def _navigate_after_history(
         self, before: dict, after: dict, *, action: str
     ) -> None:
-        """Jump to the page that changed so undo/redo is visible; tip in status bar."""
+        """Jump to the page that changed so undo/redo is visible; hint in status bar."""
         area, plat_key, hint = locate_doc_change(before, after)
         if area == "platform":
             self._tabs.setCurrentWidget(self._platform)

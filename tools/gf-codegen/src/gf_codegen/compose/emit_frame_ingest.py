@@ -158,7 +158,9 @@ def normalize_frame_ingest(
         frame_h = 480
 
     transport = str(
-        raw.get("channel_transport") or raw.get("tip_transport") or "shm"
+        raw.get("camera_transport")
+        or raw.get("channel_transport")
+        or "shm"
     ).strip().lower() or "shm"
     if transport not in _VALID_TRANSPORT:
         transport = "shm"
@@ -171,9 +173,8 @@ def normalize_frame_ingest(
         source = "colorbar"
     if not active:
         # SOP default when video contract present: isp (SIL overrides via GF_FRAME_SOURCE)
-        if isinstance(raw.get("tip_slots") or raw.get("channel_slots"), list) and (
-            raw.get("tip_slots") or raw.get("channel_slots")
-        ):
+        slots_probe = raw.get("camera_slots") or raw.get("channel_slots")
+        if isinstance(slots_probe, list) and slots_probe:
             active = "isp"
         elif source in ("carla_file", "file") or bool(bridge.get("enabled", False)):
             active = "isp"
@@ -202,7 +203,7 @@ def normalize_frame_ingest(
 
     top_mount = _normalize_mount(raw.get("mount") if isinstance(raw.get("mount"), dict) else {})
 
-    slots_raw = raw.get("tip_slots") or raw.get("channel_slots")
+    slots_raw = raw.get("camera_slots") or raw.get("channel_slots")
     slots: list[dict[str, Any]] = []
     if isinstance(slots_raw, list) and slots_raw:
         for i, item in enumerate(slots_raw):
@@ -256,9 +257,9 @@ def normalize_frame_ingest(
         "ego_source": ego,
         "frame_w": frame_w,
         "frame_h": frame_h,
-        "tip_transport": transport,
+        "camera_transport": transport,
         "active_source": active,
-        "tip_slots": slots,
+        "camera_slots": slots,
         "bridge": {
             "enabled": bridge_enabled,
         },
@@ -299,7 +300,7 @@ def _slot_name(sid: str) -> str:
 def emit_frame_ingest_hpp(cfg: dict[str, Any], out_path: Path) -> None:
     b = cfg["bridge"]
     p = cfg["paths"]
-    slots = cfg["tip_slots"]
+    slots = cfg["camera_slots"]
     front = slots[0]
     mount = front.get("mount") or _normalize_mount({})
     lines = [
@@ -320,12 +321,10 @@ def emit_frame_ingest_hpp(cfg: dict[str, Any], out_path: Path) -> None:
         f"inline constexpr std::uint32_t kFrameW = {int(cfg['frame_w'])}u;",
         f"inline constexpr std::uint32_t kFrameH = {int(cfg['frame_h'])}u;",
         f"inline constexpr bool kBridgeEnabled = {_cxx_bool(b['enabled'])};",
-        f"inline constexpr const char* kTipTransport = {_c_str(cfg['tip_transport'])};",
-        f"inline constexpr const char* kChannelTransport = kTipTransport;",
+        f"inline constexpr const char* kCameraTransport = {_c_str(cfg['camera_transport'])};",
         f"inline constexpr const char* kActiveSource = {_c_str(cfg['active_source'])};",
-        f"inline constexpr const char* kTipSlotFront = {_c_str(_slot_name(str(front['id'])))};",
-        f"inline constexpr const char* kChannelSlotFront = kTipSlotFront;",
-        f"inline constexpr std::uint32_t kTipSlotCount = {len(slots)}u;",
+        f"inline constexpr const char* kCameraSlotFront = {_c_str(_slot_name(str(front['id'])))};",
+        f"inline constexpr std::uint32_t kCameraSlotCount = {len(slots)}u;",
         f"inline constexpr const char* kFramePath = {_c_str(p['frame'])};",
         f"inline constexpr const char* kCmdPath = {_c_str(p['cmd'])};",
         f"inline constexpr const char* kEgoPath = {_c_str(p['ego'])};",
@@ -341,7 +340,7 @@ def emit_frame_ingest_hpp(cfg: dict[str, Any], out_path: Path) -> None:
         f"inline constexpr double kMountRoll = {float(mount['roll'])};",
         f"inline constexpr double kMountFov = {float(mount['fov'])};",
         "",
-        "struct TipSlotFreeze {",
+        "struct CameraSlotFreeze {",
         "  const char* id;",
         "  const char* slot_name;",
         "  std::uint32_t w;",
@@ -350,7 +349,7 @@ def emit_frame_ingest_hpp(cfg: dict[str, Any], out_path: Path) -> None:
         "  std::uint32_t buffers;",
         "};",
         "",
-        "inline constexpr TipSlotFreeze kTipSlots[] = {",
+        "inline constexpr CameraSlotFreeze kCameraSlots[] = {",
     ]
     for s in slots:
         sid = str(s["id"])
@@ -365,8 +364,8 @@ def emit_frame_ingest_hpp(cfg: dict[str, Any], out_path: Path) -> None:
     lines += [
         "};",
         "",
-        "inline constexpr std::size_t kTipSlotsSize =",
-        "    sizeof(kTipSlots) / sizeof(kTipSlots[0]);",
+        "inline constexpr std::size_t kCameraSlotsSize =",
+        "    sizeof(kCameraSlots) / sizeof(kCameraSlots[0]);",
         "",
         "}  // namespace gf_gen::frame_ingest",
         "",
@@ -378,7 +377,7 @@ def emit_frame_ingest_hpp(cfg: dict[str, Any], out_path: Path) -> None:
 def emit_camera_contract_json(cfg: dict[str, Any], out_path: Path) -> None:
     """Write camera_contract.json for carla_scenarios / tools (not board runtime)."""
     slots_out = []
-    for s in cfg["tip_slots"]:
+    for s in cfg["camera_slots"]:
         m = s.get("mount") or _normalize_mount({})
         slots_out.append(
             {
@@ -404,7 +403,7 @@ def emit_camera_contract_json(cfg: dict[str, Any], out_path: Path) -> None:
         "schema": "camera_contract/v1",
         "active_source": cfg["active_source"],
         "ego_source": cfg["ego_source"],
-        "channel_transport": cfg["tip_transport"],
+        "camera_transport": cfg["camera_transport"],
         "slots": slots_out,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
