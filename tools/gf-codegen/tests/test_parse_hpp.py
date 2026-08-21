@@ -46,3 +46,24 @@ def test_parse_typedef_struct(tmp_path: Path) -> None:
     structs = parse_hpp_file(p)
     assert structs[0]["name"] == "IPC_CanInfo_20ms_St"
     assert structs[0]["fields"][0]["type"] == "uint8"
+
+
+def test_parse_gold_out_macros(repo_root: Path) -> None:
+    hpp = (
+        repo_root
+        / "projects/oem_a/afc_no_uss/interfaces/fcm_perception/Perception_Out_messages.h"
+    )
+    if not hpp.is_file():
+        return
+    structs = parse_hpp_file(hpp)
+    names = {s["name"] for s in structs}
+    assert "Perception_MESSAGE_Out_St" in names
+    assert "Dyn_OBJ_Item_St" in names
+    dyn = next(s for s in structs if s["name"] == "Perception_Dyn_OBJ_Out_St")
+    item = next(f for f in dyn["fields"] if f["name"] == "m_Obj_item")
+    assert item["array_size"] == 13
+    types = structs_to_sor_types(structs)
+    item_t = next(t for t in types if t["id"] == "types.Dyn_OBJ_Item_St")
+    # enum fields become uint8 on the wire
+    cls = next(f for f in item_t["fields"] if f["name"] == "m_OBJ_Object_Class")
+    assert cls["type"] == "uint8"

@@ -42,17 +42,32 @@ def write_truth(
     keyword: Optional[str] = None,
     t_s: Optional[float] = None,
     duration_s: Optional[float] = None,
+    lead_lat_m: Optional[float] = None,
+    lead_lane_assignment: Optional[int] = None,
+    lead_heading_rad: Optional[float] = None,
+    lane_extra: Optional[dict[str, Any]] = None,
     extra: Optional[dict[str, Any]] = None,
 ) -> None:
-    """Write truth snapshot. Legacy flat fields kept for planning ACC/AEB."""
+    """Write truth snapshot. Legacy flat fields kept for planning ACC/AEB.
+
+    Lane topology (optional via lane_extra): lane_count, ego_lane_index_from_left,
+    lane_width_m, host_*_c0/c1/type, adj_n, adj{i}_*.
+    """
     payload: dict[str, Any] = {
         "timestamp_ns": time.time_ns(),
         "seq": seq,
         "scenario": scenario,
         "lead_distance_m": float(lead_distance_m),
         "lead_rel_speed_mps": float(lead_rel_speed_mps),
-        "dyn_obj_count": 1 if lead_distance_m < 120.0 else 0,
+        # Soft work range; BEV canvas uses work×1.1 — not a hard display cut.
+        "dyn_obj_count": 1 if 0.5 < lead_distance_m <= 130.0 else 0,
     }
+    if lead_lat_m is not None:
+        payload["lead_lat_m"] = float(lead_lat_m)
+    if lead_lane_assignment is not None:
+        payload["lead_lane_assignment"] = int(lead_lane_assignment)
+    if lead_heading_rad is not None:
+        payload["lead_heading_rad"] = float(lead_heading_rad)
     if ego_mps is not None:
         payload["ego_mps"] = float(ego_mps)
         payload["ego_kph"] = float(ego_mps) * 3.6
@@ -60,6 +75,9 @@ def write_truth(
         payload["th_s"] = float(th_s)
     if set_speed_kph is not None:
         payload["set_speed_kph"] = float(set_speed_kph)
+    if lane_extra:
+        for k, v in lane_extra.items():
+            payload[k] = v
     run: dict[str, Any] = {"case_id": scenario}
     if case_index is not None:
         run["case_index"] = int(case_index)

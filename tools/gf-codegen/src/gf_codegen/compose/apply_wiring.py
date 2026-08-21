@@ -65,17 +65,19 @@ def apply_wiring(
     with wiring_path.open(encoding="utf-8") as f:
         wiring = yaml.safe_load(f) or {}
 
-    # Parse module hpp / fidl → types
+    # Parse module hpp / fidl → types (hpp may be a string or list)
     for mod in wiring.get("modules") or []:
-        hpp_rel = mod.get("hpp")
-        if hpp_rel:
+        hpp_rels = mod.get("hpp")
+        if isinstance(hpp_rels, str):
+            hpp_rels = [hpp_rels]
+        for hpp_rel in hpp_rels or []:
             hpp_path = resolve_path(project_dir, hpp_rel, repo_root=repo_root)
             if not hpp_path.is_file():
                 warnings.append(f"hpp not found: {hpp_path}")
-            else:
-                structs = parse_hpp_file(hpp_path)
-                for t in structs_to_sor_types(structs):
-                    _ensure_type(sor, t["id"], t.get("fields"))
+                continue
+            structs = parse_hpp_file(hpp_path)
+            for t in structs_to_sor_types(structs):
+                _ensure_type(sor, t["id"], t.get("fields"))
 
         fidl_rel = mod.get("fidl")
         if fidl_rel:

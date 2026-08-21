@@ -3,7 +3,8 @@
 | 目录 | 用途 |
 |------|------|
 | `vehicle_gateway/` | EgoMotion · Perception_In_St · Trajectory |
-| `fcm_perception/` | Perception_In_St · Perception_MESSAGE_Out_St |
+| `fcm_perception/` | In/Init 粗端口 + **Out 金样** `Perception_Out_messages.h` |
+
 | `planning_driving/` | Trajectory（planning Provide） |
 | `perception_front/` | **废弃**：旧 FrontObjectList 草稿，主链不再使用 |
 

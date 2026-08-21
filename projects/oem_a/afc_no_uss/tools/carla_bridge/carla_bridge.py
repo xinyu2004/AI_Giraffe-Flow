@@ -193,7 +193,7 @@ def write_truth(
         "scenario": scenario,
         "lead_distance_m": float(lead_distance_m),
         "lead_rel_speed_mps": float(lead_rel_speed_mps),
-        "dyn_obj_count": 1 if lead_distance_m < 120.0 else 0,
+        "dyn_obj_count": 1 if 0.5 < lead_distance_m <= 130.0 else 0,
     }
     atomic_write_text(truth_path, json.dumps(payload, separators=(",", ":")) + "\n")
 

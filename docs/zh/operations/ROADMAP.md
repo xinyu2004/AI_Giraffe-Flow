@@ -217,7 +217,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 ## 下一步
 
-1. **产品 demo：** CARLA + Foxglove（假感知→FCM 透传→planning lite）；C2 运行时加深后置。
+1. **产品 demo：** CARLA → FCM（假感知填金样 Out）→ iceoryx → Foxglove/BEV；planning 硬切吃 Out（file truth 旁路已删）。C2 运行时加深后置。
 2. **板端零 Python：** 上板 `runtime/`（含 **frame_ingest** 及一切 GMT/EM 会拉起的板端二进制）**不得依赖 Python** — 见 [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md) `BL-BOARD-NO-PY`。Python 仅宿主机 SIL（`carla_bridge` / scenarios / gf-config / GMT PC 侧）。
 3. 云 CI：L0 + 路径 L0b + nightly/发版（见 [devops/ci/README.md](../../../devops/ci/README.md)）。
 4. **后期（登记，本轮不做）：**
@@ -235,8 +235,9 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | 配置 freeze → hpp；白名单可运行期 JSON；行为进 constexpr | `BL-CFG-YAML-FALLBACK`（删 yaml 回落） |
 | `camera_slot` / driving·parking topic；产品 tip 词清退 | — |
 | Foxglove 相机主路径 + hero 换场重挂（SIL） | 换场相机空窗压到可接受 |
-| Client A（scenarios）/ B（ingest）职责与相机契约文档 | 假感知→FCM→planning demo 深化 |
+| Client A（scenarios）/ B（ingest）职责与相机契约文档 | 假感知→planning demo 再压车道线可视化 |
 | **政策：**板端 runtime / GMT 依赖 **零 Python**（含 **整条 frame_ingest**，非仅 ISP） | **实现** `BL-BOARD-NO-PY`（板端 C++ ISP/V4L，SIL py 模块不上板） |
+| **afc_no_uss：** Out 金样（DYN+LH+LA）→planning lite（ACC/AEB+LH 居中）+ BEV；量程/质量门控/车道锚；归档见 [fcm_gold_and_planning_lite.md](../driving/fcm_gold_and_planning_lite.md) | In 金样（CamCalib）；真检测；视频叠框；全 scenario 质量字段 |
 | — | `BL-STAGE-PY-MTIME`；云 CI；P3z 真板 |
 
 入口文档：[CONFIG_RUNTIME_POLICY.md](CONFIG_RUNTIME_POLICY.md) · [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md) · [frame_ingest_roles.md](../sku/afc_no_uss/frame_ingest_roles.md)。  

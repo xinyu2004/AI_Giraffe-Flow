@@ -336,14 +336,21 @@ class SessionState:
         try:
             msg = json.loads(text)
         except json.JSONDecodeError:
+            print(f"[bridge-ws] client bad json: {text[:120]!r}", flush=True)
             return
         op = msg.get("op")
         if op == "subscribe":
             for sub in msg.get("subscriptions") or []:
-                sid = int(sub["id"])
-                cid = int(sub["channelId"])
+                try:
+                    sid = int(sub["id"])
+                    cid = int(sub["channelId"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    print(f"[bridge-ws] subscribe skip bad entry {sub!r}: {exc}", flush=True)
+                    continue
                 self.subscriptions[sid] = cid
-                self.channel_subs.setdefault(cid, []).append(sid)
+                lst = self.channel_subs.setdefault(cid, [])
+                if sid not in lst:
+                    lst.append(sid)
                 topic = "?"
                 for t, ch in self.topic_to_channel.items():
                     if ch == cid:
@@ -362,9 +369,16 @@ class SessionState:
                 if cid is not None and cid in self.channel_subs:
                     self.channel_subs[cid] = [x for x in self.channel_subs[cid] if x != sid]
                 print(f"[bridge-ws] unsubscribe sub={sid}", flush=True)
+        else:
+            # advertiseClient / getParameters / etc. — log so silent failures are visible
+            print(f"[bridge-ws] client op={op!r} keys={list(msg.keys())}", flush=True)
 
     def publish(self, conn: socket.socket, topic: str, t_ns: int, data: Any) -> int:
-        """Send binary Message Data to all subscriptions of topic. Returns #sent."""
+        """Send binary Message Data to all subscriptions of topic. Returns #sent.
+
+        0 means advertised but nobody subscribed yet (Studio Image panel alone
+        only subscribes to the camera topic).
+        """
         cid = self.ensure_channel(conn, topic)
         subs = self.channel_subs.get(cid) or []
         if not subs:
@@ -588,17 +602,30 @@ def live_stdin_ws(
     seed: list[str] = []
     if cam_pub is not None:
         seed.append(TOPIC_DRIVING_CAM)
-    seed.extend(["/gf/EgoMotion", "/gf/Trajectory"])
+    # Advertise iceoryx topics up front so Studio can subscribe before first sample
+    # (late ensure_channel is easy to miss in the topic picker).
+    seed.extend(
+        [
+            "/gf/EgoMotion",
+            "/gf/Trajectory",
+            "/gf/Perception_MESSAGE_Out_St",
+            "/gf/Perception_In_St",
+        ]
+    )
     if synth_bev:
         seed.append(TOPIC_BEV)
 
     published = 0
-    dropped = 0
+    dropped = 0  # no Studio connection
+    nosub = 0  # Studio connected but topic not subscribed (panel missing)
     stdin_eof = False
     cam_logged = False
     cam_pub_count = 0
     cam_hb_at = 0.0
+    status_at = 0.0
     by_topic: dict[str, int] = {}
+    by_topic_nosub: dict[str, int] = {}
+    by_topic_in: dict[str, int] = {}  # rows seen from tap (regardless of Studio)
 
     def _close_client(*, reason: str = "") -> None:
         nonlocal conn, state, peer_label
@@ -615,30 +642,36 @@ def live_stdin_ws(
         peer_label = ""
 
     def _publish_row(topic: str, t_ns: int, data: Any) -> None:
-        nonlocal published, dropped, conn, state
+        nonlocal published, dropped, nosub, conn, state
+        by_topic_in[topic] = by_topic_in.get(topic, 0) + 1
         if conn is None or state is None:
             # Drain quietly so tap never blocks; Studio may connect anytime.
             dropped += 1
             return
+        # Bridge receive-time: keeps Ego/Traj/Perc/camera on one Foxglove timeline.
+        send_t = time.time_ns()
         try:
-            n = state.publish(conn, topic, t_ns, data)
+            n = state.publish(conn, topic, send_t, data)
         except (BrokenPipeError, ConnectionResetError, OSError) as exc:
             _close_client(reason=f"client gone: {exc}")
             dropped += 1
             return
         if n <= 0:
+            nosub += 1
+            by_topic_nosub[topic] = by_topic_nosub.get(topic, 0) + 1
             return
         published += n
         by_topic[topic] = by_topic.get(topic, 0) + n
         if published and published % 50 == 0:
-            # Keep one-line heartbeat; show camera share so "1150 msgs" is not opaque.
             cam_n = by_topic.get(TOPIC_DRIVING_CAM, 0)
             _status(
                 "ok",
                 f"published {published} msgs (camera={cam_n} "
                 f"ego={by_topic.get('/gf/EgoMotion', 0)} "
                 f"traj={by_topic.get('/gf/Trajectory', 0)} "
-                f"bev={by_topic.get(TOPIC_BEV, 0)})",
+                f"perc={by_topic.get('/gf/Perception_MESSAGE_Out_St', 0)} "
+                f"bev={by_topic.get(TOPIC_BEV, 0)} "
+                f"nosub={nosub})",
             )
 
     try:
@@ -694,6 +727,13 @@ def live_stdin_ws(
                                 state = new_state
                                 peer_label = who
                                 _status("ok", f"CONNECTED peer={who} (listen :{port})")
+                                _status(
+                                    "listen",
+                                    "Studio: Image panel = camera only. "
+                                    "Add Raw Messages (or Plot) and select "
+                                    "/gf/EgoMotion /gf/Trajectory /gf/Perception_MESSAGE_Out_St "
+                                    "— otherwise nosub drops those frames.",
+                                )
                         except (BrokenPipeError, ConnectionResetError, OSError) as exc:
                             _status("err", f"handshake failed peer={who}: {exc}")
                             try:
@@ -713,19 +753,23 @@ def live_stdin_ws(
                     except (BrokenPipeError, ConnectionResetError, OSError) as exc:
                         _close_client(reason=f"client gone: {exc}")
 
-                # Always drain stdin so the tap pipe never backs up
+                # Always drain stdin so the tap pipe never backs up (prefer over camera).
                 lines: list[str] = []
                 if fd >= 0 and fd in ready:
-                    chunk = os_read_chunk(inp)
-                    if chunk == "":
-                        if not buf:
-                            stdin_eof = True
-                            _status("bye", "stdin EOF")
-                    else:
+                    # Read until EAGAIN / short read so Ego/Perc are not starved by JPEG.
+                    for _ in range(64):
+                        chunk = os_read_chunk(inp, size=65536)
+                        if chunk == "":
+                            if not buf and not lines:
+                                stdin_eof = True
+                                _status("bye", "stdin EOF")
+                            break
                         buf += chunk
                         while "\n" in buf:
                             line, buf = buf.split("\n", 1)
                             lines.append(line)
+                        if len(chunk) < 65536:
+                            break
                 elif fd < 0 and not stdin_eof:
                     # Non-selectable stream (tests): blocking readline with short idle
                     line = inp.readline()
@@ -756,25 +800,61 @@ def live_stdin_ws(
                                 cam["data"],
                             )
 
+                # Periodic: prove tap is alive even when Studio only subscribed camera.
+                now_mono = time.monotonic()
+                if now_mono - status_at >= 5.0:
+                    status_at = now_mono
+                    _status(
+                        "ok",
+                        "tap→bridge "
+                        f"ego_in={by_topic_in.get('/gf/EgoMotion', 0)} "
+                        f"traj_in={by_topic_in.get('/gf/Trajectory', 0)} "
+                        f"perc_in={by_topic_in.get('/gf/Perception_MESSAGE_Out_St', 0)} | "
+                        f"studio_fwd ego={by_topic.get('/gf/EgoMotion', 0)} "
+                        f"traj={by_topic.get('/gf/Trajectory', 0)} "
+                        f"perc={by_topic.get('/gf/Perception_MESSAGE_Out_St', 0)} "
+                        f"cam={by_topic.get(TOPIC_DRIVING_CAM, 0)} | "
+                        f"nosub_ego={by_topic_nosub.get('/gf/EgoMotion', 0)} "
+                        f"nosub_perc={by_topic_nosub.get('/gf/Perception_MESSAGE_Out_St', 0)}",
+                    )
+                    # Surface hint inside Studio (Problems / status), not only terminal.
+                    if (
+                        conn is not None
+                        and state is not None
+                        and (
+                            by_topic_nosub.get("/gf/EgoMotion", 0) > 0
+                            or by_topic_nosub.get("/gf/Perception_MESSAGE_Out_St", 0) > 0
+                        )
+                        and by_topic.get("/gf/EgoMotion", 0) == 0
+                        and by_topic.get("/gf/Perception_MESSAGE_Out_St", 0) == 0
+                    ):
+                        try:
+                            _send_json(
+                                conn,
+                                {
+                                    "op": "status",
+                                    "level": 1,
+                                    "id": "gf-nosub-hint",
+                                    "message": (
+                                        "Giraffe: tap is live but Studio has not subscribed. "
+                                        "Add panel → Raw Messages → topic /gf/EgoMotion "
+                                        "(and /gf/Perception_MESSAGE_Out_St). "
+                                        "Image panel alone only gets the camera topic."
+                                    ),
+                                },
+                            )
+                        except OSError:
+                            pass
+
                 # Real front camera on the same pipe (poll even when stdin idle).
                 if cam_pub is not None:
                     cam_row = cam_pub.poll()
                     if cam_row is not None:
-                        t_ns = int(cam_row["t_ns"])
                         data = cam_row["data"]
-                        n = 0
-                        if conn is not None and state is not None:
-                            try:
-                                n = state.publish(conn, TOPIC_DRIVING_CAM, t_ns, data)
-                            except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                                _close_client(reason=f"client gone: {exc}")
-                            else:
-                                if n:
-                                    published += n
-                                    by_topic[TOPIC_DRIVING_CAM] = (
-                                        by_topic.get(TOPIC_DRIVING_CAM, 0) + n
-                                    )
-                                    cam_pub_count += 1
+                        before = by_topic.get(TOPIC_DRIVING_CAM, 0)
+                        _publish_row(TOPIC_DRIVING_CAM, int(cam_row["t_ns"]), data)
+                        if by_topic.get(TOPIC_DRIVING_CAM, 0) > before:
+                            cam_pub_count += 1
                         if not cam_logged:
                             cam_logged = True
                             _status(
@@ -782,9 +862,7 @@ def live_stdin_ws(
                                 f"camera frame → {TOPIC_DRIVING_CAM} "
                                 f"{cam_row.get('data', {}).get('format', '?')}",
                             )
-                        import time as _time
-
-                        now = _time.monotonic()
+                        now = time.monotonic()
                         if cam_pub_count and now - cam_hb_at >= 5.0:
                             cam_hb_at = now
                             dig = int(getattr(cam_pub, "last_digest", 0) or 0)

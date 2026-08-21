@@ -1,14 +1,25 @@
-"""Compose BEV images from live module topics (+ optional scenario script).
+"""Compose BEV images from live module topics.
 
 Primary inputs (iceoryx → tap NDJSON):
   /gf/EgoMotion   — ego speed / steer
   /gf/Trajectory  — path polyline (ego-frame: x forward, y left)
+  /gf/Perception_MESSAGE_Out_St — FCM dyn (CIPV) + LH hostlines + LA adj lines
   /gf/UssZones    — optional nearest_cm (when tap supports it)
 
-Optional story enrichment (NOT published to Foxglove):
-  --bev-script JSONL AdasDemo frames → phase / lead / lane_offset drawn into Image
-
 Output topic: /gf/driving/bev/compressed (foxglove.CompressedImage JSON).
+
+Demo range contract (FOV is optical only — not these numbers):
+  D_work ≈ 120 m — soft working / validity band (not a hard BEV cut)
+  D_bev  = 130 m — canvas ≈ D_work×1.1; lanes/ticks/objects drawn to this
+Object fill color is by stable OBJ_ID palette (video overlay will share later).
+Trajectory polyline = planning `/gf/Trajectory` (green=accel, red=decel, blue=hold).
+
+BEV lane geometry comes only from FCM Out (Perception_LH_Out host lines and
+Perception_LA_Out adjacent lines). Mark style follows gold lanemark_type
+(1=solid, 2=dashed). Distance ticks sit on the outer edge of the whole corridor.
+
+AdasDemo JSONL script enrichment is deprecated for live; kept only for offline
+expand_rows_with_bev(..., script=...) tests if callers still pass a script.
 """
 
 from __future__ import annotations
@@ -23,17 +34,101 @@ from gf_gmt.adas_scenarios import (
     TOPIC_EGO,
     TOPIC_TRAJ,
     FrameState,
-    LEFT_LANE_Y,
-    RIGHT_LANE_Y,
     compressed_image_msg,
     render_bev_png,
     _fill_rect,
     _line,
     _png_rgb,
-    _set_pixel,
 )
 
 TOPIC_USS = "/gf/UssZones"
+TOPIC_PERC = "/gf/Perception_MESSAGE_Out_St"
+
+# Demo contract — canvas is primary; work range is soft (avoid miss via ×1.1).
+D_WORK_M = 120.0
+D_BEV_M = 130.0
+# Back-compat alias (prefer D_WORK_M / D_BEV_M in new code).
+D_PERC_M = D_WORK_M
+
+# Stable ID → RGB (adjacent hues). Video overlay will reuse the same map.
+_ID_PALETTE: tuple[tuple[int, int, int], ...] = (
+    (220, 90, 90),
+    (90, 180, 220),
+    (220, 180, 60),
+    (180, 100, 220),
+    (60, 200, 160),
+    (230, 140, 80),
+    (100, 140, 230),
+    (200, 80, 160),
+    (140, 200, 80),
+    (80, 200, 220),
+    (230, 100, 120),
+    (160, 160, 90),
+)
+
+
+def color_for_obj_id(obj_id: int) -> tuple[int, int, int]:
+    if obj_id <= 0:
+        return _ID_PALETTE[0]
+    return _ID_PALETTE[(int(obj_id) - 1) % len(_ID_PALETTE)]
+
+
+@dataclass
+class HostLanePoly:
+    """Ego-frame host lane mark: y = C0 + C1 x + C2 x^2 + C3 x^3."""
+
+    side: int = 0  # 1=left, 2=right
+    c0: float = 0.0
+    c1: float = 0.0
+    c2: float = 0.0
+    c3: float = 0.0
+    x0: float = 0.0
+    x1: float = D_BEV_M
+    # Gold LH_Lanemark_Type: 1=solid, 2=dashed
+    lanemark_type: int = 1
+
+    def y_at(self, x: float) -> float:
+        return self.c0 + self.c1 * x + self.c2 * x * x + self.c3 * x * x * x
+
+    @property
+    def is_dashed(self) -> bool:
+        return int(self.lanemark_type) == 2
+
+
+@dataclass
+class AdjLanePoly:
+    """Ego-frame adjacent lane mark: y = C0 + C1 x + C2 x^2 + C3 x^3."""
+
+    side: int = 0
+    c0: float = 0.0
+    c1: float = 0.0
+    c2: float = 0.0
+    c3: float = 0.0
+    x0: float = 0.0
+    x1: float = D_BEV_M
+    # Gold LA_Lanemark_Type: 1=solid, 2=dashed
+    lanemark_type: int = 2
+
+    def y_at(self, x: float) -> float:
+        return self.c0 + self.c1 * x + self.c2 * x * x + self.c3 * x * x * x
+
+    @property
+    def is_dashed(self) -> bool:
+        return int(self.lanemark_type) != 1
+
+
+@dataclass
+class BevDynObj:
+    """One FCM dyn object for BEV (and later camera overlay)."""
+
+    obj_id: int
+    x_m: float
+    y_m: float
+    is_cipv: bool = False
+    obj_class: int = 0
+    length_m: float = 4.5
+    width_m: float = 1.8
+    heading_rad: float = 0.0  # vs ego +x (forward)
 
 
 @dataclass
@@ -106,95 +201,364 @@ class LiveBevState:
     # Integrated path length (m) for scrolling ground — ego-centric BEV motion cue
     odom_m: float = 0.0
     _last_t_ns: int = 0
-    # Optional AdasDemo
+    _last_speed_mps: float = 0.0
+    # Smoothed longitudinal accel (m/s²) for Trajectory paint: +accel / −decel
+    lon_accel_mps2: float = 0.0
+    # Optional AdasDemo (offline only)
     has_adas: bool = False
     phase: str = ""
     lead_dist_m: float = 0.0
+    lead_rel_v_mps: float = 0.0
     accel_cmd_mps2: float = 0.0
     brake_active: int = 0
     lane_offset_m: float = 0.0
     cipo_x_m: float = 0.0
     cipo_y_m: float = 0.0
     scenario_id: str = ""
+    # Live FCM Out
+    has_perc_lead: bool = False
+    has_perc_lanes: bool = False
+    host_lanes: list[HostLanePoly] = field(default_factory=list)
+    adj_lanes: list[AdjLanePoly] = field(default_factory=list)
+    lane_width_m: float = 3.5
+    perc_objects: list[BevDynObj] = field(default_factory=list)
+    cipv_id: int = 0
+
+
+def traj_color_for_lon(st: LiveBevState) -> tuple[int, int, int]:
+    """Planning path color: green accel, red decel, blue hold."""
+    a = float(st.lon_accel_mps2)
+    if st.has_adas:
+        if int(st.brake_active) > 0 or float(st.accel_cmd_mps2) < -0.2:
+            a = min(a, float(st.accel_cmd_mps2) if st.accel_cmd_mps2 else -1.0)
+        elif float(st.accel_cmd_mps2) > 0.2:
+            a = max(a, float(st.accel_cmd_mps2))
+    if a > 0.25:
+        return (70, 210, 110)  # accel
+    if a < -0.25:
+        return (230, 80, 80)  # decel
+    return (90, 160, 255)  # hold
 
 
 def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360) -> bytes:
-    """Ego-centric dual-lane BEV; ground scrolls with odom_m so motion is visible."""
+    """Lane-anchored BEV: +x along host-lane heading, +y left of road.
+
+    Ego-frame polys/objects from FCM are rotated into the road frame so extreme
+    yaw no longer squashes the corridor. Canvas D_bev; objects/lanes to D_bev.
+    """
+    import math
+
     bg = (24, 28, 36)
-    asphalt = (42, 46, 54)
-    lane = (200, 200, 210)
-    dash_c = (160, 160, 80)
+    asphalt_host = (54, 58, 68)
+    lh_c = (235, 235, 250)
+    la_c = (170, 175, 190)
+    dash_c = (200, 200, 90)
     ego_c = (80, 200, 120)
-    traj_c = (90, 160, 255)
+    traj_c = traj_color_for_lon(st)
     uss_c = (220, 180, 60)
     text_bar = (40, 44, 55)
-    tick_c = (70, 90, 110)
+    tick_c = (168, 168, 172)
+    tick_major_c = (200, 200, 204)
+    cipv_outline = (245, 245, 250)
 
     buf = bytearray(bytes(bg) * (width * height))
     _fill_rect(buf, width, height, 0, 0, width, 28, text_bar)
 
-    scale = 8.0
-    ox, oy = width // 2, height - 50
-    # Scroll ground toward ego (positive odom → dashes move down / toward bottom)
-    scroll = st.odom_m % 8.0
+    ox, oy = width // 2, height - 44
+    usable_h = max(80.0, float(oy - 28))
+    sx = usable_h / D_BEV_M
+    lane_w = float(st.lane_width_m) if st.lane_width_m > 0.5 else 3.5
+    half = 0.5 * lane_w
 
-    def e2p(xm: float, ym: float) -> tuple[int, int]:
-        return int(ox - ym * scale), int(oy - xm * scale)
+    all_polys: list[HostLanePoly | AdjLanePoly] = list(st.host_lanes) + list(st.adj_lanes)
+    left_poly: HostLanePoly | None = None
+    right_poly: HostLanePoly | None = None
+    for hl in st.host_lanes:
+        if hl.side == 1:
+            left_poly = hl
+        elif hl.side == 2:
+            right_poly = hl
+    if left_poly is None and st.host_lanes:
+        left_poly = st.host_lanes[0]
+    if right_poly is None and len(st.host_lanes) > 1:
+        right_poly = st.host_lanes[1]
 
-    y_re = RIGHT_LANE_Y - 1.75
-    y_mid = 1.75
-    y_le = LEFT_LANE_Y + 1.75
-    for xi in range(0, 45):
-        xm = float(xi)
-        for ym_i in range(int(y_re * 10), int(y_le * 10) + 1):
-            px, py = e2p(xm, ym_i / 10.0)
-            _set_pixel(buf, width, height, px, py, asphalt)
-    for y_lane in (y_re, y_le):
-        p0, p1 = e2p(0.0, y_lane), e2p(42.0, y_lane)
-        _line(buf, width, height, p0[0], p0[1], p1[0], p1[1], lane, thick=2)
+    # Road yaw in ego frame from host C1 (straight-local tangent).
+    c1_ref = 0.0
+    if left_poly is not None and right_poly is not None:
+        c1_ref = 0.5 * (left_poly.c1 + right_poly.c1)
+    elif left_poly is not None:
+        c1_ref = left_poly.c1
+    elif right_poly is not None:
+        c1_ref = right_poly.c1
+    elif all_polys:
+        c1_ref = float(all_polys[0].c1)
+    psi = math.atan(max(-4.0, min(4.0, c1_ref)))
+    c_psi, s_psi = math.cos(psi), math.sin(psi)
 
-    # Dashed center line — phase shifts with odom so the road "moves"
-    for seg in range(-8, 48, 4):
-        x0 = float(seg) - scroll
-        x1 = x0 + 2.0
-        if x1 < 0 or x0 > 42:
-            continue
-        p0, p1 = e2p(max(0.0, x0), y_mid), e2p(min(42.0, x1), y_mid)
-        _line(buf, width, height, p0[0], p0[1], p1[0], p1[1], dash_c, thick=2)
+    def ego_to_road(xe: float, ye: float) -> tuple[float, float]:
+        return xe * c_psi + ye * s_psi, -xe * s_psi + ye * c_psi
 
-    # Lateral tick marks every 5 m (also scrolled) — strong motion cue
-    for k in range(-2, 12):
-        xm = (k * 5.0) - (st.odom_m % 5.0)
-        if xm < 0 or xm > 40:
-            continue
-        p0, p1 = e2p(xm, y_re + 0.2), e2p(xm, y_re + 0.8)
-        _line(buf, width, height, p0[0], p0[1], p1[0], p1[1], tick_c, thick=1)
-        p0, p1 = e2p(xm, y_le - 0.8), e2p(xm, y_le - 0.2)
-        _line(buf, width, height, p0[0], p0[1], p1[0], p1[1], tick_c, thick=1)
+    def _host_y_ego(xe: float, side: str) -> float:
+        if side == "l" and left_poly is not None:
+            return left_poly.y_at(xe)
+        if side == "r" and right_poly is not None:
+            return right_poly.y_at(xe)
+        return half if side == "l" else -half
+
+    # Lateral span in ROAD frame near ego (stable under large yaw).
+    y_road_samples: list[float] = []
+    for xe_s in (0.0, 2.0, 5.0):
+        for side in ("l", "r"):
+            _xr, yr = ego_to_road(xe_s, _host_y_ego(xe_s, side))
+            y_road_samples.append(yr)
+        for poly in all_polys:
+            _xr, yr = ego_to_road(xe_s, poly.y_at(xe_s))
+            y_road_samples.append(yr)
+    if y_road_samples:
+        y_span_min, y_span_max = min(y_road_samples), max(y_road_samples)
+        span_y = max(lane_w, y_span_max - y_span_min)
+    else:
+        y_span_min, y_span_max, span_y = -half, half, lane_w
+    y_mid = 0.5 * (y_span_min + y_span_max)
+    sy = min(
+        52.0 / max(lane_w, 2.5),
+        (width * 0.88) / max(span_y + 2.0, lane_w * 1.4),
+    )
+
+    dash_period = 12.0
+    scroll = st.odom_m % dash_period
+    # Draw horizon = min(canvas, host VR). Never extrapolate past Out VR_End.
+    host_vr = D_BEV_M
+    if st.host_lanes:
+        host_vr = min(D_BEV_M, max(p.x1 for p in st.host_lanes))
+    x_draw = max(0.0, host_vr)
+    tick_stub_m = 0.55
+    xe_span = (x_draw / max(0.2, abs(c_psi)) + 10.0) if x_draw > 0.5 else 0.0
+
+    def e2p_road(xr: float, yr: float) -> tuple[int, int]:
+        return int(ox - (yr - y_mid) * sy), int(oy - xr * sx)
+
+    def e2p_ego(xe: float, ye: float) -> tuple[int, int]:
+        return e2p_road(*ego_to_road(xe, ye))
+
+    def _draw_poly_road(
+        poly: HostLanePoly | AdjLanePoly,
+        color: tuple[int, int, int],
+        *,
+        thick: int,
+        dashed: bool = False,
+    ) -> None:
+        x_hi = min(float(poly.x1), x_draw)
+        x_lo = max(0.0, float(poly.x0))
+        if x_hi <= x_lo + 0.25:
+            return
+        prev: tuple[int, int] | None = None
+        span = x_hi - x_lo
+        steps = max(24, int(span) // 2 + 1)
+        for i in range(steps + 1):
+            xe = x_lo + span * i / steps
+            if xe > float(poly.x1) + 1e-3:
+                break
+            ye = poly.y_at(xe)
+            xr, yr = ego_to_road(xe, ye)
+            if xr < -2.0 or xr > x_draw + 5.0:
+                prev = None
+                continue
+            pt = e2p_road(xr, yr)
+            if prev is not None:
+                if not dashed or i % 3 != 0:
+                    _line(buf, width, height, prev[0], prev[1], pt[0], pt[1], color, thick=thick)
+            prev = pt
+
+    # Host asphalt only within VR
+    if x_draw > 0.5 and (left_poly is not None or right_poly is not None):
+        steps_a = max(24, int(xe_span) // 2 + 1)
+        for i in range(steps_a + 1):
+            xe = min(x_draw, (xe_span) * i / max(1, steps_a))
+            if left_poly is not None and xe > left_poly.x1:
+                continue
+            if right_poly is not None and xe > right_poly.x1:
+                continue
+            ya, yb = _host_y_ego(xe, "r"), _host_y_ego(xe, "l")
+            p_a, p_b = e2p_ego(xe, ya), e2p_ego(xe, yb)
+            xa, xb = sorted((p_a[0], p_b[0]))
+            py = (p_a[1] + p_b[1]) // 2
+            xr, _ = ego_to_road(xe, 0.5 * (ya + yb))
+            if xr < -1.0 or xr > x_draw + 2.0:
+                continue
+            _fill_rect(buf, width, height, xa, max(28, py), xb + 1, min(height, py + 3), asphalt_host)
+
+    for hl in st.host_lanes:
+        _draw_poly_road(hl, lh_c, thick=3, dashed=hl.is_dashed)
+    # No fallback schematic host when Out says unavailable.
+    for al in st.adj_lanes:
+        _draw_poly_road(al, la_c, thick=2, dashed=al.is_dashed)
+
+    # Host center dashes / ruler only when host lanes are available within VR
+    if x_draw > 0.5 and st.host_lanes:
+        y_host_mid_e = 0.5 * (_host_y_ego(0.0, "l") + _host_y_ego(0.0, "r"))
+        for seg in range(-int(dash_period), int(x_draw) + int(dash_period), max(1, int(dash_period // 2))):
+            x0 = float(seg) - scroll
+            x1 = x0 + dash_period * 0.45
+            if x1 < 0 or x0 > x_draw:
+                continue
+
+            def _pt_at_road_x(xr: float) -> tuple[int, int]:
+                xe = xr * c_psi
+                ye = 0.5 * (_host_y_ego(xe, "l") + _host_y_ego(xe, "r"))
+                return e2p_ego(xe, ye)
+
+            p0, p1 = _pt_at_road_x(max(0.0, x0)), _pt_at_road_x(min(x_draw, x1))
+            _line(buf, width, height, p0[0], p0[1], p1[0], p1[1], dash_c, thick=2)
+
+        def _corridor_yr(xr_t: float) -> tuple[float, float]:
+            ys: list[float] = []
+            xe = xr_t * c_psi
+            for _ in range(3):
+                ye_mid = 0.5 * (_host_y_ego(xe, "l") + _host_y_ego(xe, "r"))
+                xr_now, _ = ego_to_road(xe, ye_mid)
+                xe += (xr_t - xr_now) * c_psi
+            for poly in all_polys:
+                _xr, yr = ego_to_road(xe, poly.y_at(min(xe, float(poly.x1))))
+                ys.append(yr)
+            if not ys:
+                for side in ("l", "r"):
+                    _xr, yr = ego_to_road(xe, _host_y_ego(xe, side))
+                    ys.append(yr)
+            return min(ys), max(ys)
+
+        y0_lo, y0_hi = _corridor_yr(0.0)
+        _xr0, yr_host = ego_to_road(0.0, y_host_mid_e)
+        use_left_outer = abs(y0_hi - yr_host) <= abs(y0_lo - yr_host)
+        for k in range(0, int(x_draw) // 20 + 1):
+            xr = float(k * 20)
+            if xr <= 0.0 or xr > x_draw:
+                continue
+            y_lo, y_hi = _corridor_yr(xr)
+            if use_left_outer:
+                y_edge = y_hi
+                y_tip = y_edge + tick_stub_m * (1.35 if (k % 2 == 0) else 0.85)
+            else:
+                y_edge = y_lo
+                y_tip = y_edge - tick_stub_m * (1.35 if (k % 2 == 0) else 0.85)
+            major = k % 2 == 0
+            p0, p1 = e2p_road(xr, y_edge), e2p_road(xr, y_tip)
+            _line(
+                buf, width, height, p0[0], p0[1], p1[0], p1[1],
+                tick_major_c if major else tick_c, thick=2 if major else 1,
+            )
 
     if len(st.traj_x) >= 2:
         for i in range(len(st.traj_x) - 1):
-            a = e2p(st.traj_x[i], st.traj_y[i])
-            b = e2p(st.traj_x[i + 1], st.traj_y[i + 1])
+            a = e2p_ego(st.traj_x[i], st.traj_y[i])
+            b = e2p_ego(st.traj_x[i + 1], st.traj_y[i + 1])
             _line(buf, width, height, a[0], a[1], b[0], b[1], traj_c, thick=2)
 
     if st.nearest_cm is not None and st.nearest_cm > 0:
-        dist_m = float(st.nearest_cm) / 100.0
-        dist_m = max(0.5, min(dist_m, 40.0))
-        cx, cy = e2p(dist_m, 0.0)
-        _fill_rect(buf, width, height, cx - 8, cy - 8, cx + 8, cy + 8, uss_c)
+        dist_m = max(0.5, min(float(st.nearest_cm) / 100.0, D_BEV_M))
+        cx, cy = e2p_ego(dist_m, 0.0)
+        _fill_rect(buf, width, height, cx - 4, cy - 4, cx + 4, cy + 4, uss_c)
 
-    ex, ey = e2p(0.0, 0.0)
-    _fill_rect(buf, width, height, ex - 12, ey - 18, ex + 12, ey + 18, ego_c)
+    objs = list(st.perc_objects)
+    if not objs and (st.has_perc_lead or st.lead_dist_m > 0.5):
+        objs = [
+            BevDynObj(
+                obj_id=st.cipv_id or 1,
+                x_m=float(st.cipo_x_m or st.lead_dist_m),
+                y_m=float(st.cipo_y_m),
+                is_cipv=True,
+            )
+        ]
 
-    # Speed bar + small odom hash so consecutive PNGs differ even at const speed
+    max_hx = max(2, int(0.42 * lane_w * sy))
+
+    def _paint_box_road(
+        xe: float,
+        ye: float,
+        length_m: float,
+        width_m: float,
+        heading_ego: float,
+        fill: tuple[int, int, int],
+        *,
+        outline: tuple[int, int, int] | None = None,
+    ) -> None:
+        xr, yr = ego_to_road(xe, ye)
+        heading_r = heading_ego - psi
+        c = math.cos(heading_r)
+        s = math.sin(heading_r)
+        hl, hw = 0.5 * length_m, 0.5 * width_m
+        if abs(heading_r) < 0.08:
+            hx = max(2, min(max_hx, int(hw * sy)))
+            hy = max(2, int(hl * sx))
+            cx, cy = e2p_road(xr, yr)
+            if outline is not None:
+                _fill_rect(
+                    buf, width, height, cx - hx - 2, cy - hy - 2, cx + hx + 2, cy + hy + 2, outline
+                )
+            _fill_rect(buf, width, height, cx - hx, cy - hy, cx + hx, cy + hy, fill)
+            return
+        steps_l = max(4, int(length_m * sx / 2) + 1)
+        steps_w = max(3, int(width_m * sy / 2) + 1)
+        for i in range(steps_l + 1):
+            for j in range(steps_w + 1):
+                dl = -hl + length_m * i / steps_l
+                dw = -hw + width_m * j / steps_w
+                pxr = xr + dl * c - dw * s
+                pyr = yr + dl * s + dw * c
+                px, py = e2p_road(pxr, pyr)
+                col = outline if (
+                    outline is not None and (i in (0, steps_l) or j in (0, steps_w))
+                ) else fill
+                if 0 <= px < width and 0 <= py < height:
+                    _fill_rect(buf, width, height, px, py, px + 1, py + 1, col)
+
+    for obj in objs:
+        xr, _yr = ego_to_road(obj.x_m, obj.y_m)
+        if obj.x_m < -2.0 or xr > D_BEV_M + 5.0:
+            continue
+        # Class tint: pedestrians slightly different palette index
+        fill = color_for_obj_id(obj.obj_id)
+        if int(obj.obj_class) == 5:
+            fill = (220, 160, 80)
+        _paint_box_road(
+            obj.x_m,
+            obj.y_m,
+            obj.length_m,
+            obj.width_m,
+            float(obj.heading_rad),
+            fill,
+            outline=cipv_outline if obj.is_cipv else None,
+        )
+
+    # Ego: nose relative to road = -psi
+    _paint_box_road(0.0, 0.0, 4.5, 1.8, 0.0, ego_c)
+
     bar_w = int(min(200, max(8, st.speed_mps * 6)))
     _fill_rect(buf, width, height, 8, 6, 8 + bar_w, 22, (80, 180, 90))
-    # 1px odom spark in the banner (changes every ~0.1 m)
     spark = 8 + int(st.odom_m * 10) % max(1, width - 16)
     _fill_rect(buf, width, height, spark, 6, spark + 3, 22, (240, 240, 80))
 
     return _png_rgb(width, height, bytes(buf))
+
+
+
+def _lane_line_quality(it: dict[str, Any], *, conf_key: str, avail_key: str) -> tuple[float, int] | None:
+    """(conf, avail) or None to skip.
+
+    obs_tap HostLine allowlist historically omits Availability. Missing Availability
+    must NOT mean NA(0) when Confidence/VR are present — that blacked out healthy lanes.
+    """
+    has_conf = conf_key in it and it.get(conf_key) is not None
+    has_avail = avail_key in it and it.get(avail_key) is not None
+    conf = float(it[conf_key]) if has_conf else 0.95
+    if has_avail:
+        avail = int(it[avail_key])
+    else:
+        avail = 2 if conf >= 0.15 else 0
+    if avail == 0 or conf < 0.15:
+        return None
+    return conf, avail
 
 
 class LiveBevComposer:
@@ -210,6 +574,7 @@ class LiveBevComposer:
         self.state.has_adas = True
         self.state.phase = str(data.get("phase") or "")
         self.state.lead_dist_m = float(data.get("lead_dist_m") or 0.0)
+        self.state.lead_rel_v_mps = float(data.get("lead_rel_v_mps") or 0.0)
         self.state.accel_cmd_mps2 = float(data.get("accel_cmd_mps2") or 0.0)
         self.state.brake_active = int(data.get("brake_active") or 0)
         self.state.lane_offset_m = float(data.get("lane_offset_m") or 0.0)
@@ -218,6 +583,162 @@ class LiveBevComposer:
         self.state.scenario_id = str(data.get("scenario_id") or "")
         if data.get("speed_mps") is not None:
             self.state.speed_mps = float(data["speed_mps"])
+
+    def _apply_perc_lh(self, data: dict[str, Any]) -> None:
+        lh = data.get("Perception_LH_Out")
+        if not isinstance(lh, dict):
+            self.state.has_perc_lanes = False
+            self.state.host_lanes = []
+            return
+        items = lh.get("m_hostline") or []
+        n = int(lh.get("m_hostline_num") or 0)
+        if not isinstance(items, list) or n <= 0:
+            self.state.has_perc_lanes = False
+            self.state.host_lanes = []
+            return
+        lanes: list[HostLanePoly] = []
+        for it in items[: max(0, n)]:
+            if not isinstance(it, dict):
+                continue
+            q = _lane_line_quality(
+                it, conf_key="m_LH_Confidence", avail_key="m_LH_Availability_State"
+            )
+            if q is None:
+                continue
+            x0 = float(it.get("m_LH_First_VR_Start") or 0.0)
+            x1 = float(it.get("m_LH_First_VR_End") or 0.0)
+            if x1 <= x0 + 0.25:
+                continue  # no inventing horizon past VR
+            x1 = min(x1, D_BEV_M)
+            lanes.append(
+                HostLanePoly(
+                    side=int(it.get("m_LH_Side") or 0),
+                    c0=float(it.get("m_LH_Line_First_C0") or 0.0),
+                    c1=float(it.get("m_LH_Line_First_C1") or 0.0),
+                    c2=float(it.get("m_LH_Line_First_C2") or 0.0),
+                    c3=float(it.get("m_LH_Line_First_C3") or 0.0),
+                    x0=x0,
+                    x1=x1,
+                    lanemark_type=int(it.get("m_LH_Lanemark_Type") or 1),
+                )
+            )
+        self.state.host_lanes = lanes
+        self.state.has_perc_lanes = len(lanes) >= 1
+        w = float(lh.get("m_LH_Estimated_Width") or 0.0)
+        if w > 0.5:
+            self.state.lane_width_m = w
+
+    def _apply_perc_la(self, data: dict[str, Any]) -> None:
+        la = data.get("Perception_LA_Out")
+        if not isinstance(la, dict):
+            self.state.adj_lanes = []
+            return
+        items = la.get("m_adj_line") or []
+        n = int(la.get("m_adj_line_num") or 0)
+        if not isinstance(items, list) or n <= 0:
+            self.state.adj_lanes = []
+            return
+        lanes: list[AdjLanePoly] = []
+        for it in items[: max(0, n)]:
+            if not isinstance(it, dict):
+                continue
+            q = _lane_line_quality(
+                it, conf_key="m_LA_Confidence", avail_key="m_LA_Availability_State"
+            )
+            if q is None:
+                continue
+            x0 = float(it.get("m_LA_View_Range_Start") or 0.0)
+            x1 = float(it.get("m_LA_View_Range_End") or 0.0)
+            if x1 <= x0 + 0.25:
+                continue
+            x1 = min(x1, D_BEV_M)
+            lanes.append(
+                AdjLanePoly(
+                    side=int(it.get("m_LA_Line_Side") or 0),
+                    c0=float(it.get("m_LA_Line_C0") or 0.0),
+                    c1=float(it.get("m_LA_Line_C1") or 0.0),
+                    c2=float(it.get("m_LA_Line_C2") or 0.0),
+                    c3=float(it.get("m_LA_Line_C3") or 0.0),
+                    x0=x0,
+                    x1=x1,
+                    lanemark_type=int(it.get("m_LA_Lanemark_Type") or 2),
+                )
+            )
+        self.state.adj_lanes = lanes
+
+    def _apply_perc_out(self, data: dict[str, Any]) -> None:
+        """Parse gold-like Perception_MESSAGE_Out_St NDJSON from obs_tap."""
+        self._apply_perc_lh(data)
+        self._apply_perc_la(data)
+        dyn = data.get("Perception_DYN_OBJ_Out")
+        if not isinstance(dyn, dict):
+            # flat fallbacks
+            if data.get("lead_dist_m") is not None:
+                dist = float(data["lead_dist_m"])
+                self.state.has_perc_lead = 0.5 < dist <= D_BEV_M
+                self.state.lead_dist_m = dist
+                self.state.cipo_x_m = dist
+                self.state.cipo_y_m = float(data.get("lead_lat_m") or 0.0)
+                self.state.lead_rel_v_mps = float(data.get("lead_rel_v_mps") or 0.0)
+                self.state.cipv_id = 1
+                self.state.perc_objects = (
+                    [
+                        BevDynObj(
+                            obj_id=1,
+                            x_m=dist,
+                            y_m=self.state.cipo_y_m,
+                            is_cipv=True,
+                        )
+                    ]
+                    if self.state.has_perc_lead
+                    else []
+                )
+            return
+        vd = int(dyn.get("m_OBJ_VD_Count") or 0)
+        items = dyn.get("m_Obj_item") or []
+        cipv = int(dyn.get("m_OBJ_VD_CIPV_ID") or 0)
+        self.state.cipv_id = cipv
+        objs: list[BevDynObj] = []
+        if isinstance(items, list) and vd > 0:
+            for it in items[:vd]:
+                if not isinstance(it, dict):
+                    continue
+                oid = int(it.get("m_OBJ_ID") or 0)
+                dist = float(it.get("m_OBJ_Long_Distance") or 0.0)
+                if oid <= 0 or dist <= 0.5 or dist > D_BEV_M:
+                    continue
+                objs.append(
+                    BevDynObj(
+                        obj_id=oid,
+                        x_m=dist,
+                        y_m=float(it.get("m_OBJ_Lat_Distance") or 0.0),
+                        is_cipv=(cipv != 0 and oid == cipv),
+                        obj_class=int(it.get("m_OBJ_Object_Class") or 0),
+                        length_m=float(it.get("m_OBJ_Length") or 4.5),
+                        width_m=float(it.get("m_OBJ_Width") or 1.8),
+                        heading_rad=float(it.get("m_OBJ_Heading") or 0.0),
+                    )
+                )
+        self.state.perc_objects = objs
+        if not objs:
+            self.state.has_perc_lead = False
+            self.state.lead_dist_m = 0.0
+            return
+        lead = next((o for o in objs if o.is_cipv), objs[0])
+        if not lead.is_cipv:
+            lead.is_cipv = True
+            self.state.cipv_id = lead.obj_id
+        self.state.has_perc_lead = True
+        self.state.lead_dist_m = lead.x_m
+        self.state.cipo_x_m = lead.x_m
+        self.state.cipo_y_m = lead.y_m
+        if isinstance(items, list):
+            for it in items:
+                if isinstance(it, dict) and int(it.get("m_OBJ_ID") or 0) == lead.obj_id:
+                    self.state.lead_rel_v_mps = float(
+                        it.get("m_OBJ_Relative_Long_Velocity") or 0.0
+                    )
+                    break
 
     def _maybe_script_at(self, t_ns: int) -> None:
         if self._script is None or t_ns <= 0:
@@ -234,10 +755,15 @@ class LiveBevComposer:
             # Cap dt so scrub jumps don't teleport the scroll
             dt = min(dt, 0.5)
             self.state.odom_m += max(0.0, speed_mps) * dt
+            if dt >= 0.02:
+                raw_a = (speed_mps - self.state._last_speed_mps) / dt
+                raw_a = max(-6.0, min(6.0, raw_a))
+                self.state.lon_accel_mps2 = 0.65 * self.state.lon_accel_mps2 + 0.35 * raw_a
         elif self.state._last_t_ns == 0:
             # first sample: nudge so first frames still differ after start
             self.state.odom_m += max(0.0, speed_mps) * 0.05
         self.state._last_t_ns = t_ns
+        self.state._last_speed_mps = float(speed_mps)
 
     def update(self, row: dict[str, Any]) -> dict[str, Any] | None:
         """Feed one NDJSON row. Returns a camera row to publish, or None."""
@@ -274,8 +800,11 @@ class LiveBevComposer:
             if data.get("nearest_cm") is not None:
                 self.state.nearest_cm = float(data["nearest_cm"])
             emit = True
+        elif "Perception_MESSAGE_Out" in leaf or leaf == TOPIC_PERC:
+            self._apply_perc_out(data)
+            emit = True
         elif leaf.endswith("AdasDemo") or leaf == TOPIC_ADAS:
-            # Allowed in NDJSON for offline/jsonl; not forwarded to Studio.
+            # Offline/jsonl only; live path uses FCM Out.
             self._apply_adas_data(data)
             self._advance_odom(self.state.t_ns or t_ns, self.state.speed_mps)
             emit = True
@@ -291,7 +820,7 @@ class LiveBevComposer:
         # Prefer unique log times for Studio Image panel (ns); bump if equal
         if t <= 0:
             t = self._n * 100_000_000  # 0.1s steps
-        if self.state.has_adas:
+        if self.state.has_adas and not self.state.has_perc_lead:
             lo = self.state.lane_offset_m
             # Prefer planning Trajectory (ego-frame → world y for render_bev_png).
             if len(self.state.traj_x) >= 2 and len(self.state.traj_y) >= 2:
@@ -309,7 +838,7 @@ class LiveBevComposer:
                 steer_angle_deg=self.state.steer_angle_deg,
                 gear=self.state.gear,
                 lead_dist_m=self.state.lead_dist_m,
-                lead_rel_v_mps=0.0,
+                lead_rel_v_mps=self.state.lead_rel_v_mps,
                 accel_cmd_mps2=self.state.accel_cmd_mps2,
                 brake_active=self.state.brake_active,
                 lane_offset_m=lo,

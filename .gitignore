@@ -2,6 +2,7 @@
 
 build/
 build-*/
+**/build-sil/
 cmake-build-*/
 out/
 install/
@@ -10,6 +11,9 @@ install/
 .deps-prefix/
 middleware/.deps-prefix/
 compile_commands.json
+
+# SIL file-IPC scratch under each SKU (compose / scenarios mkdir at runtime)
+**/runtime_ipc/
 
 # Vendored trees live under middleware/; keep policy in deps/
 middleware/third_party/*/
@@ -48,8 +52,9 @@ venv/
 # compose working outputs (golden/ is optional — produced after review; not shipped in demo by default)
 projects/**/gf.sor.json
 projects/**/golden/gf.sor.json
-projects/**/reports/signal_lineage_report.yaml
-projects/**/reports/iox_shm_report.json
+projects/**/reports/
+*.yuv
+!tools/**/fixtures/**/*.yuv
 
 # Local IDE / agent
 .cursor/

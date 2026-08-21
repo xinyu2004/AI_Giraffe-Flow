@@ -30,6 +30,8 @@ from _instrument import (
 from _camera_mount import load_camera_mount
 from _traffic import ensure_ambient_traffic
 from _truth import write_truth
+from _lane_truth import lead_ego_frame, measure_lane_topology
+from _objects_truth import collect_dyn_objects
 from _verdict import (
     CmdProbe,
     Sample,
@@ -195,11 +197,22 @@ class AtomCase:
 
             if target is not None:
                 gap, es, ls, rel = gap_speed(ego, target)
+                lead_long, lead_lat, lead_assign, lead_hdg = lead_ego_frame(ego, target)
+                # Prefer along-track distance when forward; fallback to euclidean gap
+                if lead_long > 0.5:
+                    gap = lead_long
                 collided = actors_colliding(ego, target)
             else:
                 ev = ego.get_velocity()
                 es = math.sqrt(ev.x**2 + ev.y**2 + ev.z**2)
                 gap, ls, rel, collided = 0.0, 0.0, 0.0, False
+                lead_lat, lead_assign, lead_hdg = 0.0, 0, 0.0
+            lane_extra = measure_lane_topology(ego, world)
+            try:
+                dyn_extra = collect_dyn_objects(ego, world, lead=target)
+                lane_extra = {**lane_extra, **dyn_extra}
+            except Exception:  # noqa: BLE001
+                pass
             th = time_headway_s(gap, es) if gap > 0 else None
             samples.append(
                 Sample(
@@ -221,6 +234,10 @@ class AtomCase:
                 th_s=th,
                 t_s=elapsed,
                 duration_s=duration_s,
+                lead_lat_m=lead_lat if target is not None else None,
+                lead_lane_assignment=lead_assign if target is not None else None,
+                lead_heading_rad=lead_hdg if target is not None else None,
+                lane_extra=lane_extra,
             )
             if view is not None:
                 tgt = None

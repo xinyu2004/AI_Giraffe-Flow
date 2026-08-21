@@ -415,10 +415,7 @@ def emit_frame_ingest(req: dict[str, Any], gen_dir: Path) -> dict[str, str]:
     project_dir = gen_dir.parent
     cfg = normalize_frame_ingest(req, project_dir=project_dir)
     ipc = project_dir / "runtime_ipc"
-    ipc.mkdir(parents=True, exist_ok=True)
-    gitignore = ipc / ".gitignore"
-    if not gitignore.is_file():
-        gitignore.write_text("# SIL file-IPC scratch (not GfChannel)\n*\n!.gitignore\n", encoding="utf-8")
+    ipc.mkdir(parents=True, exist_ok=True)  # scratch; whole dir is root-.gitignored
     hpp = gen_dir / "include" / "gf_gen" / "frame_ingest_config.hpp"
     emit_frame_ingest_hpp(cfg, hpp)
     legacy_env = gen_dir / "frame_ingest.env"

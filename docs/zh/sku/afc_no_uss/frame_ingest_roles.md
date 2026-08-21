@@ -139,3 +139,23 @@ Linux:    EM → runtime/bin/gf_frame_ingest ─┘
 - 二次 `compile_sil`：compose/stage 可 mtime-skip；`cmake --build` 由 Ninja 增量
 - **注意：** `tools/carla_bridge/*.py` 不经编译；若 stage 被 skip，runtime 里可能仍是**旧拷贝**（ingest 优先 `share/frame_ingest/modules/`）。改 bridge 后需 `stage_sil_runtime` / `GF_FORCE_COMPILE=1`，或修 `BL-STAGE-PY-MTIME`
 - `runtime/` 可 `du`；含 `bin/gf_frame_ingest` + `lib/libgf_gf_channel.so`
+- **假感知：`carla_scenarios` 写 `runtime_ipc/carla_truth.json` → **仅 FCM** 读入并填金样 `Perception_MESSAGE_Out_St`（DYN 多目标/行人 + LH/LA 含 C2）→ iceoryx → planning / Foxglove BEV。planning **不再**读 truth 文件。
+- **金样字段 / planning lite 归档：** [../../driving/fcm_gold_and_planning_lite.md](../../driving/fcm_gold_and_planning_lite.md)（用了哪些 Out 变量、干什么、lite 控车做了什么）。
+
+## Demo 量程与颜色（afc_no_uss）
+
+| 量 | 值 | 说明 |
+|----|----|------|
+| `D_work` | **≈120 m** | 软工作带（跟车/有效检测参考）；**不是** BEV 硬裁边界 |
+| `D_bev` | **130 m** | 画布 ≈ `D_work×1.1`；车道线/刻度/目标按此绘制，避免余量漏画 |
+| 颜色 | **按 `m_OBJ_ID` 调色板** | 相邻可辨；CIPV 加浅描边；以后视频叠框共用 ID→色 |
+| UE↔BEV | **车道锚** | BEV 以本车道航向为 +x；车身/目标按相对航向旋转，避免横车挤扁 |
+| 多目标 | truth→FCM | 周围车辆+行人进 `m_Obj_item`；类别映射 CARLA→金样 enum |
+| 车道拓扑 | **truth→FCM→LH+LA** | BEV **只画 Out**；禁止示意臆造车道数/本车道索引 |
+| `ego_lane_index_from_left` | 从左数 0… | 真值字段；本车道由 LH 体现 |
+
+多车道 / 视频叠框后置；本阶段 LH 仍为本车道示意。
+
+## Backlog
+
+- 全 scenario 质量字段（Confidence / FS / 非仅 ISP）：见 [backlog_truth_quality.md](./backlog_truth_quality.md)（改 carla_scenarios 时一并做）。

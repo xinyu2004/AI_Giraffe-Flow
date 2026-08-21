@@ -6,7 +6,10 @@ modules:
 - id: adapter.vehicle_can_gateway
   hpp: projects/oem_a/afc_no_uss/interfaces/vehicle_gateway/io_types.hpp
 - id: perception.fcm
-  hpp: projects/oem_a/afc_no_uss/interfaces/fcm_perception/io_ports.hpp
+  # In/Init 粗端口 + Out 金样（Perception_MESSAGE_Out_St）
+  hpp:
+  - projects/oem_a/afc_no_uss/interfaces/fcm_perception/io_ports.hpp
+  - projects/oem_a/afc_no_uss/interfaces/fcm_perception/Perception_Out_messages.h
   package: customer/fcm-perception
 - id: planning.driving
   hpp: projects/oem_a/afc_no_uss/interfaces/planning_driving/io_types.hpp

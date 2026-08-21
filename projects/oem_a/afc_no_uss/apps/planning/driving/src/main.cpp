@@ -20,7 +20,6 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <thread>
 
@@ -28,13 +27,15 @@ namespace {
 
 constexpr const char* kProcess = "planning.driving";
 constexpr int kTrajPoints = 16;
-constexpr float kWheelbaseM = 2.8f;
-constexpr float kDeg2Rad = 0.017453292519943295f;
+// First-cut lane-keep gains (tune later).
+constexpr float kBlendLenM = 18.0f;     // approach lane center over ~this length
+constexpr float kSteerKy = 0.35f;       // 1/m → steer from lateral error
+constexpr float kSteerKpsi = 0.80f;     // steer from heading (C1)
+constexpr float kMaxSteer = 0.55f;
 
-struct TruthSnapshot {
-  float lead_distance_m{120.0f};
+struct LeadSnapshot {
+  float lead_distance_m{130.0f};
   float lead_rel_speed_mps{0.0f};
-  std::string scenario{"none"};
   bool valid{false};
 };
 
@@ -46,76 +47,113 @@ struct LongitudinalCtrl {
   const char* mode{"cruise"};
 };
 
-bool JsonF32(const std::string& js, const char* key, float* out) {
-  const std::string pat = std::string("\"") + key + "\"";
-  auto pos = js.find(pat);
-  if (pos == std::string::npos) {
-    return false;
-  }
-  pos = js.find(':', pos + pat.size());
-  if (pos == std::string::npos) {
-    return false;
-  }
-  ++pos;
-  while (pos < js.size() && (js[pos] == ' ' || js[pos] == '\t')) {
-    ++pos;
-  }
-  char* end = nullptr;
-  const float v = std::strtof(js.c_str() + pos, &end);
-  if (end == js.c_str() + pos) {
-    return false;
-  }
-  *out = v;
-  return true;
-}
+struct HostLaneGeom {
+  bool valid{false};
+  float c0{0.0f};  // lane-center poly (ego-frame y left)
+  float c1{0.0f};
+  float c2{0.0f};
+  float c3{0.0f};
+  float x_end{60.0f};
+  float width_m{3.5f};
+  float e_y{0.0f};  // y_center(0): >0 → center is left of ego
 
-bool JsonStr(const std::string& js, const char* key, std::string* out) {
-  const std::string pat = std::string("\"") + key + "\"";
-  auto pos = js.find(pat);
-  if (pos == std::string::npos) {
-    return false;
+  float y_at(float x) const {
+    return c0 + c1 * x + c2 * x * x + c3 * x * x * x;
   }
-  pos = js.find(':', pos + pat.size());
-  if (pos == std::string::npos) {
-    return false;
-  }
-  pos = js.find('"', pos + 1);
-  if (pos == std::string::npos) {
-    return false;
-  }
-  const auto end = js.find('"', pos + 1);
-  if (end == std::string::npos) {
-    return false;
-  }
-  *out = js.substr(pos + 1, end - pos - 1);
-  return true;
-}
+};
 
-TruthSnapshot ReadTruth(const std::string& path) {
-  TruthSnapshot t{};
-  if (path.empty()) {
+LeadSnapshot LeadFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
+  LeadSnapshot t{};
+  const auto& dyn = perc.Perception_DYN_OBJ_Out;
+  if (dyn.m_OBJ_VD_Count == 0) {
     return t;
   }
-  std::ifstream in(path);
-  if (!in) {
+  std::uint8_t idx = 0;
+  if (dyn.m_OBJ_VD_CIPV_ID != 0) {
+    for (std::uint8_t i = 0; i < dyn.m_OBJ_VD_Count && i < 13; ++i) {
+      if (dyn.m_Obj_item[i].m_OBJ_ID == dyn.m_OBJ_VD_CIPV_ID) {
+        idx = i;
+        break;
+      }
+    }
+  }
+  const auto& obj = dyn.m_Obj_item[idx];
+  if (obj.m_OBJ_ID == 0 || obj.m_OBJ_Long_Distance <= 0.5f ||
+      obj.m_OBJ_Long_Distance > 130.0f) {
     return t;
   }
-  std::ostringstream oss;
-  oss << in.rdbuf();
-  const std::string js = oss.str();
-  float dist = 120.0f;
-  float rel = 0.0f;
-  std::string sc = "none";
-  if (!JsonF32(js, "lead_distance_m", &dist)) {
-    return t;
-  }
-  (void)JsonF32(js, "lead_rel_speed_mps", &rel);
-  (void)JsonStr(js, "scenario", &sc);
-  t.lead_distance_m = dist;
-  t.lead_rel_speed_mps = rel;
-  t.scenario = sc;
+  t.lead_distance_m = obj.m_OBJ_Long_Distance;
+  t.lead_rel_speed_mps = obj.m_OBJ_Relative_Long_Velocity;
   t.valid = true;
   return t;
+}
+
+HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
+  HostLaneGeom g{};
+  const auto& lh = perc.Perception_LH_Out;
+  if (lh.m_hostline_num < 1) {
+    return g;
+  }
+  bool have_l = false;
+  bool have_r = false;
+  float lc0 = 0.0f, lc1 = 0.0f, lc2 = 0.0f, lc3 = 0.0f, lx1 = 60.0f;
+  float rc0 = 0.0f, rc1 = 0.0f, rc2 = 0.0f, rc3 = 0.0f, rx1 = 60.0f;
+  const std::uint8_t n = std::min<std::uint8_t>(lh.m_hostline_num, 4);
+  for (std::uint8_t i = 0; i < n; ++i) {
+    const auto& line = lh.m_hostline[i];
+    if (line.m_LH_Confidence < 0.1f && line.m_LH_Availability_State == 0) {
+      continue;
+    }
+    const float x1 = std::max(line.m_LH_First_VR_End, 20.0f);
+    // side: 1=left, 2=right (FCM convention)
+    if (line.m_LH_Side == 1) {
+      have_l = true;
+      lc0 = line.m_LH_Line_First_C0;
+      lc1 = line.m_LH_Line_First_C1;
+      lc2 = line.m_LH_Line_First_C2;
+      lc3 = line.m_LH_Line_First_C3;
+      lx1 = x1;
+    } else if (line.m_LH_Side == 2) {
+      have_r = true;
+      rc0 = line.m_LH_Line_First_C0;
+      rc1 = line.m_LH_Line_First_C1;
+      rc2 = line.m_LH_Line_First_C2;
+      rc3 = line.m_LH_Line_First_C3;
+      rx1 = x1;
+    }
+  }
+  if (have_l && have_r) {
+    g.valid = true;
+    g.c0 = 0.5f * (lc0 + rc0);
+    g.c1 = 0.5f * (lc1 + rc1);
+    g.c2 = 0.5f * (lc2 + rc2);
+    g.c3 = 0.5f * (lc3 + rc3);
+    g.x_end = std::min(lx1, rx1);
+    g.width_m = std::max(2.5f, std::fabs(lc0 - rc0));
+  } else if (have_l || have_r) {
+    // One edge only: assume ~3.5 m lane, ego near center of half-width.
+    g.valid = true;
+    const float half = 1.75f;
+    if (have_l) {
+      g.c0 = lc0 - half;
+      g.c1 = lc1;
+      g.c2 = lc2;
+      g.c3 = lc3;
+      g.x_end = lx1;
+    } else {
+      g.c0 = rc0 + half;
+      g.c1 = rc1;
+      g.c2 = rc2;
+      g.c3 = rc3;
+      g.x_end = rx1;
+    }
+    g.width_m = 3.5f;
+  }
+  if (lh.m_LH_Estimated_Width > 0.5f) {
+    g.width_m = lh.m_LH_Estimated_Width;
+  }
+  g.e_y = g.y_at(0.0f);
+  return g;
 }
 
 void WriteCtrl(const std::string& path, const LongitudinalCtrl& c, std::uint64_t ts) {
@@ -137,38 +175,69 @@ void WriteCtrl(const std::string& path, const LongitudinalCtrl& c, std::uint64_t
   }
 }
 
-LongitudinalCtrl ComputeAccAeb(const gf_gen::EgoMotion& ego, const TruthSnapshot& truth) {
+float SteerFromLane(const HostLaneGeom& lane) {
+  if (!lane.valid) {
+    return 0.0f;
+  }
+  // Ego-frame y>0 is left. CARLA steer>0 is right → negate lateral/heading terms.
+  const float cmd = -kSteerKy * lane.e_y - kSteerKpsi * lane.c1;
+  return std::clamp(cmd, -kMaxSteer, kMaxSteer);
+}
+
+LongitudinalCtrl ComputeAccAeb(const gf_gen::EgoMotion& ego,
+                               const LeadSnapshot& lead,
+                               const HostLaneGeom& lane) {
   LongitudinalCtrl c{};
   const float v = std::max(0.0f, ego.speed_mps);
-  c.steer = std::clamp(ego.steer_angle_deg / 25.0f, -1.0f, 1.0f);
+  c.steer = lane.valid ? SteerFromLane(lane)
+                       : std::clamp(ego.steer_angle_deg / 25.0f, -1.0f, 1.0f);
 
-  if (!truth.valid) {
+  if (!lead.valid) {
     c.mode = "cruise";
     c.target_speed_mps = 12.0f;
     const float err = c.target_speed_mps - v;
-    c.throttle = std::clamp(0.2f + err * 0.08f, 0.0f, 0.7f);
-    c.brake = (err < -2.0f) ? std::clamp((-err - 2.0f) * 0.1f, 0.0f, 0.4f) : 0.0f;
+    // Standstill pull-away: need a real throttle floor or CARLA never starts.
+    if (v < 0.8f) {
+      c.throttle = std::clamp(0.45f + err * 0.05f, 0.40f, 0.75f);
+      c.brake = 0.0f;
+    } else {
+      c.throttle = std::clamp(0.2f + err * 0.08f, 0.0f, 0.7f);
+      c.brake = (err < -2.0f) ? std::clamp((-err - 2.0f) * 0.1f, 0.0f, 0.4f) : 0.0f;
+    }
     return c;
   }
 
-  const float d = truth.lead_distance_m;
-  const float rel = truth.lead_rel_speed_mps;
-  // Time-to-collision style AEB.
-  const float closing = std::max(0.1f, v - (v + rel));
-  const float ttc = d / std::max(0.5f, closing);
+  const float d = lead.lead_distance_m;
+  const float rel = lead.lead_rel_speed_mps;
+  // Closing rate: ego closing on lead (positive when approaching).
+  const float closing = std::max(0.0f, -rel);
+  const float ttc = (closing > 0.5f) ? (d / closing) : 1.0e6f;
 
-  if (truth.scenario == "aeb" || d < 12.0f || ttc < 1.6f) {
+  // Hard AEB only when actually moving into a near threat (not parked at gap).
+  if (d < 5.0f || (v > 1.2f && (d < 10.0f || ttc < 1.4f))) {
     c.mode = "aeb";
     c.target_speed_mps = 0.0f;
     c.throttle = 0.0f;
-    c.brake = (d < 6.0f || ttc < 1.0f) ? 1.0f : std::clamp(0.55f + (12.0f - d) * 0.05f, 0.55f, 1.0f);
+    c.brake = (d < 5.0f || ttc < 1.0f) ? 1.0f
+                                        : std::clamp(0.55f + (10.0f - d) * 0.05f, 0.55f, 1.0f);
     return c;
   }
 
-  // ACC: hold ~gap_time * speed, clamp gap 18–40 m.
   c.mode = "acc";
-  const float desired_gap = std::clamp(v * 1.6f, 18.0f, 40.0f);
+  // Gap scales with speed; floor is creep-friendly (old 18 m floor pinned v=0).
+  const float desired_gap = std::clamp(std::max(8.0f, v * 1.6f), 8.0f, 40.0f);
   const float gap_err = d - desired_gap;
+
+  // Pull-away: stopped with a safe gap ahead → accelerate toward cruise/follow.
+  if (v < 1.0f && d > 10.0f) {
+    const float pull = std::clamp(8.0f + gap_err * 0.2f + rel * 0.3f, 6.0f, 12.0f);
+    c.target_speed_mps = pull;
+    c.throttle = std::clamp(0.42f + (pull - v) * 0.06f, 0.35f, 0.75f);
+    c.brake = 0.0f;
+    c.mode = "pullaway";
+    return c;
+  }
+
   c.target_speed_mps = std::clamp(v + gap_err * 0.15f + rel * 0.4f, 0.0f, 16.0f);
   const float speed_err = c.target_speed_mps - v;
   if (speed_err >= 0.0f) {
@@ -181,28 +250,14 @@ LongitudinalCtrl ComputeAccAeb(const gf_gen::EgoMotion& ego, const TruthSnapshot
   return c;
 }
 
-void FillCurvedTrajectory(const gf_gen::EgoMotion& ego,
-                          float speed_scale,
-                          gf_gen::Trajectory& traj) {
+void FillLaneKeepTrajectory(const gf_gen::EgoMotion& ego,
+                            float speed_scale,
+                            const HostLaneGeom& lane,
+                            gf_gen::Trajectory& traj) {
   const float speed = std::max(ego.speed_mps * speed_scale, 0.2f);
-  const float yaw_rate_rad = ego.yaw_rate_degps * kDeg2Rad;
-  const float steer_rad = ego.steer_angle_deg * kDeg2Rad;
-
-  float kappa = 0.0f;
-  if (std::fabs(yaw_rate_rad) > 1e-4f) {
-    kappa = yaw_rate_rad / std::max(speed, 0.5f);
-  } else {
-    kappa = steer_rad / kWheelbaseM;
-  }
-  kappa *= 2.5f;
-  constexpr float kMaxKappa = 0.15f;
-  kappa = std::clamp(kappa, -kMaxKappa, kMaxKappa);
-
-  const float horizon_m = std::clamp(speed * 3.0f, 20.0f, 55.0f);
+  const float horizon_m =
+      std::clamp(speed * 4.0f, 25.0f, std::min(100.0f, lane.valid ? lane.x_end : 100.0f));
   const float ds = horizon_m / static_cast<float>(kTrajPoints - 1);
-  float x = 0.0f;
-  float y = 0.0f;
-  float psi = 0.0f;
 
   traj.timestamp_ns = ego.timestamp_ns;
   traj.point_count = static_cast<std::uint8_t>(kTrajPoints);
@@ -210,22 +265,16 @@ void FillCurvedTrajectory(const gf_gen::EgoMotion& ego,
   traj.gear_shift_second = 0;
 
   for (int i = 0; i < kTrajPoints; ++i) {
+    const float x = ds * static_cast<float>(i);
+    float y = 0.0f;
+    if (lane.valid) {
+      // Ego at (0,0); blend onto lane-center poly so path stays in-lane.
+      const float alpha = 1.0f - std::exp(-x / kBlendLenM);
+      y = alpha * lane.y_at(x);
+    }
     traj.points_x_m[i] = x;
     traj.points_y_m[i] = y;
-    psi += kappa * ds;
-    x += ds * std::cos(psi);
-    y += ds * std::sin(psi);
   }
-}
-
-std::string TruthPath() {
-  const char* v = std::getenv("GF_CARLA_TRUTH_PATH");
-#if defined(GF_PLAN_HAS_FRAME_INGEST)
-  if (!v || !v[0]) {
-    v = gf_gen::frame_ingest::kTruthPath;
-  }
-#endif
-  return (v && v[0]) ? std::string(v) : std::string("runtime_ipc/carla_truth.json");
 }
 
 std::string CtrlPath() {
@@ -256,11 +305,10 @@ int main() {
   std::optional<gf_gen::Perception_MESSAGE_Out_St> last_perc;
   std::optional<gf_gen::EgoMotion> last_ego;
   std::uint64_t seq = 0;
-  const std::string truth_path = TruthPath();
   const std::string ctrl_path = CtrlPath();
 
-  std::cout << "gf-planning-driving: start (ACC/AEB truth=" << truth_path
-            << " ctrl=" << ctrl_path << ")\n";
+  std::cout << "gf-planning-driving: start (ACC/AEB + LH lane-keep; ctrl=" << ctrl_path
+            << ")\n";
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
@@ -277,29 +325,46 @@ int main() {
 
     if (last_ego) {
       const auto& ego = *last_ego;
-      const int dyn =
-          last_perc ? static_cast<int>(last_perc->dyn_obj_count) : 0;
-      const TruthSnapshot truth = ReadTruth(truth_path);
-      const LongitudinalCtrl ctrl = ComputeAccAeb(ego, truth);
+      LeadSnapshot lead{};
+      HostLaneGeom lane{};
+      int dyn = 0;
+      int lh_n = 0;
+      if (last_perc) {
+        lead = LeadFromPerc(*last_perc);
+        lane = HostLaneFromPerc(*last_perc);
+        dyn = static_cast<int>(last_perc->Perception_DYN_OBJ_Out.m_OBJ_VD_Count);
+        lh_n = static_cast<int>(last_perc->Perception_LH_Out.m_hostline_num);
+      }
+      const LongitudinalCtrl ctrl = ComputeAccAeb(ego, lead, lane);
       WriteCtrl(ctrl_path, ctrl, ego.timestamp_ns);
 
       float speed_scale = 1.0f;
       if (std::strcmp(ctrl.mode, "aeb") == 0) {
         speed_scale = 0.15f;
-      } else if (std::strcmp(ctrl.mode, "acc") == 0) {
+      } else if (std::strcmp(ctrl.mode, "acc") == 0 ||
+                 std::strcmp(ctrl.mode, "pullaway") == 0) {
         speed_scale = std::clamp(ctrl.target_speed_mps / std::max(ego.speed_mps, 1.0f),
                                  0.3f, 1.2f);
       }
 
+      // When parked, shape traj from commanded speed so BEV path isn't a stub.
+      gf_gen::EgoMotion ego_for_traj = ego;
+      if (ego.speed_mps < 1.0f && ctrl.target_speed_mps > 1.0f &&
+          std::strcmp(ctrl.mode, "aeb") != 0) {
+        ego_for_traj.speed_mps = ctrl.target_speed_mps;
+      }
       gf_gen::Trajectory traj{};
-      FillCurvedTrajectory(ego, speed_scale, traj);
+      FillLaneKeepTrajectory(ego_for_traj, speed_scale, lane, traj);
       if (static_cast<bool>(traj_pub.Send(traj))) {
         std::cout << "gf-planning-driving: Trajectory#" << seq
                   << " pts=" << static_cast<int>(traj.point_count)
                   << " y_end=" << traj.points_y_m[traj.point_count - 1]
+                  << " e_y=" << lane.e_y << " lh=" << lh_n
+                  << " lane=" << (lane.valid ? 1 : 0)
                   << " dyn=" << dyn << " mode=" << ctrl.mode
-                  << " lead=" << (truth.valid ? truth.lead_distance_m : -1.0f)
+                  << " lead=" << (lead.valid ? lead.lead_distance_m : -1.0f)
                   << " thr=" << ctrl.throttle << " brk=" << ctrl.brake
+                  << " st=" << ctrl.steer
                   << std::endl;
         ++seq;
       }

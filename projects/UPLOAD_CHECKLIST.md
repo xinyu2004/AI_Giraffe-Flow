@@ -6,14 +6,17 @@
 
 | 路径 | 原因 |
 |------|------|
-| `build/`、`build-hil/`、`cmake-build-*/` | CMake 构建树 |
+| `build/`、`**/build-sil/`、`build-hil/`、`cmake-build-*/`、`build-*/` | CMake / SIL 构建树（可达数百 MiB）；根 `.gitignore` 已覆盖 |
+| `**/runtime_ipc/` | SIL 文件 IPC 整目录（truth/cmd/yuv…）；compose 运行时再 `mkdir`；**勿入库、勿打包** |
+| `*.yuv` | 大二进制帧旁路；fixtures 除外 |
 | `middleware/.deps-prefix/`、`.deps-sysroot/` | 源码编出的 attr/acl staging |
 | `middleware/third_party/iceoryx/`、`attr/`、`acl/` | bootstrap 检出（保留 `middleware/third_party/README.md`） |
 | `.venv/`、`venv/` | 本地 Python 环境（可再 `python3 -m venv .venv`） |
 | `**/generated/` | `gf-codegen generate` 输出 |
 | `projects/**/gf.sor.json` | compose 工作副本 |
-| `projects/**/reports/` | lineage 等本地报告 |
+| `projects/**/reports/` | lineage 等本地报告（整目录 ignore） |
 | `**/__pycache__/`、`*.egg-info/`、`.pytest_cache/` | Python 垃圾 |
+| `observability/`、`*.mcap`、`session*.jsonl`、`**/runtime/logs/` | SIL 观测 / 日志落盘 |
 
 `.gitignore` 已覆盖上表；若用压缩包上传，请确认未手动打进上述目录。
 

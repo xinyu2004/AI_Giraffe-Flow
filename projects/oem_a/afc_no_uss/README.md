@@ -1,6 +1,6 @@
 # oem_a / afc_no_uss — AFC 前视（无 USS）
 
-P3-5：`Perception_*` + `Trajectory`；帧摄入 / CARLA / Foxglove。详见 [SIM_SPIKE.md](SIM_SPIKE.md)。
+`Perception_*` + `Trajectory`；帧摄入 / CARLA / Foxglove。SIL：`scripts/compile_sil.sh` → `scripts/run_sil.sh`。
 
 ## 验收（主路径）
 

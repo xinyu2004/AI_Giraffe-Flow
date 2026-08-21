@@ -194,6 +194,7 @@ class CameraFramePublisher:
         self._shm_ok_logged = False
         self._shm_next_try = 0.0  # monotonic; backoff while writer not ready
         self._wait_logged_at = 0.0
+        self._wait_open_logged = False  # "open but no seq" — once only
         self._frames_ok = 0
         self._last_frame_mono = 0.0
         self.last_seq_pub = -1
@@ -284,7 +285,8 @@ class CameraFramePublisher:
             import time
 
             now = time.monotonic()
-            if self._frames_ok == 0 and now - self._wait_logged_at >= 3.0:
+            if self._frames_ok == 0 and not self._wait_open_logged:
+                self._wait_open_logged = True
                 self._wait_logged_at = now
                 print(
                     f"[bridge-ws] camera waiting: slot={self.camera_slot} open but no seq yet "

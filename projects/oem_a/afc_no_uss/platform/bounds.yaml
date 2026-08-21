@@ -44,11 +44,14 @@ iceoryx:
     max_interface_number: 2                 # IOX_MAX_INTERFACE_NUMBER
   mempools:
     # chunk payload size (alignment 8) + count → payload SHM
+    # 8192: FCM Perception_MESSAGE_Out_St 金样派生 (~4.5KiB)
     - size: 256
       count: 128
     - size: 1024
       count: 64
     - size: 4096
       count: 32
+    - size: 8192
+      count: 16
   # Optional: roudi_payload + measured mgmt > this → Verify warn (0 = off)
   budget_shm_bytes: 0

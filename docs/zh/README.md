@@ -22,6 +22,7 @@
 | [operations/AP_LITE_BACKLOG.md](operations/AP_LITE_BACKLOG.md) | 后置项（含 `BL-BOARD-NO-PY`） |
 | [operations/WORKFLOW.md](operations/WORKFLOW.md) | 操作流程 |
 | [operations/OBSERVABILITY_DEMO.md](operations/OBSERVABILITY_DEMO.md) | Live / Foxglove / 回灌 |
+| [driving/fcm_gold_and_planning_lite.md](driving/fcm_gold_and_planning_lite.md) | FCM 金样字段用途 + planning lite |
 | [dependencies/THIRD_PARTY_EVALUATION.md](dependencies/THIRD_PARTY_EVALUATION.md) | 三方库 |
 
 阅读顺序：根 [README_zh.md](../../README_zh.md) → 上表三条主线 → 需要时再开 DESIGN / ROADMAP。

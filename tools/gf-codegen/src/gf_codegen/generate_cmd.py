@@ -205,12 +205,234 @@ _SCALAR_PRINTF: dict[str, tuple[str, str]] = {
     "bool": ("static_cast<int>({v} ? 1 : 0)", "%d"),
 }
 
+# Fat vendor blobs (e.g. FCM gold Out) must NOT dump every nested field into
+# the live NDJSON pipe — that stalls tap→Foxglove (camera still works via shm).
+_OBS_TAP_FIELD_ALLOW: dict[str, frozenset[str]] = {
+    "Perception_MESSAGE_Out_St": frozenset(
+        {"Perception_DYN_OBJ_Out", "Perception_LH_Out", "Perception_LA_Out"}
+    ),
+    "Perception_Dyn_OBJ_Out_St": frozenset(
+        {
+            "m_frame_id",
+            "m_time_stamp",
+            "m_OBJ_VD_Count",
+            "m_OBJ_Ped_Count",
+            "m_OBJ_VD_CIPV_ID",
+            "m_Obj_item",
+        }
+    ),
+    "Dyn_OBJ_Item_St": frozenset(
+        {
+            "m_OBJ_ID",
+            "m_OBJ_Object_Class",
+            "m_OBJ_Long_Distance",
+            "m_OBJ_Lat_Distance",
+            "m_OBJ_Relative_Long_Velocity",
+            "m_OBJ_Relative_Lat_Velocity",
+            "m_OBJ_Lane_Assignment",
+            "m_OBJ_Width",
+            "m_OBJ_Length",
+            "m_OBJ_Heading",
+        }
+    ),
+    "Perception_LH_Out_St": frozenset(
+        {
+            "m_frame_id",
+            "m_time_stamp",
+            "m_hostline_num",
+            "m_LH_Estimated_Width",
+            "m_hostline",
+        }
+    ),
+    "HostLine_St": frozenset(
+        {
+            "m_LH_Side",
+            "m_LH_Confidence",
+            "m_LH_Availability_State",
+            "m_LH_First_VR_Start",
+            "m_LH_First_VR_End",
+            "m_LH_Line_First_C0",
+            "m_LH_Line_First_C1",
+            "m_LH_Line_First_C2",
+            "m_LH_Line_First_C3",
+            "m_LH_Lanemark_Type",
+        }
+    ),
+    "Perception_LA_Out_St": frozenset(
+        {
+            "m_frame_id",
+            "m_time_stamp",
+            "m_adj_line_num",
+            "m_adj_line",
+        }
+    ),
+    "LA_Line_St": frozenset(
+        {
+            "m_LA_Confidence",
+            "m_LA_Availability_State",
+            "m_LA_Line_Side",
+            "m_LA_View_Range_Start",
+            "m_LA_View_Range_End",
+            "m_LA_Line_C0",
+            "m_LA_Line_C1",
+            "m_LA_Line_C2",
+            "m_LA_Line_C3",
+            "m_LA_Lanemark_Type",
+        }
+    ),
+}
+
+
+def _filter_fields_for_obs(
+    type_leaf: str | None, fields: list[Any]
+) -> list[Any]:
+    if not type_leaf:
+        return fields
+    allow = _OBS_TAP_FIELD_ALLOW.get(type_leaf)
+    if allow is None:
+        return fields
+    out: list[Any] = []
+    for f in fields:
+        if isinstance(f, dict) and str(f.get("name") or "") in allow:
+            out.append(f)
+    return out
+
+
+def _emit_fields_printf(
+    lines: list[str],
+    fields: list[Any],
+    type_by_id: dict[str, dict[str, Any]],
+    *,
+    expr_prefix: str,
+    depth: int,
+    first_flag_name: str,
+    owner_type_leaf: str | None = None,
+) -> None:
+    """Append printf statements for scalar / nested / array fields into ``lines``."""
+    if depth > 3:
+        return
+    fields = _filter_fields_for_obs(owner_type_leaf, fields)
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        fname = str(field.get("name") or "")
+        ftype = str(field.get("type") or "")
+        asize = field.get("array_size")
+        if not fname:
+            continue
+        expr = f"{expr_prefix}.{fname}" if expr_prefix else fname
+        nested_leaf = ftype.split(".")[-1] if ftype.startswith("types.") else None
+        # Nested struct (no array)
+        if asize is None and ftype.startswith("types."):
+            nested = type_by_id.get(ftype) or {}
+            nested_fields = list(nested.get("fields") or [])
+            if not nested_fields:
+                continue
+            lines.append("  {")
+            lines.append(f'    if (!{first_flag_name}) std::printf(", ");')
+            lines.append(f'    std::printf("\\"{fname}\\":{{");')
+            lines.append("    bool nest_first = true;")
+            _emit_fields_printf(
+                lines,
+                nested_fields,
+                type_by_id,
+                expr_prefix=expr,
+                depth=depth + 1,
+                first_flag_name="nest_first",
+                owner_type_leaf=nested_leaf,
+            )
+            lines.append('    std::printf("}");')
+            lines.append(f"    {first_flag_name} = false;")
+            lines.append("  }")
+            continue
+        # Array of nested structs — dyn objects: up to 8 (BEV ID palette); else cap 2
+        if asize is not None and ftype.startswith("types."):
+            nested = type_by_id.get(ftype) or {}
+            nested_fields = list(nested.get("fields") or [])
+            if not nested_fields:
+                continue
+            if nested_leaf == "Dyn_OBJ_Item_St":
+                nmax = min(int(asize), 8)
+            elif nested_leaf == "LA_Line_St":
+                nmax = min(int(asize), 4)
+            elif nested_leaf == "HostLine_St":
+                nmax = min(int(asize), 2)
+            else:
+                nmax = min(int(asize), 2)
+            lines.append("  {")
+            lines.append(f'    if (!{first_flag_name}) std::printf(", ");')
+            lines.append(f'    std::printf("\\"{fname}\\":[");')
+            if nested_leaf == "Dyn_OBJ_Item_St":
+                parent = expr.rsplit(".", 1)[0]
+                lines.append(
+                    f"    const int n = std::min({nmax}, "
+                    f"static_cast<int>({parent}.m_OBJ_VD_Count));"
+                )
+            elif nested_leaf == "LA_Line_St":
+                parent = expr.rsplit(".", 1)[0]
+                lines.append(
+                    f"    const int n = std::min({nmax}, "
+                    f"static_cast<int>({parent}.m_adj_line_num));"
+                )
+            else:
+                lines.append(f"    const int n = {nmax};")
+            lines.append("    for (int i = 0; i < n; ++i) {")
+            lines.append('      if (i) std::printf(",");')
+            lines.append('      std::printf("{");')
+            lines.append("      bool item_first = true;")
+            _emit_fields_printf(
+                lines,
+                nested_fields,
+                type_by_id,
+                expr_prefix=f"{expr}[i]",
+                depth=depth + 1,
+                first_flag_name="item_first",
+                owner_type_leaf=nested_leaf,
+            )
+            lines.append('      std::printf("}");')
+            lines.append("    }")
+            lines.append('    std::printf("]");')
+            lines.append(f"    {first_flag_name} = false;")
+            lines.append("  }")
+            continue
+        # Scalar array
+        if asize is not None:
+            if ftype not in _SCALAR_PRINTF:
+                continue
+            cast, fmt = _SCALAR_PRINTF[ftype]
+            lines.append("  {")
+            lines.append(f'    if (!{first_flag_name}) std::printf(", ");')
+            lines.append(
+                f"    int n = {int(asize)} < kMaxArrayExport ? {int(asize)} : kMaxArrayExport;"
+            )
+            lines.append(f'    std::printf("\\"{fname}\\":[");')
+            lines.append("    for (int i = 0; i < n; ++i) {")
+            lines.append('      if (i) std::printf(",");')
+            lines.append(f'      std::printf("{fmt}", {cast.format(v=f"{expr}[i]")});')
+            lines.append("    }")
+            lines.append('    std::printf("]");')
+            lines.append(f"    {first_flag_name} = false;")
+            lines.append("  }")
+            continue
+        # Scalar
+        if ftype not in _SCALAR_PRINTF:
+            continue
+        cast, fmt = _SCALAR_PRINTF[ftype]
+        lines.append("  {")
+        lines.append(f'    if (!{first_flag_name}) std::printf(", ");')
+        lines.append(
+            f'    std::printf("\\"{fname}\\":{fmt}", {cast.format(v=expr)});'
+        )
+        lines.append(f"    {first_flag_name} = false;")
+        lines.append("  }")
+
 
 def _write_obs_tap(sor: dict[str, Any], out_dir: Path) -> int:
     """Generate src/obs_tap_main.cpp — subscribe all SOR event services → NDJSON.
 
     Runtime filter: GF_OBS_LIVE_SERVICES (comma-separated short names; empty = all).
     Hand-maintained tools/debug_bridge/iox_obs_tap/src/main.cpp is fallback only.
+    Nested structs (e.g. FCM gold Out) are flattened into JSON objects/arrays.
     """
     type_by_id: dict[str, dict[str, Any]] = {}
     for t in sor.get("types") or []:
@@ -253,6 +475,7 @@ def _write_obs_tap(sor: dict[str, Any], out_dir: Path) -> int:
         "#include <cstdint>",
         "#include <cstdio>",
         "#include <cstdlib>",
+        "#include <algorithm>",
         "#include <iostream>",
         "#include <set>",
         "#include <string>",
@@ -263,9 +486,10 @@ def _write_obs_tap(sor: dict[str, Any], out_dir: Path) -> int:
         "constexpr int kMaxArrayExport = 16;",
         "",
         "std::uint64_t now_ns() {",
+        "  // Wall clock — Foxglove timeline; steady_clock lands near 1970 and looks empty.",
         "  return static_cast<std::uint64_t>(",
         "      std::chrono::duration_cast<std::chrono::nanoseconds>(",
-        "          std::chrono::steady_clock::now().time_since_epoch())",
+        "          std::chrono::system_clock::now().time_since_epoch())",
         "          .count());",
         "}",
         "",
@@ -308,58 +532,20 @@ def _write_obs_tap(sor: dict[str, Any], out_dir: Path) -> int:
         else:
             lines.append("  const std::uint64_t t_ns = now_ns();")
 
-        count_field = None
-        for f in fields:
-            if isinstance(f, dict) and str(f.get("name") or "") in ("point_count", "count"):
-                count_field = str(f["name"])
-                break
-
         lines.append(
             f'  std::printf("{{\\"t_ns\\":%llu,\\"topic\\":\\"/gf/{short}\\",\\"data\\":{{",'
         )
         lines.append("             static_cast<unsigned long long>(t_ns));")
-
-        first = True
-        for field in fields:
-            if not isinstance(field, dict):
-                continue
-            fname = str(field.get("name") or "")
-            ftype = str(field.get("type") or "")
-            asize = field.get("array_size")
-            if not fname or ftype.startswith("types."):
-                continue
-            sep = "" if first else ", "
-            if asize is not None:
-                if ftype not in _SCALAR_PRINTF:
-                    continue
-                cast, fmt = _SCALAR_PRINTF[ftype]
-                lines.append("  {")
-                if count_field:
-                    lines.append(f"    int n = static_cast<int>(s.{count_field});")
-                    lines.append("    if (n < 0) n = 0;")
-                    lines.append(f"    if (n > {int(asize)}) n = {int(asize)};")
-                    lines.append("    if (n > kMaxArrayExport) n = kMaxArrayExport;")
-                else:
-                    lines.append(
-                        f"    int n = {int(asize)} < kMaxArrayExport ? {int(asize)} : kMaxArrayExport;"
-                    )
-                lines.append(f'    std::printf("{sep}\\"{fname}\\":[");')
-                lines.append("    for (int i = 0; i < n; ++i) {")
-                lines.append('      if (i) std::printf(",");')
-                lines.append(f'      std::printf("{fmt}", {cast.format(v=f"s.{fname}[i]")});')
-                lines.append("    }")
-                lines.append('    std::printf("]");')
-                lines.append("  }")
-                first = False
-                continue
-            if ftype not in _SCALAR_PRINTF:
-                continue
-            cast, fmt = _SCALAR_PRINTF[ftype]
-            lines.append(
-                f'  std::printf("{sep}\\"{fname}\\":{fmt}", {cast.format(v=f"s.{fname}")});'
-            )
-            first = False
-
+        lines.append("  bool first = true;")
+        _emit_fields_printf(
+            lines,
+            fields,
+            type_by_id,
+            expr_prefix="s",
+            depth=0,
+            first_flag_name="first",
+            owner_type_leaf=type_name,
+        )
         lines += [
             '  std::printf("}}\\n");',
             "  std::fflush(stdout);",
@@ -421,6 +607,7 @@ def _write_obs_tap(sor: dict[str, Any], out_dir: Path) -> int:
     ]
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return len(events)
+
 
 
 

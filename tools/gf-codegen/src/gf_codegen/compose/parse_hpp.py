@@ -31,6 +31,8 @@ _CXX_TO_SOR = {
     "real32_T": "float32",
 }
 
+_SOR_PRIMS = set(_CXX_TO_SOR.values()) | {"float32", "float64", "bool"}
+
 # 对接会上用的「粗端口」名（整包）；导入时可默认只勾这些
 _FAT_PORT_EXACT = {
     "EgoMotion",
@@ -57,6 +59,27 @@ def _strip_comments(text: str) -> str:
     return text
 
 
+def _collect_defines(text: str) -> dict[str, str]:
+    """Collect simple ``#define NAME <int>`` for array-size expansion."""
+    out: dict[str, str] = {}
+    for m in re.finditer(r"#define\s+(\w+)\s+(\d+)\b", text):
+        out[m.group(1)] = m.group(2)
+    return out
+
+
+def _expand_define_arrays(text: str, defines: dict[str, str]) -> str:
+    if not defines:
+        return text
+
+    def repl(m: re.Match[str]) -> str:
+        name = m.group(1)
+        if name in defines:
+            return f"[{defines[name]}]"
+        return m.group(0)
+
+    return re.sub(r"\[\s*([A-Za-z_]\w*)\s*\]", repl, text)
+
+
 def _map_type(cxx: str) -> str:
     cxx = cxx.strip()
     if cxx in _CXX_TO_SOR:
@@ -81,7 +104,10 @@ def is_fat_port_name(name: str) -> bool:
 
 def parse_hpp_file(path: Path) -> list[dict[str, Any]]:
     """Return list of {name, fields:[{name,type,array_size?}]}."""
-    text = _strip_comments(path.read_text(encoding="utf-8"))
+    raw = path.read_text(encoding="utf-8")
+    defines = _collect_defines(raw)
+    text = _strip_comments(raw)
+    text = _expand_define_arrays(text, defines)
     # drop enum / enum class blocks (keep type names usable as opaque uint8 later)
     text = re.sub(r"enum\s+(?:class\s+)?\w+[^{]*\{[^}]*\}", ";", text, flags=re.S)
 
@@ -130,6 +156,7 @@ def _append_struct(
         rest = fm.group(2)
         for part in rest.split(","):
             part = part.strip()
+            # only 1-D arrays with numeric size (macros already expanded)
             pm = re.match(r"^(\w+)(?:\s*\[\s*(\d+)\s*\])?\s*$", part)
             if not pm:
                 continue
@@ -145,7 +172,11 @@ def _append_struct(
 
 
 def structs_to_sor_types(structs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert parsed structs to SOR types[] entries; fix nested type refs."""
+    """Convert parsed structs to SOR types[] entries; fix nested type refs.
+
+    Unknown enum / vendor type names (not a known struct, not a SOR primitive)
+    become ``uint8`` so iceoryx POD generation stays trivially copyable.
+    """
     known = {s["name"] for s in structs}
     out: list[dict[str, Any]] = []
     for s in structs:
@@ -154,6 +185,9 @@ def structs_to_sor_types(structs: list[dict[str, Any]]) -> list[dict[str, Any]]:
             t = f["type"]
             if t in known:
                 t = f"types.{t}"
+            elif t not in _SOR_PRIMS and not t.startswith("types."):
+                # enum / opaque vendor typedef → wire as uint8
+                t = "uint8"
             item: dict[str, Any] = {"name": f["name"], "type": t}
             if "array_size" in f:
                 item["array_size"] = f["array_size"]

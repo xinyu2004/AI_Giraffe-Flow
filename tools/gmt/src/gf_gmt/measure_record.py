@@ -33,7 +33,11 @@ _TRAJ_RE = re.compile(
 )
 _EGO_HINT = re.compile(r"speed_mps|EgoMotion|nearest_cm=(?P<cm>\d+)")
 _USS_RE = re.compile(r"UssZones#(?P<seq>\d+).*nearest_cm=(?P<cm>\d+).*speed=(?P<spd>[0-9.]+)")
-_FCM_RE = re.compile(r"out#(?P<seq>\d+)\s+dyn=(?P<dyn>\d+).*frame=(?P<frame>\d+)")
+_FCM_RE = re.compile(
+    r"out#(?P<seq>\d+)\s+vd=(?P<dyn>\d+).*?(?:lead=(?P<lead>[-0-9.]+))?"
+)
+# legacy stub logs
+_FCM_RE_LEGACY = re.compile(r"out#(?P<seq>\d+)\s+dyn=(?P<dyn>\d+).*frame=(?P<frame>\d+)")
 _PLAN_RE = re.compile(
     r"Trajectory#(?P<seq>\d+).*dyn=(?P<dyn>\d+).*nearest_cm=(?P<cm>\d+)"
 )
@@ -98,19 +102,23 @@ def events_from_sil_logs(log_dir: Path) -> list[dict[str, Any]]:
     fcm = log_dir / "fcm.log"
     if fcm.is_file():
         for line in fcm.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = _FCM_RE.search(line)
+            m = _FCM_RE.search(line) or _FCM_RE_LEGACY.search(line)
             if m:
                 seq = int(m.group("seq"))
+                data = {
+                    "seq": seq,
+                    "dyn_obj_count": int(m.group("dyn")),
+                    "source": "fcm",
+                }
+                if "frame" in m.groupdict() and m.groupdict().get("frame"):
+                    data["frame"] = int(m.group("frame"))
+                if m.groupdict().get("lead"):
+                    data["lead_distance_m"] = float(m.group("lead"))
                 events.append(
                     {
                         "t_ns": seq * 100_000_000,
                         "topic": "/gf/Perception_MESSAGE_Out_St",
-                        "data": {
-                            "seq": seq,
-                            "dyn_obj_count": int(m.group("dyn")),
-                            "frame": int(m.group("frame")),
-                            "source": "fcm",
-                        },
+                        "data": data,
                     }
                 )
     events.sort(key=lambda e: (int(e["t_ns"]), e["topic"]))

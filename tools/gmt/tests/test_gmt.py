@@ -258,6 +258,153 @@ def test_bev_compose_from_module_topics() -> None:
     assert any(r["topic"] == TOPIC_CAM for r in exp)
 
 
+def test_bev_draws_lh_hostlanes_from_perc_out() -> None:
+    from gf_gmt.bev_compose import D_BEV_M, D_PERC_M, D_WORK_M, LiveBevComposer, color_for_obj_id
+
+    assert D_PERC_M == 120.0
+    assert D_BEV_M == 130.0
+    assert D_WORK_M == 120.0
+    assert color_for_obj_id(1) != color_for_obj_id(2)
+
+    comp = LiveBevComposer()
+    cam = comp.update(
+        {
+            "t_ns": 50_000_000,
+            "topic": "/gf/Perception_MESSAGE_Out_St",
+            "data": {
+                "Perception_LH_Out": {
+                    "m_hostline_num": 2,
+                    "m_LH_Estimated_Width": 3.5,
+                    "m_hostline": [
+                        {
+                            "m_LH_Side": 1,
+                            "m_LH_Confidence": 0.9,
+                            "m_LH_Availability_State": 2,
+                            "m_LH_First_VR_Start": 0.0,
+                            "m_LH_First_VR_End": 120.0,
+                            "m_LH_Line_First_C0": 1.75,
+                            "m_LH_Line_First_C1": 0.0,
+                            "m_LH_Line_First_C2": 0.0,
+                            "m_LH_Line_First_C3": 0.0,
+                            "m_LH_Lanemark_Type": 1,
+                        },
+                        {
+                            "m_LH_Side": 2,
+                            "m_LH_Confidence": 0.9,
+                            "m_LH_Availability_State": 2,
+                            "m_LH_First_VR_Start": 0.0,
+                            "m_LH_First_VR_End": 120.0,
+                            "m_LH_Line_First_C0": -1.75,
+                            "m_LH_Line_First_C1": 0.0,
+                            "m_LH_Line_First_C2": 0.0,
+                            "m_LH_Line_First_C3": 0.0,
+                            "m_LH_Lanemark_Type": 1,
+                        },
+                    ],
+                },
+                "Perception_LA_Out": {
+                    "m_adj_line_num": 1,
+                    "m_adj_line": [
+                        {
+                            "m_LA_Line_Side": 1,
+                            "m_LA_Confidence": 0.85,
+                            "m_LA_Availability_State": 2,
+                            "m_LA_View_Range_Start": 0.0,
+                            "m_LA_View_Range_End": 120.0,
+                            "m_LA_Line_C0": 5.25,
+                            "m_LA_Line_C1": 0.0,
+                            "m_LA_Line_C2": 0.0,
+                            "m_LA_Line_C3": 0.0,
+                            "m_LA_Lanemark_Type": 2,
+                        },
+                    ],
+                },
+                "Perception_DYN_OBJ_Out": {
+                    "m_OBJ_VD_Count": 2,
+                    "m_OBJ_VD_CIPV_ID": 1,
+                    "m_Obj_item": [
+                        {
+                            "m_OBJ_ID": 1,
+                            "m_OBJ_Long_Distance": 80.0,
+                            "m_OBJ_Lat_Distance": 0.0,
+                            "m_OBJ_Relative_Long_Velocity": -1.0,
+                            "m_OBJ_Length": 4.5,
+                            "m_OBJ_Width": 1.8,
+                        },
+                        {
+                            "m_OBJ_ID": 2,
+                            "m_OBJ_Long_Distance": 45.0,
+                            "m_OBJ_Lat_Distance": 3.5,
+                            "m_OBJ_Relative_Long_Velocity": 0.0,
+                            "m_OBJ_Length": 4.5,
+                            "m_OBJ_Width": 1.8,
+                        },
+                    ],
+                },
+            },
+        }
+    )
+    assert cam is not None
+    assert comp.state.has_perc_lanes
+    assert len(comp.state.host_lanes) == 2
+    assert comp.state.host_lanes[0].c0 == 1.75
+    assert len(comp.state.adj_lanes) == 1
+    assert comp.state.adj_lanes[0].c0 == 5.25
+    assert comp.state.adj_lanes[0].side == 1
+    assert not comp.state.host_lanes[0].is_dashed
+    assert comp.state.adj_lanes[0].is_dashed
+    assert comp.state.has_perc_lead
+    assert comp.state.lead_dist_m == 80.0
+    assert len(comp.state.perc_objects) == 2
+    assert color_for_obj_id(comp.state.perc_objects[0].obj_id) != color_for_obj_id(
+        comp.state.perc_objects[1].obj_id
+    )
+
+
+def test_bev_missing_availability_still_draws_when_conf_ok() -> None:
+    """obs_tap may omit Availability; missing ≠ NA(0)."""
+    from gf_gmt.bev_compose import LiveBevComposer
+
+    comp = LiveBevComposer()
+    cam = comp.update(
+        {
+            "t_ns": 50_000_000,
+            "topic": "/gf/Perception_MESSAGE_Out_St",
+            "data": {
+                "Perception_LH_Out": {
+                    "m_hostline_num": 2,
+                    "m_LH_Estimated_Width": 3.5,
+                    "m_hostline": [
+                        {
+                            "m_LH_Side": 1,
+                            "m_LH_Confidence": 0.9,
+                            "m_LH_First_VR_Start": 0.0,
+                            "m_LH_First_VR_End": 120.0,
+                            "m_LH_Line_First_C0": 1.75,
+                            "m_LH_Line_First_C1": 0.0,
+                            "m_LH_Line_First_C2": 0.0,
+                            "m_LH_Line_First_C3": 0.0,
+                        },
+                        {
+                            "m_LH_Side": 2,
+                            "m_LH_Confidence": 0.9,
+                            "m_LH_First_VR_Start": 0.0,
+                            "m_LH_First_VR_End": 120.0,
+                            "m_LH_Line_First_C0": -1.75,
+                            "m_LH_Line_First_C1": 0.0,
+                            "m_LH_Line_First_C2": 0.0,
+                            "m_LH_Line_First_C3": 0.0,
+                        },
+                    ],
+                },
+            },
+        }
+    )
+    assert cam is not None
+    assert comp.state.has_perc_lanes
+    assert len(comp.state.host_lanes) == 2
+
+
 def test_bev_prefers_planning_traj_when_adas() -> None:
     from gf_gmt.bev_compose import LiveBevComposer
 
