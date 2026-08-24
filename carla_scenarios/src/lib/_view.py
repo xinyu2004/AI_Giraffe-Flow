@@ -135,6 +135,48 @@ class ScenarioView:
         cam.listen(_on_image)
         return cam
 
+    def retarget_vehicle(self, vehicle: Any) -> None:
+        """Move chase cams onto a new hero without closing the pygame window."""
+        if vehicle is None:
+            return
+        try:
+            if int(getattr(self._vehicle, "id", -1)) == int(getattr(vehicle, "id", -2)):
+                return
+        except Exception:  # noqa: BLE001
+            pass
+        for cam in list(self._cameras.values()):
+            try:
+                cam.stop()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                cam.destroy()
+            except Exception:  # noqa: BLE001
+                pass
+        self._cameras.clear()
+        self._surfaces = {MODE_SCENE: None, MODE_WINDSHIELD: None}
+        self._vehicle = vehicle
+        cx, cz, cpitch, cyaw, cfov = scene_chase_pose()
+        self._cameras[MODE_SCENE] = self._spawn_cam(
+            fov=cfov,
+            transform=self._carla.Transform(
+                self._carla.Location(x=cx, z=cz),
+                self._carla.Rotation(pitch=cpitch, yaw=cyaw),
+            ),
+            mode=MODE_SCENE,
+        )
+        self._cameras[MODE_WINDSHIELD] = self._spawn_cam(
+            fov=self._mount.fov,
+            transform=self._mount.as_carla_transform(self._carla),
+            mode=MODE_WINDSHIELD,
+        )
+        self._sync_spectator()
+        print(
+            f"[view] retarget chase cams → ego id={getattr(vehicle, 'id', '?')} "
+            f"(pygame window kept)",
+            flush=True,
+        )
+
     def mode(self) -> str:
         return self._mode
 

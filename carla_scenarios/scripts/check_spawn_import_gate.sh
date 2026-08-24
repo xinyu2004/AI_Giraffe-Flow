@@ -27,8 +27,14 @@ check_empty "place/pick must not import spawn.ic or boundary" \
   'spawn\.(ic|boundary)|from spawn import (ic|boundary)' \
   src/spawn/place.py src/spawn/pick.py
 
-check_empty "AtomCase must not import spawn.ic" \
-  'spawn\.ic|from spawn import ic' src/lib/_case_atom.py
+# Allow only set_natural_continue in AtomCase (batch flag; not IC profiles)
+if rg -n 'from spawn\.ic import|import spawn\.ic' src/lib/_case_atom.py 2>/dev/null \
+  | grep -v 'set_natural_continue' | grep -v '^$' ; then
+  echo "FAIL: AtomCase may only import set_natural_continue from spawn.ic"
+  fail=1
+else
+  echo "OK: AtomCase only uses set_natural_continue from spawn.ic"
+fi
 
 if rg -n '^(from spawn\.ic import .*closing_toward_lead|.*closing_toward_lead\()' \
   src/layouts/vru.py 2>/dev/null | grep -v '^$'; then
@@ -52,19 +58,19 @@ else
   echo "OK: layouts use named closing_* / seed_speed only"
 fi
 
-# run_cases: boundary sanitize only (not case IC profiles)
-if rg -n 'from spawn\.ic import' run_cases.py 2>/dev/null | grep -v '^$'; then
-  echo "FAIL: run_cases must not import spawn.ic (use spawn.boundary)"
+# run_cases: must not import spawn.ic for IC profiles; natural continue flag ok
+if rg -n 'from spawn\.ic import' run_cases.py 2>/dev/null | grep -v 'set_natural_continue' | grep -v '^$'; then
+  echo "FAIL: run_cases must not import spawn.ic profiles (set_natural_continue only)"
   fail=1
 else
-  echo "OK: run_cases does not import spawn.ic"
+  echo "OK: run_cases does not import spawn.ic profiles"
 fi
 
-if ! rg -n 'sanitize_keep_ego' run_cases.py >/dev/null 2>&1; then
-  echo "FAIL: run_cases should call sanitize_keep_ego"
+if rg -n 'sanitize_keep_ego' run_cases.py >/dev/null 2>&1; then
+  echo "FAIL: run_cases must not call sanitize_keep_ego (natural continue; fail openly)"
   fail=1
 else
-  echo "OK: run_cases uses sanitize_keep_ego"
+  echo "OK: run_cases does not sanitize/destroy between cases"
 fi
 
 # IC must not call sanitize (residue ownership = boundary)

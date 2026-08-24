@@ -225,7 +225,11 @@ def apply_lane_change(vehicle: Any, tm: Any, lane: str) -> None:
 
 
 def apply_vehicle_control(vehicle: Any, cmd: dict[str, Any]) -> None:
-    """Apply throttle/brake/steer when present (CARLA VehicleControl)."""
+    """Apply throttle/brake/steer when present (CARLA VehicleControl).
+
+    Always clears hand_brake when applying longitudinal/lateral cmd — scenarios
+    may park the hero at cold-start; preserving hand_brake would ignore throttle.
+    """
     if vehicle is None:
         return
     try:
@@ -242,6 +246,7 @@ def apply_vehicle_control(vehicle: Any, cmd: dict[str, Any]) -> None:
         ctrl.brake = max(0.0, min(1.0, float(cmd["brake"])))
     if "steer" in cmd:
         ctrl.steer = max(-1.0, min(1.0, float(cmd["steer"])))
+    ctrl.hand_brake = False
     vehicle.apply_control(ctrl)
 
 

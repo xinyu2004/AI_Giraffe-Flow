@@ -105,36 +105,36 @@ class AtomCase:
         duration_s: float,
         view: Optional[ScenarioView] = None,
         keep_ego: bool = False,
+        preserve_ego: bool = False,
         stop_flag: Optional[Callable[[], bool]] = None,
         ensure_view: Optional[Callable[..., Optional[ScenarioView]]] = None,
     ) -> Tuple[int, Optional[ScenarioView]]:
         stop = stop_flag or (lambda: STOP)
         load_local_env()
         mount = load_camera_mount()
-        meta: dict[str, Any] = {"keep_ego": keep_ego}
+        meta: dict[str, Any] = {
+            "keep_ego": keep_ego,
+            "preserve_ego": preserve_ego,
+        }
         weather_cfg = None
         if self.weather_preset is not None:
             weather_cfg = load_weather(self.weather_preset)
             apply_weather(world, carla, weather_cfg)
             meta["weather"] = weather_cfg.preset
 
-        # Defense in depth: boundary sanitize when reusing hero (batch/combo).
-        if keep_ego:
-            try:
-                from spawn.boundary import sanitize_keep_ego
+        # keep_ego = continue pose (skip hero IC). preserve_ego = don't destroy at end.
+        from spawn.ic import set_natural_continue
 
-                if not sanitize_keep_ego(world, None):
-                    keep_ego = False
-                    meta["keep_ego"] = False
-                    meta["keep_ego_downgraded"] = True
-            except Exception:  # noqa: BLE001
-                keep_ego = False
-                meta["keep_ego"] = False
-
-        ego, target, layout_meta = self.layout(
-            carla, client, world, keep_ego=keep_ego
-        )
+        set_natural_continue(keep_ego)
+        try:
+            ego, target, layout_meta = self.layout(
+                carla, client, world, keep_ego=keep_ego
+            )
+        finally:
+            set_natural_continue(False)
         meta.update(layout_meta or {})
+        if keep_ego:
+            meta["natural_continue"] = True
         if weather_cfg is not None:
             apply_wiper(ego, weather_cfg.wiper_speed)
         ensure_ambient_traffic(
@@ -146,7 +146,7 @@ class AtomCase:
             f"[{self.tag}] READY host={carla_host()}:{carla_port()} "
             f"ego={ego.id} target={getattr(target, 'id', None)} "
             f"duration_s={duration_s} mount_ref={mount.describe()} "
-            f"keep_ego={int(keep_ego)}",
+            f"keep_ego={int(keep_ego)} preserve_ego={int(preserve_ego)}",
             flush=True,
         )
 
@@ -324,9 +324,9 @@ class AtomCase:
             **{k: v for k, v in meta.items() if isinstance(v, (int, float, str, bool))},
         }
         print_verdict(self.tag, ok, reason, **extra)
-        # Single-run / non-keep_ego: leave UE clean so next acc.py + carla_bridge
-        # cannot stay glued to a wrecked leftover hero (Foxglove≠pygame scene).
-        if not keep_ego:
+        # Batch passes preserve_ego=True so the next case can continue the same hero.
+        # Single-run leaves UE clean for the next standalone script / bridge remount.
+        if not preserve_ego:
             try:
                 from spawn.roles import ROLE_EGO, ROLE_LEAD, destroy_role
 
@@ -334,7 +334,7 @@ class AtomCase:
                 destroy_role(world, ROLE_EGO)
                 print(
                     f"[{self.tag}] cleanup: destroyed leftover hero/lead "
-                    f"(keep_ego=0)",
+                    f"(preserve_ego=0)",
                     flush=True,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -415,6 +415,7 @@ def bind_run_session(case: AtomCase) -> Callable[..., Tuple[int, Optional[Scenar
         duration_s: float,
         view: Optional[ScenarioView] = None,
         keep_ego: bool = False,
+        preserve_ego: bool = False,
         stop_flag: Optional[Callable[[], bool]] = None,
         ensure_view: Optional[Callable[..., Optional[ScenarioView]]] = None,
     ) -> Tuple[int, Optional[ScenarioView]]:
@@ -427,6 +428,7 @@ def bind_run_session(case: AtomCase) -> Callable[..., Tuple[int, Optional[Scenar
             duration_s=duration_s,
             view=view,
             keep_ego=keep_ego,
+            preserve_ego=preserve_ego,
             stop_flag=stop_flag,
             ensure_view=ensure_view,
         )

@@ -1,10 +1,19 @@
-"""Place / spawn actors — pose (+ at-rest). No constant-velocity IC / case branches."""
+"""Place / spawn actors — pose (+ at-rest). No constant-velocity IC / case branches.
+
+``keep_ego=True`` (batch natural continue): keep hero pose & velocity; only
+reposition lead/props relative to the current ego. Giraffe owns motion.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Optional, Tuple
 
-from spawn.pick import offset_transform, pick_curve_transform, pick_follow_transforms
+from spawn.pick import (
+    offset_transform,
+    pick_curve_transform,
+    pick_follow_transforms,
+    pick_lead_ahead_of,
+)
 from spawn.roles import (
     ROLE_EGO,
     ROLE_LEAD,
@@ -14,6 +23,24 @@ from spawn.roles import (
     set_role,
     tick_world,
 )
+
+
+def _park_handbrake(actor: Any) -> None:
+    """Hold park brake after cold place so slope does not roll into a barrier."""
+    try:
+        import carla  # type: ignore
+
+        actor.apply_control(
+            carla.VehicleControl(
+                throttle=0.0,
+                brake=1.0,
+                steer=0.0,
+                hand_brake=True,
+                reverse=False,
+            )
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _set_transform_at_rest(actor: Any, transform: Any) -> None:
@@ -41,6 +68,7 @@ def _set_transform_at_rest(actor: Any, transform: Any) -> None:
         actor.set_target_angular_velocity(carla.Vector3D(0.0, 0.0, 0.0))
     except Exception:  # noqa: BLE001
         pass
+    _park_handbrake(actor)
 
 
 def spawn_named(
@@ -155,7 +183,7 @@ def ego_lead(
     keep_ego: bool = False,
     reset: bool = True,
 ) -> Tuple[Any, Any]:
-    """Place hero + lead at given transforms. No speed IC / settle."""
+    """Place hero + lead. keep_ego: do not teleport/zero hero (natural continue)."""
     if reset:
         destroy_role(world, ROLE_LEAD)
         if not keep_ego:
@@ -173,8 +201,10 @@ def ego_lead(
             destroy_existing=False,
             clear_radius_m=6.0,
         )
-    else:
+        keep_ego = False  # cold spawn this call
+    elif not keep_ego:
         _set_transform_at_rest(ego, ego_tf)
+    # else: natural continue — leave ego pose & velocity alone
 
     lead = find_by_role(world, ROLE_LEAD)
     if lead is None:
@@ -190,8 +220,9 @@ def ego_lead(
         _set_transform_at_rest(lead, lead_tf)
 
     tick_world(world)
-    # Post-teleport tick can revive residual world vel — zero once more at rest.
-    for actor in (ego, lead):
+    # Quiet lead after place; never slam hero velocity when continuing.
+    quiet = (lead,) if keep_ego else (ego, lead)
+    for actor in quiet:
         try:
             import carla  # type: ignore
 
@@ -199,6 +230,11 @@ def ego_lead(
             actor.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
         except Exception:  # noqa: BLE001
             pass
+    if not keep_ego:
+        _park_handbrake(ego)
+        for _ in range(3):
+            tick_world(world)
+            _park_handbrake(ego)
     tick_world(world)
     return ego, lead
 
@@ -213,17 +249,27 @@ def spawn_ego_lead(
     require_straight: bool = True,
     keep_ego: bool = False,
 ) -> Tuple[Any, Any]:
-    """Convenience: pick follow transforms then place. Still no IC."""
-    ego_tf, lead_tf = pick_follow_transforms(
-        world, lead_gap_m=lead_gap_m, require_straight=require_straight
-    )
+    """Pick follow transforms then place. keep_ego → lead relative to current ego."""
+    existing = find_by_role(world, ROLE_EGO) if keep_ego else None
+    if existing is not None:
+        ego_tf = existing.get_transform()
+        lead_tf = pick_lead_ahead_of(world, ego_tf, lead_gap_m=lead_gap_m)
+        print(
+            f"[place] natural continue: keep ego id={existing.id} "
+            f"lead ahead ≈{lead_gap_m}m",
+            flush=True,
+        )
+    else:
+        ego_tf, lead_tf = pick_follow_transforms(
+            world, lead_gap_m=lead_gap_m, require_straight=require_straight
+        )
     return ego_lead(
         world,
         ego_tf=ego_tf,
         lead_tf=lead_tf,
         ego_filter=ego_filter,
         lead_filter=lead_filter,
-        keep_ego=keep_ego,
+        keep_ego=keep_ego and existing is not None,
         reset=reset,
     )
 
@@ -236,17 +282,22 @@ def spawn_ego_only(
     keep_ego: bool = False,
     reset_others: bool = True,
 ) -> Any:
-    """Spawn/reposition hero; optionally clear lead. No IC."""
+    """Spawn/reposition hero; optionally clear lead. keep_ego → leave hero pose."""
     if reset_others:
         destroy_role(world, ROLE_LEAD)
         if not keep_ego:
             destroy_role(world, ROLE_EGO)
         tick_world(world)
 
+    ego = find_by_role(world, ROLE_EGO)
+    if ego is not None and keep_ego:
+        print(f"[place] natural continue: keep ego id={ego.id} (no teleport)", flush=True)
+        tick_world(world)
+        return ego
+
     if ego_tf is None:
         ego_tf = pick_curve_transform(world)
 
-    ego = find_by_role(world, ROLE_EGO)
     if ego is None:
         ego = spawn_named(
             world,

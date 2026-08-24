@@ -38,8 +38,16 @@ def layout_acc_cut_in(
         ego = spawn_named(
             world, role=ROLE_EGO, transform=ego_tf, bp_filter="vehicle.tesla.model3"
         )
-    else:
+    elif not keep_ego:
         ego.set_transform(ego_tf)
+    else:
+        # Natural continue: adjacent lead ahead of *current* ego.
+        from spawn.pick import offset_transform, pick_lead_ahead_of
+
+        ego_tf = ego.get_transform()
+        lead_tf = pick_lead_ahead_of(world, ego_tf, lead_gap_m=gap)
+        lat = 3.5 if side != "right" else -3.5
+        lead_tf = offset_transform(lead_tf, right_m=lat)
 
     lead = spawn_named(
         world, role=ROLE_LEAD, transform=lead_tf, bp_filter="vehicle.audi.tt"
@@ -56,9 +64,10 @@ def layout_acc_cut_in(
     except Exception:  # noqa: BLE001
         pass
 
-    # Seed ego forward so ACC has something to regulate after IC.
+    # Seed ego only on cold start; batch continue leaves motion to Giraffe.
     ego_mps = float(os.environ.get("GF_CUTIN_EGO_MPS") or "10")
-    seed_speed(carla_mod, ego, ego_mps)
+    if not keep_ego:
+        seed_speed(carla_mod, ego, ego_mps)
 
     print(
         f"[layout] CUT_IN side={side} gap≈{gap}m ego={ego.id} lead={lead.id}",

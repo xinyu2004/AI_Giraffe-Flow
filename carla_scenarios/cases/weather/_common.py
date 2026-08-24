@@ -85,10 +85,12 @@ def run_session(
     duration_s: float,
     preset: str,
     keep_ego: bool = False,
+    preserve_ego: bool = False,
     stop_flag: Optional[Callable[[], bool]] = None,
     ensure_view: Optional[Callable[..., Optional[ScenarioView]]] = None,
 ) -> Tuple[int, Optional[ScenarioView]]:
     """Scheme-1 session on an existing world (daemon or CLI)."""
+    del preserve_ego  # batch flag; weather session never destroys hero
     stop = stop_flag or (lambda: STOP)
     load_local_env()
     cfg = load_weather(preset)

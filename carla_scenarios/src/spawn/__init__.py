@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from spawn.boundary import handoff_keep_ego, sanitize_keep_ego
+from spawn.boundary import (
+    ego_ok_for_continue,
+    handoff_keep_ego,
+    reset_wrecked_ego,
+    sanitize_keep_ego,
+)
 from spawn.ic import (
     closing_along_heading,
     closing_along_pose,
@@ -10,16 +15,19 @@ from spawn.ic import (
     closing_toward_lead,
     enable_constant_forward,
     freeze_motion,
+    natural_continue,
     release_only,
     reset_vehicle_motion,
     seed_speed,
     set_forward_speed,
+    set_natural_continue,
 )
 from spawn.pick import (
     offset_transform,
     pick_curve_transform,
     pick_cut_in_transforms,
     pick_follow_transforms,
+    pick_lead_ahead_of,
 )
 from spawn.place import (
     ego_lead,
@@ -48,19 +56,24 @@ __all__ = [
     "closing_toward_lead",
     "destroy_role",
     "ego_lead",
+    "ego_ok_for_continue",
     "enable_constant_forward",
     "find_by_role",
     "freeze_motion",
     "handoff_keep_ego",
+    "natural_continue",
     "offset_transform",
     "pick_curve_transform",
     "pick_cut_in_transforms",
     "pick_follow_transforms",
+    "pick_lead_ahead_of",
     "release_only",
     "reset_vehicle_motion",
+    "reset_wrecked_ego",
     "sanitize_keep_ego",
     "seed_speed",
     "set_forward_speed",
+    "set_natural_continue",
     "set_role",
     "spawn_ego_lead",
     "spawn_ego_only",

@@ -80,14 +80,22 @@ def pick_follow_transforms(
             st = _straightness_score(wp, need)
             if st is None:
                 continue
-            score = st + need * 0.01
+            # Prefer wider lanes / more center-like corridor (less curb/barrier risk).
+            score = st + need * 0.01 + float(getattr(wp, "lane_width", 3.5)) * 3.0
         else:
-            score = need
+            score = need + float(getattr(wp, "lane_width", 3.5))
 
         ego_tf = wp.transform
-        ego_tf.location.z += 0.3
+        ego_tf.location.z += 0.35
+        # Face road forward explicitly (spawn-point yaw can disagree with lane).
+        ego_tf.rotation.yaw = wp.transform.rotation.yaw
+        ego_tf.rotation.pitch = 0.0
+        ego_tf.rotation.roll = 0.0
         lead_tf = lead_wp.transform
-        lead_tf.location.z += 0.3
+        lead_tf.location.z += 0.35
+        lead_tf.rotation.yaw = lead_wp.transform.rotation.yaw
+        lead_tf.rotation.pitch = 0.0
+        lead_tf.rotation.roll = 0.0
         if best is None or score > best[2]:
             best = (ego_tf, lead_tf, score)
 
@@ -205,3 +213,28 @@ def offset_transform(tf: Any, *, forward_m: float = 0.0, right_m: float = 0.0) -
         z=tf.location.z,
     )
     return carla.Transform(loc, tf.rotation)
+
+
+def pick_lead_ahead_of(
+    world: Any,
+    ego_tf: Any,
+    *,
+    lead_gap_m: float,
+) -> Any:
+    """Lead pose ahead of current ego along the driving lane (batch continue)."""
+    import carla  # type: ignore
+
+    m = world.get_map()
+    wp = m.get_waypoint(
+        ego_tf.location,
+        project_to_road=True,
+        lane_type=carla.LaneType.Driving,
+    )
+    if wp is None:
+        return offset_transform(ego_tf, forward_m=float(lead_gap_m))
+    lead_wp = _waypoint_ahead(wp, float(lead_gap_m))
+    if lead_wp is None:
+        return offset_transform(ego_tf, forward_m=float(lead_gap_m))
+    lead_tf = lead_wp.transform
+    lead_tf.location.z += 0.3
+    return lead_tf

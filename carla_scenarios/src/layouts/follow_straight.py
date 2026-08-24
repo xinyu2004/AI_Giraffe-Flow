@@ -1,7 +1,7 @@
 """Straight-road follow layout for ACC (and similar longitudinal cases).
 
 Compose: pick+place via spawn.place.spawn_ego_lead, then ic.release_only.
-Does not import closing IC. Batch residue is owned by spawn.boundary.
+Batch keep_ego: place keeps hero pose; IC skips hero via set_natural_continue.
 """
 
 from __future__ import annotations

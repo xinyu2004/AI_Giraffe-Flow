@@ -1,14 +1,16 @@
-"""Named case IC profiles — assume boundary already sanitized.
+"""Named case IC profiles.
 
-Profiles (narrow; no keep_ego residue rescue, no velocity flip):
+Cold start (first case / single-run): place at rest, then named IC may seed speed.
+Batch natural continue (``set_natural_continue(True)``): **never** touch hero motion —
+Giraffe/planning owns control; IC only rearranges lead/props/ambient.
+
+Profiles:
 
 - ``release_only`` — follow / ACC (no constant velocity)
 - ``closing_toward_lead`` — vehicle-vehicle AEB (road + toward lead)
 - ``closing_along_heading`` — map road forward (VRU ego / same-dir bike)
 - ``closing_along_pose`` — current actor yaw (cross-traffic only)
 - ``seed_speed`` — lateral / env light road forward
-
-Residue / keep_ego clearing lives in ``spawn.boundary`` only.
 """
 
 from __future__ import annotations
@@ -16,7 +18,36 @@ from __future__ import annotations
 import math
 from typing import Any, Optional, Tuple
 
-from spawn.roles import tick_world
+from spawn.roles import ROLE_EGO, tick_world
+
+# Batch mid-suite: skip any IC that would steer/brake/seed the hero.
+_NATURAL_CONTINUE = False
+
+
+def set_natural_continue(enabled: bool) -> None:
+    global _NATURAL_CONTINUE
+    _NATURAL_CONTINUE = bool(enabled)
+
+
+def natural_continue() -> bool:
+    return _NATURAL_CONTINUE
+
+
+def _is_hero(vehicle: Any) -> bool:
+    try:
+        return str(vehicle.attributes.get("role_name") or "") == ROLE_EGO
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _skip_hero_motion_ic(vehicle: Any, *, profile: str) -> bool:
+    if not _NATURAL_CONTINUE or not _is_hero(vehicle):
+        return False
+    print(
+        f"[ic] skip {profile} on hero (natural continue; Giraffe drives)",
+        flush=True,
+    )
+    return True
 
 
 def reset_vehicle_motion(vehicle: Any) -> None:
@@ -112,7 +143,13 @@ def _snap_road_yaw(vehicle: Any) -> Tuple[float, float]:
 
 
 def release_only(carla_mod: Any, ego: Any) -> None:
-    """Follow-family IC: autopilot off, zero control; no constant velocity."""
+    """Follow-family IC: autopilot off; park brake on until Giraffe drives.
+
+    hand_brake=True avoids Town slope roll-into-barrier when SIL is absent.
+    VehicleControl from bridge/planning overrides once cmd arrives.
+    """
+    if _skip_hero_motion_ic(ego, profile="release_only"):
+        return
     try:
         ego.set_autopilot(False)
     except Exception:  # noqa: BLE001
@@ -121,9 +158,9 @@ def release_only(carla_mod: Any, ego: Any) -> None:
         ego.apply_control(
             carla_mod.VehicleControl(
                 throttle=0.0,
-                brake=0.0,
+                brake=1.0,
                 steer=0.0,
-                hand_brake=False,
+                hand_brake=True,
                 reverse=False,
             )
         )
@@ -146,6 +183,8 @@ def _enable_along(
     Passing world-frame (fx,fy)*speed as local XYZ was the ACC→AEB reverse bug:
     when world-forward.x < 0, local x became negative → reverse at |speed|.
     """
+    if _skip_hero_motion_ic(vehicle, profile=profile):
+        return False
     del fx, fy  # yaw must already face the intended direction; use body +X.
     speed = abs(float(speed_mps))
     world = vehicle.get_world()
@@ -199,7 +238,9 @@ def _enable_along(
 def closing_along_heading(
     carla_mod: Any, vehicle: Any, speed_mps: float
 ) -> bool:
-    """IC along map road forward. Assumes sanitize already ran for keep_ego."""
+    """IC along map road forward."""
+    if _skip_hero_motion_ic(vehicle, profile="closing_along_heading"):
+        return False
     fx, fy = _snap_road_yaw(vehicle)
     return _enable_along(
         carla_mod, vehicle, speed_mps, fx, fy, profile="closing_along_heading"
@@ -210,6 +251,8 @@ def closing_along_pose(
     carla_mod: Any, vehicle: Any, speed_mps: float
 ) -> bool:
     """IC along current actor yaw (cross-traffic). No road snap."""
+    if _skip_hero_motion_ic(vehicle, profile="closing_along_pose"):
+        return False
     fx, fy = _xy_forward(vehicle)
     return _enable_along(
         carla_mod, vehicle, speed_mps, fx, fy, profile="closing_along_pose"
@@ -223,6 +266,8 @@ def closing_toward_lead(
     lead: Any,
 ) -> bool:
     """IC toward lead if mostly along-road; else road forward."""
+    if _skip_hero_motion_ic(vehicle, profile="closing_toward_lead"):
+        return False
     if lead is None:
         raise ValueError("closing_toward_lead requires lead actor")
     fx, fy = _snap_road_yaw(vehicle)
@@ -250,6 +295,8 @@ def seed_speed(carla_mod: Any, vehicle: Any, speed_mps: float) -> bool:
 
 
 def set_forward_speed(carla_mod: Any, vehicle: Any, speed_mps: float) -> None:
+    if _skip_hero_motion_ic(vehicle, profile="set_forward_speed"):
+        return
     speed = abs(float(speed_mps))
     fx, fy = _xy_forward(vehicle)
     vel = carla_mod.Vector3D(fx * speed, fy * speed, 0.0)

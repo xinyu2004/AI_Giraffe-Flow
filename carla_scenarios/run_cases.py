@@ -48,7 +48,9 @@ from _carla_env import (  # noqa: E402
 from _manifest import resolve_targets  # noqa: E402
 from _camera_mount import load_camera_mount  # noqa: E402
 from _view import ScenarioView  # noqa: E402
-from spawn.boundary import sanitize_keep_ego  # noqa: E402
+from spawn.ic import set_natural_continue  # noqa: E402
+from spawn.boundary import reset_wrecked_ego  # noqa: E402
+from spawn.roles import ROLE_EGO, find_by_role  # noqa: E402
 
 STOP = False
 
@@ -87,10 +89,16 @@ def _ensure_view(
                 return view
         except Exception:  # noqa: BLE001
             pass
+        # Same window: only remount chase sensors onto the new hero.
         try:
-            view.destroy()
-        except Exception:  # noqa: BLE001
-            pass
+            view.retarget_vehicle(ego)
+            return view
+        except Exception as exc:  # noqa: BLE001
+            print(f"[run_cases] view retarget failed: {exc}; recreating", flush=True)
+            try:
+                view.destroy()
+            except Exception:  # noqa: BLE001
+                pass
     try:
         v = ScenarioView(
             world,
@@ -239,15 +247,17 @@ def main(argv: list[str] | None = None) -> int:
         f"[run_cases] Client A long-lived host={carla_host()}:{carla_port()} "
         f"cases={len(runnable)} planned_skipped={planned_skip} "
         f"stop_on_fail={int(stop_on_fail)} write_results={int(write_results)} "
-        f"(scheme-1: place/IC; Giraffe drives; one window)",
+        f"(scheme-1: natural continue; Giraffe drives; one window)",
         flush=True,
     )
     carla, client, world = connect_world(
         wait_s=wait_budget_s(args.wait_s), log_prefix="[run_cases]"
     )
+    # Always wipe leftover hero/lead from a prior crash/session — otherwise the
+    # first case "continues" from the guardrail instead of a real cold start.
+    reset_wrecked_ego(world, reason="suite_start")
 
     view: Optional[ScenarioView] = None
-    keep_ego = False
     passed_ids: list[str] = []
     failed_ids: list[str] = []
     skipped_rest: list[str] = []
@@ -257,24 +267,36 @@ def main(argv: list[str] | None = None) -> int:
             if STOP:
                 skipped_rest.extend(c for c, _, _ in runnable[idx:])
                 break
+            # Only suite_start is a cold wipe. Mid-suite: keep the same hero (and
+            # pygame window) even if yaw is ugly — wrong heading is a verdict
+            # issue, not a reason to respawn / reopen the window.
+            hero = find_by_role(world, ROLE_EGO)
+            if idx == 0:
+                keep_ego = False
+            elif hero is not None:
+                alive = True
+                try:
+                    if hasattr(hero, "is_alive"):
+                        alive = bool(hero.is_alive)
+                except Exception:  # noqa: BLE001
+                    alive = False
+                if alive:
+                    keep_ego = True
+                else:
+                    keep_ego = False
+                    reset_wrecked_ego(world, reason="dead")
+            else:
+                keep_ego = False
+                print(
+                    f"[run_cases] WARN {cid}: ego missing mid-batch → cold spawn "
+                    f"(window may remount)",
+                    flush=True,
+                )
             print(
                 f"[run_cases] ▶ {cid} ({script.name}) keep_ego={int(keep_ego)} "
-                f"[{idx + 1}/{len(runnable)}]",
+                f"preserve_ego=1 [{idx + 1}/{len(runnable)}]",
                 flush=True,
             )
-            # Boundary: clear keep_ego residue before next layout (or destroy hero).
-            if keep_ego:
-                try:
-                    ego_ref = getattr(view, "_vehicle", None) if view is not None else None
-                    kept = sanitize_keep_ego(world, ego_ref)
-                    if not kept:
-                        keep_ego = False
-                except Exception as exc:  # noqa: BLE001
-                    print(
-                        f"[run_cases] sanitize_keep_ego: {type(exc).__name__}: {exc}",
-                        flush=True,
-                    )
-                    keep_ego = False
             os.environ["GF_SCENARIO_CASE_ID"] = cid
             os.environ["GF_SCENARIO_CASE_INDEX"] = str(idx + 1)
             os.environ["GF_SCENARIO_CASE_TOTAL"] = str(len(runnable))
@@ -313,20 +335,24 @@ def main(argv: list[str] | None = None) -> int:
                 case_dur = duration_s_for_case(cid, fallback=float(args.duration_s))
             else:
                 case_dur = max(1.0, float(args.duration_s))
-            code, view = runner(
-                carla,
-                client,
-                world,
-                period_s=args.period_s,
-                no_window=args.no_window,
-                duration_s=max(1.0, case_dur),
-                view=view,
-                keep_ego=keep_ego,
-                stop_flag=lambda: STOP,
-                ensure_view=_ensure_view,
-            )
+            set_natural_continue(keep_ego)
+            try:
+                code, view = runner(
+                    carla,
+                    client,
+                    world,
+                    period_s=args.period_s,
+                    no_window=args.no_window,
+                    duration_s=max(1.0, case_dur),
+                    view=view,
+                    keep_ego=keep_ego,
+                    preserve_ego=True,
+                    stop_flag=lambda: STOP,
+                    ensure_view=_ensure_view,
+                )
+            finally:
+                set_natural_continue(False)
             elapsed = time.time() - t0
-            keep_ego = True
             ok = int(code) == 0
             row = {
                 "id": cid,

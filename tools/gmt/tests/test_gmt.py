@@ -405,6 +405,29 @@ def test_bev_missing_availability_still_draws_when_conf_ok() -> None:
     assert len(comp.state.host_lanes) == 2
 
 
+def test_bev_traj_color_uses_throttle_not_stuck_speed() -> None:
+    from gf_gmt.bev_compose import (
+        LiveBevState,
+        lon_intent,
+        traj_color_for_lon,
+        traj_thickness_for_lon,
+    )
+
+    hold = LiveBevState(lon_accel_mps2=0.0, throttle_cmd=0.0, brake_cmd=0.0)
+    assert traj_color_for_lon(hold) == (90, 160, 255)
+    assert traj_thickness_for_lon(hold) == 2
+
+    # Stuck ego (a≈0) but planning pullaway — must be green + thicker
+    pull = LiveBevState(lon_accel_mps2=0.0, throttle_cmd=0.75, brake_cmd=0.0)
+    assert lon_intent(pull) > 0.5
+    assert traj_color_for_lon(pull) == (70, 210, 110)
+    assert traj_thickness_for_lon(pull) >= 5
+
+    brake = LiveBevState(lon_accel_mps2=0.0, throttle_cmd=0.0, brake_cmd=0.8)
+    assert traj_color_for_lon(brake) == (230, 80, 80)
+    assert traj_thickness_for_lon(brake) >= 5
+
+
 def test_bev_prefers_planning_traj_when_adas() -> None:
     from gf_gmt.bev_compose import LiveBevComposer
 

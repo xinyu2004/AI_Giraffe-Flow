@@ -12,7 +12,8 @@ Demo range contract (FOV is optical only — not these numbers):
   D_work ≈ 120 m — soft working / validity band (not a hard BEV cut)
   D_bev  = 130 m — canvas ≈ D_work×1.1; lanes/ticks/objects drawn to this
 Object fill color is by stable OBJ_ID palette (video overlay will share later).
-Trajectory polyline = planning `/gf/Trajectory` (green=accel, red=decel, blue=hold).
+Trajectory polyline = planning `/gf/Trajectory`:
+  green=accel, red=decel, blue=hold; line thickness ∝ |throttle−brake| (hold fixed thin).
 
 BEV lane geometry comes only from FCM Out (Perception_LH_Out host lines and
 Perception_LA_Out adjacent lines). Mark style follows gold lanemark_type
@@ -24,6 +25,8 @@ expand_rows_with_bev(..., script=...) tests if callers still pass a script.
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -204,6 +207,10 @@ class LiveBevState:
     _last_speed_mps: float = 0.0
     # Smoothed longitudinal accel (m/s²) for Trajectory paint: +accel / −decel
     lon_accel_mps2: float = 0.0
+    # Planning lite ctrl snapshot (file IPC) — preferred over measured a for paint
+    throttle_cmd: float = 0.0
+    brake_cmd: float = 0.0
+    plan_mode: str = ""
     # Optional AdasDemo (offline only)
     has_adas: bool = False
     phase: str = ""
@@ -225,19 +232,41 @@ class LiveBevState:
     cipv_id: int = 0
 
 
-def traj_color_for_lon(st: LiveBevState) -> tuple[int, int, int]:
-    """Planning path color: green accel, red decel, blue hold."""
-    a = float(st.lon_accel_mps2)
+def lon_intent(st: LiveBevState) -> float:
+    """Signed longitudinal intent in [-1, 1]: +accel, −decel, ~0 hold.
+
+    Prefer planning throttle/brake (even when ego is physically stuck), then
+    AdasDemo accel_cmd, then measured lon_accel.
+    """
+    thr = max(0.0, min(1.0, float(st.throttle_cmd)))
+    brk = max(0.0, min(1.0, float(st.brake_cmd)))
+    if thr > 0.04 or brk > 0.04:
+        return max(-1.0, min(1.0, thr - brk))
     if st.has_adas:
         if int(st.brake_active) > 0 or float(st.accel_cmd_mps2) < -0.2:
-            a = min(a, float(st.accel_cmd_mps2) if st.accel_cmd_mps2 else -1.0)
-        elif float(st.accel_cmd_mps2) > 0.2:
-            a = max(a, float(st.accel_cmd_mps2))
-    if a > 0.25:
+            return max(-1.0, min(0.0, float(st.accel_cmd_mps2) / 3.0))
+        if float(st.accel_cmd_mps2) > 0.2:
+            return max(0.0, min(1.0, float(st.accel_cmd_mps2) / 3.0))
+    a = float(st.lon_accel_mps2)
+    return max(-1.0, min(1.0, a / 2.5))
+
+
+def traj_color_for_lon(st: LiveBevState) -> tuple[int, int, int]:
+    """Planning path color: green accel, red decel, blue hold."""
+    intent = lon_intent(st)
+    if intent > 0.08:
         return (70, 210, 110)  # accel
-    if a < -0.25:
+    if intent < -0.08:
         return (230, 80, 80)  # decel
     return (90, 160, 255)  # hold
+
+
+def traj_thickness_for_lon(st: LiveBevState) -> int:
+    """Hold stays thin (2); accel/decel thicken with |intent| → 3..7."""
+    intent = abs(lon_intent(st))
+    if intent <= 0.08:
+        return 2
+    return max(3, min(7, 2 + int(round(intent * 5.0))))
 
 
 def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360) -> bytes:
@@ -255,6 +284,7 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     dash_c = (200, 200, 90)
     ego_c = (80, 200, 120)
     traj_c = traj_color_for_lon(st)
+    traj_thick = traj_thickness_for_lon(st)
     uss_c = (220, 180, 60)
     text_bar = (40, 44, 55)
     tick_c = (168, 168, 172)
@@ -453,7 +483,7 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
         for i in range(len(st.traj_x) - 1):
             a = e2p_ego(st.traj_x[i], st.traj_y[i])
             b = e2p_ego(st.traj_x[i + 1], st.traj_y[i + 1])
-            _line(buf, width, height, a[0], a[1], b[0], b[1], traj_c, thick=2)
+            _line(buf, width, height, a[0], a[1], b[0], b[1], traj_c, thick=traj_thick)
 
     if st.nearest_cm is not None and st.nearest_cm > 0:
         dist_m = max(0.5, min(float(st.nearest_cm) / 100.0, D_BEV_M))
@@ -543,6 +573,18 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
 
 
 
+def _resolve_planning_ctrl_path() -> Path | None:
+    env = (os.environ.get("GF_PLANNING_CTRL_PATH") or "").strip()
+    if env:
+        return Path(env)
+    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
+    if proj:
+        return Path(proj) / "runtime_ipc" / "planning_ctrl.json"
+    # CWD often = SKU root when GMT_depend_launch runs
+    cand = Path("runtime_ipc") / "planning_ctrl.json"
+    return cand if cand.is_file() else cand
+
+
 def _lane_line_quality(it: dict[str, Any], *, conf_key: str, avail_key: str) -> tuple[float, int] | None:
     """(conf, avail) or None to skip.
 
@@ -569,6 +611,31 @@ class LiveBevComposer:
         self._emit_every = 1
         self._n = 0
         self._script = script
+        self._ctrl_path = _resolve_planning_ctrl_path()
+        self._ctrl_mtime_ns = -1
+
+    def _refresh_plan_ctrl(self) -> None:
+        """Pull throttle/brake from planning_ctrl.json (same file gateway reads)."""
+        path = self._ctrl_path
+        if path is None or not path.is_file():
+            return
+        try:
+            mtime_ns = path.stat().st_mtime_ns
+        except OSError:
+            return
+        if mtime_ns == self._ctrl_mtime_ns:
+            return
+        try:
+            raw = path.read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except (OSError, json.JSONDecodeError, TypeError):
+            return
+        if not isinstance(data, dict):
+            return
+        self._ctrl_mtime_ns = mtime_ns
+        self.state.throttle_cmd = float(data.get("throttle") or 0.0)
+        self.state.brake_cmd = float(data.get("brake") or 0.0)
+        self.state.plan_mode = str(data.get("mode") or "")
 
     def _apply_adas_data(self, data: dict[str, Any]) -> None:
         self.state.has_adas = True
@@ -820,6 +887,7 @@ class LiveBevComposer:
         # Prefer unique log times for Studio Image panel (ns); bump if equal
         if t <= 0:
             t = self._n * 100_000_000  # 0.1s steps
+        self._refresh_plan_ctrl()
         if self.state.has_adas and not self.state.has_perc_lead:
             lo = self.state.lane_offset_m
             # Prefer planning Trajectory (ego-frame → world y for render_bev_png).

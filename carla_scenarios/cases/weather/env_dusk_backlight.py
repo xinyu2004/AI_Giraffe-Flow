@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import main, run_session as _run_session  # noqa: E402
 
 
-def run_session(carla, client, world, *, period_s, no_window, duration_s, view=None, keep_ego=False, stop_flag=None, ensure_view=None):
+def run_session(carla, client, world, *, period_s, no_window, duration_s, view=None, keep_ego=False, preserve_ego=False, stop_flag=None, ensure_view=None):
     return _run_session(
         "env_dusk_backlight",
         period_s,
@@ -22,6 +22,7 @@ def run_session(carla, client, world, *, period_s, no_window, duration_s, view=N
         duration_s=duration_s,
         preset="dusk",
         keep_ego=keep_ego,
+        preserve_ego=preserve_ego,
         stop_flag=stop_flag,
         ensure_view=ensure_view,
     )
