@@ -1,7 +1,7 @@
 # 可观测演示（P2 O/F + Live · 约 15 分钟）
 
 > 配套：`GMT measure record|tag|export` · `GMT bridge foxglove`  
-> 主链 SIL：`projects/oem_a/afc_with_uss`（**iceoryx**）  
+> 主链 SIL：`projects/afc`（**iceoryx**）  
 > **说明：** `GMT bridge foxglove --ws` 是自研 Foxglove WebSocket **子集**，**不是** ROS 包 `foxglove_bridge`。  
 > **主路径：** gf-config Verify(+Generate) → `compile_sil` → `run_sil`。SKU 验收 smoke → `projects/.../scripts/verify/`；平台门禁 → `devops/ci/`。
 
@@ -11,18 +11,18 @@
 source .venv/bin/activate
 # gf-config A 页：profile=vehicle-debug，勾 live_tap，填白名单（如 EgoMotion / Trajectory）
 # 若尚未编过 SIL：
-bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+bash projects/afc/scripts/compile_sil.sh
 ```
 
 ## 1. Live：实时看 + 实时落盘（推荐）
 
 `run_sil` 读 `generated/observability.json`：live 有效则起  
-`gf_iox_obs_tap`，fan-out 到 **GMT live**（8766）与 **Foxglove**（8765），可选 tee 落盘。
+`gf_iox_obs_tap`，fan-out 到 **GMT live**（8766）与 **Foxglove**（8765）；**不落盘**（afc 无自动 JSONL tee）。
 
 ```bash
-bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+bash projects/afc/scripts/run_sil.sh
 # 已编过：
-# GF_SKIP_COMPILE=1 bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+# GF_SKIP_COMPILE=1 bash projects/afc/scripts/run_sil.sh
 ```
 
 | 客户端 | 连接 |
@@ -33,12 +33,12 @@ bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
 
 Foxglove 连接后加 **Raw Messages** / **Plot**，勾选 `/gf/EgoMotion`、`/gf/Trajectory`。
 
-落盘默认：`projects/.../build-sil/observability/session_live.jsonl`（`${BUILD}/observability/`；`GF_LIVE_SESSION` / `GF_OBS_OUT` 可改；`GF_LIVE_TEE=0` 关 tee）。
+落盘：在 **GMT GUI** 顶栏点 **录制**（默认 `${BUILD}/observability/gmt_record.jsonl`，目录由 `GF_OBS_OUT` / 项目 observability 根决定）。run_sil **不会**自动写 `session_live.jsonl`。
 
 ```bash
 # 推荐：终端 run_sil + GUI 连接
-bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
-GMT gui --project projects/oem_a/afc_with_uss
+bash projects/afc/scripts/run_sil.sh
+GMT gui --project projects/afc
 # 顶栏 Live 连接/录制；M=标记点；打开 session → 回灌
 ```
 
@@ -52,7 +52,7 @@ GMT gui --project projects/oem_a/afc_with_uss
 ## 2. 事后录 session → MCAP（验证脚本）
 
 ```bash
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_observability.sh
+bash projects/afc/scripts/verify/smoke_sil_observability.sh
 ```
 
 产物默认在 `${BUILD}/observability/`（即 `projects/.../build-sil/observability/`）：
@@ -64,7 +64,7 @@ bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_observability.sh
 | `session.mcap` | 多 topic MCAP |
 
 ```bash
-GMT bridge foxglove --mcap projects/oem_a/afc_with_uss/build-sil/observability/session.mcap
+GMT bridge foxglove --mcap projects/afc/build-sil/observability/session.mcap
 ```
 
 ## 2b. ADAS 场景 demo（合场景 · 无需 SIL）
@@ -74,11 +74,11 @@ GMT bridge foxglove --mcap projects/oem_a/afc_with_uss/build-sil/observability/s
 ```bash
 # （场景 jsonl 已在 projects/.../scenarios/；用 GMT 打开 session / 回灌）
 GMT bridge foxglove --ws --synth-bev \
-  --jsonl projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl --port 8765
+  --jsonl projects/afc/scenarios/overtake_acc_aeb.jsonl --port 8765
 # Studio → ws://127.0.0.1:8765 · Image + Plot(AdasDemo.*)
 
-GMT gui --project projects/oem_a/afc_with_uss \
-  --session projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl
+GMT gui --project projects/afc \
+  --session projects/afc/scenarios/overtake_acc_aeb.jsonl
 ```
 
 注入：场景联调推荐  
@@ -90,21 +90,21 @@ GMT gui --project projects/oem_a/afc_with_uss \
 ## 3. WebSocket 回放（非 live）
 
 ```bash
-GMT bridge foxglove --ws --jsonl projects/oem_a/afc_with_uss/build-sil/observability/session_tagged.jsonl --port 8765
+GMT bridge foxglove --ws --jsonl projects/afc/build-sil/observability/session_tagged.jsonl --port 8765
 ```
 
 ## 4. Tag 窗示例（CLI）
 
 ```bash
-GMT measure tag --in projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
-  --out projects/oem_a/afc_with_uss/build-sil/observability/session_tagged.jsonl --label demo
+GMT measure tag --in projects/afc/build-sil/observability/session.jsonl \
+  --out projects/afc/build-sil/observability/session_tagged.jsonl --label demo
 ```
 
 ## 5. GMT GUI：录制 / Tag / 主机回放
 
 ```bash
-GMT gui --project projects/oem_a/afc_with_uss \
-  --session projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl
+GMT gui --project projects/afc \
+  --session projects/afc/build-sil/observability/session.jsonl
 ```
 
 - **文件**：从日志录制、导入 NDJSON、跟随 live、导出 MCAP / **VCD**  
@@ -120,13 +120,13 @@ GMT gui --project projects/oem_a/afc_with_uss \
 
 ```bash
 # 尖刺（stub fixture → VCD）
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_gmt_vcd.sh
+bash projects/afc/scripts/verify/smoke_gmt_vcd.sh
 
 # 或手工：
 GMT measure export --format vcd \
   --in tools/gmt/fixtures/session_stub.jsonl \
-  --out projects/oem_a/afc_with_uss/build-sil/observability/session_stub.vcd
-gtkwave projects/oem_a/afc_with_uss/build-sil/observability/session_stub.vcd   # 若已安装
+  --out projects/afc/build-sil/observability/session_stub.vcd
+gtkwave projects/afc/build-sil/observability/session_stub.vcd   # 若已安装
 ```
 
 轨名：`gf.<Service>.<field>`（如 `gf.EgoMotion.seq`）。GUI：**文件 → 导出 VCD**。
@@ -137,19 +137,19 @@ gtkwave projects/oem_a/afc_with_uss/build-sil/observability/session_stub.vcd   #
 
 ```bash
 # B1：替 gateway，全链消费者
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_inject.sh
+bash projects/afc/scripts/verify/smoke_sil_inject.sh
 
 # B2：单模块 DUT（例 sensing.uss）
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_inject_b2.sh
+bash projects/afc/scripts/verify/smoke_sil_inject_b2.sh
 
 # 或手工 B1：
-GF_SKIP_COMPILE=1 GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+GF_SKIP_COMPILE=1 GF_INJECT_SESSION=projects/afc/build-sil/observability/session.jsonl \
+  bash projects/afc/scripts/run_sil.sh
 
 # 手工 B2：
-GF_SKIP_COMPILE=1 GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
+GF_SKIP_COMPILE=1 GF_INJECT_SESSION=projects/afc/build-sil/observability/session.jsonl \
   GF_INJECT_DUT=sensing.uss \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+  bash projects/afc/scripts/run_sil.sh
 ```
 
 `vehicle-debug` compose 会编 `debug_bridge/iox_obs_inject`；`production-release` 不编。  

@@ -44,7 +44,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Config-driven: compose → generated/iox_roudi.toml (BL-MEM-ROUDI); no env override.
-IOX_TOML="${ROOT}/projects/oem_a/afc_with_uss/generated/iox_roudi.toml"
+IOX_TOML="${ROOT}/projects/afc/generated/iox_roudi.toml"
 if [[ ! -f "${IOX_TOML}" ]]; then
   echo "[run_iox_demo] ERROR: missing ${IOX_TOML} — compose SKU with req.bindings iceoryx" >&2
   exit 1

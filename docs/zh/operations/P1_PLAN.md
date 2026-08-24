@@ -69,7 +69,7 @@ flowchart LR
 
 ### 2.2 验收
 
-- [x] 打开 `afc_with_uss` 可见连线图  
+- [x] 打开 `afc` 可见连线图  
 - [x] 改边保存后 wiring 更新且 compose/lineage 可用  
 - [x] 改 req 写回  
 - [x] C 页红项  
@@ -170,7 +170,7 @@ iceoryx 路径：  hpp / fidl 进 SOR types → iceoryx binding（不用 fdepl /
 ### M — MCU 桌面（已交付）
 
 - [x] `mcu.cp_gateway` + `cp_ipc_peer` 桌面可跑（Unix socket / `cross_domain_ipc`）  
-- [x] `adc_full` 联调脚本无真 MCU：`projects/oem_b/adc_full/scripts/smoke_mcu_desktop.sh`  
+- [x] `adc` 联调脚本无真 MCU：`projects/adc/scripts/smoke_mcu_desktop.sh`  
 - [x] profile：`cmake/profiles/mcu_desktop.cmake`（无 iceoryx）  
 - [x] 补回 `cmake/GfModules.cmake` + desktop profiles（F 轨消费端）
 
@@ -228,5 +228,5 @@ iceoryx 路径：  hpp / fidl 进 SOR types → iceoryx binding（不用 fdepl /
 ```bash
 source .venv/bin/activate
 pip install -e "tools/gf-codegen[dev]" -e tools/gf-config
-gf-config projects/oem_a/afc_with_uss/project.yaml
+gf-config projects/afc/project.yaml
 ```

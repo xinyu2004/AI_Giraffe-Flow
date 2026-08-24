@@ -474,8 +474,7 @@ def test_bev_script_three_phases_no_adas_topic() -> None:
     script_path = (
         root
         / "projects"
-        / "oem_a"
-        / "afc_with_uss"
+        / "afc"
         / "scenarios"
         / "overtake_acc_aeb.jsonl"
     )
@@ -749,7 +748,7 @@ def test_live_tag_mark(tmp_path: Path) -> None:
     from gf_gmt.measure_tag import load_tags, tags_path_for_session
 
     app = QApplication.instance() or QApplication(sys.argv)
-    session = tmp_path / "session_live.jsonl"
+    session = tmp_path / "gmt_record.jsonl"
     session.write_text("", encoding="utf-8")
     panel = TagPanel()
     panel.set_session(session)

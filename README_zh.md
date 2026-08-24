@@ -34,7 +34,7 @@
 ![gf-config — 信号图（页 1）](result_pic/gf-config.png)
 
 ```bash
-gf-config projects/oem_a/afc_with_uss/project.yaml
+gf-config projects/afc/project.yaml
 ```
 
 细节：[tools/gf-config/README_zh.md](tools/gf-config/README_zh.md) · [WORKFLOW](docs/zh/operations/WORKFLOW.md)
@@ -81,22 +81,18 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 
 #### 2.3 参考进程与主链（示例 SKU）
 
-以 [oem_a / afc_with_uss](projects/oem_a/afc_with_uss/) 为例：
+以 [projects/afc](projects/afc/)（无 USS）为例：
 
 ```text
 车态源（二选一）
   · gateway（continuous / 无回灌）  或  · inject（playhead，替 gateway）
         │
-        ▼ EgoMotion
-   ┌────┴────┬────────────┐
-   ▼         ▼            ▼
-  USS      FCM stub    （订 Ego 等）
-   │         │
-   ▼         ▼
- UssZones   Perception_Out
-        \   /
-         ▼
-      planning → Trajectory
+        ▼ EgoMotion / Perception_In
+        ▼
+   perception.fcm → Perception_Out
+        │
+        ▼
+   planning.driving → Trajectory
         │
         ▼
    tap → Foxglove / GMT Live
@@ -105,9 +101,8 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 | 进程 | 角色 |
 |------|------|
 | `adapter.vehicle_can_gateway` | CAN/仿真 → EgoMotion、Perception_In…（回灌时关闭） |
-| `sensing.uss` | Ego → UssZones |
-| `perception.fcm` | Perception_In 或（回灌）Ego → 感知 stub |
-| `planning.driving` | Ego（+ 可选感知/USS）→ Trajectory |
+| `perception.fcm` | Perception_In → 感知 Out |
+| `planning.driving` | Ego + 感知 → Trajectory |
 | `gf_iox_obs_tap` | 白名单服务 → NDJSON |
 | `gf_iox_obs_inject` | playhead / continuous 回灌 Ego |
 
@@ -115,27 +110,26 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 
 #### 2.4 产品路径（SIL）
 
-`projects/oem_a/` 下 SKU 同一合同：**mtime compose / 按需 cmake configure / 增量 build**；`GF_CTEST=1` 才跑 ctest；stage 出 `runtime/bin/giraffe_launch`；GMT 旁路为 `GMT_depend_launch`（`GF_GMT_DEPEND=0` → 只 EM）。
+`projects/afc` 与 `projects/adc` 同一合同：**mtime compose / 按需 cmake configure / 增量 build**；`GF_CTEST=1` 才跑 ctest；stage 出 `runtime/bin/giraffe_launch`；GMT 旁路为 `GMT_depend_launch`（`GF_GMT_DEPEND=0` → 只 EM）。
 
 ```bash
-# afc_with_uss（含 USS）或 afc_no_uss（无 USS / 相机向）
-bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+bash projects/afc/scripts/compile_sil.sh
 
 # 普通主链（gateway 开车态）+ 默认挂 GMT depend
-bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+bash projects/afc/scripts/run_sil.sh
 
 # 板端 / 同口径 EM：
-#   ./projects/.../build-sil/runtime/bin/giraffe_launch
+#   ./projects/afc/build-sil/runtime/bin/giraffe_launch
 
 # 场景回灌（GMT playhead；全量 live 含 Ego → BEV）
 GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+  bash projects/afc/scripts/run_sil.sh
 
 # CI 要测：GF_CTEST=1 bash …/compile_sil.sh
 ```
 
-脚本：[afc_with_uss](projects/oem_a/afc_with_uss/scripts/README.md) · [afc_no_uss](projects/oem_a/afc_no_uss/README.md)  
-场景（变道→ACC→AEB）：[scenarios/README.md](projects/oem_a/afc_with_uss/scenarios/README.md)
+脚本：[afc/scripts](projects/afc/scripts/) · [afc README](projects/afc/README.md)  
+场景：[carla_scenarios/](carla_scenarios/)
 
 #### 2.5 与工具链的边界
 
@@ -172,8 +166,8 @@ bash fusa/scripts/measure_latency.sh   # 可选：延时快照
 
 ```bash
 pip install -e tools/gmt -e 'tools/gmt[gui]'
-GMT gui --project projects/oem_a/afc_with_uss \
-  --session projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl
+GMT gui --project projects/afc \
+  --session projects/afc/scenarios/overtake_acc_aeb.jsonl
 ```
 
 细节：[tools/gmt/README_zh.md](tools/gmt/README_zh.md) · [OBSERVABILITY_DEMO](docs/zh/operations/OBSERVABILITY_DEMO.md)

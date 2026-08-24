@@ -8,10 +8,10 @@ from gf_codegen.compose.pipeline import compose_project
 from gf_codegen.generate_cmd import generate
 
 
-def test_generate_afc_with_uss_proxy_skeleton(repo_root: Path, tmp_path: Path) -> None:
-    project = repo_root / "projects/oem_a/afc_with_uss/project.yaml"
+def test_generate_afc_proxy_skeleton(repo_root: Path, tmp_path: Path) -> None:
+    project = repo_root / "projects/afc/project.yaml"
     assert compose_project(project, repo_root=repo_root) == 0
-    sor = repo_root / "projects/oem_a/afc_with_uss/gf.sor.json"
+    sor = repo_root / "projects/afc/gf.sor.json"
     out = tmp_path / "generated"
     assert generate(sor, out) == 0
 
@@ -35,10 +35,10 @@ def test_generate_afc_with_uss_proxy_skeleton(repo_root: Path, tmp_path: Path) -
     assert "EventSubscriber" in proxy_txt
 
 
-def test_generate_adc_full_proxy_skeleton(repo_root: Path, tmp_path: Path) -> None:
-    project = repo_root / "projects/oem_b/adc_full/project.yaml"
+def test_generate_adc_proxy_skeleton(repo_root: Path, tmp_path: Path) -> None:
+    project = repo_root / "projects/adc/project.yaml"
     assert compose_project(project, repo_root=repo_root) == 0
-    sor = repo_root / "projects/oem_b/adc_full/gf.sor.json"
+    sor = repo_root / "projects/adc/gf.sor.json"
     out = tmp_path / "generated"
     assert generate(sor, out) == 0
 

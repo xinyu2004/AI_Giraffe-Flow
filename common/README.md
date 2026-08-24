@@ -4,7 +4,7 @@
 
 ```bash
 # From repo root — only creates missing files under projects/<oem>/<sku>/scripts/
-bash common/bootstrap_sku_scripts.sh oem_a/afc_no_uss
+bash common/bootstrap_sku_scripts.sh afc
 ```
 
 | Rule | Meaning |

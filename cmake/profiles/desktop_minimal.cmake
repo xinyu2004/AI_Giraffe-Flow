@@ -1,5 +1,5 @@
 # Trimmed SKU: core/com/log + iceoryx + demo_pipeline only (no uss_feed).
-# Matches afc_no_uss-style req; used by CI configure smoke.
+# Matches afc-style req; used by CI configure smoke.
 set(GF_SKU_APPLIED TRUE)
 set(GF_SKU_VARIANT "desktop_minimal")
 

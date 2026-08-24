@@ -11,7 +11,7 @@
 
 | Phase | Focus | Status | Exit criteria |
 |-------|--------|--------|----------------|
-| **P0** | Contract + minimal loop | ✅ | SOR 0.2, gf-codegen, iceoryx SIL, `adc_full` compose, CI |
+| **P0** | Contract + minimal loop | ✅ | SOR 0.2, gf-codegen, iceoryx SIL, `adc` compose, CI |
 | **P1** | Bindings, tools, stubs | ✅ skeleton | gf-config v1, FIDL import, MCU desktop peer, exec/phm/ucm/diag stubs |
 | **P2** | Runnable + observability | ✅ | Multiproc SIL, platform YAML, CycloneDDS path, Tag/MCAP, Foxglove |
 | **P2.5** | Host tools + architect UI | ✅ | SIL compiler switch, GMT GUI, VCD |
@@ -58,7 +58,7 @@ We do **not** sell / perform ISO 26262 certification or hold ASIL certificates f
 | Foxglove camera path + hero reattach (SIL) | Stage py mtime (`BL-STAGE-PY-MTIME`); cloud CI |
 | Client A/B roles + camera contract docs | Fake-perception → planning demo depth |
 
-Source of truth (zh): [CONFIG_RUNTIME_POLICY.md](../../zh/operations/CONFIG_RUNTIME_POLICY.md) · [AP_LITE_BACKLOG.md](../../zh/operations/AP_LITE_BACKLOG.md) · [frame_ingest_roles.md](../sku/afc_no_uss/frame_ingest_roles.md).
+Source of truth (zh): [CONFIG_RUNTIME_POLICY.md](../../zh/operations/CONFIG_RUNTIME_POLICY.md) · [AP_LITE_BACKLOG.md](../../zh/operations/AP_LITE_BACKLOG.md) · [frame_ingest_roles.md](../sku/afc/frame_ingest_roles.md).
 
 P3-4 desktop DoIP/OTA is closed — see Chinese [DOIP_OTA.md](../../zh/operations/DOIP_OTA.md).
 **2026-08-04:** gf-config log-table UX + duplicate-context Verify; GMT Collector/DEM merged into the OTA/UDS tab.

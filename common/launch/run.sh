@@ -8,15 +8,15 @@
 #   else → main chain only until Ctrl+C
 #
 # Usage:
-#   bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
+#   bash projects/afc/scripts/run_sil.sh
 #   # B1 boundary inject (no gateway; full consumer chain):
-#   GF_INJECT_MODE=playhead bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
+#   GF_INJECT_MODE=playhead bash projects/afc/scripts/run_sil.sh
 #   # continuous (board-side file):
-#   GF_INJECT_SESSION=projects/oem_a/afc_no_uss/build-sil/observability/session.jsonl \
-#     bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
+#   GF_INJECT_SESSION=projects/afc/build-sil/observability/session.jsonl \
+#     bash projects/afc/scripts/run_sil.sh
 #   # B2 single-module (DUT only + inject):
 #   GF_INJECT_MODE=playhead GF_INJECT_DUT=sensing.uss \
-#     bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
+#     bash projects/afc/scripts/run_sil.sh
 #
 # Env:
 #   GF_BUILD_DIR     default projects/.../build-sil
@@ -53,7 +53,7 @@
 #   GF_GMT_DEPEND=0：只跑 EM（不挂 GMT 旁路）；默认 1 → GMT_depend_launch.sh
 #                    （旧名 GF_SIL_FLOW 仍可作别名）
 #   # playhead (GMT stream; session file optional):
-#   GF_INJECT_MODE=playhead bash projects/oem_a/afc_no_uss/scripts/run_sil.sh
+#   GF_INJECT_MODE=playhead bash projects/afc/scripts/run_sil.sh
 #   # then GMT gui → open session → 回灌 tab → connect 127.0.0.1:8767
 #   # continuous still needs a file:
 #   GF_INJECT_SESSION=… bash …/run_sil.sh
@@ -512,7 +512,7 @@ fi
 for bin in "${NEED_BINS[@]}"; do
   if [[ ! -x "${bin}" ]]; then
     echo "Missing executable: ${bin}" >&2
-    echo "Build first: bash projects/oem_a/afc_no_uss/scripts/compile_sil.sh" >&2
+    echo "Build first: bash projects/afc/scripts/compile_sil.sh" >&2
     if [[ "${bin}" == "${TAP}" ]]; then
       echo "live_tap is on but tap binary missing — check profile=vehicle-debug + live in gf-config." >&2
     fi

@@ -10,7 +10,8 @@
 # compose-frozen deploy_config.hpp (compiled into gf_em_daemon).
 # NOT in this unit: Foxglove, GMT inject, DoIP, carla_scenarios.
 #
-# No GF_PLATFORM_DIR required (product path = hpp). Optional debug dump only.
+# Logs: console (journald captures stdout/stderr) + DLT. No --log-dir.
+# Optional debug: add Environment=GF_EM_LOG_DIR=… and --log-dir (file redirect).
 
 [Unit]
 Description=Giraffe EM (gf_em_daemon)
@@ -26,10 +27,9 @@ WorkingDirectory=/opt/giraffe/current
 Environment=GF_BUILD_DIR=/opt/giraffe/current
 Environment=GF_RUNTIME_DIR=/opt/giraffe/current
 Environment=GF_IOX_TOML=/opt/giraffe/current/etc/iox_roudi.toml
-Environment=GF_EM_LOG_DIR=/var/log/giraffe/em
 Environment=LD_LIBRARY_PATH=/opt/giraffe/current/lib
 # EM stops the machine on abnormal child exit (no relaunch). Unit Restart recovers the tree.
-ExecStart=/opt/giraffe/current/bin/gf_em_daemon --build-dir /opt/giraffe/current --log-dir /var/log/giraffe/em --deadline-ms 0
+ExecStart=/opt/giraffe/current/bin/gf_em_daemon --build-dir /opt/giraffe/current --deadline-ms 0
 Restart=on-failure
 RestartSec=2
 

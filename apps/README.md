@@ -15,7 +15,7 @@ SKU 业务 stub（gateway / uss / fcm / planning）在：
 
 `projects/<oem>/<sku>/apps/`
 
-例：[projects/oem_a/afc_with_uss/apps/](../projects/oem_a/afc_with_uss/apps/)。
+例：[projects/afc/apps/](../projects/afc/apps/)。
 
 Process bring-up → [`middleware/runtime/`](../middleware/runtime/)。  
 Tap / inject → [`tools/debug_bridge/`](../tools/debug_bridge/)。

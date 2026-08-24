@@ -20,8 +20,8 @@ pip install -e tools/gmt -e tools/gf-codegen
 pip install -e 'tools/gmt[gui]'
 
 GMT gui
-GMT gui --project projects/oem_a/afc_with_uss
-GMT gui --project projects/oem_a/afc_with_uss/project.yaml
+GMT gui --project projects/afc
+GMT gui --project projects/afc/project.yaml
 ```
 
 **主路径：** 填 **Host** → 顶栏两通道可同时连：
@@ -46,7 +46,7 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 `GF_INJECT_LIVE=0` 可强制回灌时关掉 live_tap。
 
 - **连接 Live**：WS 收流进内存；**默认不落盘**；「跟随最新」控制是否贴尾  
-- **录制**：顶栏按钮；默认 `session_live.jsonl`（已有非空则问新建/覆盖）  
+- **录制**：顶栏按钮；默认 `gmt_record.jsonl`（已有非空则问新建/覆盖）  
 - 断开：停录制；保留内存 session，可 scrub / Tag  
 - Tag：`M` 标记点；`[` / `]` 片段；Live/Inject 在顶栏连接  
 - GMT **不启动 SIL**  
@@ -62,7 +62,7 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 
 ```bash
 GF_INJECT_MODE=playhead \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+  bash projects/afc/scripts/run_sil.sh
 # 场景 demo 建议：GF_INJECT_LIVE=all（保留 Ego → BEV）
 ```
 
@@ -72,7 +72,7 @@ GMT：打开 session → **回灌** → 连接 `host:8767` → 「跟 playhead �
 
 ```bash
 GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+  bash projects/afc/scripts/run_sil.sh
 ```
 
 ### ADAS 场景 demo
@@ -82,16 +82,16 @@ GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
 ```bash
 # SIL：run_sil → GMT 打开既有 jsonl session → 回灌播放
 GMT bridge foxglove --ws --synth-bev \
-  --jsonl projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl --port 8765
+  --jsonl projects/afc/scenarios/overtake_acc_aeb.jsonl --port 8765
 
-GMT gui --project projects/oem_a/afc_with_uss \
-  --session projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl
+GMT gui --project projects/afc \
+  --session projects/afc/scenarios/overtake_acc_aeb.jsonl
 ```
 
 ### GTKWave（离线时序）
 
 ```bash
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_gmt_vcd.sh
+bash projects/afc/scripts/verify/smoke_gmt_vcd.sh
 # 或：GMT measure export --format vcd --in …jsonl --out …vcd
 ```
 
@@ -101,11 +101,11 @@ CLI 入口：**`GMT`**。GMT GUI **不写 wiring**（配置只经 gf-config）�
 
 ```bash
 # 种 Collector / DEM / 多级日志（SIL + DoIP），再开 GMT
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_phm_dem_doip.sh
+bash projects/afc/scripts/verify/smoke_phm_dem_doip.sh
 # 或交互：
-export GF_COLLECTOR_STORE=$PWD/projects/oem_a/afc_with_uss/build-sil/runtime/collector/events.ndjson
-bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
-GMT gui --project projects/oem_a/afc_with_uss
+export GF_COLLECTOR_STORE=$PWD/projects/afc/build-sil/runtime/collector/events.ndjson
+bash projects/afc/scripts/run_sil.sh
+GMT gui --project projects/afc
 ```
 
 上级：[tools/README.md](../README.md)

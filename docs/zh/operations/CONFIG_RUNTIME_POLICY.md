@@ -1,7 +1,7 @@
 # 配置运行期策略：白名单 vs 行为
 
 > **English:** principles apply repo-wide; this doc is the source of truth.  
-> 样板工程：`projects/oem_a/afc_no_uss/` · `afc_with_uss/`。
+> 样板工程：`projects/afc/` · `afc/`。
 
 ## 原则
 
@@ -88,5 +88,5 @@ systemd/init（产品）或 giraffe_launch（调试）/ run_sil
 gf-config Verify(+Generate) → compile_sil → bash …/run_sil.sh
 # 板端：拷 runtime/ → systemctl enable --now giraffe-em
 # smoke 显式作者树（可选）：
-#   GF_PLATFORM_DIR=projects/oem_a/afc_with_uss/platform bash …/verify/smoke_….sh
+#   GF_PLATFORM_DIR=projects/afc/platform bash …/verify/smoke_….sh
 ```

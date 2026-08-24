@@ -8,7 +8,7 @@
 #   GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
 #
 # Env:
-#   GF_BUILD_DIR       default projects/oem_a/afc_with_uss/build-sil
+#   GF_BUILD_DIR       default projects/afc/build-sil
 #   GF_FUSA_CODEGEN    1 = run gf-codegen pytest subset
 #   GF_FUSA_SIL        1 = L3 FuSa SIL suite (SIL-01/02/03/EM-02/06 + SIL-SM-01)
 #   GF_FUSA_SIL_MCU    0 = skip SIL-06 MCU desktop (default 1)
@@ -19,7 +19,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 export PATH="${ROOT}/.venv/bin:${PATH}"
 
-BUILD="${GF_BUILD_DIR:-${ROOT}/projects/oem_a/afc_with_uss/build-sil}"
+BUILD="${GF_BUILD_DIR:-${ROOT}/projects/afc/build-sil}"
 OUT_DIR="${ROOT}/fusa/runs"
 mkdir -p "${OUT_DIR}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -88,7 +88,7 @@ if [[ "${GF_FUSA_CODEGEN:-0}" == "1" ]]; then
     echo "===== L2 gf-codegen ====="
     python -m pytest \
       tools/gf-codegen/tests/test_observability.py \
-      tools/gf-codegen/tests/test_compose_afc_with_uss.py \
+      tools/gf-codegen/tests/test_compose_afc.py \
       tools/gf-codegen/tests/test_afc_bench_golden.py \
       tools/gf-codegen/tests/test_lint_golden.py \
       -q --tb=line
@@ -111,13 +111,13 @@ if [[ "${GF_FUSA_SIL:-0}" == "1" ]]; then
       echo
     } >>"${LOG}" 2>&1
   }
-  run_sil "SIL-01" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh
-  run_sil "SIL-02" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh
-  run_sil "SIL-03" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_phm_fault.sh
-  run_sil "SIL-SM-01" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_sm_fg.sh
-  run_sil "SIL-EM-02" projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_em_daemon.sh
+  run_sil "SIL-01" projects/afc/scripts/verify/smoke_sil.sh
+  run_sil "SIL-02" projects/afc/scripts/verify/smoke_sil_verify.sh
+  run_sil "SIL-03" projects/afc/scripts/verify/smoke_sil_phm_fault.sh
+  run_sil "SIL-SM-01" projects/afc/scripts/verify/smoke_sil_sm_fg.sh
+  run_sil "SIL-EM-02" projects/afc/scripts/verify/smoke_sil_em_daemon.sh
   if [[ "${GF_FUSA_SIL_MCU:-1}" == "1" ]]; then
-    run_sil "SIL-06" projects/oem_b/adc_full/scripts/verify/smoke_mcu_desktop.sh
+    run_sil "SIL-06" projects/adc/scripts/verify/smoke_mcu_desktop.sh
   else
     echo "${TAG} SKIP SIL-06 (GF_FUSA_SIL_MCU=0)"
     echo "# SKIP SIL-06" >>"${LOG}"
@@ -128,7 +128,7 @@ if [[ "${GF_FUSA_T4:-0}" == "1" ]]; then
   echo "${TAG} T4 production-release profile"
   {
     echo "===== L3 SIL-T4 / SG-05 ====="
-    bash projects/oem_a/afc_with_uss/scripts/verify/smoke_production_profile.sh
+    bash projects/afc/scripts/verify/smoke_production_profile.sh
     echo "# SIL-T4 OK"
     echo
   } >>"${LOG}" 2>&1

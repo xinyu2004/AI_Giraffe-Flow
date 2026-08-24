@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# SIL: host compile for oem_a / afc_no_uss
+# SIL: host compile for afc
 # TEMPLATE: copy into SKU scripts/ then fork — do not source common/ at runtime.
 #   bootstrap → require generated/ (gf-config) → cmake → build(Ninja/Make 增量) → ctest(可选) → stage(mtime)
 #
 # 无内容 SHA stamp。差异编译交给构建系统（mtime + depfile）；壳只对 codegen/stage 做 -newer。
 #
 # Usage:
-#   bash projects/oem_a/afc_no_uss/scripts/compile_sil.sh
+#   bash projects/afc/scripts/compile_sil.sh
 #   GF_CXX=clang++ GF_CC=clang GF_BUILD_DIR=$PWD/build-clang bash …/compile_sil.sh
 #
 # Env:

@@ -29,7 +29,7 @@
 | 4 | **`req.yaml`** | 系统工程师 + DevOps | SKU、能力、profile、**验收项** |
 | — | **`project.yaml`** | 系统工程师 | **仅索引**以上路径 + compose 输出；不含业务细节 |
 
-示例工程：[projects/oem_a/afc_with_uss/](../../../projects/oem_a/afc_with_uss/)
+示例工程：[projects/afc/](../../../projects/afc/)
 
 ```text
 io_types.hpp ──┐
@@ -47,13 +47,13 @@ req.yaml ──────┘
 ```bash
 # 推荐：gf-config 打开 project.yaml → Save（自动 compose）
 # 无 GUI / CI：
-python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
+python -m gf_codegen.compose --project projects/afc/project.yaml
 # 需要 Proxy/Skeleton 时：
-gf-codegen generate --project projects/oem_a/afc_with_uss/project.yaml
+gf-codegen generate --project projects/afc/project.yaml
 # 或在 gf-config 点 Generate（Ctrl+G）
 ```
 
-[`project.yaml`](../../../projects/oem_a/afc_with_uss/project.yaml) 声明：
+[`project.yaml`](../../../projects/afc/project.yaml) 声明：
 
 - OEM：`oem/oem_import.dbc`（+ 可选 `oem/oem_import.yaml`）
 - 连线：`integration/wiring.yaml`
@@ -71,7 +71,7 @@ parse hpp structs  +  import oem(dbc)  +  apply wiring  +  merge req  →  gf.so
 
 ## 4. 模块工程师：只交 io_types.hpp
 
-示例目录：[projects/oem_a/afc_with_uss/interfaces/](../../../projects/oem_a/afc_with_uss/interfaces/)
+示例目录：[projects/afc/interfaces/](../../../projects/afc/interfaces/)
 
 ```cpp
 // perception_driving/io_types.hpp — 只描述数据形状
@@ -89,9 +89,9 @@ struct DrivingObjectList { ... };
 
 ### 5.1 OEM 层 — `oem/oem_import.dbc`
 
-主机厂只给 DBC。本仓示例使用提炼后的 [`oem_import.dbc`](../../../projects/oem_a/afc_with_uss/oem/oem_import.dbc)（集成工程师按车型维护；**全量 OEM 通信矩阵**如何收纳进仓另议，见 §7）。
+主机厂只给 DBC。本仓示例使用提炼后的 [`oem_import.dbc`](../../../projects/afc/oem/oem_import.dbc)（集成工程师按车型维护；**全量 OEM 通信矩阵**如何收纳进仓另议，见 §7）。
 
-可选 [`oem_import.yaml`](../../../projects/oem_a/afc_with_uss/oem/oem_import.yaml)：集成侧策略（白名单、USS 摘要、gateway provide 列表）。**非 OEM 交付物**；P1 可由 `import oem --dbc` 脚手架生成初稿。
+可选 [`oem_import.yaml`](../../../projects/afc/oem/oem_import.yaml)：集成侧策略（白名单、USS 摘要、gateway provide 列表）。**非 OEM 交付物**；P1 可由 `import oem --dbc` 脚手架生成初稿。
 
 ### 5.2 连线层 — `integration/wiring.yaml`
 
@@ -102,13 +102,13 @@ struct DrivingObjectList { ... };
 - `bindings`：semantic 服务 ↔ hpp struct 名
 - `dataflows`：进程间边
 
-示例：[integration/wiring.yaml](../../../projects/oem_a/afc_with_uss/integration/wiring.yaml)
+示例：[integration/wiring.yaml](../../../projects/afc/integration/wiring.yaml)
 
 ### 5.3 交付层 — `req.yaml`
 
 SKU、拓扑、runtime 裁剪、观测/apps、**DevOps 验收**（golden SOR 路径、必选服务、lineage 是否必须通过）。
 
-示例：[req.yaml](../../../projects/oem_a/afc_with_uss/req.yaml)
+示例：[req.yaml](../../../projects/afc/req.yaml)
 
 ### 5.4 项目入口 — `project.yaml`
 
@@ -154,11 +154,11 @@ P1：`gmt architect wiring --read-only` 只读画布标红缺口；P1+ 拖拽写
 ```bash
 # 集成工程师（主路径）：gf-config Save → 可选 Generate
 # 无 GUI：
-python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-gf-codegen generate --project projects/oem_a/afc_with_uss/project.yaml
+python -m gf_codegen.compose --project projects/afc/project.yaml
+gf-codegen generate --project projects/afc/project.yaml
 
 # 校验 golden / 本地调试
-gf-codegen lint projects/oem_b/adc_full/golden/gf.sor.json
+gf-codegen lint projects/adc/golden/gf.sor.json
 gf-codegen lint --lineage gf.sor.json --out reports/signal_lineage_report.yaml
 ```
 
@@ -174,10 +174,10 @@ gf-codegen import module ... -o sor/fragments/xxx.json
 
 ## 9. 与 golden 的关系
 
-[projects/oem_b/adc_full/golden/gf.sor.json](../../../projects/oem_b/adc_full/golden/gf.sor.json) 为 P0 主示范 golden（各项目应自建，勿共用）。  
+[projects/adc/golden/gf.sor.json](../../../projects/adc/golden/gf.sor.json) 为 P0 主示范 golden（各项目应自建，勿共用）。  
 `req.yaml` 的 `acceptance.sor_golden` 指向**本项目** golden；CI 对 compose 输出做 diff。  
 
-Golden = 已知正确的 SOR 快照（回归/验收），不是板端运行文件。何时更新、不是什么：见 [走查 §3](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md#3-golden对照用的正确答案sor)。  
+Golden = 已知正确的 SOR 快照（回归/验收），不是板端运行文件。何时更新、不是什么：见 [afc README · Golden](../../../projects/afc/README.md#golden)。  
 P1 目标：`compose --project` 输出与对应项目 golden 对齐。
 
 ---

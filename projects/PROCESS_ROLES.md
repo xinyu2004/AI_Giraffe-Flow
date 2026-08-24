@@ -54,12 +54,11 @@ EgoMotion ──► sensing.uss ──► UssZones ──► perception.parking 
 
 规划模块本仓暂无 `io_types.hpp` 示例，在 wiring 里用 `package:` 指向外仓即可。
 
-**走查（推荐先读）：** [oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md](oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md)
+**集成入口（推荐先读）：** [afc/README.md](afc/README.md)
 
-## 三个交付项目（集成工程师工作区）
+## 交付项目（集成工程师工作区）
 
 | 路径 | 产品名 | 要点 |
 |------|--------|------|
-| [`oem_a/afc_no_uss`](oem_a/afc_no_uss/) | AFC 前视（无 USS） | 仅前视 + 行车规划；无 `sensing.uss` |
-| [`oem_a/afc_with_uss`](oem_a/afc_with_uss/) | AFC 前视（有 USS） | 前视 + 独立 USS；泊车感知可选/简化 |
-| [`oem_b/adc_full`](oem_b/adc_full/) | ADC 行泊一体 | 前视 + 环视 + USS + 泊车/行车规划 + MCU |
+| [`afc`](afc/) | AFC 前视（无 USS） | 仅前视 + 行车规划；无 `sensing.uss` |
+| [`adc`](adc/) | ADC 行泊一体 | 前视 + 环视 + USS + 泊车/行车规划 + MCU |

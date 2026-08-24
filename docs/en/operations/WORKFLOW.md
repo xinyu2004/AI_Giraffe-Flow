@@ -69,17 +69,17 @@ System integrator maintains `projects/<oem>/<vehicle>/` and runs:
 ```bash
 # GUI: open project.yaml → Save (auto-compose) → optional Generate (Ctrl+G)
 # Headless / CI:
-python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-gf-codegen generate --project projects/oem_a/afc_with_uss/project.yaml
+python -m gf_codegen.compose --project projects/afc/project.yaml
+gf-codegen generate --project projects/afc/project.yaml
 ```
 
-Contract: [sor-authoring.md](../architecture/sor-authoring.md) · [projects/oem_a/afc_with_uss/](../../../projects/oem_a/afc_with_uss/)
+Contract: [sor-authoring.md](../architecture/sor-authoring.md) · [projects/afc/](../../../projects/afc/)
 
 ### 3.1 DevOps acceptance and Golden (`req.yaml`)
 
 `acceptance` block: `sor_golden` (path to this project's known-good `gf.sor.json` snapshot), lineage gate, required services. CI runs compose + lint + golden diff before merge — codegen stays off production images.
 
-**Golden** = regression/CI reference SOR, not a board runtime file and not the OEM architecture report. Update it only on intentional contract/wiring changes. Details (zh): [INTEGRATOR_WALKTHROUGH §3](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md#3-golden对照用的正确答案sor) · example: [adc_full/golden/](../../../projects/oem_b/adc_full/golden/)
+**Golden** = regression/CI reference SOR, not a board runtime file and not the OEM architecture report. Update it only on intentional contract/wiring changes. Details (zh): [afc README · Golden](../../../projects/afc/README.md#golden) · example: [adc/golden/](../../../projects/adc/golden/)
 
 ### 3.2 Breaking service changes
 

@@ -96,7 +96,7 @@ C_PER_KEY_OH = 32
 C_CHUNK_HDR = 64
 
 # iceoryx_mgmt approx: fit to RouDi "Reserving N bytes … [iceoryx_mgmt]" on
-# afc_with_uss default mempools / iceoryx classic 2.x (SIL sweep 2026-08).
+# afc default mempools / iceoryx classic 2.x (SIL sweep 2026-08).
 # Dominated by fixed PortPool/introspection (~19.4 MiB) + per-publisher /
 # per-subscriber tables; product terms match ChunkDistributor / queue layout.
 IOX_MGMT_REF_BYTES = 21_511_288  # measured at DEFAULT_MGMT

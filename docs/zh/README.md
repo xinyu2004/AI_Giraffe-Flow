@@ -7,7 +7,7 @@
 | 主线 | 入口 |
 |------|------|
 | **gf-config** | [../../tools/gf-config/README_zh.md](../../tools/gf-config/README_zh.md) · [architecture/sor-authoring.md](architecture/sor-authoring.md) · [operations/WORKFLOW.md](operations/WORKFLOW.md) |
-| **Giraffe 模块** | [../../middleware/README.md](../../middleware/README.md) · [architecture/DESIGN.md](architecture/DESIGN.md) · [../../projects/oem_a/afc_with_uss/](../../projects/oem_a/afc_with_uss/) |
+| **Giraffe 模块** | [../../middleware/README.md](../../middleware/README.md) · [architecture/DESIGN.md](architecture/DESIGN.md) · [../../projects/afc/](../../projects/afc/) |
 | **GMT** | [../../tools/gmt/README_zh.md](../../tools/gmt/README_zh.md) · [operations/OBSERVABILITY_DEMO.md](operations/OBSERVABILITY_DEMO.md) |
 
 ## 专题索引

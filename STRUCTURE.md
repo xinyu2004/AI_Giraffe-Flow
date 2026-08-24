@@ -26,9 +26,9 @@ Flow today:
 
 ```text
 bash scripts/bootstrap_deps.sh   # → dep-manifest/bootstrap.sh
-→ bash common/bootstrap_sku_scripts.sh <oem>/<sku>   # copy templates if missing
-→ projects/<oem>/<sku>/scripts/compile_sil.sh
-→ projects/<oem>/<sku>/scripts/run_sil.sh       # EM + optional GMT_depend
+→ bash common/bootstrap_sku_scripts.sh <sku>   # copy templates if missing
+→ projects/<sku>/scripts/compile_sil.sh
+→ projects/<sku>/scripts/run_sil.sh       # EM + optional GMT_depend
 → board: systemd/init → runtime/bin/gf_em_daemon   # product
 → host debug: runtime/bin/giraffe_launch           # optional
 ```
@@ -61,7 +61,7 @@ AI_Giraffe-Flow/
 │   ├── common/                   # shared demo headers (e.g. uss_zones_topic)
 │   └── README.md                 # what may live here (see §Apps policy)
 │
-├── projects/<oem>/<sku>/         # one vehicle / trim
+├── projects/<sku>/         # one vehicle / trim
 │   ├── project.yaml
 │   ├── req.yaml
 │   ├── integration/wiring.yaml
@@ -119,7 +119,7 @@ AI_Giraffe-Flow/
 | New root `tests/` dumping everything | `middleware/tests/`, `tools/*/tests/`, `projects/.../tests/` |
 | Root `third_party/` | `middleware/third_party/` |
 | Mixing pins with checkouts | `dep-manifest/` vs `middleware/third_party/` |
-| SKU stubs under shared `apps/` | `projects/<oem>/<sku>/apps/` |
+| SKU stubs under shared `apps/` | `projects/<sku>/apps/` |
 | Claiming ASIL certificate in-repo | `fusa/` = evidence toward Safety Case; certificate out of repo |
 | Committing large `fusa/runs/` / `fusa/packs/` | local / release artifact; gitignore by default |
 
@@ -144,7 +144,7 @@ AI_Giraffe-Flow/
 | **Unit** | `middleware/<mod>/testcases/` next to code *or* `middleware/tests/unit/<mod>/` | Result, PHM timer math；FuSa `CASE` 行 |
 | **Middleware component** | `middleware/tests/component/` | com+iceoryx in-proc |
 | **Tool unit** | `tools/gf-codegen/tests/`、`tools/gf-config/…`（主机；codegen 见 FuSa L2） | compose, observability |
-| **SKU integration / smoke** | `projects/<oem>/<sku>/scripts/verify/` | main-chain SIL（FuSa L3） |
+| **SKU integration / smoke** | `projects/<sku>/scripts/verify/` | main-chain SIL（FuSa L3） |
 | **Bench / golden** | `projects/.../golden/` + codegen tests | SOR golden |
 | **Manual / FuSa runs** | `fusa/runs/` (local) | CASE logs, soak |
 
@@ -162,7 +162,7 @@ Naming: prefer `test_*.py` / `*_test.cpp` already used; don’t invent a second 
 | Safety Case drafts | [fusa/safety-case/](fusa/safety-case/) |
 | Run matrix | [fusa/scripts/run_cases.sh](fusa/scripts/run_cases.sh) |
 | Latency snapshot | [fusa/scripts/measure_latency.sh](fusa/scripts/measure_latency.sh) |
-| SKU artifacts | `projects/<oem>/<sku>/scripts/generate_fusa_artifacts.sh` → `fusa/packs/` |
+| SKU artifacts | `projects/<sku>/scripts/generate_fusa_artifacts.sh` → `fusa/packs/` |
 | Generated runs / packs | `fusa/runs/` · `fusa/packs/` (**not** committed by default) |
 | ISO 26262 certificate | **out of repo**（仓内积累证据，不存放证书本身） |
 
@@ -194,7 +194,7 @@ Naming: prefer `test_*.py` / `*_test.cpp` already used; don’t invent a second 
 
 1. STRUCTURE target (doc) — done.  
 2. Layout: `dep-manifest` + tool renames + script wrapper — **done**.  
-3. Apps split: stubs → `projects/.../apps/` (per SKU) — **done** for `oem_a/afc_with_uss` (gateway / fcm / uss / planning).  
+3. Apps split: stubs → `projects/.../apps/` (per SKU) — **done** for `afc` (gateway / fcm / uss / planning).  
 4. gf-config **two-tab UI** + port UX + **wiring_all / codegen tap** — **done**.
 
 ---
@@ -203,10 +203,10 @@ Naming: prefer `test_*.py` / `*_test.cpp` already used; don’t invent a second 
 
 ```text
 bash scripts/bootstrap_deps.sh          # → dep-manifest/bootstrap.sh
-bash projects/<oem>/<sku>/scripts/compile_sil.sh   # GF_CTEST=1 for smoke tests
-bash projects/<oem>/<sku>/scripts/run_sil.sh       # GF_GMT_DEPEND=0 → EM only
+bash projects/<sku>/scripts/compile_sil.sh   # GF_CTEST=1 for smoke tests
+bash projects/<sku>/scripts/run_sil.sh       # GF_GMT_DEPEND=0 → EM only
 # after stage: ./build-sil/runtime/bin/giraffe_launch
-bash projects/<oem>/<sku>/scripts/verify/smoke_sil.sh
+bash projects/<sku>/scripts/verify/smoke_sil.sh
 
 project → gf-config (tab1 graph → tab2 platform) → compose/generate
         → SIL / GMT_depend / Foxglove

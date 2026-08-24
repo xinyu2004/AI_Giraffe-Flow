@@ -19,7 +19,7 @@
 |---|--------|------|:----:|:----:|:----:|------|
 | R0.1 | P2 范围 | 真正可运行 SIL + 最小可观测 + platform 五 yaml；**无 DEM** | □ | □ | □ | |
 | R0.2 | 工具边界 | **gf-config** 写 req/wiring/platform；**codegen** compose/lint/generate；**GMT** 只读 | □ | □ | □ | |
-| R0.3 | 主演示链 | `afc_with_uss`：gateway → fcm/uss → planning；**无 FAPA** | □ | □ | □ | |
+| R0.3 | 主演示链 | `afc`：gateway → fcm/uss → planning；**无 FAPA** | □ | □ | □ | |
 | R0.4 | 明确不做 | 真 MCU/DoIP 台架/量产 OTA；GMT 可写配置；三栈量产级；ISO 26262 | □ | □ | □ | |
 
 ---
@@ -47,7 +47,7 @@
 | P.4 | bench golden | `pytest tools/gf-codegen/tests/test_afc_bench_golden.py -q` | □ | □ | □ | |
 
 ```bash
-python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
+python -m gf_codegen.compose --project projects/afc/project.yaml
 pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test_afc_bench_golden.py -q
 ```
 
@@ -57,7 +57,7 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R.1 | 多进程 smoke | `bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh` | □ | □ | □ | |
+| R.1 | 多进程 smoke | `bash projects/afc/scripts/verify/smoke_sil_verify.sh` | □ | □ | □ | |
 | R.2 | 端到端计数 | 日志可见 Trajectory / 各进程存活 | □ | □ | □ | |
 | R.3 | 双进程回归 | `bash …/smoke_sil.sh` 仍绿 | □ | □ | □ | |
 
@@ -78,9 +78,9 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| O.1 | Record→Tag→MCAP | `bash …/smoke_sil_observability.sh` → `projects/oem_a/afc_with_uss/build-sil/observability/session.mcap` ≥1 topic | □ | □ | □ | |
+| O.1 | Record→Tag→MCAP | `bash …/smoke_sil_observability.sh` → `projects/afc/build-sil/observability/session.mcap` ≥1 topic | □ | □ | □ | |
 | O.2 | 演示步骤 | 按 [OBSERVABILITY_DEMO.md](OBSERVABILITY_DEMO.md) 约 10 min | □ | □ | □ | |
-| F.1 | Foxglove | `GMT bridge foxglove --mcap projects/oem_a/afc_with_uss/build-sil/observability/session.mcap`；Studio 打开 | □ | □ | □ | |
+| F.1 | Foxglove | `GMT bridge foxglove --mcap projects/afc/build-sil/observability/session.mcap`；Studio 打开 | □ | □ | □ | |
 | F.2 | 字段说明 | SIL stub 多数字段为 0 **属预期** | □ | □ | □ | |
 
 ---
@@ -102,7 +102,7 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 |---|--------|--------|:----:|:----:|:----:|------|
 | G.1 | 版本锁 | iceoryx v2.0.8；cyclonedds 0.10.5；与 DEPENDENCIES 一致 | □ | □ | □ | |
 | G.2 | bench golden | `test_afc_bench_golden.py` 绿；（可选）本地 `golden/gf.sor.json` 深比对 | □ | □ | □ | |
-| G.3 | 证据包 | `bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh`；`fusa/packs/oem_a_afc_with_uss/` 有样例 | □ | □ | □ | |
+| G.3 | 证据包 | `bash projects/afc/scripts/generate_fusa_artifacts.sh`；`fusa/packs/afc/` 有样例 | □ | □ | □ | |
 | G.4 | Review 本清单 | 本文件填完整体判定 | □ | □ | □ | |
 | G.5 | （可选）OTA Spike | [OTA_SPIKE.md](OTA_SPIKE.md) | □ | □ | □ | |
 
@@ -131,11 +131,11 @@ pip install -e "tools/gf-codegen[dev]" -e "tools/gmt[dev]"
 pytest tools/gf-codegen/tests/test_merge_platform.py \
        tools/gf-codegen/tests/test_afc_bench_golden.py -q
 
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh
-GF_SKIP_COMPILE=1 bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_observability.sh
+bash projects/afc/scripts/verify/smoke_sil_verify.sh
+GF_SKIP_COMPILE=1 bash projects/afc/scripts/verify/smoke_sil_observability.sh
 bash scripts/smoke_bd_cyclone.sh
 
-GF_FUSA_PACK_UPDATE_GOLDEN=1 bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
+GF_FUSA_PACK_UPDATE_GOLDEN=1 bash projects/afc/scripts/generate_fusa_artifacts.sh
 ```
 
 ---

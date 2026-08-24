@@ -2,9 +2,9 @@
 
 > 路线图：[ROADMAP.md](ROADMAP.md) · P1：[P1_PLAN.md](P1_PLAN.md) · Review：[P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md)  
 > **中间件 / gf-config 配什么（主规格）：** [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)  
-> 集成基线：[afc_with_uss/INTEGRATOR_WALKTHROUGH.md](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md)
+> 集成基线：[afc/README.md](../../../projects/afc/README.md)
 
-**状态（2026-07-20）：** **G 收口交付已齐** — Review：[P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md)；证据包：`fusa/packs/oem_a_afc_with_uss/`；bench：`test_afc_bench_golden.py`；OTA Spike：[OTA_SPIKE.md](OTA_SPIKE.md)。  
+**状态（2026-07-20）：** **G 收口交付已齐** — Review：[P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md)；证据包：`fusa/packs/afc/`；bench：`test_afc_bench_golden.py`；OTA Spike：[OTA_SPIKE.md](OTA_SPIKE.md)。  
 **P2 主题：** **先定型 gf-config（A/B/C）** → 再多进程真跑 + 可观测 + CycloneDDS（已落地，按清单验收）。  
 **排期原则：Cfg 轨优先** — 入口不定，后面 SIL/codegen 都难对齐。
 
@@ -16,7 +16,7 @@
 |------|------|
 | **Config first** | **先做齐 gf-config A·SKU / B·信号 / C·平台** + compose 读 platform；再堆 SIL |
 | **Runnable second** | 配置入口稳定后，验收仍以「进程在跑、样本在流」为准 |
-| **一条主演示链** | `oem_a/afc_with_uss` 多进程 iceoryx SIL（无 FAPA） |
+| **一条主演示链** | `afc` 多进程 iceoryx SIL（无 FAPA） |
 | **粗端口不变** | wiring 继续 fat port |
 | **生成物进 App** | 主链 `GF_USE_GENERATED=ON` |
 | **Stub 分级** | OTA / 真 DoIP / 真 MCU 仍可 stub |
@@ -32,10 +32,10 @@
 
 | # | 决策 | 说明 |
 |---|------|------|
-| D1 | **主项目** | 扩展 `projects/oem_a/afc_with_uss`（不新开项目） |
+| D1 | **主项目** | 扩展 `projects/afc`（不新开项目） |
 | D2 | **B 轨 binding** | **CycloneDDS** 真源码 pub/sub；vsomeip **保持 P1 stub** |
 | D3 | **EgoMotion 源** | 车端 CAN 经 gateway（DBC 可合并多 ECU 报文）；**uss.dbc 不进车身 info** |
-| D3b | **无泊车** | `afc_with_uss` **无 `perception.fapa`**（FAPA=泊车）；带泊车另开 SKU |
+| D3b | **无泊车** | `afc` **无 `perception.fapa`**（FAPA=泊车）；带泊车另开 SKU |
 | D4 | **MCU** | 画布特殊节点；yaml 保留 VehicleBus/Trajectory；真 CP → P3 |
 | D5 | **平台 ③** | exec(+sm∈function_groups) / phm / diag / **log** / **ucm 空壳**；**无 DEM**；见 MIDDLEWARE_CONFIG_PLAN |
 | D6 | **gf-config** | **P2 做齐 A·SKU / B·信号 / C·平台**（C 不进 P3）；YAML 已空壳；GMT **不写**配置 |
@@ -111,7 +111,7 @@ flowchart TD
 
 ### 验收
 
-- [ ] compose afc_with_uss → lineage ok
+- [ ] compose afc → lineage ok
 
 ---
 
@@ -130,7 +130,7 @@ flowchart TD
 
 ### 验收
 
-- [ ] 打开 afc_with_uss：三页齐全，C 页能改 platform 并保存
+- [ ] 打开 afc：三页齐全，C 页能改 platform 并保存
 - [ ] 改 Alive 超时 → 落盘 `phm.yaml`；改 FG → 落盘 `exec.yaml`
 - [ ] external.* 默认不出现在 exec/phm 进程下拉
 - [ ] B 页既有能力无回退
@@ -174,7 +174,7 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 | `perception.fcm` | 前视行车感知（本 SKU 有） |
 | `planning.driving` | 新或拆 demo |
 
-> **`perception.fapa`（泊车）不在本 SKU。** 带泊车的行泊一体见 `oem_b/adc_full` 等。  
+> **`perception.fapa`（泊车）不在本 SKU。** 带泊车的行泊一体见 `adc` 等。  
 > `external.vehicle_mcu` 不做 AP iceoryx 进程。双进程回归保留。
 
 ### 7.2 交付物
@@ -183,8 +183,8 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 |---|--------|
 | R-1 | 主链可执行文件 + `GF_USE_GENERATED=ON` |
 | R-2 | CMake / `GF_APPS` / `gf_build.cmake` |
-| R-3 | `projects/oem_a/afc_with_uss/scripts/verify/run_sil_verify.sh` |
-| R-4 | `projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh`（下游 N 帧断言） |
+| R-3 | `projects/afc/scripts/verify/run_sil_verify.sh` |
+| R-4 | `projects/afc/scripts/verify/smoke_sil_verify.sh`（下游 N 帧断言） |
 | R-5 | 双进程回归说明 |
 
 ### 验收
@@ -243,8 +243,8 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 |------|------|
 | Review 清单 | [P2_REVIEW_CHECKLIST.md](P2_REVIEW_CHECKLIST.md) |
 | 版本锁 | [dep-manifest/versions.lock.md](../../../dep-manifest/versions.lock.md)（cyclonedds **0.10.5**） |
-| bench golden | `tools/gf-codegen/tests/test_afc_bench_golden.py`；（可选快照）`projects/oem_a/afc_with_uss/golden/gf.sor.json` |
-| 证据包 | `fusa/packs/oem_a_afc_with_uss/` · `projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh` |
+| bench golden | `tools/gf-codegen/tests/test_afc_bench_golden.py`；（可选快照）`projects/afc/golden/gf.sor.json` |
+| 证据包 | `fusa/packs/afc/` · `projects/afc/scripts/generate_fusa_artifacts.sh` |
 | U · OTA Spike | [OTA_SPIKE.md](OTA_SPIKE.md)（可选） |
 
 ---
@@ -271,9 +271,9 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 | **W5** | **F** + **G** 收口（可压缩进 W4 末） | **可演示收口** |
 
 ```bash
-gf-config projects/oem_a/afc_with_uss/project.yaml   # 先把 A/B/C 配稳
-python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil_verify.sh
+gf-config projects/afc/project.yaml   # 先把 A/B/C 配稳
+python -m gf_codegen.compose --project projects/afc/project.yaml
+bash projects/afc/scripts/verify/smoke_sil_verify.sh
 ```
 
 ---

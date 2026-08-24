@@ -6,7 +6,7 @@ No local presets, no ``GF_CAMERA_MOUNT_*`` authoring here.
 Resolve path (first hit):
   1. ``GF_CAMERA_CONTRACT`` — absolute/relative file path
   2. ``$GF_PROJECT_DIR/generated/camera_contract.json``
-  3. Repo-relative ``projects/oem_a/afc_no_uss/generated/camera_contract.json``
+  3. Repo-relative ``projects/afc/generated/camera_contract.json``
      (when this tree sits next to ``projects/``)
 
 Missing / incomplete contract → hard error (do not invent numbers).
@@ -98,8 +98,7 @@ def camera_contract_path() -> Path | None:
     cand = (
         _repo_root()
         / "projects"
-        / "oem_a"
-        / "afc_no_uss"
+        / "afc"
         / "generated"
         / "camera_contract.json"
     )
@@ -118,9 +117,9 @@ def _missing_contract_hint() -> str:
     else:
         lines.append("  Compose SKU first, then set one of:")
         lines.append("    export GF_CAMERA_CONTRACT=/path/to/generated/camera_contract.json")
-        lines.append("    export GF_PROJECT_DIR=/path/to/projects/oem_a/afc_no_uss")
+        lines.append("    export GF_PROJECT_DIR=/path/to/projects/afc")
         lines.append(
-            "  (unset env also looks for projects/oem_a/afc_no_uss/generated/camera_contract.json)"
+            "  (unset env also looks for projects/afc/generated/camera_contract.json)"
         )
     return "\n".join(lines)
 

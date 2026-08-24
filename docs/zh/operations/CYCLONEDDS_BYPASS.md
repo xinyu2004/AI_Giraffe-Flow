@@ -7,7 +7,7 @@
 
 | 通道 | P2 角色 | 说明 |
 |------|---------|------|
-| **iceoryx** | **主链 SIL** | `afc_with_uss` 四进程 / 双进程 demo；`smoke_sil*.sh` |
+| **iceoryx** | **主链 SIL** | `afc` 四进程 / 双进程 demo；`smoke_sil*.sh` |
 | **CycloneDDS** | **旁路真收发** | binding 真 pub/sub ≥1 event；**不**替换主链 |
 | **vsomeip** | **保持 stub** | `middleware/bindings/someip`；真源码/Boost 后置 |
 

@@ -260,7 +260,7 @@ _EN: dict[str, str] = {
     '导出 VCD（GTKWave）': 'Export VCD (GTKWave)',
     '导出 clip…': 'Export clip…',
     '导出失败': 'Export failed',
-    '将 Live 流落盘；已有 session_live.jsonl 时可新建或覆盖': (
+    '将 Live 流落盘；已有 gmt_record.jsonl 时可新建或覆盖': (
         'Write Live stream to disk; new or overwrite if exists'
     ),
     '尚未加载项目（SOR / 动画 DAG / 变量轨对齐）。\n是否现在打开 project.yaml？\n\n选「否」仍可旁观连接（无 DAG）。': (

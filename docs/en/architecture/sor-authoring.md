@@ -23,9 +23,9 @@
 ## One command
 
 ```bash
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+gf-codegen compose --project projects/afc/project.yaml
 ```
 
 Tool internally: parse hpp + import oem + apply wiring + merge req → `gf.sor.json` + lineage report.
 
-Examples: [projects/oem_a/afc_with_uss/](../../../projects/oem_a/afc_with_uss/) · [interfaces/](../../../projects/oem_a/afc_with_uss/interfaces/)
+Examples: [projects/afc/](../../../projects/afc/) · [interfaces/](../../../projects/afc/interfaces/)

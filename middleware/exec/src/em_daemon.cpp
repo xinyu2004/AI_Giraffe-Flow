@@ -512,16 +512,13 @@ bool EmDaemon::Spawn(Runtime& rt, bool is_relaunch) {
   }
   req.env_set.emplace_back("GF_EM_MANAGED", "1");
   req.env_set.emplace_back("GF_PLATFORM_DIR", cfg_.platform_dir);
-  // Children share the same structured log file as Host/EM (GMT Logging tab).
+  // Children share structured logging via Logger (console + DLT). Optional file
+  // only when caller set GF_LOG_FILE / log_dir for debug smoke.
   if (const char* lf = std::getenv("GF_LOG_FILE"); lf != nullptr && lf[0] != '\0') {
     req.env_set.emplace_back("GF_LOG_FILE", lf);
-  } else if (!cfg_.log_dir.empty()) {
-    req.env_set.emplace_back("GF_LOG_FILE", JoinPath(cfg_.log_dir, "giraffe_modules.log"));
   }
   if (const char* ld = std::getenv("GF_LOG_DIR"); ld != nullptr && ld[0] != '\0') {
     req.env_set.emplace_back("GF_LOG_DIR", ld);
-  } else if (!cfg_.log_dir.empty()) {
-    req.env_set.emplace_back("GF_LOG_DIR", cfg_.log_dir);
   }
   if (is_relaunch) {
     req.env_set.emplace_back("GF_PHM_FAULT_MS", "0");
@@ -541,7 +538,7 @@ bool EmDaemon::Spawn(Runtime& rt, bool is_relaunch) {
   }
   rt.ever_started = true;
   rt.terminal_exit = false;
-  // Keep "em_daemon: spawned" for SIL verify greps.
+  // Keep "em_daemon: spawned" for operators / DLT / console greps.
   log.Info("em", "t_ms=" + std::to_string(MonoMs()) + " em_daemon: spawned name=" +
                      rt.spec.name + " pid=" + std::to_string(pid) +
                      " relaunch=" + (is_relaunch ? "yes" : "no") +

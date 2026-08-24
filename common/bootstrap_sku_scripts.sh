@@ -3,8 +3,8 @@
 # After copy, the SKU owns the file; further edits must NOT be pushed back here.
 #
 # Usage (from repo root):
-#   bash common/bootstrap_sku_scripts.sh oem_a/afc_no_uss
-#   bash common/bootstrap_sku_scripts.sh oem_a/afc_with_uss
+#   bash common/bootstrap_sku_scripts.sh afc
+#   bash common/bootstrap_sku_scripts.sh afc
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

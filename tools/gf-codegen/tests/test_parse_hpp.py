@@ -6,7 +6,7 @@ from gf_codegen.compose.parse_hpp import parse_hpp_file, structs_to_sor_types
 
 
 def test_parse_uss(repo_root: Path) -> None:
-    hpp = repo_root / "projects/oem_a/afc_with_uss/interfaces/uss_sensing/io_types.hpp"
+    hpp = repo_root / "projects/afc/interfaces/uss_sensing/io_types.hpp"
     structs = parse_hpp_file(hpp)
     names = {s["name"] for s in structs}
     assert "UssZones" in names
@@ -19,7 +19,7 @@ def test_parse_uss(repo_root: Path) -> None:
 
 
 def test_parse_front(repo_root: Path) -> None:
-    hpp = repo_root / "projects/oem_a/afc_with_uss/interfaces/perception_front/io_types.hpp"
+    hpp = repo_root / "projects/afc/interfaces/perception_front/io_types.hpp"
     structs = parse_hpp_file(hpp)
     names = {s["name"] for s in structs}
     assert "FrontObjectList" in names
@@ -28,7 +28,7 @@ def test_parse_front(repo_root: Path) -> None:
 def test_parse_fcm_fat_ports(repo_root: Path) -> None:
     from gf_codegen.compose.parse_hpp import is_fat_port_name
 
-    hpp = repo_root / "projects/oem_a/afc_with_uss/interfaces/fcm_perception/io_ports.hpp"
+    hpp = repo_root / "projects/afc/interfaces/fcm_perception/io_ports.hpp"
     structs = parse_hpp_file(hpp)
     names = {s["name"] for s in structs}
     assert "Perception_In_St" in names
@@ -51,7 +51,7 @@ def test_parse_typedef_struct(tmp_path: Path) -> None:
 def test_parse_gold_out_macros(repo_root: Path) -> None:
     hpp = (
         repo_root
-        / "projects/oem_a/afc_no_uss/interfaces/fcm_perception/Perception_Out_messages.h"
+        / "projects/afc/interfaces/fcm_perception/Perception_Out_messages.h"
     )
     if not hpp.is_file():
         return

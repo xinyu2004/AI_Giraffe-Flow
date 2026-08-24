@@ -25,7 +25,7 @@ gf_sil_preflight_ports() {
   python - <<'PY'
 import os, re, signal, subprocess, time
 
-tag = "[afc_no_uss]"
+tag = "[afc]"
 
 def cmdline(pid: int) -> str:
     try:
@@ -88,7 +88,7 @@ if os.environ.get("GF_SIL_DOIP_ON") == "1":
 
 kill_stale = os.environ.get("GF_SIL_KILL_STALE", "1") == "1"
 listeners = [(p, n, pid) for p, n, pid in ss_listeners() if p in wanted]
-other_run_sil = pids_matching("afc_no_uss/scripts/run_sil.sh")
+other_run_sil = pids_matching("afc/scripts/run_sil.sh")
 
 if not listeners and not other_run_sil:
     if os.environ.get("GF_SIL_INJECT_ON") == "1" and kill_stale:
@@ -134,7 +134,7 @@ for p, n, pid in listeners:
 if not kill_stale:
     print(f"{tag} ERROR: Address already in use / previous SIL still up.", flush=True)
     print(f"{tag}   → Ctrl+C the other terminal's run_sil, or re-run with:", flush=True)
-    print(f"{tag}   GF_SIL_KILL_STALE=1 bash projects/oem_a/afc_no_uss/scripts/run_sil.sh …", flush=True)
+    print(f"{tag}   GF_SIL_KILL_STALE=1 bash projects/afc/scripts/run_sil.sh …", flush=True)
     raise SystemExit(1)
 
 targets = {pid for _, _, pid, _ in ours} | {pid for _, _, pid, _ in others}

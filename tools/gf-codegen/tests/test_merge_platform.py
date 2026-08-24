@@ -13,7 +13,7 @@ from gf_codegen.compose.pipeline import compose_project
 
 
 def test_compose_afc_writes_platform_manifest(repo_root: Path, tmp_path: Path) -> None:
-    project = repo_root / "projects/oem_a/afc_with_uss/project.yaml"
+    project = repo_root / "projects/afc/project.yaml"
     out = tmp_path / "gf.sor.json"
     rc = compose_project(project, repo_root=repo_root, out=out)
     assert rc == 0, "compose should succeed with valid platform"
@@ -30,7 +30,7 @@ def test_compose_afc_writes_platform_manifest(repo_root: Path, tmp_path: Path) -
     assert "planning.driving" in em_names
 
     report = yaml.safe_load(
-        (repo_root / "projects/oem_a/afc_with_uss/reports/signal_lineage_report.yaml").read_text(
+        (repo_root / "projects/afc/reports/signal_lineage_report.yaml").read_text(
             encoding="utf-8"
         )
     )
@@ -43,7 +43,7 @@ def test_compose_afc_writes_platform_manifest(repo_root: Path, tmp_path: Path) -
 
 def test_bad_exec_process_fails_compose(repo_root: Path, tmp_path: Path) -> None:
     """Copy SKU inputs, poison exec.yaml process → compose rc != 0."""
-    src = repo_root / "projects/oem_a/afc_with_uss"
+    src = repo_root / "projects/afc"
     dst = tmp_path / "sku"
     # minimal copy of needed files
     import shutil
@@ -197,9 +197,9 @@ def test_validate_rejects_external_process() -> None:
     assert any(c.get("id") == "platform_exec_processes" and c.get("status") == "fail" for c in checks)
 
 
-def test_adc_full_skips_platform(repo_root: Path, tmp_path: Path) -> None:
-    """adc_full has no project.platform → skip, still compose."""
-    project = repo_root / "projects/oem_b/adc_full/project.yaml"
+def test_adc_skips_platform(repo_root: Path, tmp_path: Path) -> None:
+    """adc has no project.platform → skip, still compose."""
+    project = repo_root / "projects/adc/project.yaml"
     paths = load_project(project, repo_root=repo_root)
     assert paths.platform == {}
     out = tmp_path / "adc.sor.json"

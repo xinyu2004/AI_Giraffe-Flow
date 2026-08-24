@@ -39,7 +39,7 @@ pip install -e tools/gf-config
 ## Launch
 
 ```bash
-gf-config projects/oem_a/afc_with_uss/project.yaml
+gf-config projects/afc/project.yaml
 ```
 
 ## Tabs (P3 · two pages)
@@ -89,7 +89,7 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 
 ## Acceptance
 
-- [x] Open `afc_with_uss` shows ported graph  
+- [x] Open `afc` shows ported graph  
 - [x] Add/remove nodes / drag edges / Save writes `wiring.yaml`  
 - [x] Tab 1 thin SKU + tab 2 runtime_modules / platform round-trip  
 - [x] Tab 2 **EM launch map** edits `platform/em_launch.yaml` (unlocked by `exec`)  
@@ -98,7 +98,7 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 - [x] Undo/Redo navigates to the changed page (incl. platform subpages)  
 - [x] CI does not require Qt  
 
-## Tab 2 ↔ board modules (afc_with_uss)
+## Tab 2 ↔ board modules (afc)
 
 | `runtime_modules` | Subpage / YAML | On board |
 | `core` / `com` / `osal` | (greyed, required) | CMake always-on, not trimable |

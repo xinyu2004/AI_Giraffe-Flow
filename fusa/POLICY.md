@@ -20,9 +20,9 @@ bash fusa/scripts/run_cases.sh
 # L3 FuSa SIL 全套：GF_FUSA_SIL=1 …
 
 # SKU 证据包（独立，不调用本脚本）：
-# bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
+# bash projects/afc/scripts/generate_fusa_artifacts.sh
 # 发版门禁末步（硬校验）：
-# GF_FUSA_PACK_RELEASE=1 bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
+# GF_FUSA_PACK_RELEASE=1 bash projects/afc/scripts/generate_fusa_artifacts.sh
 # 或一键：bash devops/ci/scripts/smoke_release.sh
 ```
 

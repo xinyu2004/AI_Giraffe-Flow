@@ -6,9 +6,9 @@ from gf_codegen.compose.parse_fidl import fidl_structs_to_sor_types, parse_fidl_
 
 
 def test_parse_sample_vehicle_status(repo_root: Path) -> None:
-    fidl = repo_root / "projects/oem_a/afc_with_uss/interfaces/demo_fidl/VehicleStatus.fidl"
+    fidl = repo_root / "projects/afc/interfaces/demo_fidl/VehicleStatus.fidl"
     parsed = parse_fidl_file(fidl)
-    assert parsed["package"] == "oem_a.demo"
+    assert parsed["package"] == "afc.demo"
     assert {i["name"] for i in parsed["interfaces"]} == {"VehicleStatus"}
     assert "VehiclePose" in {s["name"] for s in parsed["structs"]}
     assert "SpeedChanged" in parsed["broadcasts"]

@@ -41,6 +41,9 @@ venv/
 # Generated (when codegen lands)
 **/generated/
 !**/generated/.gitkeep
+# Octave→C++ under planning app (gf-octavecoder; not gf-codegen)
+**/apps/planning/**/oct_gen/
+!**/apps/planning/**/oct_gen/.gitkeep
 
 # Python tooling
 **/__pycache__/

@@ -16,7 +16,7 @@
 | `projects/**/gf.sor.json` | compose 工作副本 |
 | `projects/**/reports/` | lineage 等本地报告（整目录 ignore） |
 | `**/__pycache__/`、`*.egg-info/`、`.pytest_cache/` | Python 垃圾 |
-| `observability/`、`*.mcap`、`session*.jsonl`、`**/runtime/logs/` | SIL 观测 / 日志落盘 |
+| `observability/`、`*.mcap`、`gmt_record*.jsonl`（GMT Record） | 可选观测产物；**不要**上传 `build-sil/logs` / `runtime/logs`（SIL 日志走 DLT） |
 
 `.gitignore` 已覆盖上表；若用压缩包上传，请确认未手动打进上述目录。
 
@@ -26,7 +26,7 @@
 |------|------|
 | `middleware/` | 静态：core / com / bindings / osal / hal …（不含 third_party 检出与 `.deps-prefix`） |
 | `tools/gf-codegen/`、`tools/bridge/` | gf-codegen；可选 ROS2 桥（主机侧） |
-| `projects/` | 集成输入 + 项目脚本；契约在 `req.yaml`；`adc_full` / `afc_with_uss` 均可 compose |
+| `projects/` | 集成输入 + 项目脚本；契约在 `req.yaml`；`adc` / `afc` 均可 compose |
 | `apps/` | 参考 App 源码 |
 | `schemas/`、`cmake/`、`scripts/`、`dep-manifest/`、`docs/`、`devops/`、`common/deploy/` | 契约、构建、CI 门禁、板端 unit 样例、文档 |
 | 根 `README*`、`STRUCTURE.md`、`.gitignore` | |
@@ -38,7 +38,7 @@ cd AI_Giraffe-Flow
 python3 -m venv .venv && source .venv/bin/activate   # 需要 Python ≥ 3.10
 pip install -e "tools/gf-codegen[dev]"
 bash scripts/bootstrap_deps.sh                       # 拉 iceoryx + 源码编 attr/acl
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh
+bash projects/afc/scripts/verify/smoke_sil.sh
 ```
 
 只要工具链：`cmake`、`g++`、`git`、`make`、`curl`（见 `scripts/bootstrap_deps.sh --check`）。
@@ -47,5 +47,6 @@ bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh
 
 1. [code-layers.md](../docs/zh/architecture/code-layers.md) — **静态 / 生成 / 手写**  
 2. [tools/gf-codegen/README.md](../tools/gf-codegen/README.md) — 工具用法  
-3. [afc_with_uss/INTEGRATOR_WALKTHROUGH.md](oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md) — 集成审阅  
+3. [afc/README.md](afc/README.md) — AFC 集成入口  
+
 4. [P0_PLAN.md](../docs/zh/operations/P0_PLAN.md) — 计划与状态  

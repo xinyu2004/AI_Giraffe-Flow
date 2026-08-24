@@ -2,7 +2,7 @@
 
 Usage (repo root, venv active):
 
-  python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
+  python -m gf_codegen.compose --project projects/afc/project.yaml
 
 Authors should prefer gf-config: Save → auto compose; Generate (Ctrl+G) for C++ APIs.
 """

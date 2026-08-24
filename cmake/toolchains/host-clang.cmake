@@ -3,7 +3,7 @@
 #
 #   GF_SIL_TOOLCHAIN_FILE=cmake/toolchains/host-clang.cmake \
 #     GF_BUILD_DIR=$PWD/build-clang \
-#     bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+#     bash projects/afc/scripts/compile_sil.sh
 #
 # Or without this file:
 #   GF_CC=clang GF_CXX=clang++ GF_BUILD_DIR=$PWD/build-clang bash …/compile_sil.sh

@@ -42,7 +42,7 @@ UdsDispatcher → UCM OtaOrchestrator → PackageManager →（stub）落盘/Act
 | `ota_transfer.require_*` | 是否强制 ProgrammingSession / SecurityAccess |
 | `ota_transfer.max_block_length` | 0x36 单块上限 |
 
-示例见 `projects/oem_a/afc_with_uss/platform/diag.yaml`。
+示例见 `projects/afc/platform/diag.yaml`。
 
 ### 传输模式对照
 
@@ -81,7 +81,7 @@ UdsDispatcher → UCM OtaOrchestrator → PackageManager →（stub）落盘/Act
 #    见 projects/.../scripts/run_sil.sh
 
 # 2) DoIP 通路冒烟（ctest + session；**不**冒烟刷写本身）
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
+bash projects/afc/scripts/verify/smoke_doip_ota.sh
 
 # 3) 或开 GMT → 加载 project.yaml → OTA/UDS → 连接（测 DoIP/UDS，非真刷写）
 ```
@@ -93,12 +93,12 @@ bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
 
 ```bash
 # 断言：uss AliveMissed → NDJSON + PER → UDS 0x19 读到 0xC01234
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_phm_dem_doip.sh
+bash projects/afc/scripts/verify/smoke_phm_dem_doip.sh
 
 # 交互：DoIP 开时默认对 uss 短注 PHM（GF_PHM_FAULT_MS=500）
-bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+bash projects/afc/scripts/run_sil.sh
 # 另开终端：
-GMT gui --project projects/oem_a/afc_with_uss
+GMT gui --project projects/afc
 # → OTA/UDS 连接 → 等 ~1s → DEM「读取 DTC」
 # Collector「本机文件」→ …/runtime/collector/events.ndjson
 ```

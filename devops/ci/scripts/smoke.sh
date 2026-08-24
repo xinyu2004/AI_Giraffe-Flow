@@ -18,16 +18,16 @@ fi
 .venv/bin/pytest tools/gf-codegen/tests tools/gmt/tests -q
 # P2-G bench golden is included above (test_afc_bench_golden / test_merge_platform)
 
-echo "== compose + lint (afc_with_uss) =="
-python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-gf-codegen lint projects/oem_a/afc_with_uss/gf.sor.json
+echo "== compose + lint (afc) =="
+python -m gf_codegen.compose --project projects/afc/project.yaml
+gf-codegen lint projects/afc/gf.sor.json
 
 echo "== GMT architect lineage (CI read-only) =="
-GMT architect lineage --project projects/oem_a/afc_with_uss/project.yaml
+GMT architect lineage --project projects/afc/project.yaml
 
-echo "== compose + lint (adc_full) =="
-python -m gf_codegen.compose --project projects/oem_b/adc_full/project.yaml
-gf-codegen lint projects/oem_b/adc_full/gf.sor.json
+echo "== compose + lint (adc) =="
+python -m gf_codegen.compose --project projects/adc/project.yaml
+gf-codegen lint projects/adc/gf.sor.json
 
 echo "== lint schema example =="
 gf-codegen lint schemas/examples/desktop_ap_only.sor.json
@@ -45,8 +45,8 @@ cmake -B build-minimal -DGF_BUILD_TESTS=ON -DGF_USE_GENERATED=OFF \
 # configure-only is enough to prove SKU fragment is consumed; full build needs iceoryx like default
 grep -q "desktop_minimal\|GF_APPS=demo_pipeline\|SKU desktop_minimal" <(cmake -B build-minimal -DGF_BUILD_TESTS=ON -DGF_USE_GENERATED=OFF -DGF_SKU_CMAKE="${ROOT}/cmake/profiles/desktop_minimal.cmake" 2>&1) || true
 
-echo "== project smoke_sil verify (afc_with_uss dual-process) =="
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh
+echo "== project smoke_sil verify (afc dual-process) =="
+bash projects/afc/scripts/verify/smoke_sil.sh
 
 echo "== optional aarch64 link =="
 bash scripts/cross_link_smoke.sh

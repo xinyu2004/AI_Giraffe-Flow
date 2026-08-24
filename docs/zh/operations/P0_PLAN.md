@@ -1,25 +1,25 @@
 # P0 实施计划（第一版集成导向）
 
 > 路线图：[ROADMAP.md](ROADMAP.md)  
-> 集成走查：[afc_with_uss/INTEGRATOR_WALKTHROUGH.md](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md)  
+> 集成走查：[afc/README.md](../../../projects/afc/README.md)  
 > 布局：[MODULE_INTERFACE_LAYOUT.md](../../../projects/MODULE_INTERFACE_LAYOUT.md)
 
-**状态（2026-07-13）：P0 收口完成（轨 A / B / C + adc_full compose）。**
+**状态（2026-07-13）：P0 收口完成（轨 A / B / C + adc compose）。**
 
 | 轨 | 状态 | 要点 |
 |----|------|------|
 | **A** 主机工具 | ✅ | compose / lint / suggest / types+Proxy/Skeleton generate |
 | **B** 运行时 | ✅ | bootstrap、core/com、iceoryx 双进程、generate 接入 demo、OSAL |
 | **C** 构建/CI | ✅ | CMake、ctest、`devops/ci/scripts/smoke.sh`、可选 aarch64 link（无交叉工具链则 SKIP） |
-| **末刀** | ✅ | `adc_full` compose + lineage + lint + generate（测试已覆盖） |
+| **末刀** | ✅ | `adc` compose + lineage + lint + generate（测试已覆盖） |
 
 联调入口：
 
 ```bash
 pip install -e "tools/gf-codegen[dev]"
 bash scripts/bootstrap_deps.sh
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh   # SIL 双进程
-gf-codegen compose --project projects/oem_b/adc_full/project.yaml
+bash projects/afc/scripts/verify/smoke_sil.sh   # SIL 双进程
+gf-codegen compose --project projects/adc/project.yaml
 bash devops/ci/scripts/smoke.sh                        # 全量冒烟（含 adc compose）
 ```
 
@@ -33,12 +33,12 @@ bash devops/ci/scripts/smoke.sh                        # 全量冒烟（含 adc 
 
 | 问题 | 答案 |
 |------|------|
-| 现在能跑 `compose` 吗？ | **能。** `afc_with_uss` 与 `adc_full` 均已通。 |
+| 现在能跑 `compose` 吗？ | **能。** `afc` 与 `adc` 均已通。 |
 | 第一版集成工具侧完成定义？ | **已达成**（compose + lineage；SIL iceoryx 闭环）。 |
 | 下一步？ | **P1**（见 ROADMAP），非继续扩 P0 范围。 |
 
 ```text
-已完成：  轨 A + 轨 B + 轨 C + adc_full compose/generate     ✅
+已完成：  轨 A + 轨 B + 轨 C + adc compose/generate     ✅
 下一阶段： P1（SOME/IP·DDS / GMT CLI / MCU 模拟 …）
 ```
 
@@ -52,7 +52,7 @@ P0 拆成 **三条轨**，共享契约（SOR 0.2 子集），但**交付顺序**
 flowchart TD
   T0[T0_SOR子集冻结]
   T1[T1_gf-codegen_MVP]
-  T2[T2_compose_afc_with_uss]
+  T2[T2_compose_afc]
   T3[T3_suggest_CLI]
   T4[T4_generate_最小]
   T5[T5_runtime_iceoryx_demo]
@@ -72,7 +72,7 @@ flowchart TD
 | **B. 运行时** | `core` Result、`com` Event、iceoryx、RouDi、双进程 | compose/generate 之后才能闭环演示 |
 | **C. 构建/CI** | CMake desktop + aarch64 交叉 link | 与 B 同步，验收桌面冒烟 + 交叉 link |
 
-**原则：** `afc_with_uss` 为 SIL 双进程验收项目；`adc_full` 为完整拓扑 compose/generate 验收（P0 末刀已覆盖）。
+**原则：** `afc` 为 SIL 双进程验收项目；`adc` 为完整拓扑 compose/generate 验收（P0 末刀已覆盖）。
 
 ---
 
@@ -120,10 +120,10 @@ flowchart TD
 
 ### 2.5 第一版集成验收清单（compose）
 
-- [x] `compose` afc_with_uss 退出码 0  
+- [x] `compose` afc 退出码 0  
 - [x] 产出含 EgoMotion / UssZones / FrontObjectList / Trajectory  
 - [x] lineage 报告 `ok=True`  
-- [x] `adc_full` compose + lineage + generate（P0 末刀）  
+- [x] `adc` compose + lineage + generate（P0 末刀）  
 - [x] 文档命令与真实 CLI 一致  
 - [ ] （可选）人工审定后写入 `golden/gf.sor.json` — demo 默认不随仓提交，见各项目 `golden/README.md`
 
@@ -169,19 +169,19 @@ HIL：`compile_hil.sh` 需 `aarch64-linux-gnu-g++`；`run_hil` / `deploy_hil` �
 |--------|------|------|
 | M0–M3 | schema 子集 + lint/compose/suggest | ✅ |
 | M4 | generate + iceoryx 双进程 | ✅ |
-| M5 | CMake/OSAL/CI + adc_full | ✅ |
+| M5 | CMake/OSAL/CI + adc | ✅ |
 
 ---
 
 ## 7. 你现在可以做什么
 
 1. 本地跑 `bash devops/ci/scripts/smoke.sh` 或分步验证（见文首命令）  
-2. 审 `adc_full` / `afc_with_uss` 的 wiring 与 lineage 报告  
+2. 审 `adc` / `afc` 的 wiring 与 lineage 报告  
 3. 进入 **P1** 前先选主线：通信 binding / GMT CLI / MCU 桌面联调  
 
 ---
 
-## 附录 A — afc_with_uss 输入清单
+## 附录 A — afc 输入清单
 
 | 文件 | 角色 |
 |------|------|

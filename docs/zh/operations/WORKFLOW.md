@@ -49,7 +49,7 @@ AI_Giraffe-Flow/
 | 观测**白名单**（live_tap / record 服务列表） | 可以 | gf-config → `observability.json` |
 | **行为轨迹**（帧从哪来、起 bridge、dry_run…） | **不可以** | gf-config → compose → **编译冻结** |
 
-样板：`projects/oem_a/afc_no_uss` 的 `frame_ingest`。  
+样板：`projects/afc` 的 `frame_ingest`。  
 细则与 backlog：[CONFIG_RUNTIME_POLICY.md](CONFIG_RUNTIME_POLICY.md)。  
 **其它 project 后续同样对齐**；尽量用 gf-config，少手改 YAML。
 
@@ -78,7 +78,7 @@ AI_Giraffe-Flow/
 
 目标：模块只交 `io_types.hpp`；系统工程师在 `projects/<oem>/<vehicle>/` 维护集成工件，**一条命令**出 `gf.sor.json`，用自动闭环替代开会扫表。
 
-详细契约：[sor-authoring.md](../architecture/sor-authoring.md) · 走查：[afc_with_uss 集成走查](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md) · 角色：[PROCESS_ROLES.md](../../../projects/PROCESS_ROLES.md)
+详细契约：[sor-authoring.md](../architecture/sor-authoring.md) · 走查：[afc 集成入口](../../../projects/afc/README.md) · 角色：[PROCESS_ROLES.md](../../../projects/PROCESS_ROLES.md)
 
 ### 3.1 角色与 hpp 归属
 
@@ -95,15 +95,15 @@ AI_Giraffe-Flow/
 ```bash
 # GUI：打开 projects/.../project.yaml → Save（自动 compose）
 # 无 GUI / CI：
-python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
+python -m gf_codegen.compose --project projects/afc/project.yaml
 # Proxy/Skeleton：
-gf-codegen generate --project projects/oem_a/afc_with_uss/project.yaml
+gf-codegen generate --project projects/afc/project.yaml
 ```
 
-其它示例：`projects/oem_a/afc_no_uss`、`projects/oem_b/adc_full`。
+其它示例：`projects/afc`、`projects/adc`。
 产出：`gf.sor.json` + `reports/signal_lineage_report.yaml`（闭环不过则失败）。
 
-P0 golden：[projects/oem_b/adc_full/golden/gf.sor.json](../../../projects/oem_b/adc_full/golden/gf.sor.json)
+P0 golden：[projects/adc/golden/gf.sor.json](../../../projects/adc/golden/gf.sor.json)
 
 ### 3.3 门禁（替代开会）
 
@@ -121,7 +121,7 @@ P0 golden：[projects/oem_b/adc_full/golden/gf.sor.json](../../../projects/oem_b
 
 **Golden 是什么：** compose 输出的对照答案，用于回归与 CI，不是板端运行文件，也不是 OEM 架构报告。有意改接口/连线时才更新 golden；日常试验不要覆盖。  
 
-完整说明：[走查 §3 Golden](../../../projects/oem_a/afc_with_uss/INTEGRATOR_WALKTHROUGH.md#3-golden对照用的正确答案sor) · 主示范：[adc_full/golden/](../../../projects/oem_b/adc_full/golden/)
+完整说明：[afc README · Golden](../../../projects/afc/README.md#golden) · 主示范：[adc/golden/](../../../projects/adc/golden/)
 
 CI 在合入 / 发版前执行 compose + lint + golden diff；**不**把 codegen 装进量产镜像。
 
@@ -181,7 +181,7 @@ CI 在合入 / 发版前执行 compose + lint + golden diff；**不**把 codegen
    - **OTA**：Start OTA（UDS 日志在按钮下方）  
    - **DEM**：读/清 DTC（0x19 / 0x14）  
    - **Collector**：本机 NDJSON 或板端环缓（0x31 F201）  
-4. DoIP 通路冒烟（**不**冒烟刷写）：`bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh`  
+4. DoIP 通路冒烟（**不**冒烟刷写）：`bash projects/afc/scripts/verify/smoke_doip_ota.sh`  
    - CI：**仅 nightly / 发版**（`devops/ci/scripts/smoke_nightly.sh` · `smoke_release.sh`），不进日常 PR
 
 细则：[DOIP_OTA.md](DOIP_OTA.md)。真刷写 → P3z。

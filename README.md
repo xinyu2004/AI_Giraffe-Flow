@@ -34,7 +34,7 @@ Defines **what**, **who talks to whom**, and **which board modules to trim** —
 ![gf-config — signal graph (tab 1)](result_pic/gf-config.png)
 
 ```bash
-gf-config projects/oem_a/afc_with_uss/project.yaml
+gf-config projects/afc/project.yaml
 ```
 
 Details: [tools/gf-config/README.md](tools/gf-config/README.md) · [WORKFLOW](docs/en/operations/WORKFLOW.md)
@@ -81,22 +81,18 @@ Overview: [middleware/README.md](middleware/README.md)
 
 #### 2.3 Reference chain (sample SKU)
 
-[oem_a / afc_with_uss](projects/oem_a/afc_with_uss/):
+[projects/afc](projects/afc/)（无 USS）:
 
 ```text
 Vehicle state (pick one)
   · gateway (no inject)   or   · inject (playhead; gateway off)
         │
-        ▼ EgoMotion
-   ┌────┴────┬────────────┐
-   ▼         ▼            ▼
-  USS      FCM stub     (Ego subscribers)
-   │         │
-   ▼         ▼
- UssZones   Perception_Out
-        \   /
-         ▼
-      planning → Trajectory
+        ▼ EgoMotion / Perception_In
+        ▼
+   perception.fcm → Perception_Out
+        │
+        ▼
+   planning.driving → Trajectory
         │
         ▼
    tap → Foxglove / GMT Live
@@ -105,9 +101,8 @@ Vehicle state (pick one)
 | Process | Role |
 |---------|------|
 | `adapter.vehicle_can_gateway` | CAN/sim → EgoMotion, Perception_In… (off under inject) |
-| `sensing.uss` | Ego → UssZones |
-| `perception.fcm` | Perception_In or (inject) Ego → perception stub |
-| `planning.driving` | Ego (+ optional perc/USS) → Trajectory |
+| `perception.fcm` | Perception_In → perception Out |
+| `planning.driving` | Ego + perc → Trajectory |
 | `gf_iox_obs_tap` | Allowlisted services → NDJSON |
 | `gf_iox_obs_inject` | playhead / continuous Ego inject |
 
@@ -115,25 +110,24 @@ Production perception/planning: **external packages**. See [apps/](apps/README.m
 
 #### 2.4 Product path (SIL)
 
-Primary SKUs under `projects/oem_a/` share the same contract: **mtime compose / configure-on-need / incremental build**; `ctest` only with `GF_CTEST=1`; staged `runtime/bin/giraffe_launch`; GMT extras via `GMT_depend_launch` (`GF_GMT_DEPEND=0` → EM only).
+Primary SKUs `projects/afc` and `projects/adc` share the same contract: **mtime compose / configure-on-need / incremental build**; `ctest` only with `GF_CTEST=1`; staged `runtime/bin/giraffe_launch`; GMT extras via `GMT_depend_launch` (`GF_GMT_DEPEND=0` → EM only).
 
 ```bash
-# afc_with_uss (USS in chain) or afc_no_uss (no USS / camera-oriented)
-bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
-bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+bash projects/afc/scripts/compile_sil.sh
+bash projects/afc/scripts/run_sil.sh
 
 # Board / same EM entry after stage:
-#   ./projects/.../build-sil/runtime/bin/giraffe_launch
+#   ./projects/afc/build-sil/runtime/bin/giraffe_launch
 
 GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+  bash projects/afc/scripts/run_sil.sh
 
 # CI-style tests during compile:
-#   GF_CTEST=1 bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+#   GF_CTEST=1 bash projects/afc/scripts/compile_sil.sh
 ```
 
-Scripts: [afc_with_uss](projects/oem_a/afc_with_uss/scripts/README.md) · [afc_no_uss](projects/oem_a/afc_no_uss/README.md)  
-Scenarios: [scenarios/README.md](projects/oem_a/afc_with_uss/scenarios/README.md)
+Scripts: [afc/scripts](projects/afc/scripts/) · [afc README](projects/afc/README.md)  
+Scenarios: [carla_scenarios/](carla_scenarios/)
 
 #### 2.5 Boundary vs toolchain
 
@@ -170,8 +164,8 @@ In multi-process SIL, terminal logs rarely answer “who published what, when.�
 
 ```bash
 pip install -e tools/gmt -e 'tools/gmt[gui]'
-GMT gui --project projects/oem_a/afc_with_uss \
-  --session projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl
+GMT gui --project projects/afc \
+  --session projects/afc/scenarios/overtake_acc_aeb.jsonl
 ```
 
 Details: [tools/gmt/README.md](tools/gmt/README.md) · [OBSERVABILITY_DEMO](docs/zh/operations/OBSERVABILITY_DEMO.md)

@@ -140,11 +140,11 @@ def test_emit_observability_and_cmake(tmp_path: Path) -> None:
 
 
 def test_compose_afc_writes_observability(repo_root: Path, tmp_path: Path) -> None:
-    project = repo_root / "projects/oem_a/afc_with_uss/project.yaml"
+    project = repo_root / "projects/afc/project.yaml"
     out = tmp_path / "gf.sor.json"
     rc = compose_project(project, repo_root=repo_root, out=out)
     assert rc == 0
-    obs = repo_root / "projects/oem_a/afc_with_uss/generated/observability.json"
+    obs = repo_root / "projects/afc/generated/observability.json"
     assert obs.is_file()
     data = json.loads(obs.read_text(encoding="utf-8"))
     assert data.get("profile") == "vehicle-debug"
@@ -153,19 +153,19 @@ def test_compose_afc_writes_observability(repo_root: Path, tmp_path: Path) -> No
     assert "EgoMotion" in data["live_tap"]["services"]
     assert "Trajectory" in data["live_tap"]["services"]
     assert "UssZones" in data["live_tap"]["services"]
-    cmake = (repo_root / "projects/oem_a/afc_with_uss/generated/gf_build.cmake").read_text(
+    cmake = (repo_root / "projects/afc/generated/gf_build.cmake").read_text(
         encoding="utf-8"
     )
     assert "debug_bridge/iox_obs_tap" in cmake
     assert "debug_bridge/iox_obs_inject" in cmake
     assert "GF_PROJECT_DIR" in cmake
-    assert "projects/oem_a/afc_with_uss" in cmake
+    assert "projects/afc" in cmake
 
 
 def test_generate_writes_obs_tap_main(repo_root: Path, tmp_path: Path) -> None:
-    project = repo_root / "projects/oem_a/afc_with_uss/project.yaml"
+    project = repo_root / "projects/afc/project.yaml"
     assert compose_project(project, repo_root=repo_root) == 0
-    sor = repo_root / "projects/oem_a/afc_with_uss/gf.sor.json"
+    sor = repo_root / "projects/afc/gf.sor.json"
     out = tmp_path / "generated"
     assert generate(sor, out) == 0
     tap = out / "src/obs_tap_main.cpp"

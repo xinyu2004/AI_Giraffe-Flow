@@ -15,11 +15,12 @@ namespace {
 void Usage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0
-      << " --build-dir DIR [--platform DIR] [--log-dir DIR] [--deadline-ms N]\n"
-      << "       (product: LoadFromDeployConfig / deploy_config.hpp)\n"
+      << " --build-dir DIR [--platform DIR] [--deadline-ms N]\n"
+      << "       [--log-dir DIR]  (optional debug only: redirect child stdout to files)\n"
+      << "       (product: LoadFromDeployConfig / deploy_config.hpp; logs → console + DLT)\n"
       << "   or: " << argv0
       << " --platform DIR --launch FILE --build-dir DIR  (YAML smoke; explicit --launch)\n"
-      << "Env: GF_PLATFORM_DIR GF_BUILD_DIR GF_EM_LOG_DIR GF_EM_LAUNCH\n";
+      << "Env: GF_PLATFORM_DIR GF_BUILD_DIR GF_EM_LAUNCH [GF_EM_LOG_DIR]\n";
 }
 
 std::string OptOrEnv(int argc, char** argv, const char* flag, const char* env,
@@ -95,7 +96,9 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  const std::string logs = log_dir.empty() ? build + "/em_daemon_logs" : log_dir;
+  // Product path: empty log_dir → children inherit console; structured logs via DLT.
+  // Optional --log-dir / GF_EM_LOG_DIR only for debug smoke that must capture files.
+  const std::string& logs = log_dir;
   {
     auto& log = gf_ara::log::Logger::Instance();
     if (!log.ConfigureFromGenerated() && !platform.empty()) {
@@ -106,21 +109,24 @@ int main(int argc, char** argv) {
         log.ConfigureFromYaml(ss.str());
       }
     }
-    if (std::getenv("GF_LOG_DIR") == nullptr || !*std::getenv("GF_LOG_DIR")) {
-      ::setenv("GF_LOG_DIR", logs.c_str(), 0);
-    }
-    if (std::getenv("GF_LOG_FILE") == nullptr || !*std::getenv("GF_LOG_FILE")) {
-      const std::string shared = logs + "/giraffe_modules.log";
-      ::setenv("GF_LOG_FILE", shared.c_str(), 0);
+    if (!logs.empty()) {
+      if (std::getenv("GF_LOG_DIR") == nullptr || !*std::getenv("GF_LOG_DIR")) {
+        ::setenv("GF_LOG_DIR", logs.c_str(), 0);
+      }
+      if (std::getenv("GF_LOG_FILE") == nullptr || !*std::getenv("GF_LOG_FILE")) {
+        const std::string shared = logs + "/giraffe_modules.log";
+        ::setenv("GF_LOG_FILE", shared.c_str(), 0);
+      }
     }
     log.ApplyEnvFileSink();
+    const std::string log_note = logs.empty() ? "(console+DLT)" : logs;
     if (yaml_mode) {
       log.Info("em", "gf_em_daemon start mode=yaml platform=" + platform +
                          " launch=" + launch + " build=" + build +
-                         " log_dir=" + logs);
+                         " log_dir=" + log_note);
     } else {
       log.Info("em", "gf_em_daemon start mode=deploy_config platform=" + platform +
-                         " build=" + build + " log_dir=" + logs);
+                         " build=" + build + " log_dir=" + log_note);
     }
   }
 

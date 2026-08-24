@@ -56,7 +56,7 @@ bash devops/ci/scripts/smoke_release.sh
 4. `smoke_doip_ota.sh`（仅通路，无刷写）  
 5. `GF_FUSA_T4=1`  
 6. **FuSa evidence**：`GF_FUSA_PACK_RELEASE=1` → `projects/.../generate_fusa_artifacts.sh`  
-   - 落盘 `fusa/packs/oem_a_afc_with_uss/`（含 `release/RELEASE_GATE.md` · `MANIFEST.md` · `SHA256SUMS`）  
+   - 落盘 `fusa/packs/afc/`（含 `release/RELEASE_GATE.md` · `MANIFEST.md` · `SHA256SUMS`）  
    - **硬校验**必有：SOR、lineage、`session.mcap`、`cases_latest.log`、`session_stub.vcd`  
 
 **不做**：SWU 打包、真刷写冒烟。默认不把 `fusa/packs/` 提交进仓。

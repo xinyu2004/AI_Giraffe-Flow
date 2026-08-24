@@ -10,7 +10,7 @@
 | 项 | 约定 |
 |----|------|
 | 时钟 | OSAL monotonic（日志前缀 `t_ms=`）；Trajectory 用消息内 `timestamp_ns` |
-| 环境 | SIL：`projects/oem_a/afc_with_uss` + iceoryx；主机 Linux |
+| 环境 | SIL：`projects/afc` + iceoryx；主机 Linux |
 | 样本 | 主链 verify：`GF_MP_TRAJ_COUNT=30`；PHM/EM 各跑对应 smoke 一次 |
 | 产物 | `fusa/runs/measure_summary_*.json`（gitignore）；本表填汇总 |
 | 脚本 | `bash fusa/scripts/measure_latency.sh`（**不**调用 `run_cases` / pack） |

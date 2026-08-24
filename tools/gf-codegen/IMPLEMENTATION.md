@@ -1,14 +1,14 @@
 # gf-codegen 详细实施说明（P0）
 
 > 总计划：[P0_PLAN.md](../../docs/zh/operations/P0_PLAN.md)  
-> 验收项目：[projects/oem_a/afc_with_uss/](../../projects/oem_a/afc_with_uss/)  
-> 状态：**代码已落地 2026-07-10** — A1–A5 MVP 已完成（`afc_with_uss` compose / lint / suggest / generate）。
+> 验收项目：[projects/afc/](../../projects/afc/)  
+> 状态：**代码已落地 2026-07-10** — A1–A5 MVP 已完成（`afc` compose / lint / suggest / generate）。
 
-**目标一句话：** 在主机用 Python 做出 `gf-codegen`，使下面命令成功，并为 `afc_with_uss` 写出 SOR + lineage：
+**目标一句话：** 在主机用 Python 做出 `gf-codegen`，使下面命令成功，并为 `afc` 写出 SOR + lineage：
 
 ```bash
 pip install -e tools/gf-codegen
-gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
+gf-codegen compose --project projects/afc/project.yaml
 ```
 
 ---
@@ -31,7 +31,7 @@ gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml
 - libclang / 完整 C++ AST  
 - ARXML、SOME/IP/DDS 配置生成  
 - 把工具打进板端镜像  
-- 一次打通 `adc_full`（可作回归加分项，非第一刀）
+- 一次打通 `adc`（可作回归加分项，非第一刀）
 
 ---
 
@@ -67,7 +67,7 @@ tools/gf-codegen/
     conftest.py              # repo_root fixture
     test_lint_golden.py
     test_parse_hpp.py
-    test_compose_afc_with_uss.py
+    test_compose_afc.py
 ```
 
 ### 2.2 `pyproject.toml`（建议）
@@ -140,7 +140,7 @@ gf-codegen generate <sor.json> --out <dir>
 **验收：**
 
 ```bash
-gf-codegen lint projects/oem_b/adc_full/golden/gf.sor.json
+gf-codegen lint projects/adc/golden/gf.sor.json
 gf-codegen lint schemas/examples/desktop_ap_only.sor.json
 # 故意删掉 deployments 应非 0 退出
 ```
@@ -189,13 +189,13 @@ P0：按 `types[]` 生成 POD struct 头文件即可；Proxy/Skeleton 可先空�
 
 ---
 
-## 4. `compose` 管道（对着 afc_with_uss 写死）
+## 4. `compose` 管道（对着 afc 写死）
 
 ### 4.1 路径解析
 
 `project.yaml` 内相对路径均相对 **project 文件所在目录**：
 
-| project 字段 | afc_with_uss 实际文件 |
+| project 字段 | afc 实际文件 |
 |--------------|----------------------|
 | `oem.dbc` | `oem/oem_import.dbc` |
 | `oem.manifest` | `oem/oem_import.yaml` |
@@ -302,10 +302,10 @@ C 类型 → SOR 类型名建议表：`uint8_t`→`uint8`，`float`→`float32`�
 
 #### Step：`lineage_check`
 
-对 afc_with_uss 输出 YAML：
+对 afc 输出 YAML：
 
 ```yaml
-project_id: afc_with_uss
+project_id: afc
 ok: true
 errors: []
 warnings: []
@@ -331,7 +331,7 @@ checks:
 
 ---
 
-## 5. 期望的 afc_with_uss 输出形态（验收对照）
+## 5. 期望的 afc 输出形态（验收对照）
 
 compose 成功后，SOR 中**至少**包含：
 
@@ -354,12 +354,12 @@ adapter.vehicle_can_gateway ─EgoMotion─► sensing.uss ─UssZones─► per
 ## 6. 验收清单（打勾即第一版集成工具侧完成）
 
 - [ ] `pip install -e tools/gf-codegen` 后 `gf-codegen --help` 可用  
-- [ ] `gf-codegen lint projects/oem_b/adc_full/golden/gf.sor.json` 退出 0  
-- [ ] `gf-codegen compose --project projects/oem_a/afc_with_uss/project.yaml` 退出 0  
-- [ ] 生成 `projects/oem_a/afc_with_uss/gf.sor.json`（或 `--out` 指定路径）  
-- [ ] 生成 `projects/oem_a/afc_with_uss/reports/signal_lineage_report.yaml`，`ok: true`  
+- [ ] `gf-codegen lint projects/adc/golden/gf.sor.json` 退出 0  
+- [ ] `gf-codegen compose --project projects/afc/project.yaml` 退出 0  
+- [ ] 生成 `projects/afc/gf.sor.json`（或 `--out` 指定路径）  
+- [ ] 生成 `projects/afc/reports/signal_lineage_report.yaml`，`ok: true`  
 - [ ] `pytest tools/gf-codegen/tests` 全绿  
-- [ ] 人工审 SOR 后复制为 `projects/oem_a/afc_with_uss/golden/gf.sor.json`，更新 `req.yaml` 的 `sor_golden`  
+- [ ] 人工审 SOR 后复制为 `projects/afc/golden/gf.sor.json`，更新 `req.yaml` 的 `sor_golden`  
 - [ ] README / 走查中的命令与真实 CLI 一致  
 
 ---
@@ -375,7 +375,7 @@ adapter.vehicle_can_gateway ─EgoMotion─► sensing.uss ─UssZones─► per
 | 5 | `compose/import_oem.py` | cantools 读 dbc + 应用 include/module_owned |
 | 6 | `compose/apply_wiring.py` + `merge_req.py` | 内存中拼出完整 dict |
 | 7 | `compose/lineage.py` + `write_sor.py` + `pipeline.py` | A3 端到端 |
-| 8 | `test_compose_afc_with_uss.py` | CI 级锁定 |
+| 8 | `test_compose_afc.py` | CI 级锁定 |
 | 9 | `suggest_cmd.py` | A4 |
 | 10 | `generate_cmd.py` | A5 |
 
@@ -396,7 +396,7 @@ adapter.vehicle_can_gateway ─EgoMotion─► sensing.uss ─UssZones─► per
 ## 9. 下一步
 
 1. **评审本文**（尤其 §4 ID 约定与 lineage 四条）  
-2. 同意后开干：**先 A1+A2，再 A3 打通 afc_with_uss**  
+2. 同意后开干：**先 A1+A2，再 A3 打通 afc**  
 3. A3 通过后再补 golden / suggest / generate  
 
 实现开始时，在本文件顶部把「代码尚未落地」改为版本与日期，并在 `P0_PLAN.md` 轨 A 勾选进度。

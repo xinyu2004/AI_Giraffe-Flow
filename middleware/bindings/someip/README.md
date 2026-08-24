@@ -7,7 +7,7 @@
 | `InitRuntime` / `Shutdown` | Process-local flag |
 | `BackendName()` | `"stub"` (later `"vsomeip"`) |
 
-`.fdepl` SOME/IP IDs: `gf_codegen.compose.parse_fdepl`（**不**代替 `req.bindings`）。样例：`projects/oem_a/afc_with_uss/interfaces/demo_fidl/VehicleStatus.fdepl`。
+`.fdepl` SOME/IP IDs: `gf_codegen.compose.parse_fdepl`（**不**代替 `req.bindings`）。样例：`projects/afc/interfaces/demo_fidl/VehicleStatus.fdepl`。
 
 ```bash
 # CycloneDDS path: scripts/smoke_bd_cyclone.sh

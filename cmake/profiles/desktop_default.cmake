@@ -1,5 +1,5 @@
 # Fallback SKU when -DGF_SKU_CMAKE is unset (host CI / desktop demo).
-# Mirrors a typical compose output for afc_with_uss-like iceoryx demos.
+# Mirrors a typical compose output for afc-like iceoryx demos.
 set(GF_SKU_APPLIED TRUE)
 set(GF_SKU_VARIANT "desktop_default")
 

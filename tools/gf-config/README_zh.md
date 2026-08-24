@@ -39,7 +39,7 @@ pip install -e tools/gf-config
 ## 启动
 
 ```bash
-gf-config projects/oem_a/afc_with_uss/project.yaml
+gf-config projects/afc/project.yaml
 ```
 
 ## 页签（P3 两页）
@@ -90,7 +90,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 
 ## 验收清单
 
-- [x] 打开 `afc_with_uss` 可见带端口的连线图  
+- [x] 打开 `afc` 可见带端口的连线图  
 - [x] 右键增删节点 / 拖线 / Save 写回 `wiring.yaml`  
 - [x] 页 1 薄 SKU + 页 2 runtime_modules / platform 可写回  
 - [x] 页 2「EM 启动表」读写 `platform/em_launch.yaml`（勾选 `exec` 后出现）  
@@ -99,7 +99,7 @@ gf-config projects/oem_a/afc_with_uss/project.yaml
 - [x] 撤销/重做跳转到对应页（含平台子页）  
 - [x] CI 不强制跑 Qt  
 
-## 页 2 与板端模块对应（afc_with_uss）
+## 页 2 与板端模块对应（afc）
 
 | 勾选 `runtime_modules` | 子页 / YAML | 板端体现 |
 |------------------------|-------------|----------|

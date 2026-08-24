@@ -19,9 +19,9 @@ SKU 验收 smoke 见 `projects/<oem>/<sku>/scripts/verify/`；平台编排进 de
 
 ```bash
 bash scripts/bootstrap_deps.sh
-bash common/bootstrap_sku_scripts.sh oem_a/afc_with_uss
+bash common/bootstrap_sku_scripts.sh afc
 # gf-config: Save → Verify →（需要时）Generate
-bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
-bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+bash projects/afc/scripts/compile_sil.sh
+bash projects/afc/scripts/run_sil.sh
 # 板端：拷 runtime/ + 安装 common/deploy/systemd/giraffe-em.service.example
 ```

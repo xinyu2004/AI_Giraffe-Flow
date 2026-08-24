@@ -30,12 +30,12 @@
 ```bash
 # SIL — 无本地 session 亦可
 GF_INJECT_MODE=playhead \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+  bash projects/afc/scripts/run_sil.sh
 # → inject LISTENING :8767（events=0 until GMT session cmd）
 
 # 主机 GMT
-GMT gui --project projects/oem_a/afc_with_uss \
-  --session projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl
+GMT gui --project projects/afc \
+  --session projects/afc/build-sil/observability/session.jsonl
 # →「回灌」→ 连接 host:8767 →「跟 playhead 灌」→ scrub
 # 非 EgoMotion：GMT 本地记粉；EgoMotion：cmd inject
 # 板端 need_window → GMT window_begin/push/window_end
@@ -46,8 +46,8 @@ GMT **不**调用 `run_sil`；只连 inject 控制口。
 ### continuous（板端文件 + 限额）
 
 ```bash
-GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+GF_INJECT_SESSION=projects/afc/build-sil/observability/session.jsonl \
+  bash projects/afc/scripts/run_sil.sh
 # 可选：GF_INJECT_MAX_EVENTS=20000  GF_INJECT_LOOP=1
 ```
 
@@ -75,7 +75,7 @@ GF_INJECT_SESSION=projects/oem_a/afc_with_uss/build-sil/observability/session.js
 ```bash
 GF_INJECT_MODE=playhead \
   GF_INJECT_DUT=sensing.uss \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+  bash projects/afc/scripts/run_sil.sh
 ```
 
 ## 环境变量

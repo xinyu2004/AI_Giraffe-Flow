@@ -36,11 +36,11 @@ int main() {
   }
   Pass("PER-01", "Open instance=sku_demo");
 
-  if (!kv.SetValue("trim", "afc_with_uss").HasValue()) {
+  if (!kv.SetValue("trim", "afc").HasValue()) {
     return Fail("PER-02", "SetValue");
   }
   const auto got = kv.GetValue("trim");
-  if (!got.HasValue() || got.Value() != "afc_with_uss") {
+  if (!got.HasValue() || got.Value() != "afc") {
     return Fail("PER-02", "GetValue mismatch");
   }
   Pass("PER-02", "SetValue/GetValue roundtrip");
@@ -56,7 +56,7 @@ int main() {
     return Fail("PER-04", "re-Open");
   }
   const auto again = kv.GetValue("trim");
-  if (!again.HasValue() || again.Value() != "afc_with_uss") {
+  if (!again.HasValue() || again.Value() != "afc") {
     return Fail("PER-04", "persist across reopen");
   }
   Pass("PER-04", "dual-slot persist across Close/Open");

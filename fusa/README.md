@@ -30,9 +30,9 @@ GF_FUSA_T4=1 bash fusa/scripts/run_cases.sh
 bash fusa/scripts/measure_latency.sh
 
 # 本 SKU 产物包（独立；不调用 run_cases）
-bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
+bash projects/afc/scripts/generate_fusa_artifacts.sh
 # 发版证据包（经 smoke_release 末步，硬校验）：
-# GF_FUSA_PACK_RELEASE=1 bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
+# GF_FUSA_PACK_RELEASE=1 bash projects/afc/scripts/generate_fusa_artifacts.sh
 ```
 
 CI/CD 分层见 [devops/README.md](../devops/README.md)。SIL 场景脚本在各演示工程 `projects/.../scripts/verify/`。

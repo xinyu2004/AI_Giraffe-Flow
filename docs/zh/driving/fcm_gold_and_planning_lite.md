@@ -14,7 +14,7 @@
 
 ONNX/`MakeFromDetect` 当前不写 Out；内容由 truth 驱动。freeze 只刷三处 `m_time_stamp` / `m_frame_id`。
 
-契约头示例：`projects/oem_a/afc_no_uss/interfaces/fcm_perception/Perception_Out_messages.h`  
+契约头示例：`projects/afc/interfaces/fcm_perception/Perception_Out_messages.h`  
 FCM：`…/apps/perception/fcm/src/main.cpp`  
 Planning：`…/apps/planning/driving/src/main.cpp`  
 BEV：`tools/gmt/src/gf_gmt/bev_compose.py`
@@ -113,4 +113,4 @@ Planning **不读 LA**（无变道逻辑）。
 | `projects/**/build-sil/`（及 `build-*/`） | SIL 构建树；勿打包 |
 | 总清单 | [projects/UPLOAD_CHECKLIST.md](../../../projects/UPLOAD_CHECKLIST.md) |
 
-相关驾驶/SIL 角色： [../sku/afc_no_uss/frame_ingest_roles.md](../sku/afc_no_uss/frame_ingest_roles.md) · 质量 backlog：[../sku/afc_no_uss/backlog_truth_quality.md](../sku/afc_no_uss/backlog_truth_quality.md)
+相关驾驶/SIL 角色： [../sku/afc/frame_ingest_roles.md](../sku/afc/frame_ingest_roles.md) · 质量 backlog：[../sku/afc/backlog_truth_quality.md](../sku/afc/backlog_truth_quality.md)

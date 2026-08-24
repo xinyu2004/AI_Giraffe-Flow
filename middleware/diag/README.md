@@ -14,7 +14,7 @@ ARA-inspired **Diagnostics** (`gf_ara::diag`).
 
 ```bash
 ctest --test-dir build -R 'gf_diag_doip_smoke|gf_uds_nrc_smoke|gf_doip_session_smoke' --output-on-failure
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
+bash projects/afc/scripts/verify/smoke_doip_ota.sh
 ```
 
 DoIP 通路冒烟（**不**冒烟刷写本身）。

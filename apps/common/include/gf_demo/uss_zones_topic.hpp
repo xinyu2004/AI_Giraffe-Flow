@@ -1,7 +1,7 @@
 #ifndef GF_DEMO_USS_ZONES_TOPIC_HPP
 #define GF_DEMO_USS_ZONES_TOPIC_HPP
 
-// P0 dual-process demo topic — mirrors projects/oem_a/afc_with_uss USS shape (POD).
+// P0 dual-process demo topic — mirrors projects/afc USS shape (POD).
 #include <cstdint>
 
 namespace gf::demo::uss_sensing {

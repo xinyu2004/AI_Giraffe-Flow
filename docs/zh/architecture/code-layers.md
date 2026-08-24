@@ -50,11 +50,11 @@ Giraffe Flow 板端与工具链按三层分工，避免「业务改中间件、O
 | 同上 | `include/gf_gen/skeleton/*_skeleton.hpp` | **提供方**（publish / `Send`） |
 | 同上 | `include/gf_gen/proxy/*_proxy.hpp` | **消费方**（subscribe / `Take`） |
 
-`afc_with_uss` 一键路径（生成物落在**本项目**下）：
+`afc` 一键路径（生成物落在**本项目**下）：
 
 ```bash
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh
-# → projects/oem_a/afc_with_uss/generated/
+bash projects/afc/scripts/verify/smoke_sil.sh
+# → projects/afc/generated/
 ```
 
 **lineage 报告：** 检查 DBC/hpp/wiring/req 合成后是否断连、是否有占位类型；给集成审阅与 CI 门禁用，**不是**板端运行文件。
@@ -72,7 +72,7 @@ bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh
 | `integration/wiring.yaml` | provide/require、bindings、dataflows |
 | `req.yaml` + `project.yaml` | SKU / 验收 / 索引 |
 
-示例验收项目：[`projects/oem_a/afc_with_uss/`](../../projects/oem_a/afc_with_uss/)。
+示例验收项目：[`projects/afc/`](../../projects/afc/)。
 
 ### 3.2 业务逻辑（应用工程师）— `apps/*/src`
 
@@ -84,7 +84,7 @@ bash projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh
 - [`apps/simulators/uss_feed/`](../../apps/simulators/uss_feed/) — 发布 `UssZones`
 - [`apps/demo_pipeline/`](../../apps/demo_pipeline/) — 订阅消费
 
-项目侧脚本（手写、可上传）：[`projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh`](../../projects/oem_a/afc_with_uss/scripts/verify/smoke_sil.sh)（另有 `compile_sil` / `run_sil` / `compile_hil`）。
+项目侧脚本（手写、可上传）：[`projects/afc/scripts/verify/smoke_sil.sh`](../../projects/afc/scripts/verify/smoke_sil.sh)（另有 `compile_sil` / `run_sil` / `compile_hil`）。
 
 ---
 

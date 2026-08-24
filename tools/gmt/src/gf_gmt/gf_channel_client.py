@@ -32,8 +32,7 @@ def _find_lib() -> Path:
         candidates.append(
             repo
             / "projects"
-            / "oem_a"
-            / "afc_no_uss"
+            / "afc"
             / "build-sil"
             / "runtime"
             / "lib"

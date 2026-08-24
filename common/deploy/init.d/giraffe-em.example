@@ -2,6 +2,8 @@
 # Giraffe EM — SysV init.d example (product entry = gf_em_daemon).
 # Copy to /etc/init.d/giraffe-em, chmod +x, update-rc.d / chkconfig as needed.
 # Edit RUNTIME below to the staged self-contained runtime root.
+#
+# Logs: console + DLT (no --log-dir). Optional debug: export GF_EM_LOG_DIR and pass --log-dir.
 
 ### BEGIN INIT INFO
 # Provides:          giraffe-em
@@ -15,18 +17,16 @@
 RUNTIME="${RUNTIME:-/opt/giraffe/current}"
 DAEMON="${RUNTIME}/bin/gf_em_daemon"
 PIDFILE="${PIDFILE:-/var/run/giraffe-em.pid}"
-LOGDIR="${LOGDIR:-/var/log/giraffe/em}"
 NAME=giraffe-em
 
 export GF_BUILD_DIR="${RUNTIME}"
 export GF_RUNTIME_DIR="${RUNTIME}"
 export GF_IOX_TOML="${RUNTIME}/etc/iox_roudi.toml"
-export GF_EM_LOG_DIR="${LOGDIR}"
+unset GF_EM_LOG_DIR
 export LD_LIBRARY_PATH="${RUNTIME}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 # EM stops on abnormal child exit; init/systemd Restart recovers the whole tree.
 
 start() {
-  mkdir -p "${LOGDIR}"
   if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
     echo "${NAME} already running"
     return 0
@@ -34,8 +34,8 @@ start() {
   echo "Starting ${NAME}..."
   start-stop-daemon --start --background --make-pidfile --pidfile "${PIDFILE}" \
     --chdir "${RUNTIME}" --exec "${DAEMON}" -- \
-    --build-dir "${RUNTIME}" --log-dir "${LOGDIR}" --deadline-ms 0 \
-    || "${DAEMON}" --build-dir "${RUNTIME}" --log-dir "${LOGDIR}" --deadline-ms 0 &
+    --build-dir "${RUNTIME}" --deadline-ms 0 \
+    || "${DAEMON}" --build-dir "${RUNTIME}" --deadline-ms 0 &
   echo $! >"${PIDFILE}"
 }
 

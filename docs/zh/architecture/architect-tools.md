@@ -24,8 +24,8 @@ gf-config → Verify/Generate/compile → run_sil
 ## GMT GUI
 
 ```bash
-GMT gui --project projects/oem_a/afc_with_uss \
-  --session projects/oem_a/afc_with_uss/build-sil/observability/session.jsonl
+GMT gui --project projects/afc \
+  --session projects/afc/build-sil/observability/session.jsonl
 ```
 
 Tag 持久化：`session.tags.json`（可改名/改窗/topics/备注）。

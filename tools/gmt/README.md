@@ -20,8 +20,8 @@ pip install -e tools/gmt -e tools/gf-codegen
 pip install -e 'tools/gmt[gui]'
 
 GMT gui
-GMT gui --project projects/oem_a/afc_with_uss
-GMT gui --project projects/oem_a/afc_with_uss/project.yaml
+GMT gui --project projects/afc
+GMT gui --project projects/afc/project.yaml
 ```
 
 **Main path:** set **Host** → both top-bar channels may connect at once:
@@ -45,7 +45,7 @@ GMT gui --project projects/oem_a/afc_with_uss/project.yaml
 `GF_INJECT_LIVE=0` forces live_tap off during inject.
 
 - **Connect Live:** WS into memory; **no disk by default**; “follow latest” controls tail stickiness  
-- **Record:** top-bar button; default `session_live.jsonl` (prompt new/overwrite if non-empty)  
+- **Record:** top-bar button; default `gmt_record.jsonl` (prompt new/overwrite if non-empty)  
 - Disconnect: stop record; keep in-memory session for scrub / Tag  
 - Tag: `M` mark; `[` / `]` segment; Live/Inject connect on the top bar  
 - GMT **does not start SIL**  
@@ -61,7 +61,7 @@ Full session stays in GMT; board inject holds A/B windows only. SIL may omit `GF
 
 ```bash
 GF_INJECT_MODE=playhead \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+  bash projects/afc/scripts/run_sil.sh
 # Scenario demo: GF_INJECT_LIVE=all (keep Ego → BEV)
 ```
 
@@ -71,7 +71,7 @@ GMT: open session → **Inject** → connect `host:8767` → “follow playhead�
 
 ```bash
 GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
-  bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
+  bash projects/afc/scripts/run_sil.sh
 ```
 
 ### ADAS scenario demo
@@ -82,16 +82,16 @@ Primary file `overtake_acc_aeb.jsonl` (lane change → ACC → AEB). Load it in 
 # SIL: run_sil → GMT open jsonl → Inject play
 # Offline (no SIL):
 GMT bridge foxglove --ws --synth-bev \
-  --jsonl projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl --port 8765
+  --jsonl projects/afc/scenarios/overtake_acc_aeb.jsonl --port 8765
 
-GMT gui --project projects/oem_a/afc_with_uss \
-  --session projects/oem_a/afc_with_uss/scenarios/overtake_acc_aeb.jsonl
+GMT gui --project projects/afc \
+  --session projects/afc/scenarios/overtake_acc_aeb.jsonl
 ```
 
 ### GTKWave (offline timing)
 
 ```bash
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_gmt_vcd.sh
+bash projects/afc/scripts/verify/smoke_gmt_vcd.sh
 # or: GMT measure export --format vcd --in …jsonl --out …vcd
 ```
 
@@ -100,11 +100,11 @@ CLI entry: **`GMT`**. GMT GUI **does not write wiring** (authoring stays in gf-c
 ### OTA/UDS demo data (Collector / DEM / log levels)
 
 ```bash
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_phm_dem_doip.sh
+bash projects/afc/scripts/verify/smoke_phm_dem_doip.sh
 # Interactive:
-export GF_COLLECTOR_STORE=$PWD/projects/oem_a/afc_with_uss/build-sil/runtime/collector/events.ndjson
-bash projects/oem_a/afc_with_uss/scripts/run_sil.sh
-GMT gui --project projects/oem_a/afc_with_uss
+export GF_COLLECTOR_STORE=$PWD/projects/afc/build-sil/runtime/collector/events.ndjson
+bash projects/afc/scripts/run_sil.sh
+GMT gui --project projects/afc
 ```
 
 Parent: [tools/README.md](../README.md)

@@ -10,7 +10,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "${ROOT}"
 export PATH="${ROOT}/.venv/bin:${PATH}"
 CI="${ROOT}/devops/ci/scripts"
-VERIFY="${ROOT}/projects/oem_a/afc_with_uss/scripts/verify"
+VERIFY="${ROOT}/projects/afc/scripts/verify"
 
 echo "== nightly: L0 =="
 bash "${CI}/smoke.sh"
@@ -23,8 +23,8 @@ bash "${ROOT}/scripts/run_iox_demo.sh"
 
 echo "== nightly: DoIP path (no flash) =="
 # smoke.sh already compiled host build; DoIP needs SKU build-sil — compile if missing
-if [[ ! -d "${ROOT}/projects/oem_a/afc_with_uss/build-sil" ]]; then
-  bash "${ROOT}/projects/oem_a/afc_with_uss/scripts/compile_sil.sh"
+if [[ ! -d "${ROOT}/projects/afc/build-sil" ]]; then
+  bash "${ROOT}/projects/afc/scripts/compile_sil.sh"
 fi
 bash "${VERIFY}/smoke_doip_ota.sh"
 

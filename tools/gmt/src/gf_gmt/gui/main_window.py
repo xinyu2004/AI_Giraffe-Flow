@@ -139,7 +139,7 @@ class GmtMainWindow(QMainWindow):
         self._btn_live_rec.setCheckable(True)
         self._btn_live_rec.setEnabled(False)
         self._btn_live_rec.setToolTip(
-            t("将 Live 流落盘；已有 session_live.jsonl 时可新建或覆盖")
+            t("将 Live 流落盘；已有 gmt_record.jsonl 时可新建或覆盖")
         )
         self._btn_live_rec.toggled.connect(self._on_live_record_toggled)
         self._live_state = QLabel(t("空闲"))
@@ -490,7 +490,7 @@ class GmtMainWindow(QMainWindow):
         )
 
     def _default_live_session(self) -> Path:
-        return self._default_obs_dir() / "session_live.jsonl"
+        return self._default_obs_dir() / "gmt_record.jsonl"
 
     def _set_live_ui(self, active: bool) -> None:
         self._live_active = active
@@ -613,7 +613,7 @@ class GmtMainWindow(QMainWindow):
             p = self._project_dir / "generated" / "observability.json"
             if p.is_file():
                 return p
-        fallback = Path.cwd() / "projects/oem_a/afc_with_uss/generated/observability.json"
+        fallback = Path.cwd() / "projects/afc/generated/observability.json"
         return fallback if fallback.is_file() else None
 
     def _default_obs_dir(self) -> Path:
@@ -624,8 +624,7 @@ class GmtMainWindow(QMainWindow):
             d = (
                 Path.cwd()
                 / "projects"
-                / "oem_a"
-                / "afc_with_uss"
+                / "afc"
                 / "build-sil"
                 / "observability"
             )
@@ -683,10 +682,10 @@ class GmtMainWindow(QMainWindow):
 
     def _new_live_record_path(self) -> Path:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return self._default_obs_dir() / f"session_live_{stamp}.jsonl"
+        return self._default_obs_dir() / f"gmt_record_{stamp}.jsonl"
 
     def _choose_live_record_path(self) -> Path | None:
-        """Ask new/overwrite when default session_live.jsonl exists and is non-empty."""
+        """Ask new/overwrite when default gmt_record.jsonl exists and is non-empty."""
         default = self._default_live_session()
         if default.is_file() and default.stat().st_size > 0:
             box = QMessageBox(self)

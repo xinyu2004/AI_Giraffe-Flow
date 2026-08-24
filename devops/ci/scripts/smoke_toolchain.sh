@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "${ROOT}"
 export PATH="${ROOT}/.venv/bin:${PATH}"
 
-VERIFY="${ROOT}/projects/oem_a/afc_with_uss/scripts/verify"
+VERIFY="${ROOT}/projects/afc/scripts/verify"
 export GF_SKIP_COMPILE="${GF_SKIP_COMPILE:-1}"
 
 echo "== toolchain: observability =="

@@ -50,7 +50,7 @@ def default_collector_store(project_dir: Path | None = None) -> Path:
     cwd = Path.cwd()
     candidates.extend(
         [
-            cwd / "projects" / "oem_a" / "afc_with_uss" / "build-sil" / "runtime" / "collector" / "events.ndjson",
+            cwd / "projects" / "afc" / "build-sil" / "runtime" / "collector" / "events.ndjson",
             cwd / "build-sil" / "runtime" / "collector" / "events.ndjson",
             cwd / "build" / "runtime" / "collector" / "events.ndjson",
         ]

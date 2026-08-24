@@ -29,7 +29,7 @@
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R1.1 | 打开项目可见连线 | `gf-config` 打开 `projects/oem_a/afc_with_uss`，B 页有进程卡与边 | □ | □ | □ | |
+| R1.1 | 打开项目可见连线 | `gf-config` 打开 `projects/afc`，B 页有进程卡与边 | □ | □ | □ | |
 | R1.2 | A 页 req 完整 | capabilities / runtime_modules / bindings / apps / acceptance 可编辑并 Save → `req.yaml` | □ | □ | □ | |
 | R1.3 | B 页拖线 / 删边 / 布局保持 | Out→In 连线；Delete；重建后位置不丢 | □ | □ | □ | |
 | R1.4 | 导入 hpp | 「导入 hpp/h…」→ 勾选 struct → 写回 `modules[].hpp` + 端口 | □ | □ | □ | |
@@ -46,7 +46,7 @@
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R2.1 | compose 产出 SKU cmake | `python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml` → `generated/gf_build.cmake` 含 `GF_WITH_*` / `GF_APPS` | □ | □ | □ | |
+| R2.1 | compose 产出 SKU cmake | `python -m gf_codegen.compose --project projects/afc/project.yaml` → `generated/gf_build.cmake` 含 `GF_WITH_*` / `GF_APPS` | □ | □ | □ | |
 | R2.2 | GfModules 消费 | 存在 `cmake/GfModules.cmake`；configure 日志出现 binding/app | □ | □ | □ | |
 | R2.3 | desktop_default | `-DGF_SKU_CMAKE=cmake/profiles/desktop_default.cmake` | □ | □ | □ | |
 | R2.4 | desktop_minimal | 低配仅 demo；缺模块 STATUS skip 不炸 | □ | □ | □ | |
@@ -55,8 +55,8 @@
 **命令备忘：**
 
 ```bash
-python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
-# 查看：projects/oem_a/afc_with_uss/generated/gf_build.cmake
+python -m gf_codegen.compose --project projects/afc/project.yaml
+# 查看：projects/afc/generated/gf_build.cmake
 ```
 
 ---
@@ -66,7 +66,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
 | R3.1 | parse_fidl 单测 | `pytest tools/gf-codegen/tests/test_parse_fidl.py -q` | □ | □ | □ | |
-| R3.2 | 样例 fidl | `projects/oem_a/afc_with_uss/interfaces/demo_fidl/VehicleStatus.fidl` 候选含 VehiclePose / SpeedChanged 等 | □ | □ | □ | |
+| R3.2 | 样例 fidl | `projects/afc/interfaces/demo_fidl/VehicleStatus.fidl` 候选含 VehiclePose / SpeedChanged 等 | □ | □ | □ | |
 | R3.3 | GUI 导入写回 | Save 后 `wiring.modules[].fidl` + provides/requires | □ | □ | □ | |
 | R3.4 | compose 合类型 | modules 挂 fidl 后 SOR types 有对应 struct | □ | □ | □ | |
 | R3.5 | parse_fdepl | `pytest tools/gf-codegen/tests/test_parse_fdepl.py -q`；样例 `.fdepl` ServiceID=0x1234 | □ | □ | □ | |
@@ -78,7 +78,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R4.1 | smoke 脚本 | `bash projects/oem_b/adc_full/scripts/smoke_mcu_desktop.sh` | □ | □ | □ | |
+| R4.1 | smoke 脚本 | `bash projects/adc/scripts/smoke_mcu_desktop.sh` | □ | □ | □ | |
 | R4.2 | 传输库 | `middleware/bindings/cross_domain_ipc` + `gf_cross_domain_ipc_smoke` | □ | □ | □ | |
 | R4.3 | peer / gateway | `gf_cp_ipc_peer` ↔ `gf_mcu_cp_gateway`（CanInfo → TrajPlot/P_Parking） | □ | □ | □ | |
 | R4.4 | profile | `cmake/profiles/mcu_desktop.cmake`（无 iceoryx） | □ | □ | □ | |
@@ -90,7 +90,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R5.1 | 一键 smoke | DoIP 通路：`bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh`（**不**冒烟刷写）；exec/phm 见 `devops/ci` / `fusa` | □ | □ | □ | 原 `smoke_eu_stub.sh` 已删 |
+| R5.1 | 一键 smoke | DoIP 通路：`bash projects/afc/scripts/verify/smoke_doip_ota.sh`（**不**冒烟刷写）；exec/phm 见 `devops/ci` / `fusa` | □ | □ | □ | 原 `smoke_eu_stub.sh` 已删 |
 | R5.2 | exec | `gf_exec_smoke`：Offer → Running | □ | □ | □ | |
 | R5.3 | phm Alive/Deadline | `gf_phm_alive_deadline_smoke`：超时 miss → Alive 恢复 → Pause | □ | □ | □ | |
 | R5.4 | ucm 状态机 | Idle→Transfer→Process→Activate→Rollback | □ | □ | □ | |
@@ -119,7 +119,7 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
 | R7.1 | 一键 smoke | `pytest tools/gmt/tests -q` + `GMT architect lineage --project …` | □ | □ | □ | 原 `smoke_ta.sh` 已删 |
-| R7.2 | architect lineage | `GMT architect lineage --project projects/oem_a/afc_with_uss/project.yaml` → PASS | □ | □ | □ | |
+| R7.2 | architect lineage | `GMT architect lineage --project projects/afc/project.yaml` → PASS | □ | □ | □ | |
 | R7.3 | architect dag | `GMT architect dag --project …` 输出 nodes/edges JSON | □ | □ | □ | |
 | R7.4 | measure export | `GMT measure export --in tools/gmt/fixtures/session_stub.jsonl --out /tmp/x.mcap`；文件以 `\x89MCAP0` 开头 | □ | □ | □ | |
 | R7.5 | ARXML import | `gf-codegen import arxml schemas/examples/oem/demo_faracon_subset.arxml` → candidates 含 EgoMotion | □ | □ | □ | |
@@ -149,10 +149,10 @@ python -m gf_codegen.compose --project projects/oem_a/afc_with_uss/project.yaml
 source .venv/bin/activate
 pip install -e "tools/gf-codegen[dev]" -e "tools/gmt[dev]"
 
-bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh
+bash projects/afc/scripts/verify/smoke_doip_ota.sh
 bash scripts/smoke_bd_cyclone.sh
-bash projects/oem_b/adc_full/scripts/verify/smoke_mcu_desktop.sh
-GMT architect lineage --project projects/oem_a/afc_with_uss/project.yaml
+bash projects/adc/scripts/verify/smoke_mcu_desktop.sh
+GMT architect lineage --project projects/afc/project.yaml
 
 pytest tools/gf-codegen/tests tools/gmt/tests -q
 ```

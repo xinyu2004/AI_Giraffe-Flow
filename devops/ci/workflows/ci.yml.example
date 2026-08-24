@@ -43,8 +43,8 @@
 #         run: |
 #           set -euo pipefail
 #           # L0 already ran; ensure SKU SIL then skip recompile in toolchain smokes
-#           if [[ ! -d projects/oem_a/afc_with_uss/build-sil ]]; then
-#             bash projects/oem_a/afc_with_uss/scripts/compile_sil.sh
+#           if [[ ! -d projects/afc/build-sil ]]; then
+#             bash projects/afc/scripts/compile_sil.sh
 #           fi
 #           GF_SKIP_COMPILE=1 bash devops/ci/scripts/smoke_toolchain.sh
 #

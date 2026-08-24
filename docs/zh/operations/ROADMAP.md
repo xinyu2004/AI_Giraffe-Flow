@@ -21,7 +21,7 @@
 
 | 阶段 | 主题 | 状态 | 核心验收 |
 |------|------|------|----------|
-| **P0** | 契约 + 最小可运行闭环 | ✅ | SOR 子集、gf-codegen、iceoryx 双进程、adc_full compose、CI |
+| **P0** | 契约 + 最小可运行闭环 | ✅ | SOR 子集、gf-codegen、iceoryx 双进程、adc compose、CI |
 | **P1** | 车规通信 + 工具 + OTA/DoIP 骨架 | ✅ 骨架 | gf-config 初版、FIDL、MCU 桌面 peer、exec/phm/ucm/diag stub |
 | **P2** | 真正可运行 + 可观测 + platform 骨架 | ✅ | 多进程 SIL、platform、CycloneDDS、Tag/MCAP、Foxglove |
 | **P2.5** | 主机工具链 + 架构师可视化 | ✅ | SIL 编译器可换、GMT GUI、VCD |
@@ -45,7 +45,7 @@
 | P0-6 | OSAL POSIX | `middleware/osal/` | ✅ |
 | P0-7 | CMake + `req.yaml` | `cmake/`，`projects/**/req.yaml` | ✅ |
 | P0-8 | CI smoke | `devops/ci/scripts/smoke.sh`（+ toolchain/nightly/release 分层，见 [ci/README](../../../devops/ci/README.md)） | ✅ |
-| P0-9 | `adc_full` compose / generate | `projects/oem_b/adc_full/` | ✅ |
+| P0-9 | `adc` compose / generate | `projects/adc/` | ✅ |
 
 ### 明确不在 P0
 
@@ -141,7 +141,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | T2 | 可复现 PHM 隔离 / Collector 场景 + 参考延时表 | ✅ SIL 预算已填；文档标明主机 SIL ≠ ECU ASIL；板端 soak → P3z |
 | T3 | 本机 runs / packs 流程（默认不进仓） | ✅ `fusa/scripts/run_cases.sh` → `fusa/runs/`；SKU `generate_fusa_artifacts.sh` → `fusa/packs/`（互不调用） |
 | T3b | Safety Case 追溯（SG → SR → 验证） | ✅ [traceability.md](../../../fusa/safety-case/traceability.md)：SG-01…05 + OTA/DoIP/UDS；缺口 → P3z / assumptions |
-| T4 | `production` profile：关 Record/ROS/调试路径 | ✅ [`smoke_production_profile.sh`](../../../projects/oem_a/afc_with_uss/scripts/verify/smoke_production_profile.sh)；**发版必跑** `GF_FUSA_T4=1`（`devops/ci/README.md`） |
+| T4 | `production` profile：关 Record/ROS/调试路径 | ✅ [`smoke_production_profile.sh`](../../../projects/afc/scripts/verify/smoke_production_profile.sh)；**发版必跑** `GF_FUSA_T4=1`（`devops/ci/README.md`） |
 
 **目标：** 完整 Safety Case（骨架：[fusa/safety-case/](../../../fusa/safety-case/)）。**当前不声称**证书已取得；仓内持续积累可引用证据（不含把 GMT/stub 当板级 ASIL 证据）。
 
@@ -154,19 +154,19 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | D3 | UCM 编排（+ SM Pause）；后端可 stub→RAUC | ✅ `OtaOrchestrator`；0x27/0x29 插件 ABI（`.so/.dll`） |
 | D4 | OTA/升级失败路径上 Collector 事件可观测 | ✅ `ucm/ota_failed` |
 
-操作说明：[DOIP_OTA.md](DOIP_OTA.md) · 验收：`bash projects/oem_a/afc_with_uss/scripts/verify/smoke_doip_ota.sh`  
+操作说明：[DOIP_OTA.md](DOIP_OTA.md) · 验收：`bash projects/afc/scripts/verify/smoke_doip_ota.sh`  
 **2026-08-04：** gf-config 日志表 UX / 重复 context Verify / 撤销跳页；GMT 独立 Collector 页并入 OTA/UDS。
 
 ### P3-5 Sim spike — 场景演示（A–C ✅；弃 VP）
 
 | # | 交付物 | 状态 |
 |---|--------|------|
-| A–C | **`afc_no_uss`**：Perception_*→Trajectory + `frame_ingest`（默认 C dry-run）+ Foxglove | ✅ **主路径** `run_sil.sh`（gf-config→compose→compile） |
+| A–C | **`afc`**：Perception_*→Trajectory + `frame_ingest`（默认 C dry-run）+ Foxglove | ✅ **主路径** `run_sil.sh`（gf-config→compose→compile） |
 | cfg | **行为编译冻结**：`deploy_config.hpp` + `frame_ingest_config.hpp`；白名单仍可用 `observability.json` | ✅ [CONFIG_RUNTIME_POLICY.md](CONFIG_RUNTIME_POLICY.md) |
 | E | AM62 EdgeAI / S2 | ⏳ 桌面闭环后（文档占位，见 SIM_SPIKE） |
 | S2 | Vision Pilot | **放弃**（授权） |
 
-弱耦合；不替代主航道。工程：`projects/oem_a/afc_no_uss/` · [SIM_SPIKE.md](../../../projects/oem_a/afc_no_uss/SIM_SPIKE.md)。  
+弱耦合；不替代主航道。工程：`projects/afc/` · [SIM_SPIKE.md](../../../projects/afc/SIM_SPIKE.md)。  
 **其它 project 后续同样**：行为进编译期；白名单可 JSON；编排用 gf-config（少手改 YAML）。
 
 **2026-08-06：** A/B/C + `frame_ingest` 配置驱动验收落地。
@@ -237,8 +237,8 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | Foxglove 相机主路径 + hero 换场重挂（SIL） | 换场相机空窗压到可接受 |
 | Client A（scenarios）/ B（ingest）职责与相机契约文档 | 假感知→planning demo 再压车道线可视化 |
 | **政策：**板端 runtime / GMT 依赖 **零 Python**（含 **整条 frame_ingest**，非仅 ISP） | **实现** `BL-BOARD-NO-PY`（板端 C++ ISP/V4L，SIL py 模块不上板） |
-| **afc_no_uss：** Out 金样（DYN+LH+LA）→planning lite（ACC/AEB+LH 居中）+ BEV；量程/质量门控/车道锚；归档见 [fcm_gold_and_planning_lite.md](../driving/fcm_gold_and_planning_lite.md) | In 金样（CamCalib）；真检测；视频叠框；全 scenario 质量字段 |
+| **afc：** Out 金样（DYN+LH+LA）→planning lite（ACC/AEB+LH 居中）+ BEV；量程/质量门控/车道锚；归档见 [fcm_gold_and_planning_lite.md](../driving/fcm_gold_and_planning_lite.md) | In 金样（CamCalib）；真检测；视频叠框；全 scenario 质量字段 |
 | — | `BL-STAGE-PY-MTIME`；云 CI；P3z 真板 |
 
-入口文档：[CONFIG_RUNTIME_POLICY.md](CONFIG_RUNTIME_POLICY.md) · [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md) · [frame_ingest_roles.md](../sku/afc_no_uss/frame_ingest_roles.md)。  
+入口文档：[CONFIG_RUNTIME_POLICY.md](CONFIG_RUNTIME_POLICY.md) · [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md) · [frame_ingest_roles.md](../sku/afc/frame_ingest_roles.md)。  
 P3-4 桌面 DoIP/OTA 已收口 → [DOIP_OTA.md](DOIP_OTA.md)。

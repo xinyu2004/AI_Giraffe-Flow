@@ -205,7 +205,7 @@ GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
 bash fusa/scripts/measure_latency.sh
 
 # SKU 产物包（独立）
-bash projects/oem_a/afc_with_uss/scripts/generate_fusa_artifacts.sh
+bash projects/afc/scripts/generate_fusa_artifacts.sh
 ```
 
 最近 L3 全绿记录：[../cases/sil_verify_cases.md](../cases/sil_verify_cases.md)「最近复现」。  
