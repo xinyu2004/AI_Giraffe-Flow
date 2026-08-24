@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # X-3 verify: PHM fault injection — miss then recover, e2e still OK.
+# Self-contained smoke (does NOT call product run_sil).
 #
 # Usage (after compile_sil):
 #   bash projects/afc/scripts/verify/smoke_sil_phm_fault.sh
@@ -12,34 +13,11 @@ source "${SCRIPT_DIR}/_verify_common.sh"
 gf_project_env
 
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-500}"
+export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-planning}"
 export GF_MP_TRAJ_COUNT="${GF_MP_TRAJ_COUNT:-8}"
 export GF_MP_TIMEOUT_SEC="${GF_MP_TIMEOUT_SEC:-60}"
 
-echo "${TAG} PHM fault inject GF_PHM_FAULT_MS=${GF_PHM_FAULT_MS} (planning)"
-bash "${SCRIPT_DIR}/run_sil_verify.sh"
-
-# Fault is injected on planning (gateway keeps GF_PHM_FAULT_MS=0 for e2e).
-LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/runtime/logs/planning.log"
-GW_LOG="${GF_BUILD_DIR:-${BUILD_SIL}}/runtime/logs/gateway.log"
-if [[ ! -f "${LOG}" ]]; then
-  echo "${TAG} missing planning log: ${LOG}" >&2
-  exit 1
-fi
-
-if ! grep -qE 'FAULT inject|AliveMissed|DeadlineMissed' "${LOG}"; then
-  echo "${TAG} FAIL: expected fault/AliveMissed/DeadlineMissed in ${LOG}" >&2
-  cat "${LOG}" >&2 || true
-  exit 1
-fi
-if ! grep -qE 'recovered|fault window ended|phm recovered' "${LOG}"; then
-  echo "${TAG} FAIL: expected recover in ${LOG}" >&2
-  cat "${LOG}" >&2 || true
-  exit 1
-fi
-if [[ ! -f "${GW_LOG}" ]] || ! grep -qE 'Trajectory#[0-9]+' "${GW_LOG}"; then
-  echo "${TAG} FAIL: expected Trajectory e2e in ${GW_LOG}" >&2
-  cat "${GW_LOG}" >&2 || true
-  exit 1
-fi
+echo "${TAG} PHM fault inject GF_PHM_FAULT_MS=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET}"
+bash "${SCRIPT_DIR}/run_mainchain_verify.sh"
 
 echo "${TAG} smoke_sil_phm_fault OK (planning miss → recover → Trajectory e2e)"

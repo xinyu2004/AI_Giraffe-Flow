@@ -22,10 +22,9 @@ if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
   bash "${PROJECT_SCRIPTS}/compile_sil.sh"
 fi
 
-# Short main-chain for CI-ish runs
+# Short main-chain for CI-ish runs (no PHM fault; verify shell only)
 export GF_MP_TRAJ_COUNT="${GF_MP_TRAJ_COUNT:-8}"
-export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
-bash "${SCRIPT_DIR}/run_sil_verify.sh"
+bash "${SCRIPT_DIR}/run_mainchain_verify.sh"
 
 echo "${TAG} measure record from ${LOG_DIR} ..."
 OBS_JSON="${PROJECT_DIR}/generated/observability.json"

@@ -186,16 +186,10 @@ gf_sil_preflight_ports
 # =============================================================================
 
 if [[ "${DOIP_ON}" == "1" ]]; then
-  # GMT DEM: real PHM AliveMissed in apps → PersistDtc → shared GF_PER_DIR;
-  # DoIP 0x19 uses ReloadDtcsFromPer (no fake seed).
-  # Opt-out: GF_PHM_FAULT_MS=0 before run_sil.
-  if [[ -z "${_PHM_FAULT_USER}" ]]; then
-    export GF_PHM_FAULT_MS=500
-    export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-planning}"
-  fi
+  # GMT DEM: PHM → PersistDtc → GF_PER_DIR → DoIP 0x19（故障注入仅 scripts/verify smoke）
   echo "${TAG} DoIP OTA server → TCP ${DOIP_PORT} (GMT OTA: 127.0.0.1:${DOIP_PORT})"
-  echo "${TAG} DEM: PHM fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET} per=${GF_PER_DIR}"
-  host_info "start DoIP OTA server port=${DOIP_PORT} per=${GF_PER_DIR} phm_fault_ms=${GF_PHM_FAULT_MS} target=${GF_PHM_FAULT_TARGET}"
+  echo "${TAG} DEM: per=${GF_PER_DIR}"
+  host_info "start DoIP OTA server port=${DOIP_PORT} per=${GF_PER_DIR}"
   : >"${LOG_DIR}/doip_ota.log"
   # DoIP/UDS params from deploy_config.hpp (export for gf_doip_ota_server).
   if [[ -z "${GF_DIAG_S3_SERVER_MS+x}" ]]; then
@@ -250,18 +244,6 @@ if [[ "${DOIP_ON}" == "1" ]]; then
   host_info "DoIP ok pid=${DOIP_PID} port=${DOIP_PORT}"
 fi
 
-# Per-process PHM fault (others get 0). Target via GF_PHM_FAULT_TARGET.
-_fault_ms_for() {
-  local name="$1"
-  if [[ "${GF_PHM_FAULT_MS}" == "0" ]]; then
-    echo 0
-  elif [[ "${name}" == "${GF_PHM_FAULT_TARGET}" ]]; then
-    echo "${GF_PHM_FAULT_MS}"
-  else
-    echo 0
-  fi
-}
-
 start_consumers() {
   local apps="${1:-fcm,planning}"
   local a
@@ -270,33 +252,33 @@ start_consumers() {
   for a in "${_arr[@]}"; do
     case "${a}" in
       fcm)
-        echo "${TAG} start fcm (PHM fault_ms=$(_fault_ms_for fcm))"
-        host_info "start app=fcm fault_ms=$(_fault_ms_for fcm)"
+        echo "${TAG} start fcm"
+        host_info "start app=fcm"
         # stdbuf: line-buffer stdout so smoke/timeout kill still leaves Trajectory lines on disk
         if command -v stdbuf >/dev/null 2>&1; then
-          GF_DLT_APP_ID=FCM_ GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" stdbuf -oL -eL "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
+          GF_DLT_APP_ID=FCM_ stdbuf -oL -eL "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
         else
-          GF_DLT_APP_ID=FCM_ GF_PHM_FAULT_MS="$(_fault_ms_for fcm)" "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
+          GF_DLT_APP_ID=FCM_ "${FCM}" >"${LOG_DIR}/fcm.log" 2>&1 &
         fi
         FCM_PID=$!
         ;;
       uss)
-        echo "${TAG} start uss (PHM fault_ms=$(_fault_ms_for uss))"
-        host_info "start app=uss fault_ms=$(_fault_ms_for uss)"
+        echo "${TAG} start uss"
+        host_info "start app=uss"
         if command -v stdbuf >/dev/null 2>&1; then
-          GF_DLT_APP_ID=USS_ GF_PHM_FAULT_MS="$(_fault_ms_for uss)" stdbuf -oL -eL "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
+          GF_DLT_APP_ID=USS_ stdbuf -oL -eL "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
         else
-          GF_DLT_APP_ID=USS_ GF_PHM_FAULT_MS="$(_fault_ms_for uss)" "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
+          GF_DLT_APP_ID=USS_ "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
         fi
         USS_PID=$!
         ;;
       planning)
-        echo "${TAG} start planning (PHM fault_ms=$(_fault_ms_for planning))"
-        host_info "start app=planning fault_ms=$(_fault_ms_for planning)"
+        echo "${TAG} start planning"
+        host_info "start app=planning"
         if command -v stdbuf >/dev/null 2>&1; then
-          GF_DLT_APP_ID=PLAN GF_PHM_FAULT_MS="$(_fault_ms_for planning)" stdbuf -oL -eL "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
+          GF_DLT_APP_ID=PLAN stdbuf -oL -eL "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
         else
-          GF_DLT_APP_ID=PLAN GF_PHM_FAULT_MS="$(_fault_ms_for planning)" "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
+          GF_DLT_APP_ID=PLAN "${PLAN}" >"${LOG_DIR}/planning.log" 2>&1 &
         fi
         PLAN_PID=$!
         ;;

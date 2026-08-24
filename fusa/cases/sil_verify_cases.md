@@ -45,7 +45,7 @@
 ### SIL-02 — 主链 verify（有限帧）
 - 类别: fusa
 - 脚本: `projects/afc/scripts/verify/smoke_sil_verify.sh`
-- 步骤: compile_sil → run_sil_verify
+- 步骤: compile_sil → run_mainchain_verify
 - 期望: 有限帧 Trajectory / exec·phm 断言（脚本内）
 - 状态: active
 - 最近: **PASS**（2026-07-31）
@@ -53,7 +53,7 @@
 ### SIL-03 — PHM miss → recover
 - 类别: fusa
 - 脚本: `projects/afc/scripts/verify/smoke_sil_phm_fault.sh`
-- 环境: `GF_PHM_FAULT_MS=500`（默认）；注入在 **planning**（gateway 保持 0 以保 e2e）
+- 环境: smoke 自设 `GF_PHM_FAULT_MS=500` 并走 `run_mainchain_verify`（不调用产品 `run_sil`）
 - 期望: `planning.log` 含 `FAULT inject|AliveMissed|DeadlineMissed` 与 `recovered|fault window ended`；`gateway.log` 仍有 Trajectory
 - 状态: active
 - 最近: **PASS**（2026-07-31）

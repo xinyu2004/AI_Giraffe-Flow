@@ -55,7 +55,7 @@
 | Flow / GMT | `GF_LIVE_TAP` · `GF_INJECT_*` · `GF_WS_*` · `GF_GMT_DEPEND` | 不上板 |
 | 帧源 SIL 覆盖 | `GF_FRAME_SOURCE` · `GF_CARLA_*` | 覆盖 freeze 默认；板端仍读 hpp |
 | DoIP 主机覆盖 | `GF_DOIP_*` · `GF_DIAG_*` · `GF_OTA_*` | 默认读 `deploy_config.hpp` |
-| 故障注入 | `GF_PHM_FAULT_*` | 产品必须为 0 / 未设 |
+| 故障注入 | `GF_PHM_FAULT_*` | **仅** `scripts/verify/` smoke 自设并自启进程；产品 `run_sil` 不涉及 |
 | smoke 作者树 | **`GF_PLATFORM_DIR`**（显式） | **后期删除**（[BL-CFG-YAML-FALLBACK](AP_LITE_BACKLOG.md)）：今日仅当对应 freeze 头未编入时 YAML 回落 |
 
 **勿再加** `*.env` / 板端可变行为 yaml。

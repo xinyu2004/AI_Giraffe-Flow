@@ -92,18 +92,17 @@ bash projects/afc/scripts/verify/smoke_doip_ota.sh
 没有进程内假种数；环缓 NDJSON 看 `GF_COLLECTOR_STORE`。
 
 ```bash
-# 断言：uss AliveMissed → NDJSON + PER → UDS 0x19 读到 0xC01234
-bash projects/afc/scripts/verify/smoke_phm_dem_doip.sh
-
-# 交互：DoIP 开时默认对 uss 短注 PHM（GF_PHM_FAULT_MS=500）
+# 产品路径：无 PHM 故障注入；DoIP 仅监听，等真实 miss 或手工故障
 bash projects/afc/scripts/run_sil.sh
-# 另开终端：
+
+# 故障注入 → DEM/DoIP（仅 smoke）
+bash projects/afc/scripts/verify/smoke_sil_phm_fault.sh
+# 另开终端（可选）：
 GMT gui --project projects/afc
-# → OTA/UDS 连接 → 等 ~1s → DEM「读取 DTC」
+# → OTA/UDS 连接 → DEM「读取 DTC」
 # Collector「本机文件」→ …/runtime/collector/events.ndjson
 ```
 
-**关闭 PHM 注入：** `GF_PHM_FAULT_MS=0 bash …/run_sil.sh`。  
 `dtc_map` 事件键须与 `AliveMissed` / `DeadlineMissed` / `ota_failed` 等 `event_id` 一致。
 
 环境变量覆盖（服务端 / smoke，可选）：`GF_DOIP_PORT`、`GF_OTA_TRANSFER_MODE`、`GF_DIAG_S3_SERVER_MS`、`GF_DIAG_TP_PERIOD_MS`、`GF_DIAG_SEC_PLUGIN`。

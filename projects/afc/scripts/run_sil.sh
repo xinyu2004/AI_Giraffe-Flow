@@ -44,9 +44,6 @@
 #                      设 0 则端口忙时直接失败并提示如何手动停
 #   GF_DOIP            default auto — 1/0 强制开/关；auto = deploy_config kDoip
 #   GF_DOIP_PORT       default from deploy_config kDoipTcpPort（通常 13400）
-#   GF_PHM_FAULT_MS    DoIP 开且未显式设置时默认 500 — 真实 AliveMissed → GF_PER_DIR → DEM 0x19
-#   GF_PHM_FAULT_TARGET  默认 planning（fcm|planning|gateway）；其它进程 fault=0
-#                      关闭 PHM 注入：GF_PHM_FAULT_MS=0
 #   frame_ingest：相机开时由 EM 启 bin/gf_frame_ingest（compose filter）
 #   GF_FRAME_SOURCE   帧源（与 GF_INJECT_MODE 正交）：isp|carla|replay|colorbar|none
 #                    默认 isp（freeze SOP）；CARLA SIL 设 carla；GF_INJECT_FRAMES_DIR 未设时暗示 replay
@@ -80,10 +77,6 @@ export GF_PROJECT_DIR="${PROJECT_DIR}"
 HOST="${GF_WS_HOST:-0.0.0.0}"
 PORT="${GF_WS_PORT:-8765}"
 # Product path: hpp-only (no default GF_PLATFORM_DIR). Smoke may export GF_PLATFORM_DIR explicitly.
-# Remember whether caller set PHM fault (empty = unset) before applying defaults.
-_PHM_FAULT_USER="${GF_PHM_FAULT_MS-}"
-export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-0}"
-export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-planning}"
 export LD_LIBRARY_PATH="${RUNTIME}/lib:${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 # COVESA libdlt from in-tree build (not apt)
 _DLT_LIBDIR="${BUILD}/_dep-manifest/dlt-daemon/src/lib"
@@ -645,11 +638,6 @@ host_info "run_sil begin platform=${GF_PLATFORM_DIR:-(hpp-only)} live=${LIVE_ON}
 
 export GF_IOX_TOML="${IOX_TOML}"
 unset GF_EM_LOG_DIR || true
-# PHM fault defaults must be in env *before* EM spawns apps (children inherit).
-if [[ "${DOIP_ON}" == "1" && -z "${_PHM_FAULT_USER}" ]]; then
-  export GF_PHM_FAULT_MS=500
-  export GF_PHM_FAULT_TARGET="${GF_PHM_FAULT_TARGET:-planning}"
-fi
 host_info "start EM mode=deploy_config dlt=${DLT_ON} roudi=${IOX_ON} (console+DLT; no --log-dir)"
 echo "${TAG} [EM] gf_em_daemon (deploy_config.hpp) → dlt?=${DLT_ON} RouDi?=${IOX_ON} → apps"
 _EM_ARGS=(
