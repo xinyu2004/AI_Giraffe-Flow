@@ -1,11 +1,13 @@
-"""Tunnel entry/exit — approximate ISP exposure transitions via weather."""
+"""Tunnel entry/exit — approximate ISP exposure transitions via weather.
+
+Ego motion is Giraffe-only.
+"""
 
 from __future__ import annotations
 
 import os
 from typing import Any, Optional, Tuple
 
-from spawn.ic import seed_speed
 from spawn.pick import pick_follow_transforms
 from spawn.place import spawn_ego_only
 from _verdict import CmdProbe, release_ego
@@ -57,13 +59,16 @@ def layout_tunnel_entry(
     ego = spawn_ego_only(world, ego_tf=ego_tf, keep_ego=keep_ego)
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_TUNNEL_EGO_MPS") or "10")
-    seed_speed(carla_mod, ego, mps)
     switch_s = float(os.environ.get("GF_TUNNEL_SWITCH_S") or "3.0")
-    print(f"[layout] TUNNEL_ENTRY ego={ego.id} switch_s={switch_s}", flush=True)
+    print(
+        f"[layout] TUNNEL_ENTRY ego={ego.id} switch_s={switch_s} (Giraffe drives)",
+        flush=True,
+    )
     return ego, None, {
         "layout": "env_tunnel_entry",
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
         "switch_s": switch_s,
         "to_dark": True,
     }
@@ -82,13 +87,16 @@ def layout_tunnel_exit(
     ego = spawn_ego_only(world, ego_tf=ego_tf, keep_ego=keep_ego)
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_TUNNEL_EGO_MPS") or "10")
-    seed_speed(carla_mod, ego, mps)
     switch_s = float(os.environ.get("GF_TUNNEL_SWITCH_S") or "3.0")
-    print(f"[layout] TUNNEL_EXIT ego={ego.id} switch_s={switch_s}", flush=True)
+    print(
+        f"[layout] TUNNEL_EXIT ego={ego.id} switch_s={switch_s} (Giraffe drives)",
+        flush=True,
+    )
     return ego, None, {
         "layout": "env_tunnel_exit",
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
         "switch_s": switch_s,
         "to_dark": False,
     }
@@ -115,7 +123,4 @@ def tick_tunnel(
     if meta.get("handed_off") or not cmd.seen_control:
         return
     meta["handed_off"] = True
-    try:
-        ego.disable_constant_velocity()
-    except Exception:  # noqa: BLE001
-        pass
+    print(f"[layout] tunnel Giraffe cmd at t={elapsed:.2f}s", flush=True)

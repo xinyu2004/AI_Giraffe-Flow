@@ -1,4 +1,7 @@
-"""Lateral L2 layouts: LKA / LDW / ELK / LCC."""
+"""Lateral L2 layouts: LKA / LDW / ELK / LCC.
+
+Ego motion is Giraffe-only; neighbor/lead may use scenario IC.
+"""
 
 from __future__ import annotations
 
@@ -10,10 +13,6 @@ from spawn.pick import offset_transform, pick_curve_transform, pick_follow_trans
 from spawn.place import spawn_ego_only, spawn_named
 from spawn.roles import ROLE_LEAD
 from _verdict import CmdProbe, release_ego
-
-
-def _seed_ego_speed(carla_mod: Any, ego: Any, mps: float) -> None:
-    seed_speed(carla_mod, ego, mps)
 
 
 def layout_lka_curve_entry(
@@ -28,12 +27,12 @@ def layout_lka_curve_entry(
     ego = spawn_ego_only(world, ego_tf=tf, keep_ego=keep_ego)
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_LKA_EGO_MPS") or "9")
-    _seed_ego_speed(carla_mod, ego, mps)
-    print(f"[layout] LKA_CURVE_ENTRY ego={ego.id} v≈{mps}", flush=True)
+    print(f"[layout] LKA_CURVE_ENTRY ego={ego.id} v_target≈{mps} (Giraffe drives)", flush=True)
     return ego, None, {
         "layout": "lka_curve_entry",
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
     }
 
 
@@ -49,12 +48,12 @@ def layout_lka_in_curve(
     ego = spawn_ego_only(world, ego_tf=tf, keep_ego=keep_ego)
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_LKA_EGO_MPS") or "8")
-    _seed_ego_speed(carla_mod, ego, mps)
-    print(f"[layout] LKA_IN_CURVE ego={ego.id}", flush=True)
+    print(f"[layout] LKA_IN_CURVE ego={ego.id} (Giraffe drives)", flush=True)
     return ego, None, {
         "layout": "lka_in_curve",
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
     }
 
 
@@ -67,19 +66,18 @@ def layout_ldw_drift(
 ) -> Tuple[Any, Optional[Any], dict[str, Any]]:
     del client
     ego_tf, _ = pick_follow_transforms(world, lead_gap_m=20.0)
-    # Bias toward lane edge as IC.
     off = float(os.environ.get("GF_LDW_OFFSET_M") or "0.6")
     ego_tf = offset_transform(ego_tf, right_m=off)
     ego = spawn_ego_only(world, ego_tf=ego_tf, keep_ego=keep_ego)
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_LDW_EGO_MPS") or "8")
-    _seed_ego_speed(carla_mod, ego, mps)
-    print(f"[layout] LDW_DRIFT offset≈{off}m ego={ego.id}", flush=True)
+    print(f"[layout] LDW_DRIFT offset≈{off}m ego={ego.id} (Giraffe drives)", flush=True)
     return ego, None, {
         "layout": "ldw_drift",
         "offset_m": off,
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
     }
 
 
@@ -104,17 +102,17 @@ def layout_elk_overshoot(
     )
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_ELK_EGO_MPS") or "9")
-    _seed_ego_speed(carla_mod, ego, mps)
     seed_speed(carla_mod, neighbor, mps * 0.9)
     print(
-        f"[layout] ELK_OVERSHOOT ego={ego.id} neighbor={neighbor.id}",
+        f"[layout] ELK_OVERSHOOT ego={ego.id} neighbor={neighbor.id} (Giraffe drives ego)",
         flush=True,
     )
     return ego, neighbor, {
         "layout": "elk_overshoot",
         "offset_m": off,
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
     }
 
 
@@ -130,12 +128,12 @@ def layout_lcc_straight(
     ego = spawn_ego_only(world, ego_tf=ego_tf, keep_ego=keep_ego)
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_LCC_EGO_MPS") or "10")
-    _seed_ego_speed(carla_mod, ego, mps)
-    print(f"[layout] LCC_STRAIGHT ego={ego.id}", flush=True)
+    print(f"[layout] LCC_STRAIGHT ego={ego.id} (Giraffe drives)", flush=True)
     return ego, None, {
         "layout": "lcc_straight",
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
     }
 
 
@@ -146,13 +144,8 @@ def tick_lateral_handoff(
     meta: dict[str, Any],
     cmd: CmdProbe,
 ) -> None:
+    del ego
     if meta.get("handed_off") or not cmd.seen_control:
         return
-    if not meta.get("const_vel"):
-        return
     meta["handed_off"] = True
-    try:
-        ego.disable_constant_velocity()
-    except Exception:  # noqa: BLE001
-        pass
-    print(f"[layout] lateral handoff t={elapsed:.2f}s", flush=True)
+    print(f"[layout] lateral Giraffe cmd at t={elapsed:.2f}s", flush=True)

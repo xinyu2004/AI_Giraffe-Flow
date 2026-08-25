@@ -196,27 +196,11 @@ else
   echo "${TAG} stage: skip platform/ (product path = hpp; set GF_STAGE_PLATFORM=1 to include)"
 fi
 
-# Python ingest helpers + carla module (SIL host only; HIL/board: GF_STAGE_PY=0).
-INGEST_APP="${PROJECT_DIR}/apps/frame_ingest"
-BRIDGE_SRC="${PROJECT_DIR}/tools/carla_bridge"
-if [[ "${GF_STAGE_PY:-1}" == "1" ]]; then
-  if [[ -d "${INGEST_APP}" ]]; then
-    for f in gf_frame_ingest.py gf_channel_py.py; do
-      [[ -f "${INGEST_APP}/${f}" ]] && cp -f "${INGEST_APP}/${f}" "${SHARE}/${f}"
-    done
-  fi
-  if [[ -d "${BRIDGE_SRC}" ]]; then
-    rm -rf "${SHARE}/modules/carla_bridge"
-    mkdir -p "${SHARE}/modules"
-    cp -a "${BRIDGE_SRC}" "${SHARE}/modules/carla_bridge"
-    # drop bytecode if any
-    find "${SHARE}/modules/carla_bridge" -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
-    echo "${TAG} stage share ← carla_bridge (copied; GF_STAGE_PY=1)"
-  fi
-else
-  rm -rf "${SHARE}"
-  echo "${TAG} stage: skip Python share/ (GF_STAGE_PY=0; board/HIL path)"
-fi
+# Boundary modules are C++ binaries under bin/ (gf_frame_colorbar / gf_frame_replay /
+# gf_carla_io). No Python share/ for frame_ingest.
+rm -rf "${SHARE}/gf_frame_ingest.py" "${SHARE}/gf_channel_py.py" \
+  "${SHARE}/modules/carla_bridge" "${SHARE}/modules/carla_io" 2>/dev/null || true
+echo "${TAG} stage: no Python frame_ingest share (C++ modules in bin/)"
 
 # Debug-only host helper (product entry = systemd/init → gf_em_daemon).
 # Runtime is self-contained: only paths under ROOT (this staged tree).

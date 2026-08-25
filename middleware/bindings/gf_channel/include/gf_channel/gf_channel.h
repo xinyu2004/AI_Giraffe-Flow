@@ -7,13 +7,15 @@
 extern "C" {
 #endif
 
-/* Pixel formats — keep in sync with frame_ingest pixel_format strings. */
+/* Payload formats — image planes + opaque blob (general shm, not image-only). */
 enum GfChannelFormat {
   GF_CHANNEL_FMT_NV12 = 0,
   GF_CHANNEL_FMT_NV21 = 1,
   GF_CHANNEL_FMT_YUV422 = 2,
   GF_CHANNEL_FMT_YUV444 = 3,
   GF_CHANNEL_FMT_RGB8 = 4,
+  /* Opaque/structured: plane_bytes = w, h must be 1 (see gf_channel_create_blob). */
+  GF_CHANNEL_FMT_BLOB = 5,
 };
 
 enum {
@@ -31,10 +33,12 @@ const char* gf_channel_format_name(uint16_t format);
 
 /*
  * Create (writer / ingest). buffers must be 2 or 3.
- * slot examples: "gf.channel.front".
+ * slot examples: "gf.channel.front", "gf.channel.vehicle_state".
  */
 GfChannel* gf_channel_create(const char* slot, uint32_t w, uint32_t h, uint16_t format,
                              uint32_t buffers);
+/* Structured/opaque payload: fixed plane_bytes (POD / blob). */
+GfChannel* gf_channel_create_blob(const char* slot, uint32_t plane_bytes, uint32_t buffers);
 GfChannel* gf_channel_open(const char* slot);
 void gf_channel_close(GfChannel* ch);
 int gf_channel_publish(GfChannel* ch, const void* plane, uint32_t plane_bytes,

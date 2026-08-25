@@ -61,15 +61,15 @@ def layout_hlb_oncoming(
     )
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_HLB_EGO_MPS") or "10")
-    seed_speed(carla_mod, ego, mps)
     seed_speed(carla_mod, other, mps)
     _lights_on(ego)
     _lights_on(other)
-    print(f"[layout] HLB_ONCOMING ego={ego.id} other={other.id}", flush=True)
+    print(f"[layout] HLB_ONCOMING ego={ego.id} other={other.id} (Giraffe drives ego)", flush=True)
     return ego, other, {
         "layout": "hlb_oncoming",
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
     }
 
 
@@ -86,12 +86,12 @@ def layout_hlb_urban(
     _lights_on(ego)
     _lights_on(lead)
     mps = float(os.environ.get("GF_HLB_EGO_MPS") or "8")
-    seed_speed(carla_mod, ego, mps)
-    print(f"[layout] HLB_URBAN ego={ego.id} lead={lead.id}", flush=True)
+    print(f"[layout] HLB_URBAN ego={ego.id} lead={lead.id} (Giraffe drives ego)", flush=True)
     return ego, lead, {
         "layout": "hlb_urban",
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
     }
 
 
@@ -122,12 +122,12 @@ def layout_night_lead_hb(
     _lights_on(ego)
     _lights_on(lead)
     mps = float(os.environ.get("GF_NIGHT_LEAD_EGO_MPS") or "9")
-    seed_speed(carla_mod, ego, mps)
-    print(f"[layout] NIGHT_LEAD_HB ego={ego.id} lead={lead.id}", flush=True)
+    print(f"[layout] NIGHT_LEAD_HB ego={ego.id} lead={lead.id} (Giraffe drives ego)", flush=True)
     return ego, lead, {
         "layout": "env_night_lead_hb",
         "ego_mps": mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
     }
 
 
@@ -138,13 +138,8 @@ def tick_light_handoff(
     meta: dict[str, Any],
     cmd: CmdProbe,
 ) -> None:
+    del ego
     if meta.get("handed_off") or not cmd.seen_control:
         return
-    if not meta.get("const_vel"):
-        return
     meta["handed_off"] = True
-    try:
-        ego.disable_constant_velocity()
-    except Exception:  # noqa: BLE001
-        pass
-    print(f"[layout] lighting handoff t={elapsed:.2f}s", flush=True)
+    print(f"[layout] lighting Giraffe cmd at t={elapsed:.2f}s", flush=True)

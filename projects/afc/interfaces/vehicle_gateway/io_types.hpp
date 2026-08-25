@@ -58,7 +58,7 @@ struct VehicleBus {
   uint8_t _opaque[1];
 };
 
-// 规划回传 → gateway 下发控车（CAN / IPC）
+// 规划回传 → gateway 下发控车（CAN / IPC）；与 planning_driving::Trajectory 同形
 struct Trajectory {
   uint64_t timestamp_ns;
   uint8_t point_count;
@@ -66,6 +66,11 @@ struct Trajectory {
   float points_y_m[60];
   uint8_t gear_shift_first;
   uint8_t gear_shift_second;
+  float throttle;
+  float brake;
+  float steer;
+  float target_speed_mps;
+  uint8_t ctrl_mode;  // 0=cruise 1=acc 2=aeb 3=pullaway
 };
 
 }  // namespace gf::demo::vehicle_gateway

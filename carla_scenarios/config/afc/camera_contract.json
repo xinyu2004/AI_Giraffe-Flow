@@ -1,0 +1,27 @@
+{
+  "schema": "camera_contract/v1",
+  "product": "afc",
+  "active_source": "isp",
+  "ego_source": "carla",
+  "camera_transport": "shm",
+  "slots": [
+    {
+      "id": "front",
+      "slot_name": "gf.channel.front",
+      "w": 640,
+      "h": 480,
+      "pixel_format": "nv12",
+      "buffers": 2,
+      "mount": {
+        "id": "1",
+        "x": 0.55,
+        "y": 0.0,
+        "z": 1.35,
+        "pitch": -5.0,
+        "yaw": 0.0,
+        "roll": 0.0,
+        "fov": 100.0
+      }
+    }
+  ]
+}

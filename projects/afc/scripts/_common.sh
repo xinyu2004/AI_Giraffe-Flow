@@ -110,6 +110,27 @@ gf_require_generated() {
   return 0
 }
 
+# Octave → oct_gen (mtime). Prefer console entry like gf-config; ⊥ gf-codegen.
+gf_octavecoder_sync() {
+  local sku="${1:-afc}"
+  local coder_src="${ROOT}/tools/gf-octavecoder/src"
+  if [[ ! -d "${coder_src}/gf_octavecoder" ]]; then
+    echo "${TAG} WARN: gf-octavecoder missing; skip oct_gen" >&2
+    return 0
+  fi
+  echo "${TAG} gf-octavecoder generate sku=${sku} ..."
+  if command -v gf-octavecoder >/dev/null 2>&1; then
+    gf-octavecoder generate --repo-root "${ROOT}" --sku "${sku}"
+    return $?
+  fi
+  # Dev fallback before pip install -e tools/gf-octavecoder
+  local py="${ROOT}/.venv/bin/python"
+  [[ -x "${py}" ]] || py="$(command -v python3)"
+  echo "${TAG} WARN: gf-octavecoder not on PATH — using python -m (pip install -e tools/gf-octavecoder)" >&2
+  PYTHONPATH="${coder_src}${PYTHONPATH:+:${PYTHONPATH}}" \
+    "${py}" -m gf_octavecoder generate --repo-root "${ROOT}" --sku "${sku}"
+}
+
 # Stage when runtime incomplete, or build products newer than staged copies.
 gf_sil_need_stage() {
   local rt build em_src em_dst

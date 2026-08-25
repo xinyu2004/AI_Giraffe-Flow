@@ -8,7 +8,7 @@
 | `playhead/` | GMT 时间轴驱动 | `GF_INJECT_MODE=playhead`（session 可选） |
 | `dut/` | B2 单模块 | `GF_INJECT_DUT=…` + session |
 
-互斥：`ego_source=inject` 时 gateway **不**发 EgoMotion。
+**车态边界：** `ego_source=inject` 时 gateway **不退出**。inject / 回灌侧应写入 GfChannel `gf.channel.vehicle_state`（与 carla 本机桥相同槽）；gateway **唯一 Provide** `EgoMotion` + `Perception_In_St`。勿让 inject 与 gateway 双发 Ego。
 
 ```bash
 ./samples/stage.sh --inject playhead

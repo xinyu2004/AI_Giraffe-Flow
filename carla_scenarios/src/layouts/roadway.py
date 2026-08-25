@@ -1,11 +1,13 @@
-"""Lane split / merge roadway stress layouts (best-effort on Town maps)."""
+"""Lane split / merge roadway stress layouts (best-effort on Town maps).
+
+Ego motion is Giraffe-only.
+"""
 
 from __future__ import annotations
 
 import os
 from typing import Any, Optional, Tuple
 
-from spawn.ic import seed_speed
 from spawn.pick import pick_follow_transforms
 from spawn.place import spawn_ego_only
 from _verdict import CmdProbe, release_ego
@@ -68,9 +70,13 @@ def layout_lane_split(
     ego = spawn_ego_only(world, ego_tf=tf, keep_ego=keep_ego)
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_ROAD_EGO_MPS") or "10")
-    seed_speed(carla_mod, ego, mps)
-    print(f"[layout] LANE_SPLIT ego={ego.id}", flush=True)
-    return ego, None, {"layout": "env_lane_split", "ego_mps": mps, "const_vel": True}
+    print(f"[layout] LANE_SPLIT ego={ego.id} (Giraffe drives)", flush=True)
+    return ego, None, {
+        "layout": "env_lane_split",
+        "ego_mps": mps,
+        "const_vel": False,
+        "ic": "giraffe_only",
+    }
 
 
 def layout_lane_merge(
@@ -85,9 +91,13 @@ def layout_lane_merge(
     ego = spawn_ego_only(world, ego_tf=tf, keep_ego=keep_ego)
     release_ego(carla_mod, ego)
     mps = float(os.environ.get("GF_ROAD_EGO_MPS") or "10")
-    seed_speed(carla_mod, ego, mps)
-    print(f"[layout] LANE_MERGE ego={ego.id}", flush=True)
-    return ego, None, {"layout": "env_lane_merge", "ego_mps": mps, "const_vel": True}
+    print(f"[layout] LANE_MERGE ego={ego.id} (Giraffe drives)", flush=True)
+    return ego, None, {
+        "layout": "env_lane_merge",
+        "ego_mps": mps,
+        "const_vel": False,
+        "ic": "giraffe_only",
+    }
 
 
 def tick_road_handoff(
@@ -97,11 +107,8 @@ def tick_road_handoff(
     meta: dict[str, Any],
     cmd: CmdProbe,
 ) -> None:
+    del ego
     if meta.get("handed_off") or not cmd.seen_control:
         return
     meta["handed_off"] = True
-    try:
-        ego.disable_constant_velocity()
-    except Exception:  # noqa: BLE001
-        pass
-    print(f"[layout] roadway handoff t={elapsed:.2f}s", flush=True)
+    print(f"[layout] roadway Giraffe cmd at t={elapsed:.2f}s", flush=True)

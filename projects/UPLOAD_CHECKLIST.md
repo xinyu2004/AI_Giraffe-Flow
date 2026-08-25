@@ -37,6 +37,7 @@
 cd AI_Giraffe-Flow
 python3 -m venv .venv && source .venv/bin/activate   # 需要 Python ≥ 3.10
 pip install -e "tools/gf-codegen[dev]"
+pip install -e tools/gf-octavecoder   # 可选：planning Octave 转译 → gf-octavecoder
 bash scripts/bootstrap_deps.sh                       # 拉 iceoryx + 源码编 attr/acl
 bash projects/afc/scripts/verify/smoke_sil.sh
 ```

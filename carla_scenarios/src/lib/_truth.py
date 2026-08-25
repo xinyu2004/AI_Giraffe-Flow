@@ -1,98 +1,11 @@
-"""Shared truth writer for carla_scenarios (no Giraffe / gf-* imports)."""
+"""Removed: carla_truth.json file IPC is deleted.
+
+Perception/truth for SIL is GfChannel ``fake_perc`` from giraffe_client.
+HUD fields are computed in-process by scenario_client.
+"""
 
 from __future__ import annotations
 
-def _ipc_under_project(name: str) -> Path:
-    import os
-    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
-    if proj:
-        return Path(proj) / "runtime_ipc" / name
-    return Path("runtime_ipc") / name
-
-
-import json
-import os
-import time
-from pathlib import Path
-from typing import Any, Optional
-
-
-def truth_path() -> Path:
-    return Path(os.environ.get("GF_CARLA_TRUTH_PATH") or str(_ipc_under_project("carla_truth.json")))
-
-
-def atomic_write_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)
-
-
-def write_truth(
-    *,
-    scenario: str,
-    lead_distance_m: float,
-    lead_rel_speed_mps: float,
-    seq: int,
-    ego_mps: Optional[float] = None,
-    th_s: Optional[float] = None,
-    set_speed_kph: Optional[float] = None,
-    case_index: Optional[int] = None,
-    case_total: Optional[int] = None,
-    keyword: Optional[str] = None,
-    t_s: Optional[float] = None,
-    duration_s: Optional[float] = None,
-    lead_lat_m: Optional[float] = None,
-    lead_lane_assignment: Optional[int] = None,
-    lead_heading_rad: Optional[float] = None,
-    lane_extra: Optional[dict[str, Any]] = None,
-    extra: Optional[dict[str, Any]] = None,
-) -> None:
-    """Write truth snapshot. Legacy flat fields kept for planning ACC/AEB.
-
-    Lane topology (optional via lane_extra): lane_count, ego_lane_index_from_left,
-    lane_width_m, host_*_c0/c1/type, adj_n, adj{i}_*.
-    """
-    payload: dict[str, Any] = {
-        "timestamp_ns": time.time_ns(),
-        "seq": seq,
-        "scenario": scenario,
-        "lead_distance_m": float(lead_distance_m),
-        "lead_rel_speed_mps": float(lead_rel_speed_mps),
-        # Soft work range; BEV canvas uses work×1.1 — not a hard display cut.
-        "dyn_obj_count": 1 if 0.5 < lead_distance_m <= 130.0 else 0,
-    }
-    if lead_lat_m is not None:
-        payload["lead_lat_m"] = float(lead_lat_m)
-    if lead_lane_assignment is not None:
-        payload["lead_lane_assignment"] = int(lead_lane_assignment)
-    if lead_heading_rad is not None:
-        payload["lead_heading_rad"] = float(lead_heading_rad)
-    if ego_mps is not None:
-        payload["ego_mps"] = float(ego_mps)
-        payload["ego_kph"] = float(ego_mps) * 3.6
-    if th_s is not None:
-        payload["th_s"] = float(th_s)
-    if set_speed_kph is not None:
-        payload["set_speed_kph"] = float(set_speed_kph)
-    if lane_extra:
-        for k, v in lane_extra.items():
-            payload[k] = v
-    run: dict[str, Any] = {"case_id": scenario}
-    if case_index is not None:
-        run["case_index"] = int(case_index)
-    if case_total is not None:
-        run["case_total"] = int(case_total)
-    if keyword is not None:
-        run["keyword"] = keyword
-    if t_s is not None:
-        run["t_s"] = float(t_s)
-    if duration_s is not None:
-        run["duration_s"] = float(duration_s)
-    if len(run) > 1:
-        payload["run"] = run
-    if extra:
-        payload.update(extra)
-    atomic_write_text(
-        truth_path(), json.dumps(payload, separators=(",", ":")) + "\n"
-    )
+raise ImportError(
+    "_truth.write_truth removed — no carla_truth.json; use GfChannel fake_perc / in-process HUD"
+)

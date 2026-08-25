@@ -29,6 +29,7 @@ export GF_BUILD_DIR="${BUILD_SIL}"
 
 gf_ensure_bootstrap
 gf_require_generated
+gf_octavecoder_sync afc
 
 SIL_CMAKE_ARGS=()
 gf_sil_cmake_compiler_args SIL_CMAKE_ARGS

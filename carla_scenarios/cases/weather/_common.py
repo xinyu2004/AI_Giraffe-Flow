@@ -33,7 +33,6 @@ from _instrument import (  # noqa: E402
 )
 from _camera_mount import load_camera_mount  # noqa: E402
 from _traffic import ensure_ambient_traffic  # noqa: E402
-from _truth import write_truth  # noqa: E402
 from _verdict import (  # noqa: E402
     CmdProbe,
     Sample,
@@ -55,19 +54,10 @@ def _on_sig(signum: int, _frame: object) -> None:
 
 
 def run_dry(tag: str, duration_s: float, period_s: float) -> int:
-    print(f"[{tag}] explicit --dry-run: truth only (no closed loop)", flush=True)
+    print(f"[{tag}] explicit --dry-run: no CARLA / no file IPC", flush=True)
     print(f"[{tag}] READY dry-run", flush=True)
     t0 = time.time()
-    seq = 0
     while not STOP and (time.time() - t0) < duration_s:
-        seq += 1
-        elapsed = time.time() - t0
-        write_truth(
-            scenario=tag,
-            lead_distance_m=28.0 + 6.0 * math.sin(elapsed * 0.35),
-            lead_rel_speed_mps=-0.5,
-            seq=seq,
-        )
         time.sleep(period_s)
     print_verdict(tag, False, "no_giraffe_control", mode="dry-run")
     return 1
@@ -151,16 +141,6 @@ def run_session(
                 th_s=th,
                 collided=collided,
             )
-        )
-        write_truth(
-            scenario=tag,
-            lead_distance_m=gap,
-            lead_rel_speed_mps=rel,
-            seq=seq["n"],
-            ego_mps=es,
-            th_s=th,
-            t_s=elapsed,
-            duration_s=duration_s,
         )
         if view is not None:
             tgt = None

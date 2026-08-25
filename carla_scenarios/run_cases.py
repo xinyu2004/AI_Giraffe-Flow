@@ -24,11 +24,12 @@ import importlib.util
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, List
 
 _HERE = Path(__file__).resolve().parent
 _SRC = _HERE / "src"
@@ -53,12 +54,62 @@ from spawn.boundary import reset_wrecked_ego  # noqa: E402
 from spawn.roles import ROLE_EGO, find_by_role  # noqa: E402
 
 STOP = False
+_GIRAFFE_CLIENT_PROC: Optional[subprocess.Popen[Any]] = None
 
 
 def _on_sig(signum: int, _frame: object) -> None:
     global STOP
     STOP = True
     print(f"[run_cases] signal {signum} → stop", flush=True)
+
+
+def _start_giraffe_client() -> None:
+    """scenario_client 一键拉起 giraffe_client（用户无感两个 Client）。"""
+    global _GIRAFFE_CLIENT_PROC
+    flag = (os.environ.get("GF_START_GIRAFFE_CLIENT") or "1").strip().lower()
+    if flag in ("0", "false", "no", "off"):
+        print("[run_cases] GF_START_GIRAFFE_CLIENT=0 → skip giraffe_client", flush=True)
+        return
+    if _GIRAFFE_CLIENT_PROC is not None and _GIRAFFE_CLIENT_PROC.poll() is None:
+        return
+    cmd = [sys.executable, "-m", "giraffe_client"]
+    log_path = _HERE / "results" / "giraffe_client.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_f = open(log_path, "a", encoding="utf-8")  # noqa: SIM115
+    log_f.write(f"\n--- run_cases spawn {datetime.now().isoformat()} ---\n")
+    log_f.flush()
+    _GIRAFFE_CLIENT_PROC = subprocess.Popen(
+        cmd,
+        cwd=str(_HERE),
+        env=os.environ.copy(),
+        stdout=log_f,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    print(
+        f"[run_cases] started giraffe_client pid={_GIRAFFE_CLIENT_PROC.pid} "
+        f"log={log_path}",
+        flush=True,
+    )
+
+
+def _stop_giraffe_client() -> None:
+    global _GIRAFFE_CLIENT_PROC
+    proc = _GIRAFFE_CLIENT_PROC
+    _GIRAFFE_CLIENT_PROC = None
+    if proc is None:
+        return
+    if proc.poll() is not None:
+        return
+    print(f"[run_cases] stopping giraffe_client pid={proc.pid}", flush=True)
+    try:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=5)
+    except Exception:  # noqa: BLE001
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _load_py(path: Path) -> Any:
@@ -253,6 +304,7 @@ def main(argv: list[str] | None = None) -> int:
     carla, client, world = connect_world(
         wait_s=wait_budget_s(args.wait_s), log_prefix="[run_cases]"
     )
+    _start_giraffe_client()
     # Always wipe leftover hero/lead from a prior crash/session — otherwise the
     # first case "continues" from the guardrail instead of a real cold start.
     reset_wrecked_ego(world, reason="suite_start")
@@ -384,6 +436,7 @@ def main(argv: list[str] | None = None) -> int:
                     break
             time.sleep(0.3)
     finally:
+        _stop_giraffe_client()
         if view is not None:
             try:
                 view.destroy()

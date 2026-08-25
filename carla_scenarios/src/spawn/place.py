@@ -43,7 +43,7 @@ def _park_handbrake(actor: Any) -> None:
         pass
 
 
-def _set_transform_at_rest(actor: Any, transform: Any) -> None:
+def _set_transform_at_rest(actor: Any, transform: Any, *, park: bool = False) -> None:
     """Teleport with physics-off, then zero world velocity (still not an IC speed)."""
     import carla  # type: ignore
 
@@ -68,7 +68,8 @@ def _set_transform_at_rest(actor: Any, transform: Any) -> None:
         actor.set_target_angular_velocity(carla.Vector3D(0.0, 0.0, 0.0))
     except Exception:  # noqa: BLE001
         pass
-    _park_handbrake(actor)
+    if park:
+        _park_handbrake(actor)
 
 
 def spawn_named(
@@ -217,24 +218,20 @@ def ego_lead(
             clear_radius_m=8.0,
         )
     else:
-        _set_transform_at_rest(lead, lead_tf)
+        _set_transform_at_rest(lead, lead_tf, park=True)
 
     tick_world(world)
-    # Quiet lead after place; never slam hero velocity when continuing.
-    quiet = (lead,) if keep_ego else (ego, lead)
-    for actor in quiet:
-        try:
-            import carla  # type: ignore
+    # Quiet lead after place. Ego velocity: Giraffe-only (no park/handbrake on hero).
+    try:
+        import carla  # type: ignore
 
-            actor.disable_constant_velocity()
-            actor.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
-        except Exception:  # noqa: BLE001
-            pass
-    if not keep_ego:
-        _park_handbrake(ego)
-        for _ in range(3):
-            tick_world(world)
-            _park_handbrake(ego)
+        lead.disable_constant_velocity()
+        lead.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
+        if not keep_ego:
+            ego.disable_constant_velocity()
+            ego.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
+    except Exception:  # noqa: BLE001
+        pass
     tick_world(world)
     return ego, lead
 

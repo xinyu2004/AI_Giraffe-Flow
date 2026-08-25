@@ -80,6 +80,10 @@ struct GfChannel {
 };
 
 extern "C" uint32_t gf_channel_plane_bytes(uint16_t format, uint32_t w, uint32_t h) {
+  if (format == GF_CHANNEL_FMT_BLOB) {
+    /* w carries plane_bytes; h must be 1. */
+    return (h == 1 && w > 0) ? w : 0;
+  }
   if (w == 0 || h == 0) {
     return 0;
   }
@@ -117,6 +121,9 @@ extern "C" uint16_t gf_channel_format_from_name(const char* name) {
   if (std::strcmp(name, "rgb8") == 0) {
     return GF_CHANNEL_FMT_RGB8;
   }
+  if (std::strcmp(name, "blob") == 0) {
+    return GF_CHANNEL_FMT_BLOB;
+  }
   return GF_CHANNEL_FMT_NV12;
 }
 
@@ -132,6 +139,8 @@ extern "C" const char* gf_channel_format_name(uint16_t format) {
       return "yuv444";
     case GF_CHANNEL_FMT_RGB8:
       return "rgb8";
+    case GF_CHANNEL_FMT_BLOB:
+      return "blob";
     default:
       return "nv12";
   }
@@ -141,6 +150,10 @@ extern "C" const char* gf_channel_format_name(uint16_t format) {
 
 extern "C" GfChannel* gf_channel_create(const char*, uint32_t, uint32_t, uint16_t,
                                        uint32_t) {
+  errno = ENOTSUP;
+  return nullptr;
+}
+extern "C" GfChannel* gf_channel_create_blob(const char*, uint32_t, uint32_t) {
   errno = ENOTSUP;
   return nullptr;
 }
@@ -163,6 +176,11 @@ extern "C" int gf_channel_info(const GfChannel*, uint32_t*, uint32_t*, uint16_t*
 }
 
 #else
+
+extern "C" GfChannel* gf_channel_create_blob(const char* slot, uint32_t plane_bytes,
+                                            uint32_t buffers) {
+  return gf_channel_create(slot, plane_bytes, 1u, GF_CHANNEL_FMT_BLOB, buffers);
+}
 
 extern "C" GfChannel* gf_channel_create(const char* slot, uint32_t w, uint32_t h,
                                        uint16_t format, uint32_t buffers) {

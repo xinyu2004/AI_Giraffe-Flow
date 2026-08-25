@@ -573,16 +573,7 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
 
 
 
-def _resolve_planning_ctrl_path() -> Path | None:
-    env = (os.environ.get("GF_PLANNING_CTRL_PATH") or "").strip()
-    if env:
-        return Path(env)
-    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
-    if proj:
-        return Path(proj) / "runtime_ipc" / "planning_ctrl.json"
-    # CWD often = SKU root when GMT_depend_launch runs
-    cand = Path("runtime_ipc") / "planning_ctrl.json"
-    return cand if cand.is_file() else cand
+_CTRL_MODE_NAMES = {0: "cruise", 1: "acc", 2: "aeb", 3: "pullaway"}
 
 
 def _lane_line_quality(it: dict[str, Any], *, conf_key: str, avail_key: str) -> tuple[float, int] | None:
@@ -611,31 +602,20 @@ class LiveBevComposer:
         self._emit_every = 1
         self._n = 0
         self._script = script
-        self._ctrl_path = _resolve_planning_ctrl_path()
-        self._ctrl_mtime_ns = -1
 
-    def _refresh_plan_ctrl(self) -> None:
-        """Pull throttle/brake from planning_ctrl.json (same file gateway reads)."""
-        path = self._ctrl_path
-        if path is None or not path.is_file():
-            return
-        try:
-            mtime_ns = path.stat().st_mtime_ns
-        except OSError:
-            return
-        if mtime_ns == self._ctrl_mtime_ns:
-            return
-        try:
-            raw = path.read_text(encoding="utf-8")
-            data = json.loads(raw)
-        except (OSError, json.JSONDecodeError, TypeError):
-            return
-        if not isinstance(data, dict):
-            return
-        self._ctrl_mtime_ns = mtime_ns
-        self.state.throttle_cmd = float(data.get("throttle") or 0.0)
-        self.state.brake_cmd = float(data.get("brake") or 0.0)
-        self.state.plan_mode = str(data.get("mode") or "")
+    def _apply_traj_ctrl(self, data: dict[str, Any]) -> None:
+        if data.get("throttle") is not None:
+            self.state.throttle_cmd = float(data["throttle"])
+        if data.get("brake") is not None:
+            self.state.brake_cmd = float(data["brake"])
+        if data.get("ctrl_mode") is not None:
+            try:
+                mid = int(data["ctrl_mode"])
+                self.state.plan_mode = _CTRL_MODE_NAMES.get(mid, str(mid))
+            except (TypeError, ValueError):
+                pass
+        elif data.get("mode") is not None:
+            self.state.plan_mode = str(data["mode"])
 
     def _apply_adas_data(self, data: dict[str, Any]) -> None:
         self.state.has_adas = True
@@ -859,6 +839,7 @@ class LiveBevComposer:
             if isinstance(xs, list) and isinstance(ys, list):
                 self.state.traj_x = [float(x) for x in xs]
                 self.state.traj_y = [float(y) for y in ys]
+            self._apply_traj_ctrl(data)
             if data.get("timestamp_ns"):
                 self.state.t_ns = int(data["timestamp_ns"])
             self._maybe_script_at(self.state.t_ns or t_ns)
@@ -887,7 +868,6 @@ class LiveBevComposer:
         # Prefer unique log times for Studio Image panel (ns); bump if equal
         if t <= 0:
             t = self._n * 100_000_000  # 0.1s steps
-        self._refresh_plan_ctrl()
         if self.state.has_adas and not self.state.has_perc_lead:
             lo = self.state.lane_offset_m
             # Prefer planning Trajectory (ego-frame → world y for render_bev_png).

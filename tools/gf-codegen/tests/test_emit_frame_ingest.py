@@ -19,12 +19,12 @@ def test_normalize_defaults() -> None:
     assert cfg["ego_source"] == "gateway"
     assert cfg["bridge"]["enabled"] is False
     assert "dry_run" not in cfg["bridge"]
-    assert cfg["paths"]["frame"].endswith("runtime_ipc/front.yuv") or "runtime_ipc" in cfg["paths"]["frame"]
-    assert "/tmp/gf_" not in cfg["paths"]["frame"]
+    assert cfg["paths"]["frame"] == ""
 
 
 def test_emit_frame_ingest_carla(tmp_path: Path) -> None:
     req = {
+        "product": "AFC",
         "frame_ingest": {
             "frame_source": "carla_file",
             "perception_backend": "stub",
@@ -36,13 +36,14 @@ def test_emit_frame_ingest_carla(tmp_path: Path) -> None:
             "bridge": {
                 "enabled": True,
             },
-            "paths": {
-                "frame": "/tmp/gf_front.yuv",
-                "cmd": "/tmp/gf_carla_cmd.json",
-            },
         }
     }
-    meta = emit_frame_ingest(req, tmp_path)
+    # gen_dir under fake projects/afc so host export lands in sibling carla_scenarios
+    proj = tmp_path / "projects" / "afc"
+    gen = proj / "generated"
+    gen.mkdir(parents=True)
+    (tmp_path / "carla_scenarios").mkdir()
+    meta = emit_frame_ingest(req, gen)
     hpp = Path(meta["hpp"]).read_text(encoding="utf-8")
     assert 'kFrameSource = "carla_file"' in hpp
     assert 'kPixelFormat = "nv12"' in hpp
@@ -57,12 +58,18 @@ def test_emit_frame_ingest_carla(tmp_path: Path) -> None:
     assert "kDemoLaneChange" not in hpp
     assert "kFramePath" in hpp
     assert "kTip" not in hpp
-    assert not (tmp_path / "frame_ingest.env").exists()
+    assert not (gen / "frame_ingest.env").exists()
     assert "camera_contract" in meta
+    assert meta.get("product") == "afc"
     cam = json.loads(Path(meta["camera_contract"]).read_text(encoding="utf-8"))
     assert cam["schema"] == "camera_contract/v1"
+    assert cam["product"] == "afc"
     assert cam["slots"][0]["slot_name"] == "gf.channel.front"
     assert cam["camera_transport"] == "shm"
+    host = Path(meta["camera_contract_host"])
+    assert host == tmp_path / "carla_scenarios" / "config" / "afc" / "camera_contract.json"
+    assert host.is_file()
+    assert json.loads(host.read_text(encoding="utf-8"))["product"] == "afc"
 
 
 def test_normalize_active_source_enables_bridge() -> None:
@@ -118,29 +125,33 @@ def test_normalize_rejects_missing_camera_slots_key_uses_default_front() -> None
     assert cfg["camera_slots"][0]["id"] == "front"
 
 
-def test_legacy_tmp_paths_migrate_to_runtime_ipc(tmp_path: Path) -> None:
+def test_replay_frame_path_optional(tmp_path: Path) -> None:
     cfg = normalize_frame_ingest(
         {
             "frame_ingest": {
-                "paths": {
-                    "frame": "/tmp/gf_front.yuv",
-                    "cmd": "/tmp/gf_carla_cmd.json",
-                }
+                "active_source": "replay",
+                "paths": {"frame": "/tmp/gf_front.yuv"},
             }
         },
         project_dir=tmp_path,
     )
     assert cfg["paths"]["frame"] == str(tmp_path / "runtime_ipc" / "front.yuv")
-    assert cfg["paths"]["cmd"] == str(tmp_path / "runtime_ipc" / "carla_cmd.json")
-    assert not cfg["paths"]["frame"].startswith("/tmp/gf_")
+    assert "cmd" not in cfg["paths"]
 
 
-def test_legacy_rgb_path_migrates_to_yuv() -> None:
+def test_legacy_rgb_path_migrates_to_yuv(tmp_path: Path) -> None:
     cfg = normalize_frame_ingest(
-        {"frame_ingest": {"paths": {"frame": "/tmp/gf_front.rgb"}, "pixel_format": "nv12"}}
+        {
+            "frame_ingest": {
+                "active_source": "replay",
+                "paths": {"frame": "/tmp/gf_front.rgb"},
+                "pixel_format": "nv12",
+            }
+        },
+        project_dir=tmp_path,
     )
     assert cfg["paths"]["frame"].endswith("front.yuv")
-    assert "/tmp/" not in cfg["paths"]["frame"]
+    assert not cfg["paths"]["frame"].startswith("/tmp/gf_")
 
 
 def test_gf_build_cmake_no_frame_ingest_env(tmp_path: Path) -> None:

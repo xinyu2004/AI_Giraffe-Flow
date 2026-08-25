@@ -1,12 +1,24 @@
-# planning.driving — SIL stub + process bring-up (exec/phm + fault inject)
+# planning.driving — thin iceoryx shell + oct_gen + gf_octave_planning
 
-add_executable(gf_planning_driving
-  src/main.cpp
+set(_GF_PLAN_SOURCES src/main.cpp)
+
+# Octave-generated headers are included from oct_gen/; .cpp optional later.
+file(GLOB _GF_OCT_GEN_CPP CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/oct_gen/*.cpp"
 )
+list(APPEND _GF_PLAN_SOURCES ${_GF_OCT_GEN_CPP})
+
+add_executable(gf_planning_driving ${_GF_PLAN_SOURCES})
 target_link_libraries(gf_planning_driving PRIVATE
   gf_ara::com_iceoryx
   gf_ara::runtime
 )
+if(TARGET gf_octave_planning)
+  target_link_libraries(gf_planning_driving PRIVATE gf_octave_planning)
+  target_include_directories(gf_planning_driving PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/oct_gen"
+  )
+endif()
 add_dependencies(gf_planning_driving iox-roudi)
 
 if(NOT GF_USE_GENERATED)

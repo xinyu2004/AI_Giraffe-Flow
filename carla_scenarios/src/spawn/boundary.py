@@ -32,8 +32,14 @@ def _speed_xy(vehicle: Any) -> float:
 
 
 def _hard_stop(vehicle: Any) -> None:
+    """Stop non-driving helpers. On hero: clear const-vel only (Giraffe owns control)."""
     import carla  # type: ignore
 
+    is_hero = False
+    try:
+        is_hero = str(vehicle.attributes.get("role_name") or "") == ROLE_EGO
+    except Exception:  # noqa: BLE001
+        pass
     try:
         vehicle.disable_constant_velocity()
     except Exception:  # noqa: BLE001
@@ -42,6 +48,8 @@ def _hard_stop(vehicle: Any) -> None:
         vehicle.set_autopilot(False)
     except Exception:  # noqa: BLE001
         pass
+    if is_hero:
+        return
     try:
         vehicle.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
         vehicle.set_target_angular_velocity(carla.Vector3D(0.0, 0.0, 0.0))

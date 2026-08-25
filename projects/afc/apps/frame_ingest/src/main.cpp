@@ -1,8 +1,8 @@
-// gf_frame_ingest — Create GfChannel from compile freeze, spawn Python module.
-// Config truth: gf_gen/frame_ingest_config.hpp (gf-config → compose). No shell grep.
+// gf_frame_ingest — Create GfChannel slots; exec independent C++ modules (no Python).
 
 #include "gf_gen/frame_ingest_config.hpp"
 #include "gf_channel/gf_channel.h"
+#include "gf_channel/boundary_pods.h"
 
 #include <cerrno>
 #include <cstdio>
@@ -20,14 +20,12 @@
 namespace {
 
 volatile sig_atomic_t g_stop = 0;
-
 void OnSig(int) { g_stop = 1; }
 
 void SetEnv(const char* key, const char* val) {
-  if (!key || !val) {
-    return;
+  if (key && val) {
+    ::setenv(key, val, 1);
   }
-  ::setenv(key, val, 1);
 }
 
 const char* EnvOr(const char* key, const char* fallback) {
@@ -35,10 +33,8 @@ const char* EnvOr(const char* key, const char* fallback) {
   return (v && v[0]) ? v : fallback;
 }
 
-/** Runtime frame module; freeze default is SOP isp. synth → colorbar alias. */
 std::string ResolveFrameSource() {
   const char* freeze = gf_gen::frame_ingest::kActiveSource;
-  // GF_FRAME_SOURCE primary; GF_ACTIVE_SOURCE secondary override only.
   std::string s = EnvOr("GF_FRAME_SOURCE", EnvOr("GF_ACTIVE_SOURCE", freeze));
   if (s == "synth") {
     s = "colorbar";
@@ -46,44 +42,51 @@ std::string ResolveFrameSource() {
   if (s == "file") {
     s = "replay";
   }
-  // Legacy IPC labels from older freezes / scripts → module names.
   if (s == "carla_file") {
     s = "carla";
   }
   return s;
 }
 
-std::string FindModulePy() {
-  if (const char* e = std::getenv("GF_FRAME_INGEST_PY"); e && e[0]) {
-    return e;
-  }
+std::string FindBin(const char* name) {
   if (const char* rt = std::getenv("GF_RUNTIME_DIR"); rt && rt[0]) {
-    std::string p = std::string(rt) + "/share/frame_ingest/gf_frame_ingest.py";
-    if (::access(p.c_str(), R_OK) == 0) {
+    std::string p = std::string(rt) + "/bin/" + name;
+    if (::access(p.c_str(), X_OK) == 0) {
       return p;
     }
   }
-  if (const char* proj = std::getenv("GF_PROJECT_DIR"); proj && proj[0]) {
-    std::string p = std::string(proj) + "/apps/frame_ingest/gf_frame_ingest.py";
-    if (::access(p.c_str(), R_OK) == 0) {
-      return p;
+  if (const char* e = std::getenv("GF_BUILD_DIR"); e && e[0]) {
+    // Common layout: build-sil/apps/<app>/gf_*
+    static const char* kHints[] = {
+        "/apps/frame_colorbar/", "/apps/frame_replay/", "/apps/carla_io/",
+        "/apps/carla_bridge/",  // legacy path during rename
+        "/bin/",
+    };
+    for (const char* h : kHints) {
+      std::string p = std::string(e) + h + name;
+      if (::access(p.c_str(), X_OK) == 0) {
+        return p;
+      }
     }
   }
-  return {};
+  // PATH
+  return name;
 }
 
-std::string FindPython() {
-  if (const char* e = std::getenv("GF_CARLA_PYTHON"); e && e[0]) {
-    return e;
+const char* ModuleBinary(const std::string& src) {
+  if (src == "colorbar") {
+    return "gf_frame_colorbar";
   }
-  if (const char* e = std::getenv("GF_PYTHON"); e && e[0]) {
-    return e;
+  if (src == "replay") {
+    return "gf_frame_replay";
   }
-  return "python3";
-}
-
-uint16_t FormatFromName(const char* name) {
-  return gf_channel_format_from_name(name ? name : "nv12");
+  if (src == "carla") {
+    return "gf_carla_io";
+  }
+  if (src == "isp") {
+    return nullptr;  // handled in-process stub
+  }
+  return nullptr;
 }
 
 }  // namespace
@@ -91,103 +94,84 @@ uint16_t FormatFromName(const char* name) {
 int main(int /*argc*/, char** /*argv*/) {
   using namespace gf_gen::frame_ingest;
 
-  // Resolve before exporting freeze — GF_FRAME_SOURCE overrides hpp active_source.
   const std::string frame_src = ResolveFrameSource();
-
   if (!kBridgeEnabled || frame_src == "none") {
-    std::cout << "[gf_frame_ingest] disabled (kBridgeEnabled="
-              << (kBridgeEnabled ? "true" : "false")
-              << " frame_source=" << frame_src << " freeze=" << kActiveSource
-              << ") — exit 0\n";
+    std::cout << "[gf_frame_ingest] disabled — exit 0\n";
     return 0;
   }
 
   signal(SIGINT, OnSig);
   signal(SIGTERM, OnSig);
 
-  // Export for Python modules / FCM (resolved module name, not legacy IPC label).
   SetEnv("GF_FRAME_SOURCE", frame_src.c_str());
   SetEnv("GF_ACTIVE_SOURCE", frame_src.c_str());
   SetEnv("GF_PIXEL_FORMAT", kPixelFormat);
   SetEnv("GF_EGO_SOURCE", kEgoSource);
-  SetEnv("GF_CHANNEL_TRANSPORT", kCameraTransport);
+  SetEnv("GF_CHANNEL_TRANSPORT", "shm");
   SetEnv("GF_CAMERA_SLOT", kCameraSlotFront);
-  SetEnv("GF_CARLA_FRAME_PATH", kFramePath);
-  SetEnv("GF_CARLA_CMD_PATH", kCmdPath);
-  SetEnv("GF_CARLA_EGO_PATH", kEgoPath);
-  SetEnv("GF_CARLA_TRUTH_PATH", kTruthPath);
-  SetEnv("GF_PLANNING_CTRL_PATH", kCtrlPath);
+  SetEnv("GF_VEHICLE_STATE_SLOT", kVehicleStateSlot);
+  SetEnv("GF_VEHICLE_CMD_SLOT", kVehicleCmdSlot);
+  SetEnv("GF_FAKE_PERC_SLOT", kFakePercSlot);
   {
     char buf[64];
     std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(kFrameW));
     SetEnv("GF_CARLA_CAM_W", buf);
     std::snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(kFrameH));
     SetEnv("GF_CARLA_CAM_H", buf);
-    SetEnv("GF_CAMERA_MOUNT_ID", kMountId);
-    std::snprintf(buf, sizeof(buf), "%.6f", kMountX);
-    SetEnv("GF_CAMERA_MOUNT_X", buf);
-    std::snprintf(buf, sizeof(buf), "%.6f", kMountY);
-    SetEnv("GF_CAMERA_MOUNT_Y", buf);
-    std::snprintf(buf, sizeof(buf), "%.6f", kMountZ);
-    SetEnv("GF_CAMERA_MOUNT_Z", buf);
-    std::snprintf(buf, sizeof(buf), "%.6f", kMountPitch);
-    SetEnv("GF_CAMERA_MOUNT_PITCH", buf);
-    std::snprintf(buf, sizeof(buf), "%.6f", kMountYaw);
-    SetEnv("GF_CAMERA_MOUNT_YAW", buf);
-    std::snprintf(buf, sizeof(buf), "%.6f", kMountRoll);
-    SetEnv("GF_CAMERA_MOUNT_ROLL", buf);
-    std::snprintf(buf, sizeof(buf), "%.6f", kMountFov);
-    SetEnv("GF_CAMERA_MOUNT_FOV", buf);
   }
   SetEnv("GF_CHANNEL_INGEST_OWNER", "cpp");
 
   std::vector<GfChannel*> channels;
-  channels.reserve(kCameraSlotCount);
   for (std::uint32_t i = 0; i < kCameraSlotCount; ++i) {
     const auto& s = kCameraSlots[i];
     GfChannel* ch = gf_channel_create(s.slot_name, s.w, s.h,
-                                     FormatFromName(s.pixel_format), s.buffers);
+                                      gf_channel_format_from_name(s.pixel_format), s.buffers);
     if (!ch) {
-      std::cerr << "[ERROR] frame_ingest: gf_channel_create failed for " << s.slot_name
-                << " errno=" << errno << "\n";
+      std::cerr << "[ERROR] frame_ingest: create camera " << s.slot_name << " failed\n";
       for (auto* c : channels) {
         gf_channel_close(c);
       }
       return 2;
     }
-    std::cout << "[gf_frame_ingest] GfChannel created " << s.slot_name << " "
-              << s.w << "x" << s.h << " " << s.pixel_format << "\n";
+    std::cout << "[gf_frame_ingest] GfChannel created " << s.slot_name << "\n";
     channels.push_back(ch);
   }
 
-  const std::string py = FindPython();
-  const std::string module = FindModulePy();
-  if (module.empty()) {
-    std::cerr << "[ERROR] frame_ingest: gf_frame_ingest.py not found "
-                 "(set GF_RUNTIME_DIR or GF_PROJECT_DIR / GF_FRAME_INGEST_PY)\n";
+  if (frame_src == "isp") {
+    std::cout << "[gf_frame_ingest] module=isp (board path / SIL stub — slots held empty)\n";
+    while (!g_stop) {
+      ::usleep(200000);
+    }
+    for (auto* c : channels) {
+      gf_channel_close(c);
+    }
+    return 0;
+  }
+
+  const char* mod = ModuleBinary(frame_src);
+  if (!mod) {
+    std::cerr << "[ERROR] frame_ingest: unknown source=" << frame_src << "\n";
     for (auto* c : channels) {
       gf_channel_close(c);
     }
     return 2;
   }
-
-  std::cout << "[gf_frame_ingest] spawn module source=" << frame_src
-            << " (freeze=" << kActiveSource << ") py=" << py << " script=" << module
-            << "\n";
+  const std::string bin = FindBin(mod);
+  std::cout << "[gf_frame_ingest] exec module source=" << frame_src << " bin=" << bin << "\n";
 
   const pid_t child = ::fork();
   if (child < 0) {
-    std::cerr << "[ERROR] frame_ingest: fork failed errno=" << errno << "\n";
+    std::cerr << "[ERROR] frame_ingest: fork failed\n";
     for (auto* c : channels) {
       gf_channel_close(c);
     }
     return 2;
   }
   if (child == 0) {
-    // Child: module-only (parent owns GfChannel Create).
-    execlp(py.c_str(), py.c_str(), module.c_str(), "--module-only", "--source",
-           frame_src.c_str(), static_cast<char*>(nullptr));
-    std::cerr << "[ERROR] frame_ingest: execlp failed errno=" << errno << "\n";
+    execl(bin.c_str(), mod, static_cast<char*>(nullptr));
+    // try PATH
+    execlp(mod, mod, static_cast<char*>(nullptr));
+    std::cerr << "[ERROR] frame_ingest: exec " << mod << " failed errno=" << errno << "\n";
     _exit(127);
   }
 
@@ -198,7 +182,6 @@ int main(int /*argc*/, char** /*argv*/) {
       break;
     }
     if (r < 0 && errno != EINTR) {
-      std::cerr << "[ERROR] frame_ingest: waitpid failed errno=" << errno << "\n";
       break;
     }
     ::usleep(100000);
@@ -207,22 +190,11 @@ int main(int /*argc*/, char** /*argv*/) {
     ::kill(child, SIGTERM);
     ::waitpid(child, &status, 0);
   }
-
   for (auto* c : channels) {
     gf_channel_close(c);
   }
-
   if (WIFEXITED(status)) {
-    const int code = WEXITSTATUS(status);
-    if (code != 0) {
-      std::cerr << "[ERROR] frame_ingest: module exited code=" << code
-                << " source=" << frame_src << " (see host_frame_ingest.log)\n";
-    }
-    return code;
-  }
-  if (WIFSIGNALED(status)) {
-    std::cerr << "[ERROR] frame_ingest: module killed by signal "
-              << WTERMSIG(status) << "\n";
+    return WEXITSTATUS(status);
   }
   return 1;
 }

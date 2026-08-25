@@ -141,6 +141,12 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)
     report.setdefault("outputs", {})["observability"] = str(obs_json)
     report.setdefault("outputs", {})["frame_ingest_hpp"] = fi_meta["hpp"]
+    if fi_meta.get("camera_contract"):
+        report.setdefault("outputs", {})["camera_contract"] = fi_meta["camera_contract"]
+    if fi_meta.get("camera_contract_host"):
+        report.setdefault("outputs", {})["camera_contract_host"] = fi_meta[
+            "camera_contract_host"
+        ]
     report.setdefault("outputs", {})["deploy_config_hpp"] = deploy_meta["hpp"]
     report.setdefault("outputs", {})["log_config_hpp"] = log_meta["hpp"]
     report.setdefault("outputs", {})["em_launch"] = deploy_meta["em_launch"]
@@ -161,6 +167,11 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     print(f"sku cmake wrote: {sku_cmake}")
     print(f"observability wrote: {obs_json}")
     print(f"frame_ingest wrote: {fi_meta['hpp']}")
+    if fi_meta.get("camera_contract_host"):
+        print(
+            f"camera_contract host export: {fi_meta['camera_contract_host']} "
+            f"(product={fi_meta.get('product')}; host env GF_CAMERA_CONTRACT)"
+        )
     print(f"deploy_config wrote: {deploy_meta['hpp']}")
     print(f"log_config wrote: {log_meta['hpp']}")
     print(f"collector_config wrote: {freeze_meta['collector']}")

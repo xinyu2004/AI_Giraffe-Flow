@@ -1,7 +1,6 @@
 """VRU (pedestrian / bicycle) AEB layouts.
 
-Ego / same-dir bike use ``closing_along_heading`` only.
-Do not aim ego IC at a lateral VRU (that yaws the hero sideways).
+Ego may use AEB-only closing seed (``aeb_ego_seed``); then Giraffe takes over.
 Walker motion is refreshed every tick via ``tick_vru_handoff``.
 """
 
@@ -11,7 +10,7 @@ import math
 import os
 from typing import Any, Optional, Tuple
 
-from spawn.ic import closing_along_heading
+from spawn.ic import aeb_ego_seed, closing_along_heading
 from spawn.pick import offset_transform
 from spawn.place import spawn_ego_lead, spawn_named, spawn_walker_at
 from spawn.roles import ROLE_LEAD, destroy_role, safe_destroy, tick_world
@@ -81,7 +80,7 @@ def layout_aeb_pedestrian(
         "layout": "aeb_pedestrian",
         "gap_m": gap_m,
         "ego_mps": ego_mps,
-        "ic": "closing_along_heading",
+        "ic": "aeb_ego_seed",
         "vru_kind": "walker" if is_walker else "bike_fallback",
         "vru_dir_x": into_road_x,
         "vru_dir_y": into_road_y,
@@ -97,7 +96,11 @@ def layout_aeb_pedestrian(
             pass
         closing_along_heading(carla_mod, target, max(ped_speed, 1.2))
 
-    const_on = closing_along_heading(carla_mod, ego, ego_mps)
+    aeb_ego_seed(True)
+    try:
+        const_on = closing_along_heading(carla_mod, ego, ego_mps)
+    finally:
+        aeb_ego_seed(False)
     meta["const_vel"] = const_on
     tick_world(world)
     if is_walker:
@@ -106,7 +109,7 @@ def layout_aeb_pedestrian(
     print(
         f"[layout] PED_CROSS gap≈{gap_m} lat≈{lat_m} "
         f"ego={ego.id} vru={target.id} kind={meta['vru_kind']} "
-        f"ic=closing_along_heading",
+        f"ic_ego=aeb_ego_seed",
         flush=True,
     )
     return ego, target, meta
@@ -150,11 +153,15 @@ def layout_aeb_bicycle(
         pass
 
     closing_along_heading(carla_mod, bike, bike_mps)
-    const_on = closing_along_heading(carla_mod, ego, ego_mps)
+    aeb_ego_seed(True)
+    try:
+        const_on = closing_along_heading(carla_mod, ego, ego_mps)
+    finally:
+        aeb_ego_seed(False)
 
     print(
         f"[layout] BICYCLE gap≈{gap_m} ego={ego.id} bike={bike.id} "
-        f"bike_v≈{bike_mps} ic=closing_along_heading",
+        f"bike_v≈{bike_mps} ic_ego=aeb_ego_seed",
         flush=True,
     )
     return ego, bike, {
@@ -163,7 +170,7 @@ def layout_aeb_bicycle(
         "ego_mps": ego_mps,
         "bike_mps": bike_mps,
         "const_vel": const_on,
-        "ic": "closing_along_heading",
+        "ic": "aeb_ego_seed",
         "vru_kind": "bicycle",
     }
 
@@ -175,7 +182,7 @@ def tick_vru_handoff(
     meta: dict[str, Any],
     cmd: CmdProbe,
 ) -> None:
-    """Keep VRU moving; release ego const-vel once Giraffe commands."""
+    """Keep VRU moving; release AEB ego seed once Giraffe commands."""
     import carla as _c  # type: ignore
 
     kind = str(meta.get("vru_kind") or "")
@@ -191,4 +198,4 @@ def tick_vru_handoff(
         ego.disable_constant_velocity()
     except Exception:  # noqa: BLE001
         pass
-    print(f"[layout] VRU Giraffe cmd at t={elapsed:.2f}s → release IC", flush=True)
+    print(f"[layout] VRU Giraffe cmd at t={elapsed:.2f}s → release AEB ego seed", flush=True)

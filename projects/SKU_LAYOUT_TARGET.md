@@ -11,4 +11,5 @@
 Octave / ops / 生成物合同：
 
 - [`../octave_planning/README.md`](../octave_planning/README.md) — 仅 `.m`
-- [`../tools/gf-octavecoder/README.md`](../tools/gf-octavecoder/README.md) — 转译器 + `ops/`；写出 `apps/planning/**/oct_gen/`，编进 `gf_planning_driving`（无拷贝）
+- [`../tools/gf-octavecoder/README.md`](../tools/gf-octavecoder/README.md) — 转译器 + `ops/` → `oct_gen/` → `gf_planning_driving`
+- [`../tools/gf-octavecoder/PLAN.md`](../tools/gf-octavecoder/PLAN.md) — 分阶段（1a 骨架 → 1b 纵向 → …）；独立函数 + 防回归

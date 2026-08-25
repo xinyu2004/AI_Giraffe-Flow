@@ -6,15 +6,6 @@ feature slots from ``src/cluster_templates/*`` (unknown → common).
 
 from __future__ import annotations
 
-def _ipc_under_project(name: str) -> Path:
-    import os
-    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
-    if proj:
-        return Path(proj) / "runtime_ipc" / name
-    return Path("runtime_ipc") / name
-
-
-import json
 import os
 import sys
 import time
@@ -49,55 +40,36 @@ def fmt_num(value: Optional[float], *, digits: int = 0) -> str:
     return f"{value:.{digits}f}"
 
 
-def ctrl_path() -> Path:
-    return Path(os.environ.get("GF_PLANNING_CTRL_PATH") or str(_ipc_under_project("planning_ctrl.json")))
+def ctrl_path() -> None:
+    """Removed: file tip deleted."""
+    return None
 
 
 @dataclass
 class CtrlProbe:
-    """Read planning ctrl (target_speed / mode)."""
+    """Read mode/target_speed from local UDP tip (shared with CmdProbe)."""
 
-    path: Path = field(default_factory=ctrl_path)
-    last_mtime: float = -1.0
-    last_ts: int = -1
+    last_seq: int = -1
     fresh_count: int = 0
-    _armed: bool = False
     target_speed_mps: Optional[float] = None
     mode: str = ""
+    _tip: Any = field(default=None, repr=False)
+
+    def _rx(self) -> Any:
+        if self._tip is None:
+            from _ctrl_tip import shared_receiver
+
+            self._tip = shared_receiver()
+        return self._tip
 
     def poll(self) -> bool:
-        p = self.path
-        if not p.is_file():
-            self.target_speed_mps = None
-            self.mode = ""
-            return False
-        try:
-            mtime = p.stat().st_mtime
-            data = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            self.target_speed_mps = None
-            self.mode = ""
-            return False
-        ts = int(data.get("timestamp_ns") or data.get("seq") or 0)
-        if "target_speed_mps" in data:
-            try:
-                self.target_speed_mps = float(data["target_speed_mps"])
-            except (TypeError, ValueError):
-                self.target_speed_mps = None
-        else:
-            self.target_speed_mps = None
-        self.mode = str(data.get("mode") or "")
-        if not self._armed:
-            self.last_mtime = mtime
-            self.last_ts = ts
-            self._armed = True
-            return False
-        if ts != self.last_ts or mtime != self.last_mtime:
-            self.fresh_count += 1
-            self.last_ts = ts
-            self.last_mtime = mtime
-            return True
-        return False
+        tip = self._rx()
+        changed = tip.poll()
+        self.fresh_count = tip.fresh_count
+        self.last_seq = tip.last_seq
+        self.target_speed_mps = tip.target_speed_mps
+        self.mode = tip.mode
+        return changed
 
     @property
     def seen(self) -> bool:

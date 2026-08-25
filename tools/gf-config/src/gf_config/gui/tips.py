@@ -414,11 +414,10 @@ SKU_FI_BRIDGE = (
     "（已由帧源推导）ingest 是否启用；勿再手勾。"
 )
 SKU_FI_PATH_FRAME = (
-    "SIL 文件旁路帧路径（默认 project/runtime_ipc/；非 GfChannel）。"
-    "旁路可有 .stream.json / .meta.json；产品图像走 GfChannel shm。"
+    "仅 replay/file 旁路帧路径（可选）；联仿主链走 GfChannel，无 front.yuv / carla_*.json。"
 )
 SKU_FI_PATH_CMD = (
-    "gateway→bridge 控车 JSON（默认 runtime_ipc/carla_cmd.json；CARLA SIL 旁路）。"
+    "已删除：控车不走 JSON。SIL egress = GfChannel vehicle_cmd → cosim → giraffe_client。"
 )
 SKU_RECORD = (
     "录制策略：控制 measure/record 采多少。\n"

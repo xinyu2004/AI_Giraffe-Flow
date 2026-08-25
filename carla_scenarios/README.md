@@ -27,4 +27,4 @@ bash scripts/check_spawn_import_gate.sh   # spawn import 门禁
 
 Defaults: `carla.env`。实现：`src/spawn` + `src/layouts` + `src/lib`。产品案：`cases/`（manifest 只列清单）。
 
-**与 gf-config 对齐相机**：compose 后读 SKU `generated/camera_contract.json`（`GF_PROJECT_DIR` / `GF_CAMERA_CONTRACT`；无本地 camera 几何）。详见 [frame_ingest_roles.md](../docs/zh/sku/afc/frame_ingest_roles.md)。
+**上位机相机**：`GF_CAMERA_CONTRACT=afc` → `config/afc/camera_contract.json`（compose/Verify 导出；**不用** `GF_PROJECT_DIR`）。详见 [config/README.md](config/README.md)。

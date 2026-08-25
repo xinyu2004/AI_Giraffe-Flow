@@ -405,17 +405,18 @@ if [[ "${INJECT_ON}" == "1" ]]; then
 
   FRAME_REPLAY_PID=""
   if [[ -n "${GF_INJECT_FRAMES_DIR:-}" ]]; then
-    REPLAY_PY="${PROJECT_DIR}/tools/carla_bridge/frame_replay.py"
-    PY="${GF_CARLA_PYTHON:-python3}"
-    if [[ -f "${REPLAY_PY}" && -d "${GF_INJECT_FRAMES_DIR}" ]]; then
-      echo "${TAG} frame_replay ← ${GF_INJECT_FRAMES_DIR} → ${GF_CARLA_FRAME_PATH}"
-      "${PY}" "${REPLAY_PY}" --frames-dir "${GF_INJECT_FRAMES_DIR}" \
-        --frame-path "${GF_CARLA_FRAME_PATH}" \
-        $([ "${GF_INJECT_LOOP:-0}" = "1" ] && echo --loop) \
-        >"${LOG_DIR}/frame_replay.log" 2>&1 &
+    REPLAY_BIN="${RUNTIME}/bin/gf_frame_replay"
+    if [[ ! -x "${REPLAY_BIN}" ]]; then
+      REPLAY_BIN="${BUILD}/apps/frame_replay/gf_frame_replay"
+    fi
+    if [[ -x "${REPLAY_BIN}" && -d "${GF_INJECT_FRAMES_DIR}" ]]; then
+      echo "${TAG} gf_frame_replay ← ${GF_INJECT_FRAMES_DIR}"
+      export GF_REPLAY_DIR="${GF_INJECT_FRAMES_DIR}"
+      export GF_FRAME_SOURCE=replay
+      "${REPLAY_BIN}" >"${LOG_DIR}/frame_replay.log" 2>&1 &
       FRAME_REPLAY_PID=$!
     else
-      echo "${TAG} WARN: GF_INJECT_FRAMES_DIR set but replay missing/dir absent" >&2
+      echo "${TAG} WARN: GF_INJECT_FRAMES_DIR set but gf_frame_replay missing/dir absent" >&2
     fi
   fi
 
@@ -462,8 +463,7 @@ elif [[ -n "${GF_INJECT_FRAMES_DIR:-}" ]]; then
   echo "${TAG} skip gf_frame_ingest (GF_INJECT_FRAMES_DIR set)"
 elif [[ -x "${INGEST_BIN}" ]]; then
 
-  export GF_CARLA_FRAME_PATH="${GF_CARLA_FRAME_PATH:-${GF_PROJECT_DIR:-.}/runtime_ipc/front.yuv}"
-  export GF_CARLA_CMD_PATH="${GF_CARLA_CMD_PATH:-${GF_PROJECT_DIR:-.}/runtime_ipc/carla_cmd.json}"
+  export GF_CARLA_FRAME_PATH="${GF_CARLA_FRAME_PATH:-}"
   export CARLA_HOST="${CARLA_HOST:-127.0.0.1}"
   export CARLA_PORT="${CARLA_PORT:-2000}"
   if [[ -n "${GF_RECORD_FRAMES_DIR:-}" ]]; then
@@ -530,7 +530,6 @@ elif [[ -x "${INGEST_BIN}" ]]; then
     (
       FCM_LOG="${LOG_DIR}/em/perception_fcm.log"
       [[ -f "${FCM_LOG}" ]] || FCM_LOG="${LOG_DIR}/fcm.log"
-      STATS="${GF_CARLA_BRIDGE_STATS_PATH:-${GF_PROJECT_DIR:-.}/runtime_ipc/carla_bridge_stats.json}"
       while kill -0 "${CARLA_BRIDGE_PID}" 2>/dev/null; do
         sleep 5
         camera_slot="${GF_CAMERA_SLOT:-gf.channel.front}"

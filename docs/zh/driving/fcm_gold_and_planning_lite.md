@@ -1,7 +1,7 @@
 # FCM 金样变量 & Planning lite
 
 > 日期：2026-08 · SIL 产品 demo 口径（驾驶链路归档，不绑某一 SKU 文档树）。  
-> 链：`carla_scenarios` → `<project>/runtime_ipc/carla_truth.json`（运行时生成）→ **仅 FCM** → iceoryx `Perception_MESSAGE_Out_St` → **planning** + **Foxglove BEV**。
+> 链：`giraffe_client`（`_lane_truth` + `_objects_truth` → `GfFakePercPod` / cosim）→ **FCM** → iceoryx `Perception_MESSAGE_Out_St` → **planning** + **Foxglove BEV**。
 
 ## 总览
 
@@ -79,7 +79,8 @@ Planning **不读 LA**（无变道逻辑）。
 | | 内容 |
 |--|------|
 | **In** | iceoryx `Perception_MESSAGE_Out_St`（DYN CIPV + **LH**）；`EgoMotion` |
-| **Out** | iceoryx `Trajectory`（16 点，沿 LH 中心 blend）；`runtime_ipc/planning_ctrl.json`（throttle/brake/steer/target_speed/mode） |
+| **Out** | iceoryx `Trajectory`（路径 + thr/brk/steer/…）；SIL 控车出口 GfChannel `vehicle_cmd` |
+| **假感知** | GfChannel `fake_perc` → FCM（**非**量产算法；无 `carla_truth.json`） |
 | **不读** | `carla_truth.json`（file truth 旁路已删） |
 
 ### 行为（lite，非量产 LKA）

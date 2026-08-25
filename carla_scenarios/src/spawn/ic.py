@@ -1,16 +1,11 @@
 """Named case IC profiles.
 
-Cold start (first case / single-run): place at rest, then named IC may seed speed.
-Batch natural continue (``set_natural_continue(True)``): **never** touch hero motion —
-Giraffe/planning owns control; IC only rearranges lead/props/ambient.
+Default: ego motion is Giraffe-only (``giraffe_client``). Lead / VRU / ambient
+remain scenario-owned.
 
-Profiles:
-
-- ``release_only`` — follow / ACC (no constant velocity)
-- ``closing_toward_lead`` — vehicle-vehicle AEB (road + toward lead)
-- ``closing_along_heading`` — map road forward (VRU ego / same-dir bike)
-- ``closing_along_pose`` — current actor yaw (cross-traffic only)
-- ``seed_speed`` — lateral / env light road forward
+**Sole exception — AEB family:** ``aeb_ego_seed(True)`` allows one closing/seed
+on the hero so standalone AEB has approach speed; handoff releases const-vel when
+Giraffe ``vehicle_cmd`` arrives. ACC / lateral / weather / etc. must not enable this.
 """
 
 from __future__ import annotations
@@ -22,6 +17,8 @@ from spawn.roles import ROLE_EGO, tick_world
 
 # Batch mid-suite: skip any IC that would steer/brake/seed the hero.
 _NATURAL_CONTINUE = False
+# AEB-only: allow hero closing seed (see aeb_ego_seed).
+_AEB_EGO_SEED = False
 
 
 def set_natural_continue(enabled: bool) -> None:
@@ -33,6 +30,16 @@ def natural_continue() -> bool:
     return _NATURAL_CONTINUE
 
 
+def aeb_ego_seed(enabled: bool) -> None:
+    """Enable/disable the sole allowed hero motion IC (AEB closing seed)."""
+    global _AEB_EGO_SEED
+    _AEB_EGO_SEED = bool(enabled)
+
+
+def aeb_ego_seed_allowed() -> bool:
+    return _AEB_EGO_SEED and not _NATURAL_CONTINUE
+
+
 def _is_hero(vehicle: Any) -> bool:
     try:
         return str(vehicle.attributes.get("role_name") or "") == ROLE_EGO
@@ -41,12 +48,14 @@ def _is_hero(vehicle: Any) -> bool:
 
 
 def _skip_hero_motion_ic(vehicle: Any, *, profile: str) -> bool:
-    if not _NATURAL_CONTINUE or not _is_hero(vehicle):
+    """Refuse hero motion IC unless AEB ego-seed window is open."""
+    if not _is_hero(vehicle):
         return False
-    print(
-        f"[ic] skip {profile} on hero (natural continue; Giraffe drives)",
-        flush=True,
-    )
+    if aeb_ego_seed_allowed():
+        print(f"[ic] AEB ego-seed allow {profile} on hero", flush=True)
+        return False
+    why = "natural continue" if _NATURAL_CONTINUE else "Giraffe-only ego (non-AEB)"
+    print(f"[ic] skip {profile} on hero ({why})", flush=True)
     return True
 
 
@@ -143,27 +152,11 @@ def _snap_road_yaw(vehicle: Any) -> Tuple[float, float]:
 
 
 def release_only(carla_mod: Any, ego: Any) -> None:
-    """Follow-family IC: autopilot off; park brake on until Giraffe drives.
-
-    hand_brake=True avoids Town slope roll-into-barrier when SIL is absent.
-    VehicleControl from bridge/planning overrides once cmd arrives.
-    """
-    if _skip_hero_motion_ic(ego, profile="release_only"):
-        return
+    """Clear TM/autopilot/const-vel on hero so Giraffe alone drives. No park/brake."""
+    del carla_mod
+    print("[ic] release_only on hero (Giraffe-only ego)", flush=True)
     try:
         ego.set_autopilot(False)
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        ego.apply_control(
-            carla_mod.VehicleControl(
-                throttle=0.0,
-                brake=1.0,
-                steer=0.0,
-                hand_brake=True,
-                reverse=False,
-            )
-        )
     except Exception:  # noqa: BLE001
         pass
     reset_vehicle_motion(ego)

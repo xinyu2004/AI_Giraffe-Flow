@@ -14,6 +14,12 @@ foreach(_gf_mod IN ITEMS core com osal)
   endif()
 endforeach()
 
+# Planning Octave ops (header-only Phase 1a); linked by gf_planning_driving.
+if(EXISTS "${CMAKE_SOURCE_DIR}/tools/gf-octavecoder/ops/CMakeLists.txt")
+  add_subdirectory("${CMAKE_SOURCE_DIR}/tools/gf-octavecoder/ops")
+  message(STATUS "Giraffe Flow: gf_octave_planning (octavecoder ops)")
+endif()
+
 # log before optional modules so exec/EM (and others) can link gf_ara::log
 # regardless of runtime_modules[] order in req.yaml.
 if(NOT TARGET gf_ara_log AND EXISTS "${CMAKE_SOURCE_DIR}/middleware/log/CMakeLists.txt")

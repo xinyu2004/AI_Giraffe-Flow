@@ -12,6 +12,12 @@ struct Trajectory {
   float points_y_m[60];
   uint8_t gear_shift_first;
   uint8_t gear_shift_second;
+  // Actuator command co-published with path (iceoryx; no planning_ctrl.json).
+  float throttle;
+  float brake;
+  float steer;
+  float target_speed_mps;
+  uint8_t ctrl_mode;  // 0=cruise 1=acc 2=aeb 3=pullaway
 };
 
 }  // namespace gf::demo::planning_driving

@@ -6,6 +6,7 @@ import os
 from typing import Any, Optional, Tuple
 
 from spawn.ic import (
+    aeb_ego_seed,
     closing_along_heading,
     closing_along_pose,
     closing_toward_lead,
@@ -50,11 +51,16 @@ def layout_aeb_stopped(
     )
     release_ego(carla_mod, ego)
     _hold_brake(carla_mod, lead)
-    const_on = closing_toward_lead(carla_mod, ego, ego_mps, lead)
+    # Sole exception: AEB may seed ego closing speed; Giraffe takes over on cmd.
+    aeb_ego_seed(True)
+    try:
+        const_on = closing_toward_lead(carla_mod, ego, ego_mps, lead)
+    finally:
+        aeb_ego_seed(False)
     ttc = gap_m / max(ego_mps, 0.1)
     print(
         f"[layout] {layout_name} gap≈{gap_m:.0f}m ego_v≈{ego_mps:.1f} "
-        f"TTC≈{ttc:.1f}s const={int(const_on)} ic=closing_toward_lead",
+        f"TTC≈{ttc:.1f}s const={int(const_on)} ic=aeb_ego_seed+closing_toward_lead",
         flush=True,
     )
     return ego, lead, {
@@ -63,7 +69,7 @@ def layout_aeb_stopped(
         "ego_mps": ego_mps,
         "ttc0": round(ttc, 2),
         "const_vel": const_on,
-        "ic": "closing_toward_lead",
+        "ic": "aeb_ego_seed",
     }
 
 
@@ -143,13 +149,17 @@ def layout_aeb_intersection_cross(
         clear_radius_m=10.0,
     )
     cross_mps = float(os.environ.get("GF_AEB_X_CROSS_MPS") or "6")
-    # Ego: road snap. Cross: pose heading only (road snap would cancel the cross yaw).
-    const_on = closing_along_heading(carla_mod, ego, ego_mps)
+    # Ego: AEB-only seed. Cross: scenario IC.
+    aeb_ego_seed(True)
+    try:
+        const_on = closing_along_heading(carla_mod, ego, ego_mps)
+    finally:
+        aeb_ego_seed(False)
     closing_along_pose(carla_mod, lead, cross_mps)
     print(
         f"[layout] INTERSECTION_CROSS gap≈{gap_m} lat≈{lateral_m} "
         f"ego={ego.id} cross={lead.id} "
-        f"ic_ego=closing_along_heading ic_cross=closing_along_pose",
+        f"ic_ego=aeb_ego_seed ic_cross=closing_along_pose",
         flush=True,
     )
     return ego, lead, {
@@ -159,7 +169,7 @@ def layout_aeb_intersection_cross(
         "ego_mps": ego_mps,
         "cross_mps": cross_mps,
         "const_vel": const_on,
-        "ic": "closing_along_heading",
+        "ic": "aeb_ego_seed",
         "cross_ic": "closing_along_pose",
     }
 
@@ -230,7 +240,7 @@ def tick_aeb_handoff(
         ego.disable_constant_velocity()
     except Exception:  # noqa: BLE001
         pass
-    print(f"[layout] Giraffe cmd at t={elapsed:.2f}s → release IC", flush=True)
+    print(f"[layout] Giraffe cmd at t={elapsed:.2f}s → release AEB ego seed", flush=True)
 
 
 def layout_fcw(

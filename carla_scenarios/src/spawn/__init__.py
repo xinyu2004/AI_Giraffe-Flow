@@ -9,6 +9,7 @@ from spawn.boundary import (
     sanitize_keep_ego,
 )
 from spawn.ic import (
+    aeb_ego_seed,
     closing_along_heading,
     closing_along_pose,
     closing_const_fwd,
@@ -73,6 +74,7 @@ __all__ = [
     "sanitize_keep_ego",
     "seed_speed",
     "set_forward_speed",
+    "aeb_ego_seed",
     "set_natural_continue",
     "set_role",
     "spawn_ego_lead",

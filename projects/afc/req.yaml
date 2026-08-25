@@ -49,17 +49,18 @@ frame_ingest:
     pixel_format: nv12
   bridge:
     enabled: true
-  paths:
-    frame: runtime_ipc/front.yuv
-    cmd: runtime_ipc/carla_cmd.json
-    ego: runtime_ipc/carla_ego.json
-    truth: runtime_ipc/carla_truth.json
-    ctrl: runtime_ipc/planning_ctrl.json
+  channels:
+    vehicle_state: gf.channel.vehicle_state
+    vehicle_cmd: gf.channel.vehicle_cmd
+    fake_perc: gf.channel.fake_perc
 apps:
 - adapters/vehicle_can_gateway
 - perception/fcm
 - planning/driving
 - frame_ingest
+- frame_colorbar
+- frame_replay
+- carla_io
 acceptance:
   description: AFC 无 USS — Perception_* + Trajectory + frame_ingest（默认 C dry-run）
   lineage_required: true
@@ -69,3 +70,8 @@ acceptance:
   - services.semantic.Perception_MESSAGE_Out_St
   - services.semantic.Trajectory
   - services.semantic.VehicleBus
+# Phase-2 backlog (not enforced yet):
+# publish_policy:
+#   EgoMotion: { trigger: period, period_ms: 10 }
+#   Perception_In_St: { trigger: on_change, watch: [speed_mps, gear, yaw_rate] }
+#   vehicle_cmd: { trigger: period, period_ms: 10 }  # SIL egress; CAN-like

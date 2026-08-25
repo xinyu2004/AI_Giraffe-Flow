@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AFC AEB — scheme-1: closing layout + closing_toward_lead IC; Giraffe brakes."""
+"""AFC AEB — closing layout + AEB-only ego seed; Giraffe takes over on cmd."""
 
 from __future__ import annotations
 

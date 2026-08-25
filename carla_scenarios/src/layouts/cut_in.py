@@ -1,11 +1,13 @@
-"""ACC cut-in: lead starts adjacent, merges into ego lane mid-case."""
+"""ACC cut-in: lead starts adjacent, merges into ego lane mid-case.
+
+Ego motion is Giraffe-only; lead uses Traffic Manager.
+"""
 
 from __future__ import annotations
 
 import os
 from typing import Any, Optional, Tuple
 
-from spawn.ic import seed_speed
 from spawn.pick import pick_cut_in_transforms
 from spawn.place import spawn_named
 from spawn.roles import ROLE_EGO, ROLE_LEAD, destroy_role, find_by_role
@@ -41,7 +43,6 @@ def layout_acc_cut_in(
     elif not keep_ego:
         ego.set_transform(ego_tf)
     else:
-        # Natural continue: adjacent lead ahead of *current* ego.
         from spawn.pick import offset_transform, pick_lead_ahead_of
 
         ego_tf = ego.get_transform()
@@ -64,13 +65,10 @@ def layout_acc_cut_in(
     except Exception:  # noqa: BLE001
         pass
 
-    # Seed ego only on cold start; batch continue leaves motion to Giraffe.
     ego_mps = float(os.environ.get("GF_CUTIN_EGO_MPS") or "10")
-    if not keep_ego:
-        seed_speed(carla_mod, ego, ego_mps)
-
     print(
-        f"[layout] CUT_IN side={side} gap≈{gap}m ego={ego.id} lead={lead.id}",
+        f"[layout] CUT_IN side={side} gap≈{gap}m ego={ego.id} lead={lead.id} "
+        f"(Giraffe drives ego)",
         flush=True,
     )
     return ego, lead, {
@@ -78,7 +76,8 @@ def layout_acc_cut_in(
         "side": side,
         "gap_m": gap,
         "ic_ego_mps": ego_mps,
-        "const_vel": True,
+        "const_vel": False,
+        "ic": "giraffe_only",
     }
 
 
@@ -89,18 +88,8 @@ def tick_cut_in_handoff(
     meta: dict[str, Any],
     cmd: CmdProbe,
 ) -> None:
-    """Release constant_velocity once Giraffe commands; nudge lead lane change."""
-    del lead
-    if meta.get("handed_off"):
-        return
-    if not cmd.seen_control:
+    del ego, lead
+    if meta.get("handed_off") or not cmd.seen_control:
         return
     meta["handed_off"] = True
-    try:
-        ego.disable_constant_velocity()
-    except Exception:  # noqa: BLE001
-        pass
-    print(
-        f"[acc_cut_in] Giraffe cmd at t={elapsed:.2f}s → release IC const_vel",
-        flush=True,
-    )
+    print(f"[acc_cut_in] Giraffe cmd at t={elapsed:.2f}s", flush=True)

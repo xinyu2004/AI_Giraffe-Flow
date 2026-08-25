@@ -1,15 +1,14 @@
-"""Camera mount (extrinsics) — **only** from SKU ``camera_contract.json``.
+"""Camera contract for host (scenario_client / giraffe_client).
 
-Truth: gf-config → compose → ``generated/camera_contract.json``.
-No local presets, no ``GF_CAMERA_MOUNT_*`` authoring here.
+真源：gf-config Verify/compose → 导出
+  ``carla_scenarios/config/<product>/camera_contract.json``
 
-Resolve path (first hit):
-  1. ``GF_CAMERA_CONTRACT`` — absolute/relative file path
-  2. ``$GF_PROJECT_DIR/generated/camera_contract.json``
-  3. Repo-relative ``projects/afc/generated/camera_contract.json``
-     (when this tree sits next to ``projects/``)
+上位机用 ``GF_CAMERA_CONTRACT``（路径或短名），不使用 ``GF_PROJECT_DIR``。
 
-Missing / incomplete contract → hard error (do not invent numbers).
+解析：
+  - ``GF_CAMERA_CONTRACT=config/afc/camera_contract.json`` → 该文件
+  - ``GF_CAMERA_CONTRACT=afc`` → ``config/afc/camera_contract.json``
+  - 未设置 → 默认 ``config/afc/camera_contract.json``
 """
 
 from __future__ import annotations
@@ -19,9 +18,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Tuple
-
-_REQUIRED_MOUNT = ("x", "y", "z", "pitch", "yaw", "roll", "fov")
+from typing import Any, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -51,85 +48,54 @@ class CameraMount:
         )
 
 
+@dataclass(frozen=True)
+class HostCamera:
+    """One camera slot from product camera_contract (maps to gf.channel.<id>)."""
+
+    id: str
+    enabled: bool
+    w: int
+    h: int
+    pixel_format: str
+    mount: CameraMount
+    slot_name: str
+
+    @property
+    def channel_slot(self) -> str:
+        return self.slot_name or f"gf.channel.{self.id}"
+
+
 def _scenarios_root() -> Path:
-    # …/carla_scenarios/src/lib/_camera_mount.py → carla_scenarios/
     return Path(__file__).resolve().parents[2]
 
 
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
-def _resolve_path(raw: str, *, want_file: bool) -> Path | None:
-    """Resolve absolute or relative path against cwd and carla_scenarios root."""
+def _resolve_under_bases(raw: str) -> Path | None:
     p = Path(raw).expanduser()
-    bases = (Path.cwd(), _scenarios_root())
-    cands = [p] if p.is_absolute() else [b / p for b in bases]
-    for c in cands:
-        try:
-            r = c.resolve()
-        except OSError:
-            continue
-        if want_file and r.is_file():
-            return r
-        if not want_file and r.is_dir():
-            return r
+    if p.is_absolute():
+        return p if p.is_file() else None
+    for base in (Path.cwd(), _scenarios_root()):
+        c = (base / p).resolve()
+        if c.is_file():
+            return c
     return None
 
 
 def camera_contract_path() -> Path | None:
-    """Return path to camera_contract.json if it exists, else None.
+    """Resolve GF_CAMERA_CONTRACT to a camera_contract.json file."""
+    raw = (os.environ.get("GF_CAMERA_CONTRACT") or "afc").strip()
+    if not raw:
+        raw = "afc"
 
-    If ``GF_CAMERA_CONTRACT`` / ``GF_PROJECT_DIR`` is set, do **not** fall back to
-    the repo-default SKU path (wrong dir must fail loudly).
-    """
-    env = (os.environ.get("GF_CAMERA_CONTRACT") or "").strip()
-    if env:
-        return _resolve_path(env, want_file=True)
+    # Short product name → config/<name>/camera_contract.json
+    if "/" not in raw and "\\" not in raw and not raw.endswith(".json"):
+        raw = f"config/{raw.lower()}/camera_contract.json"
 
-    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
-    if proj:
-        root = _resolve_path(proj, want_file=False)
-        if root is None:
-            return None
-        cand = root / "generated" / "camera_contract.json"
-        return cand if cand.is_file() else None
-
-    cand = (
-        _repo_root()
-        / "projects"
-        / "afc"
-        / "generated"
-        / "camera_contract.json"
-    )
-    return cand if cand.is_file() else None
-
-
-def _missing_contract_hint() -> str:
-    env = (os.environ.get("GF_CAMERA_CONTRACT") or "").strip()
-    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
-    lines = ["[ERROR] camera_mount: no camera_contract.json"]
-    if env:
-        lines.append(f"  GF_CAMERA_CONTRACT={env!r} not found as a file")
-    elif proj:
-        lines.append(f"  GF_PROJECT_DIR={proj!r} has no generated/camera_contract.json")
-        lines.append("  → run gf-config Verify / compose for that SKU first")
-    else:
-        lines.append("  Compose SKU first, then set one of:")
-        lines.append("    export GF_CAMERA_CONTRACT=/path/to/generated/camera_contract.json")
-        lines.append("    export GF_PROJECT_DIR=/path/to/projects/afc")
-        lines.append(
-            "  (unset env also looks for projects/afc/generated/camera_contract.json)"
-        )
-    return "\n".join(lines)
+    return _resolve_under_bases(raw)
 
 
 def _require_float(mount: dict[str, Any], key: str, path: Path) -> float:
     if key not in mount or mount[key] is None:
-        raise SystemExit(
-            f"[ERROR] camera_contract missing mount.{key} in {path} "
-            f"(re-compose after gf-config camera edit)"
-        )
+        raise SystemExit(f"[ERROR] camera_contract missing mount.{key} in {path}")
     try:
         return float(mount[key])
     except (TypeError, ValueError) as e:
@@ -138,49 +104,99 @@ def _require_float(mount: dict[str, Any], key: str, path: Path) -> float:
         ) from e
 
 
-def load_camera_mount() -> CameraMount:
-    """Load front-slot camera mount from camera_contract.json only."""
+def _missing_hint() -> str:
+    env = (os.environ.get("GF_CAMERA_CONTRACT") or "").strip() or "(default afc)"
+    return "\n".join(
+        [
+            "[ERROR] camera_contract.json not found for host",
+            f"  GF_CAMERA_CONTRACT={env!r}",
+            "  examples:",
+            "    export GF_CAMERA_CONTRACT=afc",
+            "    export GF_CAMERA_CONTRACT=config/afc/camera_contract.json",
+            "  -> authoring PC: gf-config Verify (compose exports config/<product>/)",
+            "  上位机不使用 GF_PROJECT_DIR；合同真源是 compose 导出物",
+        ]
+    )
+
+
+def _parse_slot(raw: dict[str, Any], path: Path) -> HostCamera:
+    cid = str(raw.get("id") or "").strip()
+    if not cid:
+        raise SystemExit(f"[ERROR] camera_contract slot missing id ({path})")
+    mount_raw = raw.get("mount")
+    if not isinstance(mount_raw, dict):
+        raise SystemExit(f"[ERROR] camera_contract {cid}: mount missing ({path})")
+    mount = CameraMount(
+        name=str(mount_raw.get("id") or cid),
+        x=_require_float(mount_raw, "x", path),
+        y=_require_float(mount_raw, "y", path),
+        z=_require_float(mount_raw, "z", path),
+        pitch=_require_float(mount_raw, "pitch", path),
+        yaw=_require_float(mount_raw, "yaw", path),
+        roll=_require_float(mount_raw, "roll", path),
+        fov=_require_float(mount_raw, "fov", path),
+    )
+    slot_name = str(raw.get("slot_name") or f"gf.channel.{cid}").strip()
+    return HostCamera(
+        id=cid,
+        enabled=bool(raw.get("enabled", True)),
+        w=int(raw.get("w") or 640),
+        h=int(raw.get("h") or 480),
+        pixel_format=str(raw.get("pixel_format") or "nv12"),
+        mount=mount,
+        slot_name=slot_name,
+    )
+
+
+def load_host_cameras(*, enabled_only: bool = True) -> List[HostCamera]:
+    """All slots from camera_contract (N 路由 compose 决定)."""
     path = camera_contract_path()
     if path is None:
-        print(_missing_contract_hint(), file=sys.stderr)
+        print(_missing_hint(), file=sys.stderr)
         raise SystemExit(2)
-
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
-        raise SystemExit(f"[ERROR] camera_mount: cannot read {path}: {e}") from e
-
+        raise SystemExit(f"[ERROR] camera_contract: cannot read {path}: {e}") from e
     slots = data.get("slots")
     if not isinstance(slots, list) or not slots:
-        raise SystemExit(f"[ERROR] camera_mount: no slots[] in {path}")
-    slot = slots[0] if isinstance(slots[0], dict) else {}
-    mount = slot.get("mount")
-    if not isinstance(mount, dict) or not mount:
-        raise SystemExit(f"[ERROR] camera_mount: slots[0].mount missing in {path}")
-
-    name = str(mount.get("id") or slot.get("id") or "front").strip() or "front"
-    out = CameraMount(
-        name=name,
-        x=_require_float(mount, "x", path),
-        y=_require_float(mount, "y", path),
-        z=_require_float(mount, "z", path),
-        pitch=_require_float(mount, "pitch", path),
-        yaw=_require_float(mount, "yaw", path),
-        roll=_require_float(mount, "roll", path),
-        fov=_require_float(mount, "fov", path),
+        raise SystemExit(f"[ERROR] camera_contract: no slots[] in {path}")
+    out = [_parse_slot(s, path) for s in slots if isinstance(s, dict)]
+    if enabled_only:
+        out = [c for c in out if c.enabled]
+    if not out:
+        raise SystemExit(f"[ERROR] camera_contract: no enabled slots in {path}")
+    prod = data.get("product") or path.parent.name
+    print(
+        f"[cameras] product={prod} {len(out)} slot(s) <- {path}: "
+        + ", ".join(c.id for c in out),
+        flush=True,
     )
-    print(f"[camera_mount] {out.describe()} ← {path}", flush=True)
     return out
 
 
+def load_camera_mount() -> CameraMount:
+    """Front (or first) mount — scenario pygame / single-cam callers."""
+    cams = load_host_cameras(enabled_only=True)
+    front = next((c for c in cams if c.id == "front"), cams[0])
+    print(f"[camera_mount] {front.mount.describe()} <- contract", flush=True)
+    return front.mount
+
+
 def scene_chase_pose() -> Tuple[float, float, float, float, float]:
-    """Scene overview cam only (not product camera). Vehicle-relative x,z,pitch,yaw,fov."""
     return (-6.5, 3.0, -12.0, 0.0, 90.0)
+
+
+def host_cameras_path() -> Optional[Path]:
+    return camera_contract_path()
 
 
 __all__ = [
     "CameraMount",
+    "HostCamera",
     "camera_contract_path",
+    "host_cameras_path",
     "load_camera_mount",
+    "load_host_cameras",
     "scene_chase_pose",
 ]

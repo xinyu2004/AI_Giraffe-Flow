@@ -2,23 +2,9 @@
 
 from __future__ import annotations
 
-def _ipc_under_project(name: str) -> Path:
-    import os
-    proj = (os.environ.get("GF_PROJECT_DIR") or "").strip()
-    if proj:
-        return Path(proj) / "runtime_ipc" / name
-    return Path("runtime_ipc") / name
-
-
-import json
 import os
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
-
-
-def cmd_path() -> Path:
-    return Path(os.environ.get("GF_CARLA_CMD_PATH") or str(_ipc_under_project("carla_cmd.json")))
 
 
 def time_headway_s(gap_m: float, ego_mps: float, v_min: float = 1.0) -> float:
@@ -27,42 +13,31 @@ def time_headway_s(gap_m: float, ego_mps: float, v_min: float = 1.0) -> float:
 
 @dataclass
 class CmdProbe:
-    """Detect Giraffe→bridge cmd freshness during the case window.
+    """Detect Giraffe→UE cmd freshness via local UDP tip (no disk)."""
 
-    First poll only baselines seq/mtime (stale files do NOT count as control).
-    """
-
-    path: Path = field(default_factory=cmd_path)
     last_seq: int = -1
-    last_mtime: float = -1.0
     fresh_count: int = 0
-    _armed: bool = False
+    _tip: Any = field(default=None, repr=False)
+
+    def _rx(self) -> Any:
+        if self._tip is None:
+            from _ctrl_tip import shared_receiver
+
+            self._tip = shared_receiver()
+        return self._tip
 
     def poll(self) -> bool:
-        p = self.path
-        if not p.is_file():
-            return False
-        try:
-            mtime = p.stat().st_mtime
-            data = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            return False
-        seq = int(data.get("seq", 0))
-        if not self._armed:
-            self.last_seq = seq
-            self.last_mtime = mtime
-            self._armed = True
-            return False
-        if seq != self.last_seq or mtime != self.last_mtime:
-            self.fresh_count += 1
-            self.last_seq = seq
-            self.last_mtime = mtime
-            return True
-        return False
+        tip = self._rx()
+        changed = tip.poll()
+        self.fresh_count = tip.fresh_count
+        self.last_seq = tip.last_seq
+        return changed
 
     @property
     def seen_control(self) -> bool:
-        return self.fresh_count > 0
+        if self._tip is None:
+            return False
+        return bool(self._tip.seen_control)
 
 
 @dataclass
@@ -88,32 +63,37 @@ def actors_colliding(ego: Any, lead: Any, gap_crash_m: float = 3.5) -> bool:
 
 
 def release_ego(carla_mod: Any, ego: Any) -> None:
+    """Drop TM/autopilot/const-vel; do not apply sustained VehicleControl (Giraffe owns ego)."""
+    del carla_mod
     try:
         ego.set_autopilot(False)
     except Exception:  # noqa: BLE001
         pass
     try:
-        ego.apply_control(
-            carla_mod.VehicleControl(
-                throttle=0.0, brake=0.0, steer=0.0, hand_brake=False
-            )
-        )
+        ego.disable_constant_velocity()
     except Exception:  # noqa: BLE001
         pass
 
 
 def freeze_actors(*actors: Any, carla_mod: Any = None) -> None:
-    """Disable constant-velocity and hard-brake (collision early-exit)."""
+    """Freeze non-ego actors on collision early-exit. Ego stays under Giraffe."""
     mod = carla_mod
     if mod is None:
         import carla as mod  # type: ignore
     for actor in actors:
         if actor is None:
             continue
+        is_ego = False
+        try:
+            is_ego = str(actor.attributes.get("role_name") or "") == "hero"
+        except Exception:  # noqa: BLE001
+            pass
         try:
             actor.disable_constant_velocity()
         except Exception:  # noqa: BLE001
             pass
+        if is_ego:
+            continue
         try:
             actor.set_target_velocity(mod.Vector3D(0.0, 0.0, 0.0))
         except Exception:  # noqa: BLE001

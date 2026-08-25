@@ -1,3 +1,6 @@
+// vehicle_can_gateway — façade: VehicleState → EgoMotion + Perception_In;
+// SIL egress: Trajectory → GfChannel vehicle_cmd (not locked to CAN).
+
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/proxy/trajectory_proxy.hpp"
@@ -9,28 +12,87 @@
 #define GF_GW_HAS_FRAME_INGEST 1
 #endif
 
+#include "gf_channel/gf_channel.h"
+#include "gf_channel/boundary_pods.h"
+
 #include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"
 
 #include <chrono>
-#include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <iostream>
-#include <optional>
-#include <sstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
 constexpr const char* kProcess = "adapter.vehicle_can_gateway";
+
+constexpr const char* kSlotVehicleState = "gf.channel.vehicle_state";
+constexpr const char* kSlotVehicleCmd = "gf.channel.vehicle_cmd";
+
+struct VehicleState {
+  std::uint64_t timestamp_ns{0};
+  float speed_mps{0.0f};
+  float yaw_rate_degps{0.0f};
+  float steer_angle_deg{0.0f};
+  std::uint8_t gear{4};
+  bool valid{false};
+};
+
+struct CtrlSnapshot {
+  float throttle{0.0f};
+  float brake{0.0f};
+  float steer{0.0f};
+  float target_speed_mps{0.0f};
+  std::uint8_t ctrl_mode{0};
+  bool has{false};
+};
 
 std::uint64_t now_ns() {
   return static_cast<std::uint64_t>(
       std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::steady_clock::now().time_since_epoch())
           .count());
+}
+
+const char* EgoSource() {
+  const char* v = std::getenv("GF_EGO_SOURCE");
+#if defined(GF_GW_HAS_FRAME_INGEST)
+  if (!v || !v[0]) {
+    v = gf_gen::frame_ingest::kEgoSource;
+  }
+#endif
+  // "carla" means vehicle_state GfChannel from local bridge (not json).
+  return (v && v[0]) ? v : "gateway";
+}
+
+const char* CtrlModeName(std::uint8_t mode) {
+  switch (mode) {
+    case 1:
+      return "acc";
+    case 2:
+      return "aeb";
+    case 3:
+      return "pullaway";
+    default:
+      return "cruise";
+  }
+}
+
+std::uint8_t LaneCode(const char* lane) {
+  if (!lane) {
+    return 0;
+  }
+  if (std::strcmp(lane, "left") == 0) {
+    return 1;
+  }
+  if (std::strcmp(lane, "right") == 0) {
+    return 2;
+  }
+  return 0;
 }
 
 const char* LaneFromYEnd(float y_end) {
@@ -43,163 +105,84 @@ const char* LaneFromYEnd(float y_end) {
   return "none";
 }
 
-bool JsonF32(const std::string& js, const char* key, float* out) {
-  const std::string pat = std::string("\"") + key + "\"";
-  auto pos = js.find(pat);
-  if (pos == std::string::npos) {
-    return false;
-  }
-  pos = js.find(':', pos + pat.size());
-  if (pos == std::string::npos) {
-    return false;
-  }
-  ++pos;
-  while (pos < js.size() && (js[pos] == ' ' || js[pos] == '\t')) {
-    ++pos;
-  }
-  char* end = nullptr;
-  const float v = std::strtof(js.c_str() + pos, &end);
-  if (end == js.c_str() + pos) {
-    return false;
-  }
-  *out = v;
-  return true;
+void ProjectEgo(const VehicleState& st, gf_gen::EgoMotion* ego) {
+  ego->timestamp_ns = st.timestamp_ns ? st.timestamp_ns : now_ns();
+  ego->speed_mps = st.speed_mps;
+  ego->yaw_rate_degps = st.yaw_rate_degps;
+  ego->steer_angle_deg = st.steer_angle_deg;
+  ego->gear = st.gear;
 }
 
-bool JsonU64(const std::string& js, const char* key, std::uint64_t* out) {
-  const std::string pat = std::string("\"") + key + "\"";
-  auto pos = js.find(pat);
-  if (pos == std::string::npos) {
-    return false;
-  }
-  pos = js.find(':', pos + pat.size());
-  if (pos == std::string::npos) {
-    return false;
-  }
-  ++pos;
-  while (pos < js.size() && (js[pos] == ' ' || js[pos] == '\t')) {
-    ++pos;
-  }
-  char* end = nullptr;
-  const unsigned long long v = std::strtoull(js.c_str() + pos, &end, 10);
-  if (end == js.c_str() + pos) {
-    return false;
-  }
-  *out = static_cast<std::uint64_t>(v);
-  return true;
+void ProjectPercIn(const VehicleState& st, std::uint32_t frame,
+                   gf_gen::Perception_In_St* pin) {
+  pin->timestamp_ns = st.timestamp_ns ? st.timestamp_ns : now_ns();
+  pin->ipc_frame_counter = frame;
+  pin->gear = st.gear;
+  pin->vehicle_speed = st.speed_mps;
+  pin->yaw_rate = st.yaw_rate_degps;
+  pin->_vendor_payload_opaque[0] = 0;
 }
 
-bool JsonU8(const std::string& js, const char* key, std::uint8_t* out) {
-  std::uint64_t v = 0;
-  if (!JsonU64(js, key, &v)) {
+bool IngestFromChannel(GfChannel* ch, std::uint64_t* last_seq, VehicleState* st) {
+  if (!ch) {
     return false;
   }
-  *out = static_cast<std::uint8_t>(v);
-  return true;
-}
-
-std::optional<std::string> ReadText(const std::string& path) {
-  std::ifstream in(path);
-  if (!in) {
-    return std::nullopt;
-  }
-  std::ostringstream oss;
-  oss << in.rdbuf();
-  return oss.str();
-}
-
-struct CtrlSnapshot {
-  float throttle{0.0f};
-  float brake{0.0f};
-  float steer{0.0f};
-  bool has_longitudinal{false};
-};
-
-CtrlSnapshot ReadCtrl(const std::string& path) {
-  CtrlSnapshot c{};
-  if (path.empty()) {
-    return c;
-  }
-  auto js = ReadText(path);
-  if (!js) {
-    return c;
-  }
-  float thr = 0.0f;
-  float brk = 0.0f;
-  float st = 0.0f;
-  const bool ht = JsonF32(*js, "throttle", &thr);
-  const bool hb = JsonF32(*js, "brake", &brk);
-  const bool hs = JsonF32(*js, "steer", &st);
-  if (ht || hb || hs) {
-    c.has_longitudinal = true;
-    c.throttle = thr;
-    c.brake = brk;
-    c.steer = st;
-  }
-  return c;
-}
-
-bool FillEgoFromCarlaTip(const std::string& path, gf_gen::EgoMotion* ego) {
-  auto js = ReadText(path);
-  if (!js) {
-    return false;
-  }
-  float speed = 0.0f;
-  float yaw = 0.0f;
-  float steer = 0.0f;
-  std::uint8_t gear = 4;
+  GfVehicleStatePod pod{};
+  std::uint32_t got = 0;
   std::uint64_t ts = 0;
-  if (!JsonF32(*js, "speed_mps", &speed)) {
+  std::uint32_t w = 0;
+  std::uint32_t h = 0;
+  std::uint16_t fmt = 0;
+  const int r = gf_channel_latest(ch, &pod, sizeof(pod), &got, last_seq, &ts, &w, &h, &fmt);
+  if (r != 1 || got < sizeof(GfVehicleStatePod)) {
     return false;
   }
-  (void)JsonF32(*js, "yaw_rate_degps", &yaw);
-  (void)JsonF32(*js, "steer_angle_deg", &steer);
-  (void)JsonU8(*js, "gear", &gear);
-  if (!JsonU64(*js, "timestamp_ns", &ts)) {
-    ts = now_ns();
+  if (pod.magic != GF_CH_VEHICLE_STATE_MAGIC || pod.version != GF_CH_POD_VERSION) {
+    return false;
   }
-  ego->timestamp_ns = ts;
-  ego->speed_mps = speed;
-  ego->yaw_rate_degps = yaw;
-  ego->steer_angle_deg = steer;
-  ego->gear = gear;
+  st->timestamp_ns = pod.timestamp_ns ? pod.timestamp_ns : ts;
+  st->speed_mps = pod.speed_mps;
+  st->yaw_rate_degps = pod.yaw_rate_degps;
+  st->steer_angle_deg = pod.steer_angle_deg;
+  st->gear = pod.gear ? pod.gear : 4;
+  st->valid = true;
   return true;
 }
 
-void WriteCarlaCmd(const std::string& path,
-                   const char* lane,
-                   float speed_mps,
-                   float throttle,
-                   float brake,
-                   float steer,
-                   std::uint64_t seq) {
-  if (path.empty()) {
+void StubTick(std::uint64_t frame, VehicleState* st) {
+  st->timestamp_ns = now_ns();
+  st->speed_mps = 5.0f + static_cast<float>(frame % 10) * 0.1f;
+  st->yaw_rate_degps = 0.1f;
+  st->steer_angle_deg = 2.0f;
+  st->gear = 4;
+  st->valid = true;
+}
+
+void PublishCmd(GfChannel* ch, const char* lane, const VehicleState& st,
+                const CtrlSnapshot& ctrl, std::uint64_t seq) {
+  if (!ch) {
     return;
   }
-  const std::string tmp = path + ".tmp";
-  {
-    std::ofstream out(tmp, std::ios::trunc);
-    if (!out) {
-      return;
+  GfVehicleCmdPod pod{};
+  pod.magic = GF_CH_VEHICLE_CMD_MAGIC;
+  pod.version = GF_CH_POD_VERSION;
+  pod.timestamp_ns = now_ns();
+  pod.seq = seq;
+  pod.throttle = ctrl.has ? ctrl.throttle : 0.35f;
+  pod.brake = ctrl.has ? ctrl.brake : 0.0f;
+  pod.steer = ctrl.has ? ctrl.steer : 0.0f;
+  if (!ctrl.has) {
+    if (std::strcmp(lane, "left") == 0) {
+      pod.steer = 0.25f;
+    } else if (std::strcmp(lane, "right") == 0) {
+      pod.steer = -0.25f;
     }
-    out << "{\"lane_change\":\"" << lane << "\",\"speed_mps\":" << speed_mps
-        << ",\"throttle\":" << throttle << ",\"brake\":" << brake
-        << ",\"steer\":" << steer << ",\"seq\":" << seq
-        << ",\"timestamp_ns\":" << now_ns() << "}\n";
   }
-  if (std::rename(tmp.c_str(), path.c_str()) != 0) {
-    std::remove(tmp.c_str());
-  }
-}
-
-const char* EgoSource() {
-  const char* v = std::getenv("GF_EGO_SOURCE");
-#if defined(GF_GW_HAS_FRAME_INGEST)
-  if (!v || !v[0]) {
-    v = gf_gen::frame_ingest::kEgoSource;
-  }
-#endif
-  return (v && v[0]) ? v : "gateway";
+  pod.target_speed_mps = ctrl.target_speed_mps;
+  pod.speed_mps = st.speed_mps;
+  pod.ctrl_mode = ctrl.ctrl_mode;
+  pod.lane_code = LaneCode(lane);
+  (void)gf_channel_publish(ch, &pod, sizeof(pod), pod.timestamp_ns, seq);
 }
 
 }  // namespace
@@ -218,61 +201,39 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  const char* cmd_env = std::getenv("GF_CARLA_CMD_PATH");
-  std::string cmd_path = (cmd_env && cmd_env[0]) ? cmd_env : "";
-  const char* ego_env = std::getenv("GF_CARLA_EGO_PATH");
-  std::string ego_path = (ego_env && ego_env[0]) ? ego_env : "";
-  const char* ctrl_env = std::getenv("GF_PLANNING_CTRL_PATH");
-  std::string ctrl_path = (ctrl_env && ctrl_env[0]) ? ctrl_env : "";
-
-#if defined(GF_GW_HAS_FRAME_INGEST)
-  if (cmd_path.empty() && gf_gen::frame_ingest::kBridgeEnabled) {
-    cmd_path = gf_gen::frame_ingest::kCmdPath;
-  }
-  if (ego_path.empty()) {
-    ego_path = gf_gen::frame_ingest::kEgoPath;
-  }
-  if (ctrl_path.empty()) {
-    ctrl_path = gf_gen::frame_ingest::kCtrlPath;
-  }
-#else
-  if (ego_path.empty()) {
-    ego_path = "runtime_ipc/carla_ego.json";
-  }
-  if (ctrl_path.empty()) {
-    ctrl_path = "runtime_ipc/planning_ctrl.json";
-  }
-#endif
-
   const std::string ego_src = EgoSource();
-  const bool ego_from_carla = (ego_src == "carla");
-
-  // Mutual exclusion: inject owns EgoMotion — gateway must not double-publish.
-  if (ego_src == "inject") {
-    std::cerr << "gf-vehicle-can-gateway: ego_source=inject — exit "
-                 "(inject owns EgoMotion; do not dual-publish)\n";
-    return EXIT_SUCCESS;
-  }
+  // inject / carla / gateway all keep this process; inject feeds vehicle_state slot
+  // (or stub). Gateway always Provides Ego + Perception_In (unique provider).
 
   gf_gen::EgoMotionSkeleton ego_pub{};
   gf_gen::Perception_In_StSkeleton perc_in_pub{};
   gf_gen::TrajectoryProxy traj_sub{};
 
+  GfChannel* state_ch = nullptr;
+  GfChannel* cmd_ch = nullptr;
+  const bool want_channel = (ego_src == "carla" || ego_src == "inject" ||
+                             ego_src == "vehicle_bus" || ego_src == "channel");
+  if (want_channel) {
+    // Reader opens after writer create; retry in loop if needed.
+    state_ch = gf_channel_open(kSlotVehicleState);
+  }
+  // SIL egress channel: gateway Creates so bridge can Open.
+  cmd_ch = gf_channel_create_blob(kSlotVehicleCmd, sizeof(GfVehicleCmdPod), 2);
+  if (!cmd_ch) {
+    std::cerr << "[WARN] vehicle_can_gateway: vehicle_cmd create failed errno=" << errno
+              << " (SIL egress disabled)\n";
+  }
+
   std::uint64_t frame = 0;
   int got_traj = 0;
   std::uint64_t cmd_seq = 0;
   std::string last_lane = "none";
-  gf_gen::EgoMotion last_ego{};
-  bool have_ego = false;
+  VehicleState state{};
+  CtrlSnapshot last_ctrl{};
+  std::uint64_t state_seq = 0;
 
-  std::cout << "gf-vehicle-can-gateway: start ego_source=" << ego_src;
-  if (max_traj > 0) {
-    std::cout << " (exit after " << max_traj << " Trajectory)";
-  }
-  if (!cmd_path.empty()) {
-    std::cout << " carla_cmd=" << cmd_path;
-  }
-  std::cout << std::endl;
+  std::cout << "gf-vehicle-can-gateway: start ego_source=" << ego_src
+            << " (VehicleState→Ego+In; cmd via GfChannel)\n";
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
@@ -280,91 +241,87 @@ int main(int argc, char** argv) {
       return gf_ara::exec::kEmRestartExitCode;
     }
 
-    gf_gen::EgoMotion ego{};
-    if (ego_from_carla) {
-      if (!FillEgoFromCarlaTip(ego_path, &ego)) {
-        if (have_ego) {
-          ego = last_ego;
-          ego.timestamp_ns = now_ns();
-        } else {
-          // Wait for first camera frame from carla_bridge.
-          std::this_thread::sleep_for(std::chrono::milliseconds(20));
-          ++frame;
-          continue;
-        }
-      } else {
-        have_ego = true;
-        last_ego = ego;
-      }
-    } else {
-      ego.timestamp_ns = now_ns();
-      ego.speed_mps = 5.0f + static_cast<float>(frame % 10) * 0.1f;
-      ego.yaw_rate_degps = 0.1f;
-      ego.steer_angle_deg = 2.0f;
-      ego.gear = 4;
+    if (want_channel && !state_ch) {
+      state_ch = gf_channel_open(kSlotVehicleState);
     }
+
+    bool updated = false;
+    if (state_ch) {
+      updated = IngestFromChannel(state_ch, &state_seq, &state);
+    }
+    if (!state.valid) {
+      if (ego_src == "gateway" || ego_src == "stub") {
+        StubTick(frame, &state);
+        updated = true;
+      } else {
+        // Wait for first vehicle_state from local bridge / inject feeder.
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        ++frame;
+        continue;
+      }
+    } else if (!updated && (ego_src == "gateway" || ego_src == "stub")) {
+      StubTick(frame, &state);
+    }
+
+    gf_gen::EgoMotion ego{};
+    ProjectEgo(state, &ego);
     (void)ego_pub.Send(ego);
 
     gf_gen::Perception_In_St pin{};
-    pin.timestamp_ns = ego.timestamp_ns;
-    pin.ipc_frame_counter = static_cast<std::uint32_t>(frame);
-    pin.gear = ego.gear;
-    pin.vehicle_speed = ego.speed_mps;
-    pin.yaw_rate = ego.yaw_rate_degps;
-    pin._vendor_payload_opaque[0] = 0;
+    ProjectPercIn(state, static_cast<std::uint32_t>(frame), &pin);
     (void)perc_in_pub.Send(pin);
 
-    const char* lane = "none";
+    const char* lane = last_lane.c_str();
     float y_end = 0.0f;
     auto taken = traj_sub.Take();
     if (taken && taken.Value().has_value()) {
       const auto& t = *taken.Value();
       ++got_traj;
+      last_ctrl.throttle = t.throttle;
+      last_ctrl.brake = t.brake;
+      last_ctrl.steer = t.steer;
+      last_ctrl.target_speed_mps = t.target_speed_mps;
+      last_ctrl.ctrl_mode = t.ctrl_mode;
+      last_ctrl.has = true;
       if (t.point_count > 0) {
         y_end = t.points_y_m[t.point_count - 1];
         lane = LaneFromYEnd(y_end);
+        last_lane = lane;
       }
       std::cout << "gf-vehicle-can-gateway: Trajectory#" << got_traj
                 << " points=" << static_cast<int>(t.point_count)
                 << " y_end=" << y_end << " lane=" << lane
+                << " thr=" << t.throttle << " brk=" << t.brake
+                << " st=" << t.steer << " mode=" << CtrlModeName(t.ctrl_mode)
                 << " ts_ns=" << t.timestamp_ns << std::endl;
       if (max_traj > 0 && got_traj >= max_traj) {
         std::cout << "gf-vehicle-can-gateway: received " << got_traj
                   << " Trajectory sample(s), exiting OK\n";
+        if (cmd_ch) {
+          gf_channel_close(cmd_ch);
+        }
+        if (state_ch) {
+          gf_channel_close(state_ch);
+        }
         return EXIT_SUCCESS;
       }
     }
 
-    if (!cmd_path.empty()) {
-      // Lane / longitudinal intent from planning (+ optional ctrl snapshot).
-      // World scripted maneuvers belong in carla_scenarios/*.py — not gateway demos.
-      const CtrlSnapshot ctrl = ReadCtrl(ctrl_path);
-      float thr = ctrl.has_longitudinal ? ctrl.throttle : 0.35f;
-      float brk = ctrl.has_longitudinal ? ctrl.brake : 0.0f;
-      float st = ctrl.has_longitudinal ? ctrl.steer : 0.0f;
-      if (!ctrl.has_longitudinal) {
-        if (std::strcmp(lane, "left") == 0) {
-          st = 0.25f;
-        } else if (std::strcmp(lane, "right") == 0) {
-          st = -0.25f;
-        }
-      }
-
-      if (lane != last_lane || (got_traj > 0 && (got_traj % 5) == 0) ||
-          ctrl.has_longitudinal) {
-        ++cmd_seq;
-        WriteCarlaCmd(cmd_path, lane, ego.speed_mps, thr, brk, st, cmd_seq);
-        if (lane != last_lane) {
-          std::cout << "gf-vehicle-can-gateway: wrote carla_cmd seq=" << cmd_seq
-                    << " lane_change=" << lane << " thr=" << thr
-                    << " brk=" << brk << " steer=" << st << std::endl;
-          last_lane = lane;
-        }
-      }
+    if (cmd_ch && last_ctrl.has) {
+      ++cmd_seq;
+      PublishCmd(cmd_ch, last_lane.c_str(), state, last_ctrl, cmd_seq);
     }
 
     ++frame;
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // SIL egress cadence ≈ CAN 10ms (gf-config publish_policy backlog may override later).
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  if (cmd_ch) {
+    gf_channel_close(cmd_ch);
+  }
+  if (state_ch) {
+    gf_channel_close(state_ch);
   }
   return EXIT_SUCCESS;
 }
