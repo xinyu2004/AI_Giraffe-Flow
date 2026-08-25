@@ -213,7 +213,7 @@ std::string ReadFile(const std::string& path) {
 }
 
 std::string StemSibling(const std::string& path, const char* suffix) {
-  // runtime_ipc/front.yuv → stem + suffix (file-IPC bypass; not GfChannel)
+  // path stem + suffix (replay/file sidecar meta; not live GfChannel)
   const auto slash = path.find_last_of('/');
   const auto dot = path.find_last_of('.');
   std::string stem = path;

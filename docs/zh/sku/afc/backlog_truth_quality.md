@@ -1,14 +1,15 @@
 # Backlog: Truth → FCM 质量字段（全 scenario）
 
-状态：**open**（修「一坨」几何门控已落地；本项是**非几何**质量语义，等改 `carla_scenarios` 时一并做）
+状态：**open**（几何门控已落地；本项是**非几何**质量语义）
 
 ## 范围
 
-对 **全部** `carla_scenarios` case（纵向 / 横向 / weather / ISP / lighting / roadway / perception…）检查并补齐假感知质量链路，**不限于 ISP**。
+对 **全部** `carla_scenarios` case 检查并补齐假感知质量链路。  
+生产者现为 `giraffe_client` → `_lane_truth` / `_objects_truth` → `GfFakePercPod`（不再写 `carla_truth.json`）。
 
 ## 目标
 
-`carla_truth` → FCM Out 中与「场景条件」相关的质量要可区分，而不只是车道几何门控：
+`fake_perc` → FCM Out 中与「场景条件」相关的质量要可区分，而不只是车道几何门控：
 
 | 通道 | 用途 | 场景例 |
 |------|------|--------|
@@ -29,5 +30,6 @@
 
 ## 关联
 
-- 已做：几何失效 → `lane_avail` / `lane_conf` / `lane_vr_end_m` → FCM → BEV 守 VR（消「一坨」）
-- 触发时机：下次系统改 `carla_scenarios` 假感知/布景时一起做，勿单独散改
+- 已做：几何失效 → `lane_avail` / `lane_conf` / `lane_vr_end_m` → FCM → BEV 守 VR
+- 已做：假感知生产者迁到 cosim POD（对齐旧 JSON 字段）
+- 触发时机：下次加深天气/ISP 质量映射时一起做

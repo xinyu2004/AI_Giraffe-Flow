@@ -25,7 +25,7 @@
 
 - **单点变更**：一次只迁一个算法面（先 clamp 骨架 → 再纵向 → 再横向）。
 - **金向量门禁**：每个抽出的函数有固定输入/输出；CI 红则回退该点，不连带大改 gateway / BEV / EM。
-- **产品路径不动**：`run_sil` 不引入故障注入；Phase 3 起控车走 iceoryx `Trajectory`（SIL 宿主 `carla_cmd.json` 可保留）。
+- **产品路径不动**：`run_sil` 不引入故障注入；Phase 3 起控车走 iceoryx `Trajectory` → GfChannel `vehicle_cmd` → cosim（无 `carla_cmd.json`）。
 - **可回退**：薄壳保留旧路径开关或短时 `#if` 仅在抽取窗口；合并前必须默认走新路径且绿。
 
 ## 阶段
@@ -36,7 +36,7 @@
 | **1a** | CLI 骨架、CMake 链 `ops`+`oct_gen`、`gf_clamp` 金向量 | ✅ generate + pytest；`compile_sil` 调 sync |
 | **1b** | 纵向 ACC/AEB → `.m` → `oct_gen`；薄壳只调入口 | ✅ 独立函数 + 金向量；steer 仍在薄壳 |
 | **2** | 横向 LKA + 定长轨迹（独立函数） | ✅ `m_lat_lka` / `m_lat_traj` + 金向量 |
-| **3** | gateway 去 JSON 控车 | ✅ 控车字段进 iceoryx `Trajectory`；无 `planning_ctrl.json` 产品依赖（SIL 仍可写 `carla_cmd.json`） |
+| **3** | gateway 去 JSON 控车 | ✅ 控车字段进 iceoryx `Trajectory`；egress GfChannel `vehicle_cmd` + cosim；无 `planning_ctrl.json` / `carla_cmd.json` |
 | **4** | 环视/A*、HIL | 另开任务 |
 
 ## 目录合同（现行）

@@ -160,7 +160,8 @@ void StubTick(std::uint64_t frame, VehicleState* st) {
 
 void PublishCmd(GfChannel* ch, const char* lane, const VehicleState& st,
                 const CtrlSnapshot& ctrl, std::uint64_t seq) {
-  if (!ch) {
+  // Caller gates on ctrl.has — never invent thr/steer before first Trajectory.
+  if (!ch || !ctrl.has) {
     return;
   }
   GfVehicleCmdPod pod{};
@@ -168,16 +169,9 @@ void PublishCmd(GfChannel* ch, const char* lane, const VehicleState& st,
   pod.version = GF_CH_POD_VERSION;
   pod.timestamp_ns = now_ns();
   pod.seq = seq;
-  pod.throttle = ctrl.has ? ctrl.throttle : 0.35f;
-  pod.brake = ctrl.has ? ctrl.brake : 0.0f;
-  pod.steer = ctrl.has ? ctrl.steer : 0.0f;
-  if (!ctrl.has) {
-    if (std::strcmp(lane, "left") == 0) {
-      pod.steer = 0.25f;
-    } else if (std::strcmp(lane, "right") == 0) {
-      pod.steer = -0.25f;
-    }
-  }
+  pod.throttle = ctrl.throttle;
+  pod.brake = ctrl.brake;
+  pod.steer = ctrl.steer;
   pod.target_speed_mps = ctrl.target_speed_mps;
   pod.speed_mps = st.speed_mps;
   pod.ctrl_mode = ctrl.ctrl_mode;

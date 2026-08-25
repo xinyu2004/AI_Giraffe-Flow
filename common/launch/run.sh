@@ -191,7 +191,7 @@ _gf_load_carla_env_file() {
     key="$(echo "${key}" | sed -e 's/[[:space:]]//g')"
     val="$(echo "${val}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//')"
     case "${key}" in
-      CARLA_HOST|CARLA_PORT|GF_CARLA_WAIT_S|GF_CARLA_CONNECT_TIMEOUT_S|GF_CARLA_PYTHON|GF_CARLA_FRAME_PATH|GF_CARLA_EGO_PATH|GF_CARLA_CMD_PATH|GF_CARLA_TRUTH_PATH|GF_PIXEL_FORMAT|GF_PLANNING_CTRL_PATH)
+      CARLA_HOST|CARLA_PORT|GF_CARLA_WAIT_S|GF_CARLA_CONNECT_TIMEOUT_S|GF_CARLA_PYTHON|GF_CARLA_FRAME_PATH|GF_PIXEL_FORMAT|GF_CTRL_TIP_PORT|GF_CTRL_TIP_HOST)
         if [[ -z "${!key+x}" || -z "${!key}" ]]; then
           export "${key}=${val}"
         fi

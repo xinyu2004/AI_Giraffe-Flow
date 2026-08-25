@@ -55,8 +55,22 @@ gateway ──► vehicle_cmd ──► gf_carla_io ──► giraffe_client ─
 - **无** `carla_cmd.json` / `carla_truth.json` / `planning_ctrl.json` / `front.yuv` 产品 IPC；HUD CTRL 用本机 UDP tip（`GF_CTRL_TIP_PORT`，默认 7610）。
 - 运行时写盘：PER / OTA；Log 文件默认关；GMT 录制属上位机工具。
 
+## 上位机规划旁路（开发）
+
+`carla_scenarios/octave_bridge`：Host 扮演 `gf_carla_io` 联仿对端，`PlanningView`←fake_perc/state，规划只出 `PlanningResult`→`vehicle_cmd`；BEV 喂同一套 `bev_compose`。不替代板端 EM 路径。
+
 ## 遗留债
 
-- gateway 入/出口是否同一 SOA APP、出口总线形态 — 未锁死。
-- publish_policy（period / on-change）— 阶段 2（SIL `vehicle_cmd` 暂 10ms）。
-- fake_perc：已由 `giraffe_client` 用 `_lane_truth` + `_objects_truth` 填 POD（对齐旧 JSON）；若 BEV 仍缺邻道再查质量门控。
+- **入/出口 APP 边界**与**出口总线形态** — 未锁死（见下）。
+- publish_policy（period / on-change）— 阶段 2（SIL `vehicle_cmd` 暂 10ms；首帧前不发伪 thr/steer）。
+- fake_perc 几何已由 `_lane_truth` + `_objects_truth` 填满 POD；非几何质量字段见 `backlog_truth_quality.md`。
+
+### 入/出口 APP 边界 · 出口总线形态（为何 TBD）
+
+当前 SIL 把「车态 ingest → Ego/Perception_In」和「Trajectory → 控车出口」塞在同一个进程  
+`adapter.vehicle_can_gateway` 里；出口在联仿上是 GfChannel `vehicle_cmd`，**不是**量产 CAN/SOMEIP 帧。
+
+未锁死的两件事：
+
+1. **同一 SOA APP？** 量产可能拆成「入站网关 / 出站执行」两个部署单元，或继续一个 façade；OEM 总线拓扑与 EM 进程表决定，不在本仓库写死。
+2. **出口总线形态？** 板端可能是 CAN FD / ETH SOMEIP / 私有 PDU；SIL 用 `vehicle_cmd` POD 只证明「规划→执行」语义，不规定线束与信号布局。映射表 + publish_policy 才是 OEM 差异面。

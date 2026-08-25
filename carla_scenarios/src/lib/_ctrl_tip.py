@@ -158,6 +158,9 @@ class TipReceiver:
             if not self._armed:
                 self.last_seq = seq
                 self._armed = True
+                # First tip after bind counts (UDP has no stale file); need green CTRL ASAP.
+                self.fresh_count += 1
+                got_new = True
                 continue
             if seq != self.last_seq:
                 self.fresh_count += 1

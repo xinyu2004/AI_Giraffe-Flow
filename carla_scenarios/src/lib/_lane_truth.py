@@ -1,4 +1,4 @@
-"""CARLA → ego-frame lane topology for carla_truth (no Giraffe imports).
+"""CARLA → ego-frame lane topology for fake_perc / GfFakePercPod (no Giraffe imports).
 
 CARLA/Unreal: X forward, Y right+. Gold / this module: x forward, y left+.
 lane_count: same-direction countable Driving lanes (Shoulder 等不计).

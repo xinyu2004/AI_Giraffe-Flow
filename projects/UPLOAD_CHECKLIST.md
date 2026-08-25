@@ -7,7 +7,7 @@
 | 路径 | 原因 |
 |------|------|
 | `build/`、`**/build-sil/`、`build-hil/`、`cmake-build-*/`、`build-*/` | CMake / SIL 构建树（可达数百 MiB）；根 `.gitignore` 已覆盖 |
-| `**/runtime_ipc/` | SIL 文件 IPC 整目录（truth/cmd/yuv…）；compose 运行时再 `mkdir`；**勿入库、勿打包** |
+| `**/runtime_ipc/` | SIL scratch（可选 replay/file 帧等）；compose 运行时再 `mkdir`；**勿入库、勿打包**（主链控车/真值已走 GfChannel，无 carla_*.json） |
 | `*.yuv` | 大二进制帧旁路；fixtures 除外 |
 | `middleware/.deps-prefix/`、`.deps-sysroot/` | 源码编出的 attr/acl staging |
 | `middleware/third_party/iceoryx/`、`attr/`、`acl/` | bootstrap 检出（保留 `middleware/third_party/README.md`） |

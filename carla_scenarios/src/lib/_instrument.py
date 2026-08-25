@@ -40,11 +40,6 @@ def fmt_num(value: Optional[float], *, digits: int = 0) -> str:
     return f"{value:.{digits}f}"
 
 
-def ctrl_path() -> None:
-    """Removed: file tip deleted."""
-    return None
-
-
 @dataclass
 class CtrlProbe:
     """Read mode/target_speed from local UDP tip (shared with CmdProbe)."""

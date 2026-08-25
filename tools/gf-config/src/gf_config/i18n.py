@@ -678,8 +678,8 @@ _EN: dict[str, str] = {
         "Edit frame source/ego → Save/Verify → compile_sil → run_sil "
         "(frozen into binaries; unrelated to carla_scenarios)"
     ),
-    "图像主路径=GfChannel；SIL 文件旁路(runtime_ipc)由 compose 默认。改帧源/ego → Save/Verify → compile_sil → run_sil": (
-        "Image path=GfChannel; SIL file bypass (runtime_ipc) from compose defaults. "
+    "图像主路径=GfChannel；replay/file 才用 runtime_ipc 帧路径。改帧源/ego → Save/Verify → compile_sil → run_sil": (
+        "Image path=GfChannel; runtime_ipc frame path only for replay/file. "
         "Edit frame source/ego → Save/Verify → compile_sil → run_sil"
     ),
     "改此处 → Save/Verify → compile → run_sil（行为编译冻结，勿手改相机 JSON）": (

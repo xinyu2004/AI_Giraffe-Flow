@@ -1,4 +1,4 @@
-"""CARLA actors → ego-frame dyn objects for carla_truth (no Giraffe imports)."""
+"""CARLA actors → ego-frame dyn objects for fake_perc / GfFakePercPod (no Giraffe imports)."""
 
 from __future__ import annotations
 
