@@ -59,14 +59,17 @@ def _emit_afc_lon_hpp() -> str:
 namespace oct_gen {
 
 using gf_octave_planning::LonCtrl;
-using gf_octave_planning::lon_cruise;
-using gf_octave_planning::lon_aeb;
-using gf_octave_planning::lon_pullaway;
-using gf_octave_planning::lon_acc_follow;
+using gf_octave_planning::lon_exec;
+using gf_octave_planning::lon_a_req;
+using gf_octave_planning::plan_horizon;
+using gf_octave_planning::plan_v_at_s;
 
 /** Corresponds to octave_planning/afc/m_lon_acc_aeb.m */
-inline LonCtrl m_lon_acc_aeb(float v, bool lead_valid, float d, float rel) {
-  return gf_octave_planning::m_lon_acc_aeb(v, lead_valid, d, rel);
+inline LonCtrl m_lon_acc_aeb(float v, bool lead_valid, float d, float rel,
+                             float lead_lat_m = 0.0f, float e_y = 0.0f, float c1 = 0.0f,
+                             bool lane_valid = true) {
+  return gf_octave_planning::m_lon_acc_aeb(v, lead_valid, d, rel, lead_lat_m, e_y, c1,
+                                           lane_valid);
 }
 
 }  // namespace oct_gen
@@ -111,12 +114,13 @@ using gf_octave_planning::LatTraj;
 using gf_octave_planning::kLatTrajPoints;
 using gf_octave_planning::lat_poly_y;
 using gf_octave_planning::lat_blend_alpha;
+using gf_octave_planning::plan_fill_speed;
 
 /** Corresponds to octave_planning/afc/m_lat_traj.m */
-inline LatTraj m_lat_traj(float speed_mps, float speed_scale, bool lane_valid, float c0,
+inline LatTraj m_lat_traj(float speed_mps, float D_see, float T_plan, bool lane_valid, float c0,
                           float c1, float c2, float c3, float x_end) {
-  return gf_octave_planning::m_lat_traj(speed_mps, speed_scale, lane_valid, c0, c1, c2,
-                                        c3, x_end);
+  return gf_octave_planning::m_lat_traj(speed_mps, D_see, T_plan, lane_valid, c0, c1, c2, c3,
+                                        x_end);
 }
 
 }  // namespace oct_gen

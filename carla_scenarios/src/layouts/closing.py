@@ -133,21 +133,45 @@ def layout_aeb_intersection_cross(
     import math
 
     ego_tf = ego.get_transform()
-    # Start further aside so the car drives *into* the corridor (not crabbing on ego lane).
-    cross_tf = offset_transform(
-        ego_tf, forward_m=gap_m * 0.85, right_m=lateral_m
-    )
-    # Face toward ego path (−right = into lane).
     right = ego_tf.get_right_vector()
     into_x, into_y = -float(right.x), -float(right.y)
-    cross_tf.rotation.yaw = math.degrees(math.atan2(into_y, into_x))
-    lead = spawn_named(
-        world,
-        role=ROLE_LEAD,
-        transform=cross_tf,
-        bp_filter="vehicle.audi.a2",
-        clear_radius_m=10.0,
-    )
+    yaw_into = math.degrees(math.atan2(into_y, into_x))
+
+    # Try several corridor poses: TM / curb often blocks the first guess.
+    lat_candidates = [lateral_m, -lateral_m, lateral_m + 2.0, -(lateral_m + 2.0),
+                      lateral_m + 4.0, -(lateral_m + 4.0), 8.0, -8.0]
+    fwd_candidates = [gap_m * 0.85, gap_m * 0.7, gap_m * 1.0, gap_m * 0.55]
+    lead = None
+    last_err: Optional[BaseException] = None
+    used_lat = lateral_m
+    used_fwd = gap_m * 0.85
+    for lat in lat_candidates:
+        for fwd in fwd_candidates:
+            cross_tf = offset_transform(ego_tf, forward_m=fwd, right_m=lat)
+            cross_tf.rotation.yaw = yaw_into
+            try:
+                lead = spawn_named(
+                    world,
+                    role=ROLE_LEAD,
+                    transform=cross_tf,
+                    bp_filter="vehicle.audi.a2",
+                    clear_radius_m=18.0,
+                    keep_yaw=True,
+                )
+                used_lat = lat
+                used_fwd = fwd
+                break
+            except RuntimeError as exc:
+                last_err = exc
+                continue
+        if lead is not None:
+            break
+    if lead is None:
+        raise RuntimeError(
+            f"layout_aeb_intersection_cross: could not place cross vehicle "
+            f"(traffic/occupied). last={last_err}"
+        )
+
     cross_mps = float(os.environ.get("GF_AEB_X_CROSS_MPS") or "6")
     # Ego: AEB-only seed. Cross: scenario IC.
     aeb_ego_seed(True)
@@ -157,7 +181,7 @@ def layout_aeb_intersection_cross(
         aeb_ego_seed(False)
     closing_along_pose(carla_mod, lead, cross_mps)
     print(
-        f"[layout] INTERSECTION_CROSS gap≈{gap_m} lat≈{lateral_m} "
+        f"[layout] INTERSECTION_CROSS gap≈{gap_m} lat≈{used_lat:.1f} fwd≈{used_fwd:.1f} "
         f"ego={ego.id} cross={lead.id} "
         f"ic_ego=aeb_ego_seed ic_cross=closing_along_pose",
         flush=True,
@@ -165,7 +189,7 @@ def layout_aeb_intersection_cross(
     return ego, lead, {
         "layout": "intersection_cross",
         "gap_m": gap_m,
-        "lateral_m": lateral_m,
+        "lateral_m": used_lat,
         "ego_mps": ego_mps,
         "cross_mps": cross_mps,
         "const_vel": const_on,

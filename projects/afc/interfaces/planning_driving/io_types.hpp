@@ -10,6 +10,7 @@ struct Trajectory {
   uint8_t point_count;
   float points_x_m[60];
   float points_y_m[60];
+  float points_v_mps[60];  // v4 plan speed along path (BEV); 0 if unused
   uint8_t gear_shift_first;
   uint8_t gear_shift_second;
   // Actuator command co-published with path (iceoryx; no planning_ctrl.json).
@@ -17,7 +18,7 @@ struct Trajectory {
   float brake;
   float steer;
   float target_speed_mps;
-  uint8_t ctrl_mode;  // 0=cruise 1=acc 2=aeb 3=pullaway
+  uint8_t ctrl_mode;  // 0=cruise 1=acc 2=aeb (label only; v4 not a state machine)
 };
 
 }  // namespace gf::demo::planning_driving

@@ -64,6 +64,7 @@ struct Trajectory {
   uint8_t point_count;
   float points_x_m[60];
   float points_y_m[60];
+  float points_v_mps[60];
   uint8_t gear_shift_first;
   uint8_t gear_shift_second;
   float throttle;

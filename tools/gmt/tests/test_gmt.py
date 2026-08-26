@@ -428,6 +428,63 @@ def test_bev_traj_color_uses_throttle_not_stuck_speed() -> None:
     assert traj_thickness_for_lon(brake) >= 5
 
 
+def test_bev_plan_v_colormap_and_png() -> None:
+    from gf_gmt.bev_compose import (
+        LiveBevComposer,
+        LiveBevState,
+        render_ego_bev_png,
+        traj_color_for_v,
+    )
+
+    assert traj_color_for_v(0.0)[0] > traj_color_for_v(12.0)[0]
+    assert traj_color_for_v(12.0)[1] > traj_color_for_v(0.0)[1]
+    xs = [0.0, 10.0, 20.0, 40.0]
+    ys = [0.0, 0.0, 0.0, 0.0]
+    stop = render_ego_bev_png(
+        LiveBevState(
+            traj_x=xs,
+            traj_y=ys,
+            traj_v=[0.0, 0.0, 0.0, 0.0],
+            traj_d_see_m=20.0,
+            traj_t_plan_s=2.0,
+            traj_v_plan_mps=0.0,
+        )
+    )
+    cruise = render_ego_bev_png(
+        LiveBevState(
+            traj_x=xs,
+            traj_y=ys,
+            traj_v=[12.0, 12.0, 12.0, 12.0],
+            traj_d_see_m=80.0,
+            traj_t_plan_s=10.0,
+            traj_v_plan_mps=12.0,
+        )
+    )
+    assert stop.startswith(b"\x89PNG")
+    assert stop != cruise
+
+    comp = LiveBevComposer()
+    cam = comp.update(
+        {
+            "t_ns": 3,
+            "topic": "/gf/Trajectory",
+            "data": {
+                "points_x_m": xs,
+                "points_y_m": ys,
+                "points_v_mps": [12.0, 8.0, 4.0, 0.0],
+                "D_see_m": 40.0,
+                "T_plan_s": 5.0,
+                "target_speed_mps": 12.0,
+                "allow_lc": 1,
+            },
+        }
+    )
+    assert cam is not None
+    assert comp.state.traj_v[2] == 4.0
+    assert comp.state.traj_d_see_m == 40.0
+    assert comp.state.allow_lc
+
+
 def test_bev_prefers_planning_traj_when_adas() -> None:
     from gf_gmt.bev_compose import LiveBevComposer
 

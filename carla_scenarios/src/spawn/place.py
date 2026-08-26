@@ -79,9 +79,10 @@ def spawn_named(
     transform: Any,
     bp_filter: str,
     destroy_existing: bool = True,
-    clear_radius_m: float = 8.0,
+    clear_radius_m: float = 16.0,
+    keep_yaw: bool = False,
 ) -> Any:
-    """Spawn a role actor. Retries nearby poses — never hard-crash on occupied cells."""
+    """Spawn a role actor. Retries nearby poses and map spawn points."""
     if destroy_existing:
         from spawn.roles import safe_destroy
 
@@ -89,42 +90,69 @@ def spawn_named(
         safe_destroy(old)
         tick_world(world)
 
-    clear_near(
-        world,
-        transform.location,
-        radius_m=clear_radius_m,
-        protect_roles={ROLE_EGO, role},
-    )
-
     lib = world.get_blueprint_library()
     cands = list(lib.filter(bp_filter)) or list(lib.filter("vehicle.*"))
     if not cands:
         raise RuntimeError(f"no blueprints for {bp_filter!r}")
 
-    attempts: list[Any] = [transform]
-    for fwd, right, dz in (
+    def _snap(tf: Any) -> Any:
+        try:
+            import carla  # type: ignore
+
+            wp = world.get_map().get_waypoint(
+                tf.location,
+                project_to_road=True,
+                lane_type=carla.LaneType.Driving,
+            )
+            if wp is None:
+                out = tf
+            else:
+                out = wp.transform
+                if keep_yaw:
+                    out.rotation.yaw = float(tf.rotation.yaw)
+                out.rotation.pitch = 0.0
+                out.rotation.roll = 0.0
+            out.location.z = float(out.location.z) + 0.25
+            return out
+        except Exception:  # noqa: BLE001
+            return tf
+
+    attempts: list[Any] = [_snap(transform)]
+    nudges = (
         (0.0, 1.5, 0.0),
         (0.0, -1.5, 0.0),
         (2.0, 0.0, 0.0),
         (-2.0, 0.0, 0.0),
-        (2.0, 2.0, 0.0),
-        (2.0, -2.0, 0.0),
         (4.0, 0.0, 0.3),
-        (0.0, 3.0, 0.3),
-        (0.0, -3.0, 0.3),
-    ):
+        (0.0, 3.5, 0.0),
+        (0.0, -3.5, 0.0),
+        (8.0, 0.0, 0.0),
+        (12.0, 0.0, 0.0),
+        (0.0, 7.0, 0.0),
+        (0.0, -7.0, 0.0),
+    )
+    for fwd, right, dz in nudges:
         tf = offset_transform(transform, forward_m=fwd, right_m=right)
         if abs(dz) > 1e-6:
             tf.location.z = float(tf.location.z) + dz
-        attempts.append(tf)
+        attempts.append(_snap(tf))
+    try:
+        for sp in list(world.get_map().get_spawn_points())[:40]:
+            attempts.append(_snap(sp))
+    except Exception:  # noqa: BLE001
+        pass
 
     last_err: Optional[BaseException] = None
-    for i, bp in enumerate(cands[:4]):
+    radius = max(12.0, float(clear_radius_m))
+    # New hero/lead: do not protect a ghost of the same role while placing.
+    protect = {ROLE_EGO, ROLE_LEAD} - {role}
+    for i, bp in enumerate(cands[:6]):
         set_role(bp, role)
         for tf in attempts:
+            clear_near(world, tf.location, radius_m=radius, protect_roles=protect)
             actor = world.try_spawn_actor(bp, tf)
             if actor is not None:
-                if i > 0 or tf is not transform:
+                if i > 0 or tf is not attempts[0]:
                     print(
                         f"[spawn] {role} ok after nudge "
                         f"(bp={bp.id} loc=({tf.location.x:.1f},{tf.location.y:.1f}))",
@@ -193,14 +221,14 @@ def ego_lead(
 
     ego = find_by_role(world, ROLE_EGO)
     if ego is None:
-        clear_near(world, ego_tf.location, radius_m=6.0, protect_roles=set())
+        clear_near(world, ego_tf.location, radius_m=18.0, protect_roles=set())
         ego = spawn_named(
             world,
             role=ROLE_EGO,
             transform=ego_tf,
             bp_filter=ego_filter,
             destroy_existing=False,
-            clear_radius_m=6.0,
+            clear_radius_m=18.0,
         )
         keep_ego = False  # cold spawn this call
     elif not keep_ego:
@@ -215,7 +243,7 @@ def ego_lead(
             transform=lead_tf,
             bp_filter=lead_filter,
             destroy_existing=False,
-            clear_radius_m=8.0,
+            clear_radius_m=16.0,
         )
     else:
         _set_transform_at_rest(lead, lead_tf, park=True)
@@ -302,7 +330,7 @@ def spawn_ego_only(
             transform=ego_tf,
             bp_filter=ego_filter,
             destroy_existing=False,
-            clear_radius_m=6.0,
+            clear_radius_m=18.0,
         )
     else:
         _set_transform_at_rest(ego, ego_tf)

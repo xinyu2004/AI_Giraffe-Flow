@@ -38,6 +38,8 @@ for _p in (_HERE, _SRC, _LIB):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+from _proc_util import kill_matching, kill_proc_tree  # noqa: E402
+
 from _carla_env import (  # noqa: E402
     carla_host,
     carla_port,
@@ -72,6 +74,11 @@ def _start_giraffe_client() -> None:
         return
     if _GIRAFFE_CLIENT_PROC is not None and _GIRAFFE_CLIENT_PROC.poll() is None:
         return
+    # Prior Ctrl+C often left an orphaned giraffe_client (own session).
+    n = kill_matching("giraffe_client")
+    if n:
+        print(f"[run_cases] cleared {n} stale giraffe_client before start", flush=True)
+        time.sleep(0.4)
     cmd = [sys.executable, "-m", "giraffe_client"]
     log_path = _HERE / "results" / "giraffe_client.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,19 +104,9 @@ def _stop_giraffe_client() -> None:
     global _GIRAFFE_CLIENT_PROC
     proc = _GIRAFFE_CLIENT_PROC
     _GIRAFFE_CLIENT_PROC = None
-    if proc is None:
-        return
-    if proc.poll() is not None:
-        return
-    print(f"[run_cases] stopping giraffe_client pid={proc.pid}", flush=True)
-    try:
-        proc.send_signal(signal.SIGTERM)
-        proc.wait(timeout=5)
-    except Exception:  # noqa: BLE001
-        try:
-            proc.kill()
-        except Exception:  # noqa: BLE001
-            pass
+    kill_proc_tree(proc, name="giraffe_client")
+    # Belt-and-suspenders: orphans from older sessions.
+    kill_matching("giraffe_client")
 
 
 def _load_py(path: Path) -> Any:
@@ -402,6 +399,30 @@ def main(argv: list[str] | None = None) -> int:
                     stop_flag=lambda: STOP,
                     ensure_view=_ensure_view,
                 )
+            except Exception as exc:  # noqa: BLE001
+                elapsed = time.time() - t0
+                print(
+                    f"[run_cases] ■ {cid} layout/run error: {type(exc).__name__}: {exc}",
+                    flush=True,
+                )
+                failed_ids.append(cid)
+                case_rows.append(
+                    {
+                        "id": cid,
+                        "keyword": keyword,
+                        "script": str(script.relative_to(_HERE)),
+                        "exit": 1,
+                        "passed": False,
+                        "elapsed_s": round(elapsed, 3),
+                        "index": idx + 1,
+                        "total": len(runnable),
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+                if stop_on_fail:
+                    skipped_rest.extend(c for c, _, _ in runnable[idx + 1 :])
+                    break
+                continue
             finally:
                 set_natural_continue(False)
             elapsed = time.time() - t0

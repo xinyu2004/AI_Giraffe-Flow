@@ -72,6 +72,8 @@ Planning **不读 LA**（无变道逻辑）。
 
 ## 4. Planning lite 做了什么
 
+**纵向/规控（第四版）：** [planning_lon_v4.md](./planning_lon_v4.md) · [planning_v4_how.md](./planning_v4_how.md)。Host：`m_plan_tick`（路径+分段速度、视野滞回、≤8 目标）。C 等效果认可后再 generate。下表是 v3 现状备忘，不是目标。
+
 进程：`planning.driving`（iox runtime `gf-planning-driving`）。
 
 ### 输入 / 输出
@@ -87,14 +89,27 @@ Planning **不读 LA**（无变道逻辑）。
 
 | 模式 | 条件 / 动作 |
 |------|-------------|
-| `cruise` | 无 lead；目标约 12 m/s；静止有油门地板便于起步 |
-| `pullaway` | 近停 + 前车距离安全 → 拉起 |
-| `acc` | CIPV 跟车；期望间距 `clamp(max(8, v×1.6), 8…40)` m |
-| `aeb` | 过近或 TTC 过小 → 重刹 |
-| 横向 | LH 左右线 → 中心 `e_y` + `c1` → steer（非完整 LKA）；**AEB 窗口**壳层把 steer 收到 0（少甩尾），结束后恢复居中 |
-| 轨迹 | `FillLaneKeepTrajectory`：沿车道中心指数 blend，horizon 受 VR/车速限制 |
+| `aeb` | 分类 `th=3`：已在刹停包络内 → **brake=1**。车道坏也刹。无 latch、无 0.55 缓刹 |
+| `cruise` 地板 | 分类 `th=0` 且车道可用、`|e_y|≤lat_ey_slow`；目标 = `cruise_v_mps` |
+| hold（mode 仍 `cruise`） | 车道不可用或 `|e_y|>lat_ey_slow`；或跟停且间距不够 / 切车偏移。油门 0 |
+| `pullaway` | 跟车 + **本车道** `|lat|≤lat_merge` + 近停 + 间距在 `d_stop` 之外 |
+| `acc` 跟车 | `th=1` 且已在运动；目标间距 `≥ d_stop + acc_gap_over_stop`；超 `acc_v_max` 只刹不加油 |
+| `acc` 横穿谨慎 | `th=2`：不加油，移动时轻刹 |
+| 横向 | LH → `e_y`+`c1`→steer；`|e_y|` 过大则 `gf_lane_usable=0`，steer→0（限速在 LKA 内） |
+| 轨迹 | `m_lat_traj`：车道不可用时 y=0；horizon 受 VR/车速 + cal |
 
-**没有：** 变道、吃 LA、HLB、静态障碍、FS。
+**分类（`gf_lon_classify`，先分类再动作）：**
+
+| th | 含义 |
+|----|------|
+| 0 none | 无 lead、`d>lon_max`、或 `|lat|>lat_aeb_m`（邻道远目标 / CIPV 跳走） |
+| 1 follow | `|lat|<lat_acc_m` 且尚未进入刹停包络 |
+| 2 cross | ACC 锥外、AEB 锥内、`d<lon_cross_d_m` |
+| 3 aeb | 锥内且 `d_stop = v²/(2a)+v·t_react+d_min+margin`，或 TTC，或接触 `d≈0` |
+
+接触（`d<0.5`）仍是 lead，不当空路。ACC 目标间距不得进入 AEB 包络。切车 `|lat|≈2.6` 在 ACC 锥内，偏移目标不 pullaway。  
+**参数集：** `octave_planning/common/gf_plan_cal.m` ↔ `gf_octave_planning/plan_cal.hpp`。  
+**没有：** 变道、吃 LA、HLB、静态障碍、FS、AEB latch、Host/板端后处理壳。
 
 ---
 

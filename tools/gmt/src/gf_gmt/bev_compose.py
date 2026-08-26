@@ -12,8 +12,9 @@ Demo range contract (FOV is optical only — not these numbers):
   D_work ≈ 120 m — soft working / validity band (not a hard BEV cut)
   D_bev  = 130 m — canvas ≈ D_work×1.1; lanes/ticks/objects drawn to this
 Object fill color is by stable OBJ_ID palette (video overlay will share later).
-Trajectory polyline = planning `/gf/Trajectory`:
-  green=accel, red=decel, blue=hold; line thickness ∝ |throttle−brake| (hold fixed thin).
+Trajectory polyline = planning `/gf/Trajectory` (the plan, not this-tick mode):
+  each segment colored by `points_v_mps` (red=slow/stop → green=cruise);
+  dashed cyan = `D_see`; HUD `v` / `D` / `T`. Fallback if no v[]: thr−brk color.
 
 BEV lane geometry comes only from FCM Out (Perception_LH_Out host lines and
 Perception_LA_Out adjacent lines). Mark style follows gold lanemark_type
@@ -200,6 +201,12 @@ class LiveBevState:
     gear: int = 0
     traj_x: list[float] = field(default_factory=list)
     traj_y: list[float] = field(default_factory=list)
+    traj_v: list[float] = field(default_factory=list)
+    traj_d_see_m: float = 0.0
+    traj_t_plan_s: float = 0.0
+    traj_v_plan_mps: float = 0.0
+    traj_horizon_m: float = 0.0
+    allow_lc: bool = False
     nearest_cm: float | None = None
     # Integrated path length (m) for scrolling ground — ego-centric BEV motion cue
     odom_m: float = 0.0
@@ -252,7 +259,7 @@ def lon_intent(st: LiveBevState) -> float:
 
 
 def traj_color_for_lon(st: LiveBevState) -> tuple[int, int, int]:
-    """Planning path color: green accel, red decel, blue hold."""
+    """Fallback when `points_v_mps` is empty: this-tick thr−brk."""
     intent = lon_intent(st)
     if intent > 0.08:
         return (70, 210, 110)  # accel
@@ -269,6 +276,80 @@ def traj_thickness_for_lon(st: LiveBevState) -> int:
     return max(3, min(7, 2 + int(round(intent * 5.0))))
 
 
+def traj_color_for_v(v: float, v_hi: float = 12.0) -> tuple[int, int, int]:
+    """Plan speed: red stop → amber crawl → green cruise."""
+    t = max(0.0, min(1.0, float(v) / max(float(v_hi), 1.0)))
+    if t < 0.45:
+        u = t / 0.45
+        return (
+            int(220 + (230 - 220) * u),
+            int(70 + (180 - 70) * u),
+            int(70 + (60 - 70) * u),
+        )
+    u = (t - 0.45) / 0.55
+    return (
+        int(230 + (70 - 230) * u),
+        int(180 + (210 - 180) * u),
+        int(60 + (110 - 60) * u),
+    )
+
+
+def traj_seg_thickness(v0: float, v1: float) -> int:
+    """Thicker where the plan is cutting speed."""
+    dv = float(v1) - float(v0)
+    if dv < -1.0:
+        return 5
+    if dv > 1.0:
+        return 4
+    return 3
+
+
+# 5×7 column bitmaps (LSB = top). Digits + a few HUD letters.
+_FONT5: dict[str, tuple[int, ...]] = {
+    "0": (0x3E, 0x45, 0x49, 0x51, 0x3E),
+    "1": (0x00, 0x21, 0x7F, 0x01, 0x00),
+    "2": (0x21, 0x43, 0x45, 0x49, 0x31),
+    "3": (0x42, 0x41, 0x51, 0x69, 0x46),
+    "4": (0x0C, 0x14, 0x24, 0x7F, 0x04),
+    "5": (0x72, 0x51, 0x51, 0x51, 0x4E),
+    "6": (0x3E, 0x49, 0x49, 0x49, 0x26),
+    "7": (0x40, 0x47, 0x48, 0x50, 0x60),
+    "8": (0x36, 0x49, 0x49, 0x49, 0x36),
+    "9": (0x32, 0x49, 0x49, 0x49, 0x3E),
+    ".": (0x00, 0x00, 0x03, 0x00, 0x00),
+    " ": (0x00, 0x00, 0x00, 0x00, 0x00),
+    "V": (0x7C, 0x02, 0x01, 0x02, 0x7C),
+    "D": (0x7F, 0x41, 0x41, 0x41, 0x3E),
+    "T": (0x40, 0x40, 0x7F, 0x40, 0x40),
+    "L": (0x7F, 0x01, 0x01, 0x01, 0x01),
+    "C": (0x3E, 0x41, 0x41, 0x41, 0x22),
+}
+
+
+def _blit_text(
+    buf: bytearray,
+    width: int,
+    height: int,
+    x: int,
+    y: int,
+    text: str,
+    rgb: tuple[int, int, int],
+    *,
+    scale: int = 1,
+) -> None:
+    cx = x
+    sc = max(1, int(scale))
+    for ch in text.upper():
+        cols = _FONT5.get(ch, _FONT5[" "])
+        for ci, bits in enumerate(cols):
+            for row in range(7):
+                if bits & (1 << row):
+                    px = cx + ci * sc
+                    py = y + row * sc
+                    _fill_rect(buf, width, height, px, py, px + sc, py + sc, rgb)
+        cx += (5 + 1) * sc
+
+
 def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360) -> bytes:
     """Lane-anchored BEV: +x along host-lane heading, +y left of road.
 
@@ -283,8 +364,6 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     la_c = (170, 175, 190)
     dash_c = (200, 200, 90)
     ego_c = (80, 200, 120)
-    traj_c = traj_color_for_lon(st)
-    traj_thick = traj_thickness_for_lon(st)
     uss_c = (220, 180, 60)
     text_bar = (40, 44, 55)
     tick_c = (168, 168, 172)
@@ -480,10 +559,44 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
             )
 
     if len(st.traj_x) >= 2:
-        for i in range(len(st.traj_x) - 1):
+        nseg = min(len(st.traj_x), len(st.traj_y)) - 1
+        has_v = len(st.traj_v) >= nseg + 1
+        v_hi = 12.0
+        if has_v:
+            v_hi = max(12.0, max(st.traj_v[: nseg + 1]))
+        fallback_c = traj_color_for_lon(st)
+        fallback_th = traj_thickness_for_lon(st)
+        for i in range(nseg):
             a = e2p_ego(st.traj_x[i], st.traj_y[i])
             b = e2p_ego(st.traj_x[i + 1], st.traj_y[i + 1])
-            _line(buf, width, height, a[0], a[1], b[0], b[1], traj_c, thick=traj_thick)
+            if has_v:
+                v0 = st.traj_v[i]
+                v1 = st.traj_v[i + 1]
+                col = traj_color_for_v(0.5 * (v0 + v1), v_hi)
+                th = traj_seg_thickness(v0, v1)
+            else:
+                col = fallback_c
+                th = fallback_th
+            _line(buf, width, height, a[0], a[1], b[0], b[1], col, thick=th)
+
+    d_see = float(st.traj_d_see_m or 0.0)
+    if d_see < 1.0 and st.traj_x:
+        d_see = float(st.traj_x[-1])
+    if d_see >= 2.0:
+        xr_see = min(d_see, x_draw if x_draw > 1.0 else D_BEV_M)
+        pad = 0.8
+        p_a = e2p_road(xr_see, y_span_min - pad)
+        p_b = e2p_road(xr_see, y_span_max + pad)
+        see_c = (90, 210, 230)
+        steps = 8
+        for k in range(0, steps, 2):
+            t0 = k / steps
+            t1 = (k + 1) / steps
+            xa = int(p_a[0] + (p_b[0] - p_a[0]) * t0)
+            ya = int(p_a[1] + (p_b[1] - p_a[1]) * t0)
+            xb = int(p_a[0] + (p_b[0] - p_a[0]) * t1)
+            yb = int(p_a[1] + (p_b[1] - p_a[1]) * t1)
+            _line(buf, width, height, xa, ya, xb, yb, see_c, thick=2)
 
     if st.nearest_cm is not None and st.nearest_cm > 0:
         dist_m = max(0.5, min(float(st.nearest_cm) / 100.0, D_BEV_M))
@@ -564,10 +677,20 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     # Ego: nose relative to road = -psi
     _paint_box_road(0.0, 0.0, 4.5, 1.8, 0.0, ego_c)
 
-    bar_w = int(min(200, max(8, st.speed_mps * 6)))
-    _fill_rect(buf, width, height, 8, 6, 8 + bar_w, 22, (80, 180, 90))
+    bar_w = int(min(120, max(8, st.speed_mps * 6)))
+    _fill_rect(buf, width, height, 8, 6, 8 + bar_w, 14, (80, 180, 90))
+    v_plan = float(st.traj_v_plan_mps)
+    if v_plan <= 0.0 and st.traj_v:
+        v_plan = float(st.traj_v[0])
+    plan_w = int(min(120, max(4, v_plan * 6)))
+    _fill_rect(buf, width, height, 8, 15, 8 + plan_w, 22, (80, 190, 210))
     spark = 8 + int(st.odom_m * 10) % max(1, width - 16)
     _fill_rect(buf, width, height, spark, 6, spark + 3, 22, (240, 240, 80))
+
+    hud = f"V{v_plan:4.1f} D{d_see:3.0f} T{float(st.traj_t_plan_s):3.1f}"
+    if st.allow_lc:
+        hud += " LC"
+    _blit_text(buf, width, height, 140, 7, hud, (220, 224, 230), scale=1)
 
     return _png_rgb(width, height, bytes(buf))
 
@@ -616,6 +739,16 @@ class LiveBevComposer:
                 pass
         elif data.get("mode") is not None:
             self.state.plan_mode = str(data["mode"])
+        if data.get("target_speed_mps") is not None:
+            self.state.traj_v_plan_mps = float(data["target_speed_mps"])
+        if data.get("D_see_m") is not None:
+            self.state.traj_d_see_m = float(data["D_see_m"])
+        if data.get("T_plan_s") is not None:
+            self.state.traj_t_plan_s = float(data["T_plan_s"])
+        if data.get("horizon_m") is not None:
+            self.state.traj_horizon_m = float(data["horizon_m"])
+        if data.get("allow_lc") is not None:
+            self.state.allow_lc = bool(int(data["allow_lc"]))
 
     def _apply_adas_data(self, data: dict[str, Any]) -> None:
         self.state.has_adas = True
@@ -836,9 +969,12 @@ class LiveBevComposer:
         elif leaf.endswith("Trajectory") or leaf == TOPIC_TRAJ:
             xs = data.get("points_x_m") or []
             ys = data.get("points_y_m") or []
+            vs = data.get("points_v_mps") or []
             if isinstance(xs, list) and isinstance(ys, list):
                 self.state.traj_x = [float(x) for x in xs]
                 self.state.traj_y = [float(y) for y in ys]
+            if isinstance(vs, list):
+                self.state.traj_v = [float(v) for v in vs]
             self._apply_traj_ctrl(data)
             if data.get("timestamp_ns"):
                 self.state.t_ns = int(data["timestamp_ns"])

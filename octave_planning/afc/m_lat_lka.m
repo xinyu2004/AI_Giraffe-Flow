@@ -1,31 +1,36 @@
-% AFC lateral LKA — gold (1:1 with gf_octave_planning/lat_lka.hpp).
-% Lite: saturate e_y / schedule ky; invalid lane → steer 0 (not ego.steer).
+% AFC lateral LKA — reads gf_plan_cal(). Keep 1:1 with lat_lka.hpp.
+% Includes cal lat_dsteer_max (actuator rate) inside LKA — not a host shell.
 
 function steer = m_lat_lka(lane_valid, e_y, c1, steer_angle_deg)
-  if lane_valid
-    steer = lat_steer_from_lane(e_y, c1);
-  else
-    steer = lat_steer_from_ego(steer_angle_deg);
+  persistent last_steer
+  if isempty(last_steer)
+    last_steer = 0.0;
   end
+  p = gf_plan_cal();
+  if gf_lane_usable(lane_valid, e_y, c1)
+    cmd = lat_steer_from_lane(e_y, c1, p);
+  else
+    cmd = lat_steer_from_ego(steer_angle_deg);
+  end
+  ds = gf_clamp(cmd - last_steer, -p.lat_dsteer_max, p.lat_dsteer_max);
+  steer = last_steer + ds;
+  last_steer = steer;
 end
 
-function steer = lat_steer_from_lane(e_y, c1)
-  ky = 0.35;
-  kpsi = 0.80;
-  max_steer = 0.55;
-  e = gf_clamp(e_y, -1.8, 1.8);
+function steer = lat_steer_from_lane(e_y, c1, p)
+  ky = p.lat_ky;
+  e = gf_clamp(e_y, -p.lat_e_sat_m, p.lat_e_sat_m);
   ae = abs(e);
-  if ae > 1.2
-    ky = ky * 0.35;
-  elseif ae > 0.6
-    ky = ky * 0.55;
+  if ae > p.lat_e_desense_hi_m
+    ky = ky * p.lat_ky_scale_hi;
+  elseif ae > p.lat_e_desense_lo_m
+    ky = ky * p.lat_ky_scale_lo;
   end
-  c1c = gf_clamp(c1, -0.5, 0.5);
-  cmd = -ky * e - kpsi * c1c;
-  steer = gf_clamp(cmd, -max_steer, max_steer);
+  c1c = gf_clamp(c1, -p.lat_c1_sat, p.lat_c1_sat);
+  cmd = -ky * e - p.lat_kpsi * c1c;
+  steer = gf_clamp(cmd, -p.lat_max_steer, p.lat_max_steer);
 end
 
 function steer = lat_steer_from_ego(steer_angle_deg)
-  % Spun / no-lane: do not track ego wheel (was wall-hit amplifier).
   steer = 0.0;
 end

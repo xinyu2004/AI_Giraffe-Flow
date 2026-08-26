@@ -66,6 +66,7 @@ class PercView:
     lead_valid: bool = False
     lead_distance_m: float = 0.0
     lead_rel_speed_mps: float = 0.0
+    lead_lat_m: float = 0.0
     lane_valid: bool = False
     e_y: float = 0.0
     c1: float = 0.0
@@ -73,6 +74,8 @@ class PercView:
     c2: float = 0.0
     c3: float = 0.0
     x_end: float = 100.0
+    lane_conf: float = 0.0
+    lane_count: int = 0
 
 
 @dataclass
@@ -95,7 +98,11 @@ class PlanningResult:
     ctrl_mode: str = "cruise"
     points_x_m: list[float] = field(default_factory=list)
     points_y_m: list[float] = field(default_factory=list)
+    points_v_mps: list[float] = field(default_factory=list)
     horizon_m: float = 25.0
+    D_see_m: float = 0.0
+    T_plan_s: float = 0.0
+    allow_lc: int = 0
     lane_code: int = 0
 
 
@@ -138,6 +145,8 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
         left_c2 = right_c2 = 0.0
 
     perc.lane_width_m = width
+    perc.lane_conf = conf
+    perc.lane_count = lane_count
     if avail != 0:
         perc.host = [
             LaneLine(
@@ -212,17 +221,21 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
 
     lead_valid = bool(fp.get("lead_valid"))
     lead_d = float(fp.get("lead_distance_m") or 0.0)
-    if lead_valid and lead_d > 0.5:
+    lead_lat = float(fp.get("lead_lat_m") or 0.0)
+    # Contact (d≈0) is still a lead — classify as AEB, not empty-road cruise.
+    if lead_valid and lead_d >= 0.0:
         perc.lead_valid = True
         perc.lead_distance_m = lead_d
         perc.lead_rel_speed_mps = float(fp.get("lead_rel_speed_mps") or 0.0)
+        perc.lead_lat_m = lead_lat
     elif perc.objects:
         cipv = next((o for o in perc.objects if o.obj_id == perc.cipv_id), None)
         lead = cipv or perc.objects[0]
-        if lead.long_m > 0.5:
+        if lead.long_m >= 0.0:
             perc.lead_valid = True
             perc.lead_distance_m = lead.long_m
             perc.lead_rel_speed_mps = lead.rel_v_mps
+            perc.lead_lat_m = lead.lat_m
             if not perc.cipv_id:
                 perc.cipv_id = lead.obj_id
     return perc
@@ -360,9 +373,14 @@ def result_to_traj_dict(result: PlanningResult) -> dict[str, Any]:
         "timestamp_ns": result.stamp_ns,
         "points_x_m": list(result.points_x_m),
         "points_y_m": list(result.points_y_m),
+        "points_v_mps": list(result.points_v_mps),
         "throttle": result.throttle,
         "brake": result.brake,
         "steer": result.steer,
         "target_speed_mps": result.target_speed_mps,
+        "horizon_m": float(result.horizon_m),
+        "D_see_m": float(result.D_see_m),
+        "T_plan_s": float(result.T_plan_s),
+        "allow_lc": int(result.allow_lc),
         "ctrl_mode": CTRL_MODE_IDS.get(result.ctrl_mode, 0),
     }
