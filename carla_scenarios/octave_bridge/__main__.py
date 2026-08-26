@@ -17,7 +17,7 @@ if str(_ROOT) not in sys.path:
 from octave_bridge.bev_feed import BevFeed  # noqa: E402
 from octave_bridge.foxglove_ws import FoxgloveBevHub  # noqa: E402
 from octave_bridge.io_server import BridgeState, CosimIoServer  # noqa: E402
-from octave_bridge.runtime import plan_tick, resolve_engine  # noqa: E402
+from octave_bridge.runtime import close_octave, plan_tick  # noqa: E402
 from octave_bridge.semantic_map import build_view, result_to_cmd_blob  # noqa: E402
 
 STOP = False
@@ -70,9 +70,8 @@ def main(argv: list[str] | None = None) -> int:
             hub = None
 
     plan_seq = 0
-    engine = resolve_engine()
     print(
-        f"[octave_bridge] engine={engine} foxglove="
+        "[octave_bridge] engine=octave (.m) foxglove="
         f"{'ws://127.0.0.1:' + str(args.foxglove_port) if hub else 'off'}",
         flush=True,
     )
@@ -98,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         srv.stop()
         if hub is not None:
             hub.stop()
+        close_octave()
 
     import threading
 
@@ -110,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         srv.stop()
         if hub is not None:
             hub.stop()
+        close_octave()
     return 0
 
 

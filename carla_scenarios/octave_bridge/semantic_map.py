@@ -161,13 +161,18 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
                 lanemark_type=right_type,
             ),
         ]
-        # planning: center offset e_y ≈ 0.5*(left+right) at x=0
+        # Same as planning/driving HostLaneFromPerc (lite lane-keep).
         perc.lane_valid = True
-        perc.e_y = 0.5 * (left_c0 + right_c0)
+        perc.c0 = 0.5 * (left_c0 + right_c0)
         perc.c1 = 0.5 * (left_c1 + right_c1)
-        perc.c0 = perc.e_y
         perc.c2 = 0.5 * (left_c2 + right_c2)
-        perc.x_end = vr_end if vr_end > 0.5 else 100.0
+        perc.c3 = 0.0
+        perc.e_y = perc.c0  # y_center(0)
+        if width > 0.5:
+            perc.lane_width_m = width
+        else:
+            perc.lane_width_m = max(2.5, abs(left_c0 - right_c0))
+        perc.x_end = vr_end if vr_end > 0.5 else 60.0
 
     adj_n = int(fp.get("adj_n") or 0) if avail == 2 else 0
     adj_n = min(4, max(0, adj_n))

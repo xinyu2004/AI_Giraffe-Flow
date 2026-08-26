@@ -55,7 +55,7 @@ Truth 侧多目标：`carla_scenarios` `_objects_truth.py` → `dyn_n` / `obj{i}
 | Track/Color/MarkerWidth 等 | 协议占位 |
 
 质量来自 truth：`lane_avail` / `lane_conf` / `lane_vr_end_m`（`assess_lane_poly_quality`）。  
-大横向偏移 → **降级短 VR**，不整帧灭线；`|atan(C1)|>40°` 等才 `avail=0`。
+大横向偏移 → **降级短 VR**；`|atan(C1)|>40°` → **近场降级**（仍出线），不整帧灭线；width 坍塌等才 `avail=0`。
 
 ---
 
@@ -91,7 +91,7 @@ Planning **不读 LA**（无变道逻辑）。
 | `pullaway` | 近停 + 前车距离安全 → 拉起 |
 | `acc` | CIPV 跟车；期望间距 `clamp(max(8, v×1.6), 8…40)` m |
 | `aeb` | 过近或 TTC 过小 → 重刹 |
-| 横向 | LH 左右线 → 中心 `e_y` + `c1` → steer（非完整 LKA）；无 LH 则跟 ego.steer |
+| 横向 | LH 左右线 → 中心 `e_y` + `c1` → steer（非完整 LKA）；**AEB 窗口**壳层把 steer 收到 0（少甩尾），结束后恢复居中 |
 | 轨迹 | `FillLaneKeepTrajectory`：沿车道中心指数 blend，horizon 受 VR/车速限制 |
 
 **没有：** 变道、吃 LA、HLB、静态障碍、FS。

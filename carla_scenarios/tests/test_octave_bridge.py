@@ -13,7 +13,6 @@ sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_LIB))
 
 from _fake_perc_pack import pack_fake_perc_pod  # noqa: E402
-from octave_bridge.plan_ref import plan_tick_ref  # noqa: E402
 from octave_bridge.protocol import (  # noqa: E402
     pack_cmd,
     unpack_fake_perc,
@@ -23,6 +22,7 @@ from octave_bridge.protocol import (  # noqa: E402
     GF_CH_POD_VERSION,
 )
 from octave_bridge.semantic_map import (  # noqa: E402
+    PlanningResult,
     build_view,
     result_to_cmd_blob,
     view_to_bev_out_dict,
@@ -131,11 +131,17 @@ def test_build_view_and_plan() -> None:
     view = build_view(state=state, fake_perc=fp)
     assert view.perc.lane_valid
     assert abs(view.perc.e_y) < 0.05
-    result = plan_tick_ref(view, seq=1)
-    assert result.ctrl_mode == "cruise"
-    assert result.throttle > 0.0
-    assert len(result.points_x_m) == 16
-    blob = result_to_cmd_blob(result, speed_mps=10.0, seq=1)
+    blob = result_to_cmd_blob(
+        PlanningResult(
+            throttle=0.3,
+            steer=0.0,
+            ctrl_mode="cruise",
+            points_x_m=[0.0, 10.0],
+            points_y_m=[0.0, 0.0],
+        ),
+        speed_mps=10.0,
+        seq=1,
+    )
     assert len(blob) == 48
 
     out = view_to_bev_out_dict(view)

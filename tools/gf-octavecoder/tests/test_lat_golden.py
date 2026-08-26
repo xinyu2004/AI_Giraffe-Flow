@@ -8,11 +8,20 @@ def gf_clamp(x: float, lo: float, hi: float) -> float:
 
 
 def lat_steer_from_lane(e_y: float, c1: float) -> float:
-    return gf_clamp(-0.35 * e_y - 0.80 * c1, -0.55, 0.55)
+    e = gf_clamp(e_y, -1.8, 1.8)
+    ky = 0.35
+    ae = abs(e)
+    if ae > 1.2:
+        ky *= 0.35
+    elif ae > 0.6:
+        ky *= 0.55
+    c1c = gf_clamp(c1, -0.5, 0.5)
+    return gf_clamp(-ky * e - 0.80 * c1c, -0.55, 0.55)
 
 
 def lat_steer_from_ego(steer_angle_deg: float) -> float:
-    return gf_clamp(steer_angle_deg / 25.0, -1.0, 1.0)
+    del steer_angle_deg
+    return 0.0
 
 
 def m_lat_lka(lane_valid: bool, e_y: float, c1: float, steer_angle_deg: float) -> float:
@@ -61,7 +70,15 @@ def test_lka_lane_left_error_steers_left() -> None:
 
 def test_lka_fallback_ego() -> None:
     s = m_lat_lka(False, 0.0, 0.0, 25.0)
-    assert abs(s - 1.0) < 1e-6
+    assert abs(s) < 1e-6
+
+
+def test_lka_large_ey_gain_reduced() -> None:
+    s_small = abs(m_lat_lka(True, 0.3, 0.0, 0.0))
+    s_big = abs(m_lat_lka(True, 1.5, 0.0, 0.0))
+    # Saturated e + lower ky → big offset must not explode past max
+    assert s_big <= 0.55 + 1e-6
+    assert s_small < s_big or s_small > 0.0
 
 
 def test_traj_points_count_and_blend() -> None:

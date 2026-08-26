@@ -105,10 +105,11 @@ def test_assess_lane_poly_ok():
     assert q["lane_vr_end_m"] >= 100.0
 
 
-def test_assess_lane_poly_invalid_large_yaw():
+def test_assess_lane_poly_extreme_yaw_near_not_blackout():
+    """atan(C1)>40° → degrade short VR (still drawable), not full blackout."""
     from _lane_truth import assess_lane_poly_quality
 
-    # C1≈tan(54°) like the blob frame
+    # C1≈tan(54°) like the blob / spun-ego frame
     q = assess_lane_poly_quality(
         host_left_c0=-2.88,
         host_right_c0=-5.87,
@@ -116,9 +117,10 @@ def test_assess_lane_poly_invalid_large_yaw():
         host_c2=-0.05,
         lane_width_m=3.5,
     )
-    assert q["lane_avail"] == 0
-    assert q["lane_vr_end_m"] < 0.5
-    assert q["lane_conf"] < 0.1
+    assert q["lane_avail"] == 1
+    assert q["lane_vr_end_m"] >= 8.0
+    assert q["lane_conf"] >= 0.15
+    assert "yaw" in q["reason"]
 
 
 def test_assess_lane_poly_lat_offset_soft_not_blackout():

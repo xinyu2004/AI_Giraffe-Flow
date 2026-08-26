@@ -171,6 +171,31 @@ void ApplyLatTraj(const oct_gen::LatTraj& path, const gf_gen::EgoMotion& ego,
   traj.ctrl_mode = CtrlModeId(lon.mode);
 }
 
+/** Soft brake + steer slew when off-center / no LH; AEB freezes steer (lite shell). */
+void ApplyLatLonGuard(oct_gen::LonCtrl* lon, float* steer, bool lane_valid, float e_y,
+                      float lane_width_m, float speed_mps, float* last_steer) {
+  constexpr float kSteerRate = 0.08f;
+  const float width = std::max(2.5f, lane_width_m > 0.5f ? lane_width_m : 3.5f);
+  const float off = std::fabs(e_y);
+  if (!lane_valid) {
+    lon->throttle = 0.0f;
+    lon->brake = std::max(lon->brake, 0.35f);
+    lon->target_speed_mps = std::min(lon->target_speed_mps, 2.0f);
+  } else if (off > 0.6f * width) {
+    lon->throttle = std::min(lon->throttle, 0.08f);
+    lon->brake = std::max(lon->brake, 0.22f);
+    lon->target_speed_mps =
+        std::min(lon->target_speed_mps, std::max(3.0f, speed_mps * 0.55f));
+  }
+  // AEB: do not center-yank while hard-braking; cruise/ACC keep LKA.
+  if (lon->mode && std::strcmp(lon->mode, "aeb") == 0) {
+    *steer = 0.0f;
+  }
+  const float ds = std::clamp(*steer - *last_steer, -kSteerRate, kSteerRate);
+  *steer = *last_steer + ds;
+  *last_steer = *steer;
+}
+
 }  // namespace
 
 int main() {
@@ -189,6 +214,7 @@ int main() {
   std::optional<gf_gen::Perception_MESSAGE_Out_St> last_perc;
   std::optional<gf_gen::EgoMotion> last_ego;
   std::uint64_t seq = 0;
+  float last_steer = 0.0f;
 
   std::cout << "gf-planning-driving: start (ACC/AEB + LH lane-keep; ctrl via Trajectory)\n";
 
@@ -217,10 +243,12 @@ int main() {
         dyn = static_cast<int>(last_perc->Perception_DYN_OBJ_Out.m_OBJ_VD_Count);
         lh_n = static_cast<int>(last_perc->Perception_LH_Out.m_hostline_num);
       }
-      const auto lon = oct_gen::m_lon_acc_aeb(
+      auto lon = oct_gen::m_lon_acc_aeb(
           ego.speed_mps, lead.valid, lead.lead_distance_m, lead.lead_rel_speed_mps);
-      const float steer = oct_gen::m_lat_lka(lane.valid, lane.e_y, lane.c1,
-                                             ego.steer_angle_deg);
+      float steer = oct_gen::m_lat_lka(lane.valid, lane.e_y, lane.c1,
+                                       ego.steer_angle_deg);
+      ApplyLatLonGuard(&lon, &steer, lane.valid, lane.e_y, lane.width_m, ego.speed_mps,
+                       &last_steer);
 
       float speed_scale = 1.0f;
       if (std::strcmp(lon.mode, "aeb") == 0) {
@@ -229,6 +257,9 @@ int main() {
                  std::strcmp(lon.mode, "pullaway") == 0) {
         speed_scale = std::clamp(lon.target_speed_mps / std::max(ego.speed_mps, 1.0f),
                                  0.3f, 1.2f);
+      }
+      if (!lane.valid || std::fabs(lane.e_y) > 0.6f * std::max(2.5f, lane.width_m)) {
+        speed_scale = std::min(speed_scale, 0.4f);
       }
 
       // When parked, shape traj from commanded speed so BEV path isn't a stub.

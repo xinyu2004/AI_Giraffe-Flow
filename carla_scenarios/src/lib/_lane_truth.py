@@ -496,13 +496,14 @@ def assess_lane_poly_quality(
     abs_c2 = abs(float(host_c2))
     lat_off = abs(mid)
 
-    # Hard fail: model is not usable even near-field
+    # Soft fail on extreme yaw: keep short near-field lines (BEV/planning), not blackout.
+    # Hard NA only for collapsed width / absurd corridor (below) or no_map upstream.
     if psi > math.radians(40.0):
         return {
-            "lane_avail": 0,
-            "lane_conf": 0.05,
-            "lane_vr_end_m": 0.0,
-            "reason": "poly_invalid_yaw",
+            "lane_avail": 1,
+            "lane_conf": 0.22,
+            "lane_vr_end_m": 12.0,
+            "reason": "poly_extreme_yaw_near",
         }
     if half > 0.1 and abs(float(host_left_c0) - float(host_right_c0)) < 0.4:
         return {
