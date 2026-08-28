@@ -9,7 +9,10 @@ set(_fcm_srcs
 )
 
 add_executable(gf_perception_fcm ${_fcm_srcs})
-target_include_directories(gf_perception_fcm PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_include_directories(gf_perception_fcm PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../common/include"
+)
 target_link_libraries(gf_perception_fcm PRIVATE
   gf_ara::com_iceoryx
   gf_ara::runtime

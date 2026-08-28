@@ -47,6 +47,7 @@ frame_ingest:
     w: 640
     h: 480
     pixel_format: nv12
+    fps: 30
   bridge:
     enabled: true
   channels:
@@ -70,8 +71,14 @@ acceptance:
   - services.semantic.Perception_MESSAGE_Out_St
   - services.semantic.Trajectory
   - services.semantic.VehicleBus
-# Phase-2 backlog (not enforced yet):
-# publish_policy:
-#   EgoMotion: { trigger: period, period_ms: 10 }
-#   Perception_In_St: { trigger: on_change, watch: [speed_mps, gear, yaw_rate] }
-#   vehicle_cmd: { trigger: period, period_ms: 10 }  # SIL egress; CAN-like
+publish_policy:
+  services:
+    EgoMotion: { trigger: period, period_ms: 10 }
+    Perception_In_St: { trigger: period, period_ms: 10 }
+    VehicleBus: { trigger: period, period_ms: 10 }
+    Perception_MESSAGE_Out_St: { trigger: on_change, expect_fps: 20 }
+    Trajectory: { trigger: on_change }
+  channels:
+    vehicle_cmd: { trigger: period, period_ms: 10 }  # + Traj edge extra tick (AEB); not freeze
+    vehicle_state: { trigger: on_change }
+    fake_perc: { trigger: on_change }

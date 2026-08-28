@@ -6,18 +6,18 @@
 #include "gf_gen/proxy/trajectory_proxy.hpp"
 #include "gf_gen/skeleton/ego_motion_skeleton.hpp"
 #include "gf_gen/skeleton/perception__in__st_skeleton.hpp"
-
-#if __has_include("gf_gen/frame_ingest_config.hpp")
 #include "gf_gen/frame_ingest_config.hpp"
-#define GF_GW_HAS_FRAME_INGEST 1
-#endif
+#include "gf_gen/publish_policy.hpp"
 
+#include "gf_ara/log/logger.hpp"
 #include "gf_channel/gf_channel.h"
 #include "gf_channel/boundary_pods.h"
+#include "gf_app/frame_watch.hpp"
 
 #include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
@@ -29,6 +29,17 @@
 namespace {
 
 constexpr const char* kProcess = "adapter.vehicle_can_gateway";
+
+int LogEvery() {
+  const char* v = std::getenv("GF_APP_LOG_EVERY");
+  if (!v || !v[0]) {
+    return 40;
+  }
+  const int n = std::atoi(v);
+  return n < 1 ? 1 : n;
+}
+
+bool FMoved(float a, float b, float eps) { return std::fabs(a - b) > eps; }
 
 constexpr const char* kSlotVehicleState = "gf.channel.vehicle_state";
 constexpr const char* kSlotVehicleCmd = "gf.channel.vehicle_cmd";
@@ -60,11 +71,9 @@ std::uint64_t now_ns() {
 
 const char* EgoSource() {
   const char* v = std::getenv("GF_EGO_SOURCE");
-#if defined(GF_GW_HAS_FRAME_INGEST)
   if (!v || !v[0]) {
     v = gf_gen::frame_ingest::kEgoSource;
   }
-#endif
   // "carla" means vehicle_state GfChannel from local bridge (not json).
   return (v && v[0]) ? v : "gateway";
 }
@@ -105,22 +114,48 @@ const char* LaneFromYEnd(float y_end) {
   return "none";
 }
 
-void ProjectEgo(const VehicleState& st, gf_gen::EgoMotion* ego) {
-  ego->timestamp_ns = st.timestamp_ns ? st.timestamp_ns : now_ns();
+void ProjectEgo(const VehicleState& st, std::uint64_t pub_ts, gf_gen::EgoMotion* ego) {
+  ego->timestamp_ns = pub_ts;
   ego->speed_mps = st.speed_mps;
   ego->yaw_rate_degps = st.yaw_rate_degps;
   ego->steer_angle_deg = st.steer_angle_deg;
   ego->gear = st.gear;
 }
 
-void ProjectPercIn(const VehicleState& st, std::uint32_t frame,
+void ProjectPercIn(const VehicleState& st, std::uint32_t in_seq, std::uint64_t pub_ts,
                    gf_gen::Perception_In_St* pin) {
-  pin->timestamp_ns = st.timestamp_ns ? st.timestamp_ns : now_ns();
-  pin->ipc_frame_counter = frame;
+  pin->timestamp_ns = pub_ts;
+  pin->ipc_frame_counter = in_seq;
   pin->gear = st.gear;
   pin->vehicle_speed = st.speed_mps;
   pin->yaw_rate = st.yaw_rate_degps;
   pin->_vendor_payload_opaque[0] = 0;
+}
+
+std::uint32_t ServicePeriodMs(const char* id) {
+  const auto* p = gf_gen::publish_policy::FindService(id);
+  if (p && p->period_ms > 0) {
+    return p->period_ms;
+  }
+  return 0;
+}
+
+std::uint32_t ChannelPeriodMs(const char* id) {
+  const auto* p = gf_gen::publish_policy::FindChannel(id);
+  if (p && p->period_ms > 0) {
+    return p->period_ms;
+  }
+  return 0;
+}
+
+bool PeriodDue(std::uint64_t last_pub_ns, std::uint32_t period_ms, std::uint64_t now) {
+  if (period_ms == 0) {
+    return false;
+  }
+  if (last_pub_ns == 0) {
+    return true;
+  }
+  return now - last_pub_ns >= static_cast<std::uint64_t>(period_ms) * 1000000ULL;
 }
 
 bool IngestFromChannel(GfChannel* ch, std::uint64_t* last_seq, VehicleState* st) {
@@ -149,9 +184,9 @@ bool IngestFromChannel(GfChannel* ch, std::uint64_t* last_seq, VehicleState* st)
   return true;
 }
 
-void StubTick(std::uint64_t frame, VehicleState* st) {
+void StubTick(std::uint64_t in_seq, VehicleState* st) {
   st->timestamp_ns = now_ns();
-  st->speed_mps = 5.0f + static_cast<float>(frame % 10) * 0.1f;
+  st->speed_mps = 5.0f + static_cast<float>(in_seq % 10) * 0.1f;
   st->yaw_rate_degps = 0.1f;
   st->steer_angle_deg = 2.0f;
   st->gear = 4;
@@ -218,7 +253,8 @@ int main(int argc, char** argv) {
               << " (SIL egress disabled)\n";
   }
 
-  std::uint64_t frame = 0;
+  std::uint64_t ego_seq = 0;
+  std::uint64_t pin_seq = 0;
   int got_traj = 0;
   std::uint64_t cmd_seq = 0;
   std::string last_lane = "none";
@@ -226,8 +262,90 @@ int main(int argc, char** argv) {
   CtrlSnapshot last_ctrl{};
   std::uint64_t state_seq = 0;
 
+  std::uint64_t last_stub_ns = 0;
+  std::uint64_t last_ego_pub_ns = 0;
+  std::uint64_t last_in_pub_ns = 0;
+  std::uint64_t last_cmd_pub_ns = 0;
+  std::uint64_t last_ingest_wall = 0;
+  bool ingest_stale = false;
+  const std::uint32_t ego_period_ms = ServicePeriodMs("EgoMotion");
+  const std::uint32_t in_period_ms = ServicePeriodMs("Perception_In_St");
+  const std::uint32_t cmd_period_ms = ChannelPeriodMs("vehicle_cmd");
+  const std::uint32_t ingest_timeout_ms = [&]() {
+    const std::uint32_t p = ego_period_ms ? ego_period_ms : in_period_ms;
+    if (p == 0) {
+      return 0u;
+    }
+    const std::uint32_t t = p * 10u;
+    return t < 100u ? 100u : t;
+  }();
+  const int log_every = LogEvery();
+  int last_log_mode = -1;
+  float last_log_thr = 0.0f;
+  float last_log_brk = 0.0f;
+  float last_log_st = 0.0f;
+  float last_log_y = 0.0f;
+  gf_app::EnsureDiagLogSinks();
+  gf_app::FrameWatch rx_state;
+  gf_app::FrameWatch rx_traj;
+  gf_app::FrameWatch tx_cmd;
+  gf_app::FrameWatch tx_ego;
+  gf_app::FrameWatch tx_in;
+  rx_state.Init("gw", "rx.vehicle_state");
+  rx_state.BindChannel("vehicle_state");
+  rx_traj.Init("gw", "rx.traj");
+  rx_traj.BindService("Trajectory");
+  tx_cmd.Init("gw", "tx.cmd");
+  tx_cmd.BindChannel("vehicle_cmd");
+  tx_cmd.EnablePeriodSilence();
+  tx_ego.Init("gw", "tx.ego");
+  tx_ego.BindService("EgoMotion");
+  tx_ego.EnablePeriodSilence();
+  tx_in.Init("gw", "tx.perc_in");
+  tx_in.BindService("Perception_In_St");
+  tx_in.EnablePeriodSilence();
+
   std::cout << "gf-vehicle-can-gateway: start ego_source=" << ego_src
-            << " (VehicleState→Ego+In; cmd via GfChannel)\n";
+            << " Ego/In period_ms=" << ego_period_ms << "/" << in_period_ms
+            << " hold-last (seq/ts advance; speed=0 is not stale)"
+            << " ingest_timeout_ms=" << ingest_timeout_ms
+            << " cmd period_ms=" << cmd_period_ms
+            << " hold-last after first Traj + Traj-edge extra tick"
+            << "; stdout=on-change+/" << log_every
+            << "; frame_watch=identity+budget ego[" << tx_ego.PolicyHint()
+            << "] cmd[" << tx_cmd.PolicyHint() << "])\n";
+
+  auto publish_ego = [&](std::uint64_t now) {
+    gf_gen::EgoMotion ego{};
+    ProjectEgo(state, now, &ego);
+    if (static_cast<bool>(ego_pub.Send(ego))) {
+      ++ego_seq;
+      tx_ego.Observe(ego_seq, ego.timestamp_ns);
+      last_ego_pub_ns = now;
+    }
+  };
+
+  auto publish_in = [&](std::uint64_t now) {
+    const auto next = static_cast<std::uint32_t>(pin_seq + 1);
+    gf_gen::Perception_In_St pin{};
+    ProjectPercIn(state, next, now, &pin);
+    if (static_cast<bool>(perc_in_pub.Send(pin))) {
+      pin_seq = next;
+      tx_in.Observe(pin_seq, pin.timestamp_ns);
+      last_in_pub_ns = now;
+    }
+  };
+
+  auto publish_cmd = [&]() {
+    // period hold-last; caller also invokes on new Traj (AEB edge). Not freeze.
+    if (!cmd_ch || !last_ctrl.has) {
+      return;
+    }
+    ++cmd_seq;
+    PublishCmd(cmd_ch, last_lane.c_str(), state, last_ctrl, cmd_seq);
+    tx_cmd.Observe(cmd_seq, now_ns());
+    last_cmd_pub_ns = now_ns();
+  };
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
@@ -239,55 +357,88 @@ int main(int argc, char** argv) {
       state_ch = gf_channel_open(kSlotVehicleState);
     }
 
-    bool updated = false;
+    const std::uint64_t now = now_ns();
+    bool state_fresh = false;
     if (state_ch) {
-      updated = IngestFromChannel(state_ch, &state_seq, &state);
-    }
-    if (!state.valid) {
-      if (ego_src == "gateway" || ego_src == "stub") {
-        StubTick(frame, &state);
-        updated = true;
-      } else {
-        // Wait for first vehicle_state from local bridge / inject feeder.
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        ++frame;
-        continue;
+      state_fresh = IngestFromChannel(state_ch, &state_seq, &state);
+      if (state_fresh) {
+        last_ingest_wall = now;
+        rx_state.Observe(0, state.timestamp_ns, false, true);
       }
-    } else if (!updated && (ego_src == "gateway" || ego_src == "stub")) {
-      StubTick(frame, &state);
+    } else if (ego_src == "gateway" || ego_src == "stub") {
+      const std::uint32_t stub_ms = ego_period_ms ? ego_period_ms : in_period_ms;
+      if (stub_ms != 0 &&
+          (last_stub_ns == 0 || now - last_stub_ns >=
+                                    static_cast<std::uint64_t>(stub_ms) * 1000000ULL)) {
+        StubTick(ego_seq + 1, &state);
+        state_fresh = true;
+        last_ingest_wall = now;
+        last_stub_ns = now;
+      }
     }
 
-    gf_gen::EgoMotion ego{};
-    ProjectEgo(state, &ego);
-    (void)ego_pub.Send(ego);
+    if (ingest_timeout_ms != 0 && state.valid && last_ingest_wall != 0) {
+      const bool stale =
+          now - last_ingest_wall >=
+          static_cast<std::uint64_t>(ingest_timeout_ms) * 1000000ULL;
+      if (stale && !ingest_stale) {
+        gf_ara::log::Logger::Instance().Warn(
+            "gw",
+            "ingest timeout " + std::to_string(ingest_timeout_ms) +
+                "ms (10× period) — hold-last Ego/In, speed=0 with fresh ingest is OK");
+      }
+      ingest_stale = stale;
+    }
 
-    gf_gen::Perception_In_St pin{};
-    ProjectPercIn(state, static_cast<std::uint32_t>(frame), &pin);
-    (void)perc_in_pub.Send(pin);
+    if (!state.valid) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      continue;
+    }
 
-    const char* lane = last_lane.c_str();
-    float y_end = 0.0f;
+    if (PeriodDue(last_ego_pub_ns, ego_period_ms, now)) {
+      publish_ego(now);
+    }
+    if (PeriodDue(last_in_pub_ns, in_period_ms, now)) {
+      publish_in(now);
+    }
+
     auto taken = traj_sub.Take();
     if (taken && taken.Value().has_value()) {
       const auto& t = *taken.Value();
       ++got_traj;
+      rx_traj.Observe(static_cast<std::uint64_t>(got_traj), t.timestamp_ns);
       last_ctrl.throttle = t.throttle;
       last_ctrl.brake = t.brake;
       last_ctrl.steer = t.steer;
       last_ctrl.target_speed_mps = t.target_speed_mps;
       last_ctrl.ctrl_mode = t.ctrl_mode;
       last_ctrl.has = true;
+      float y_end = 0.0f;
+      const char* lane = last_lane.c_str();
       if (t.point_count > 0) {
         y_end = t.points_y_m[t.point_count - 1];
         lane = LaneFromYEnd(y_end);
         last_lane = lane;
       }
-      std::cout << "gf-vehicle-can-gateway: Trajectory#" << got_traj
-                << " points=" << static_cast<int>(t.point_count)
-                << " y_end=" << y_end << " lane=" << lane
-                << " thr=" << t.throttle << " brk=" << t.brake
-                << " st=" << t.steer << " mode=" << CtrlModeName(t.ctrl_mode)
-                << " ts_ns=" << t.timestamp_ns << std::endl;
+      const bool changed =
+          static_cast<int>(t.ctrl_mode) != last_log_mode ||
+          FMoved(t.throttle, last_log_thr, 0.02f) ||
+          FMoved(t.brake, last_log_brk, 0.02f) ||
+          FMoved(t.steer, last_log_st, 0.02f) || FMoved(y_end, last_log_y, 0.25f);
+      if (log_every <= 1 || changed || ((got_traj - 1) % log_every == 0)) {
+        std::cout << "gf-vehicle-can-gateway: Trajectory#" << got_traj
+                  << " points=" << static_cast<int>(t.point_count)
+                  << " y_end=" << y_end << " lane=" << lane
+                  << " thr=" << t.throttle << " brk=" << t.brake
+                  << " st=" << t.steer << " mode=" << CtrlModeName(t.ctrl_mode)
+                  << " ts_ns=" << t.timestamp_ns << std::endl;
+        last_log_mode = static_cast<int>(t.ctrl_mode);
+        last_log_thr = t.throttle;
+        last_log_brk = t.brake;
+        last_log_st = t.steer;
+        last_log_y = y_end;
+      }
+      publish_cmd();
       if (max_traj > 0 && got_traj >= max_traj) {
         std::cout << "gf-vehicle-can-gateway: received " << got_traj
                   << " Trajectory sample(s), exiting OK\n";
@@ -299,16 +450,11 @@ int main(int argc, char** argv) {
         }
         return EXIT_SUCCESS;
       }
+    } else if (PeriodDue(last_cmd_pub_ns, cmd_period_ms, now)) {
+      publish_cmd();
     }
 
-    if (cmd_ch && last_ctrl.has) {
-      ++cmd_seq;
-      PublishCmd(cmd_ch, last_lane.c_str(), state, last_ctrl, cmd_seq);
-    }
-
-    ++frame;
-    // SIL egress cadence ≈ CAN 10ms (gf-config publish_policy backlog may override later).
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
   if (cmd_ch) {

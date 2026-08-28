@@ -24,5 +24,8 @@ add_dependencies(gf_planning_driving iox-roudi)
 if(NOT GF_USE_GENERATED)
   message(FATAL_ERROR "gf_planning_driving requires GF_USE_GENERATED=ON")
 endif()
-target_include_directories(gf_planning_driving PRIVATE "${GF_GENERATED_DIR}/include")
+target_include_directories(gf_planning_driving PRIVATE
+  "${GF_GENERATED_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../common/include"
+)
 target_compile_definitions(gf_planning_driving PRIVATE GF_USE_GENERATED=1)

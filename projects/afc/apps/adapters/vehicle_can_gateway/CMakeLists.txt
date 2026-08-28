@@ -14,7 +14,10 @@ add_dependencies(gf_vehicle_can_gateway iox-roudi)
 if(NOT GF_USE_GENERATED)
   message(FATAL_ERROR "gf_vehicle_can_gateway requires GF_USE_GENERATED=ON")
 endif()
-target_include_directories(gf_vehicle_can_gateway PRIVATE "${GF_GENERATED_DIR}/include")
+target_include_directories(gf_vehicle_can_gateway PRIVATE
+  "${GF_GENERATED_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../common/include"
+)
 target_compile_definitions(gf_vehicle_can_gateway PRIVATE GF_USE_GENERATED=1)
 set_target_properties(gf_vehicle_can_gateway PROPERTIES
   BUILD_RPATH_USE_ORIGIN TRUE

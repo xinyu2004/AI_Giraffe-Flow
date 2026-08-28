@@ -4,9 +4,9 @@
 #include "gf_gen/proxy/perception_message__out__st_proxy.hpp"
 #include "gf_gen/skeleton/trajectory_skeleton.hpp"
 
-#include "m_lon_acc_aeb.hpp"
-#include "m_lat_lka.hpp"
-#include "m_lat_traj.hpp"
+#include "gf_app/frame_watch.hpp"
+
+#include "m_plan_tick.hpp"
 
 #include "gf_octave_planning/plan_cal.hpp"
 
@@ -15,65 +15,55 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <optional>
+#include <string>
 #include <thread>
 
 namespace {
 
 constexpr const char* kProcess = "planning.driving";
+constexpr int kDynCap = 13;
+constexpr float kObjDMaxM = 130.0f;
 
-struct LeadSnapshot {
-  float lead_distance_m{130.0f};
-  float lead_rel_speed_mps{0.0f};
-  float lead_lat_m{0.0f};
-  bool valid{false};
-};
+int LogEvery() {
+  const char* v = std::getenv("GF_APP_LOG_EVERY");
+  if (!v || !v[0]) {
+    return 40;
+  }
+  const int n = std::atoi(v);
+  return n < 1 ? 1 : n;
+}
+
+bool FMoved(float a, float b, float eps) { return std::fabs(a - b) > eps; }
 
 struct HostLaneGeom {
   bool valid{false};
-  float c0{0.0f};  // lane-center poly (ego-frame y left)
+  float c0{0.0f};
   float c1{0.0f};
   float c2{0.0f};
   float c3{0.0f};
   float x_end{60.0f};
   float width_m{3.5f};
-  float e_y{0.0f};  // y_center(0): >0 → center is left of ego
+  float e_y{0.0f};
+  float conf{1.0f};
+  float lane_count{1.0f};
 
   float y_at(float x) const {
     return c0 + c1 * x + c2 * x * x + c3 * x * x * x;
   }
 };
 
-LeadSnapshot LeadFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
-  LeadSnapshot t{};
-  const auto& dyn = perc.Perception_DYN_OBJ_Out;
-  if (dyn.m_OBJ_VD_Count == 0) {
-    return t;
-  }
-  std::uint8_t idx = 0;
-  if (dyn.m_OBJ_VD_CIPV_ID != 0) {
-    for (std::uint8_t i = 0; i < dyn.m_OBJ_VD_Count && i < 13; ++i) {
-      if (dyn.m_Obj_item[i].m_OBJ_ID == dyn.m_OBJ_VD_CIPV_ID) {
-        idx = i;
-        break;
-      }
-    }
-  }
-  const auto& obj = dyn.m_Obj_item[idx];
-  // Contact (d≈0) is still a lead — planning classifies it as AEB, not "empty road".
-  if (obj.m_OBJ_ID == 0 || obj.m_OBJ_Long_Distance < 0.0f ||
-      obj.m_OBJ_Long_Distance > 130.0f) {
-    return t;
-  }
-  t.lead_distance_m = obj.m_OBJ_Long_Distance;
-  t.lead_rel_speed_mps = obj.m_OBJ_Relative_Long_Velocity;
-  t.lead_lat_m = obj.m_OBJ_Lat_Distance;
-  t.valid = true;
-  return t;
-}
+struct PercView {
+  HostLaneGeom lane{};
+  oct_gen::PlanObj obj[oct_gen::kObjNMax]{};
+  int nobj{0};
+  int dyn_raw{0};
+  int lh_n{0};
+};
 
 HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
   HostLaneGeom g{};
@@ -85,14 +75,15 @@ HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
   bool have_r = false;
   float lc0 = 0.0f, lc1 = 0.0f, lc2 = 0.0f, lc3 = 0.0f, lx1 = 60.0f;
   float rc0 = 0.0f, rc1 = 0.0f, rc2 = 0.0f, rc3 = 0.0f, rx1 = 60.0f;
+  float conf = 0.0f;
   const std::uint8_t n = std::min<std::uint8_t>(lh.m_hostline_num, 4);
   for (std::uint8_t i = 0; i < n; ++i) {
     const auto& line = lh.m_hostline[i];
     if (line.m_LH_Confidence < 0.1f && line.m_LH_Availability_State == 0) {
       continue;
     }
+    conf = std::max(conf, line.m_LH_Confidence);
     const float x1 = std::max(line.m_LH_First_VR_End, 20.0f);
-    // side: 1=left, 2=right (FCM convention)
     if (line.m_LH_Side == 1) {
       have_l = true;
       lc0 = line.m_LH_Line_First_C0;
@@ -118,7 +109,6 @@ HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
     g.x_end = std::min(lx1, rx1);
     g.width_m = std::max(2.5f, std::fabs(lc0 - rc0));
   } else if (have_l || have_r) {
-    // One edge only: assume ~3.5 m lane, ego near center of half-width.
     g.valid = true;
     const float half = 1.75f;
     if (have_l) {
@@ -140,7 +130,68 @@ HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
     g.width_m = lh.m_LH_Estimated_Width;
   }
   g.e_y = g.y_at(0.0f);
+  g.conf = g.valid ? std::max(conf, 0.20f) : 0.0f;
+  // Host lane_count = driving lanes. FCM has no that field: 1 + adj present.
+  g.lane_count = 1.0f;
+  if (g.valid && perc.Perception_LA_Out.m_adj_line_num >= 1) {
+    g.lane_count = 2.0f;
+  }
   return g;
+}
+
+bool ObjAlreadyPacked(const oct_gen::PlanObj* obj, int n, float d, float lat) {
+  for (int i = 0; i < n; ++i) {
+    if (std::fabs(obj[i].d - d) < 1.5f && std::fabs(obj[i].lat - lat) < 0.8f) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template <typename ObjT>
+void TryPushObj(PercView& v, const ObjT& o) {
+  if (v.nobj >= oct_gen::kObjNMax) {
+    return;
+  }
+  if (o.m_OBJ_ID == 0 || o.m_OBJ_Long_Distance < 0.0f || o.m_OBJ_Long_Distance > kObjDMaxM) {
+    return;
+  }
+  const float d = o.m_OBJ_Long_Distance;
+  const float lat = o.m_OBJ_Lat_Distance;
+  if (ObjAlreadyPacked(v.obj, v.nobj, d, lat)) {
+    return;
+  }
+  oct_gen::PlanObj row{};
+  row.d = d;
+  row.rel = o.m_OBJ_Relative_Long_Velocity;
+  row.lat = lat;
+  row.len_m = std::max(o.m_OBJ_Length, 0.5f);
+  row.cls = static_cast<float>(o.m_OBJ_Object_Class);
+  row.heading = o.m_OBJ_Heading;
+  row.is_ped = (static_cast<int>(o.m_OBJ_Object_Class) == 5) ? 1.0f : 0.0f;
+  v.obj[v.nobj++] = row;
+}
+
+// One walk of dyn[] + one walk of hostlines. Do not LeadFromPerc then pack again.
+PercView ExtractPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
+  PercView v{};
+  v.lane = HostLaneFromPerc(perc);
+  const auto& dyn = perc.Perception_DYN_OBJ_Out;
+  v.dyn_raw = static_cast<int>(dyn.m_OBJ_VD_Count) + static_cast<int>(dyn.m_OBJ_Ped_Count);
+  v.lh_n = static_cast<int>(perc.Perception_LH_Out.m_hostline_num);
+  const int n_src = std::min(kDynCap, std::max(v.dyn_raw, static_cast<int>(dyn.m_OBJ_VD_Count)));
+  if (dyn.m_OBJ_VD_CIPV_ID != 0) {
+    for (int i = 0; i < n_src; ++i) {
+      if (dyn.m_Obj_item[i].m_OBJ_ID == dyn.m_OBJ_VD_CIPV_ID) {
+        TryPushObj(v, dyn.m_Obj_item[i]);
+        break;
+      }
+    }
+  }
+  for (int i = 0; i < n_src; ++i) {
+    TryPushObj(v, dyn.m_Obj_item[i]);
+  }
+  return v;
 }
 
 std::uint8_t CtrlModeId(const char* mode) {
@@ -156,24 +207,31 @@ std::uint8_t CtrlModeId(const char* mode) {
   if (std::strcmp(mode, "pullaway") == 0) {
     return 3;
   }
-  return 0;  // cruise
+  return 0;
 }
 
-void ApplyLatTraj(const oct_gen::LatTraj& path, const gf_gen::EgoMotion& ego,
-                  const oct_gen::LonCtrl& lon, float steer, gf_gen::Trajectory& traj) {
-  traj.timestamp_ns = ego.timestamp_ns;
+std::uint64_t now_ns() {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+}
+
+void ApplyTick(const oct_gen::PlanTickOut& tick, const gf_gen::EgoMotion& ego,
+               gf_gen::Trajectory& traj) {
   traj.point_count = static_cast<std::uint8_t>(oct_gen::kLatTrajPoints);
   traj.gear_shift_first = ego.gear;
   traj.gear_shift_second = 0;
   for (int i = 0; i < oct_gen::kLatTrajPoints; ++i) {
-    traj.points_x_m[i] = path.x_m[i];
-    traj.points_y_m[i] = path.y_m[i];
+    traj.points_x_m[i] = tick.path.x_m[i];
+    traj.points_y_m[i] = tick.path.y_m[i];
+    traj.points_v_mps[i] = tick.path.v_mps[i];
   }
-  traj.throttle = lon.throttle;
-  traj.brake = lon.brake;
-  traj.steer = steer;
-  traj.target_speed_mps = lon.target_speed_mps;
-  traj.ctrl_mode = CtrlModeId(lon.mode);
+  traj.throttle = tick.throttle;
+  traj.brake = tick.brake;
+  traj.steer = tick.steer;
+  traj.target_speed_mps = tick.target_speed_mps;
+  traj.ctrl_mode = CtrlModeId(tick.mode);
 }
 
 }  // namespace
@@ -191,11 +249,40 @@ int main() {
   gf_gen::EgoMotionProxy ego_sub{};
   gf_gen::TrajectorySkeleton traj_pub{};
 
-  std::optional<gf_gen::Perception_MESSAGE_Out_St> last_perc;
   std::optional<gf_gen::EgoMotion> last_ego;
+  std::optional<gf_gen::Perception_MESSAGE_Out_St> last_perc;
+  float D_see_prev = 0.0f;
+  float T_plan_prev = 0.0f;
   std::uint64_t seq = 0;
+  const int log_every = LogEvery();
+  const char* last_log_mode = "";
+  int last_log_nobj = -1;
+  int last_log_lane = -1;
+  int last_log_lh = -1;
+  float last_log_ey = 0.0f;
+  float last_log_dsee = 0.0f;
+  float last_log_areq = 0.0f;
+  float last_log_thr = 0.0f;
+  float last_log_brk = 0.0f;
+  float last_log_st = 0.0f;
+  gf_app::EnsureDiagLogSinks();
+  gf_app::FrameWatch rx_ego;
+  gf_app::FrameWatch rx_perc;
+  gf_app::FrameWatch tx_traj;
+  rx_ego.Init("plan", "rx.ego");
+  rx_ego.BindService("EgoMotion");
+  rx_perc.Init("plan", "rx.perc");
+  rx_perc.BindService("Perception_MESSAGE_Out_St");
+  rx_perc.BindCameraCeiling();
+  tx_traj.Init("plan", "tx.traj");
+  tx_traj.BindService("Trajectory");
+  std::uint64_t last_perc_ts = 0;
+  bool have_planned = false;
 
-  std::cout << "gf-planning-driving: start (plan path+v + execute; ctrl via Trajectory)\n";
+  std::cout << "gf-planning-driving: start (v4 m_plan_tick; perc-triggered; ego cached"
+            << "; stdout=on-change+/" << log_every
+            << "; frame_watch=identity+budget perc[" << rx_perc.PolicyHint()
+            << "] ego[" << rx_ego.PolicyHint() << "])\n";
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
@@ -203,57 +290,83 @@ int main() {
       return gf_ara::exec::kEmRestartExitCode;
     }
 
+    if (auto t = ego_sub.Take(); t && t.Value().has_value()) {
+      last_ego = *t.Value();
+      rx_ego.Observe(0, last_ego->timestamp_ns, false, true);
+    }
     if (auto t = perc_sub.Take(); t && t.Value().has_value()) {
       last_perc = *t.Value();
     }
-    if (auto t = ego_sub.Take(); t && t.Value().has_value()) {
-      last_ego = *t.Value();
+
+    if (!last_perc || !last_ego) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      continue;
     }
 
-    if (last_ego) {
-      const auto& ego = *last_ego;
-      LeadSnapshot lead{};
-      HostLaneGeom lane{};
-      int dyn = 0;
-      int lh_n = 0;
-      if (last_perc) {
-        lead = LeadFromPerc(*last_perc);
-        lane = HostLaneFromPerc(*last_perc);
-        dyn = static_cast<int>(last_perc->Perception_DYN_OBJ_Out.m_OBJ_VD_Count);
-        lh_n = static_cast<int>(last_perc->Perception_LH_Out.m_hostline_num);
-      }
-      auto lon = oct_gen::m_lon_acc_aeb(
-          ego.speed_mps, lead.valid, lead.lead_distance_m, lead.lead_rel_speed_mps,
-          lead.lead_lat_m, lane.e_y, lane.c1, lane.valid);
-      float steer = oct_gen::m_lat_lka(lane.valid, lane.e_y, lane.c1,
-                                       ego.steer_angle_deg);
+    const auto& ego = *last_ego;
+    const std::uint64_t perc_ts =
+        last_perc->Perception_DYN_OBJ_Out.m_time_stamp * 1000ULL;
+    rx_perc.Observe(0, perc_ts, false, true);
+    if (have_planned && perc_ts == last_perc_ts) {
+      last_perc.reset();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      continue;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    const PercView view = ExtractPerc(*last_perc);
+    last_perc.reset();
+    const auto tick = oct_gen::m_plan_tick(
+        ego.speed_mps, ego.steer_angle_deg, view.lane.valid, view.lane.e_y, view.lane.c0,
+        view.lane.c1, view.lane.c2, view.lane.c3, view.lane.x_end, view.lane.conf,
+        view.lane.lane_count, view.nobj ? view.obj : nullptr, view.nobj, D_see_prev, T_plan_prev);
+    D_see_prev = tick.D_see;
+    T_plan_prev = tick.T_plan;
 
-      const auto hz = gf_octave_planning::plan_horizon(
-          ego.speed_mps, lane.valid, lane.e_y, lane.c1, lane.x_end);
-      auto path = oct_gen::m_lat_traj(ego.speed_mps, hz.D_see, hz.T_plan, lane.valid, lane.c0,
-                                      lane.c1, lane.c2, lane.c3, lane.x_end);
-      const bool lane_ok = gf_octave_planning::lane_usable(lane.valid, lane.e_y, lane.c1) &&
-                           std::fabs(lane.e_y) <= gf_octave_planning::plan_cal().lat_ey_slow_m;
-      oct_gen::plan_fill_speed(path, ego.speed_mps, lead.valid, lead.lead_distance_m,
-                               lead.lead_rel_speed_mps, lead.lead_lat_m, hz.D_see, lane_ok);
-      gf_gen::Trajectory traj{};
-      ApplyLatTraj(path, ego, lon, steer, traj);
-      if (static_cast<bool>(traj_pub.Send(traj))) {
-        std::cout << "gf-planning-driving: Trajectory#" << seq
+    gf_gen::Trajectory traj{};
+    ApplyTick(tick, ego, traj);
+    traj.timestamp_ns = now_ns();
+    const auto tick_ms = std::chrono::duration<double, std::milli>(
+                             std::chrono::steady_clock::now() - t0)
+                             .count();
+
+    if (static_cast<bool>(traj_pub.Send(traj))) {
+      tx_traj.Observe(seq, traj.timestamp_ns);
+      last_perc_ts = perc_ts;
+      have_planned = true;
+      const int lane_ok = view.lane.valid ? 1 : 0;
+      const bool changed =
+          std::strcmp(tick.mode, last_log_mode) != 0 || view.nobj != last_log_nobj ||
+          lane_ok != last_log_lane || view.lh_n != last_log_lh ||
+          FMoved(view.lane.e_y, last_log_ey, 0.25f) ||
+          FMoved(tick.D_see, last_log_dsee, 0.5f) ||
+          FMoved(tick.a_req, last_log_areq, 0.2f) ||
+          FMoved(traj.throttle, last_log_thr, 0.02f) ||
+          FMoved(traj.brake, last_log_brk, 0.02f) ||
+          FMoved(traj.steer, last_log_st, 0.02f);
+      if (log_every <= 1 || changed ||
+          (seq % static_cast<std::uint64_t>(log_every) == 0)) {
+        std::cout << "[perf][planning] tick_ms=" << tick_ms << " seq=" << seq
                   << " pts=" << static_cast<int>(traj.point_count)
                   << " y_end=" << traj.points_y_m[traj.point_count - 1]
-                  << " e_y=" << lane.e_y << " lh=" << lh_n
-                  << " lane=" << (lane.valid ? 1 : 0)
-                  << " dyn=" << dyn << " mode=" << lon.mode
-                  << " lead=" << (lead.valid ? lead.lead_distance_m : -1.0f)
+                  << " e_y=" << view.lane.e_y << " lh=" << view.lh_n
+                  << " lane=" << lane_ok << " dyn=" << view.dyn_raw
+                  << " nobj=" << view.nobj << " mode=" << tick.mode
+                  << " D_see=" << tick.D_see << " a_req=" << tick.a_req
                   << " thr=" << traj.throttle << " brk=" << traj.brake
-                  << " st=" << traj.steer
-                  << std::endl;
-        ++seq;
+                  << " st=" << traj.steer << std::endl;
+        last_log_mode = tick.mode;
+        last_log_nobj = view.nobj;
+        last_log_lane = lane_ok;
+        last_log_lh = view.lh_n;
+        last_log_ey = view.lane.e_y;
+        last_log_dsee = tick.D_see;
+        last_log_areq = tick.a_req;
+        last_log_thr = traj.throttle;
+        last_log_brk = traj.brake;
+        last_log_st = traj.steer;
       }
-      last_ego.reset();
+      ++seq;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
   return EXIT_SUCCESS;
 }

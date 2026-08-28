@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Optional
+from typing import Any
 
-from _lane_truth import _wrap_pi, _ego_yaw_rad, world_to_ego_xy
+from _lane_truth import _wrap_pi
 
 # Gold OBJ_Object_Class
 CLS_CAR = 1
@@ -17,6 +17,11 @@ CLS_TWO_WHEELER = 9
 
 _MAX_DYN = 13
 _RADIUS_M = 90.0
+
+# Static actor attrs (type_id / bbox). Kinematics come from snapshot each tick.
+_CACHE: dict[int, dict[str, Any]] = {}
+_SKIP: set[int] = set()
+_KEY: tuple[int, int] | None = None
 
 
 def map_carla_class(type_id: str, *, is_walker: bool = False) -> int:
@@ -42,6 +47,172 @@ def _bbox_lw(actor: Any, default_l: float, default_w: float) -> tuple[float, flo
         return default_l, default_w
 
 
+def _xy_to_ego(ex: float, ey: float, c: float, s: float, wx: float, wy: float) -> tuple[float, float]:
+    """World XY → ego (x forward, y left+). c,s = cos/sin(ego yaw)."""
+    dx = float(wx) - ex
+    dy = float(wy) - ey
+    xf = c * dx + s * dy
+    y_left = s * dx - c * dy
+    return xf, y_left
+
+
+def _try_snapshot(world: Any) -> Any:
+    try:
+        return world.get_snapshot()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _snap_kin(snap: Any, actor_id: int) -> tuple[Any, Any]:
+    if snap is None:
+        return None, None
+    try:
+        sh = snap.find(int(actor_id))
+    except Exception:  # noqa: BLE001
+        return None, None
+    if sh is None:
+        return None, None
+    try:
+        return sh.get_transform(), sh.get_velocity()
+    except Exception:  # noqa: BLE001
+        return None, None
+
+
+def reset_dyn_object_cache() -> None:
+    """Drop type_id/bbox cache (tests / new world)."""
+    global _CACHE, _SKIP, _KEY
+    _CACHE = {}
+    _SKIP = set()
+    _KEY = None
+
+
+def _bind_cache(world: Any, ego_id: int) -> None:
+    global _KEY
+    key = (id(world), int(ego_id))
+    if _KEY != key:
+        reset_dyn_object_cache()
+        _KEY = key
+
+
+def _iter_snap_ids(snap: Any) -> list[int]:
+    if snap is None:
+        return []
+    out: list[int] = []
+    try:
+        for sh in snap:
+            out.append(int(getattr(sh, "id")))
+        if out:
+            return out
+    except Exception:  # noqa: BLE001
+        pass
+    return []
+
+
+def _fetch_by_ids(world: Any, ids: list[int]) -> list[Any]:
+    if not ids:
+        return []
+    got: Any = None
+    try:
+        got = world.get_actors(ids)
+    except TypeError:
+        try:
+            got = world.get_actors(actor_ids=ids)
+        except Exception:  # noqa: BLE001
+            return []
+    except Exception:  # noqa: BLE001
+        return []
+    try:
+        return list(got)
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _put_actor(actor: Any) -> None:
+    try:
+        aid = int(actor.id)
+    except Exception:  # noqa: BLE001
+        return
+    tid = str(getattr(actor, "type_id", "") or "")
+    is_walker = tid.startswith("walker")
+    is_veh = tid.startswith("vehicle.")
+    if not is_walker and not is_veh:
+        _SKIP.add(aid)
+        _CACHE.pop(aid, None)
+        return
+    if is_walker:
+        length_m, width_m = 0.6, 0.6
+    else:
+        length_m, width_m = _bbox_lw(actor, 4.5, 1.8)
+    _CACHE[aid] = {
+        "type_id": tid,
+        "is_walker": bool(is_walker),
+        "length_m": float(length_m),
+        "width_m": float(width_m),
+    }
+    _SKIP.discard(aid)
+
+
+def _fill_cache_full(world: Any, snap_ids: list[int]) -> None:
+    for actor in _traffic_actors(world):
+        _put_actor(actor)
+    for sid in snap_ids:
+        if sid not in _CACHE:
+            _SKIP.add(int(sid))
+
+
+def _refresh_cache(world: Any, snap_ids: list[int]) -> None:
+    """First tick: one full get_actors. Later: only unknown snapshot ids."""
+    live = set(int(s) for s in snap_ids)
+    for aid in list(_CACHE):
+        if live and aid not in live:
+            del _CACHE[aid]
+    if not _CACHE:
+        _fill_cache_full(world, snap_ids)
+        return
+    unknown = [sid for sid in snap_ids if sid not in _CACHE and sid not in _SKIP]
+    if not unknown:
+        return
+    fetched = _fetch_by_ids(world, unknown)
+    seen: set[int] = set()
+    for actor in fetched:
+        _put_actor(actor)
+        try:
+            seen.add(int(actor.id))
+        except Exception:  # noqa: BLE001
+            pass
+    for sid in unknown:
+        if sid not in seen and sid not in _CACHE:
+            _SKIP.add(int(sid))
+
+
+def _traffic_actors(world: Any) -> list[Any]:
+    """One get_actors() RPC; classify vehicle/walker client-side (no second filter RPC)."""
+    try:
+        all_a = world.get_actors()
+    except Exception:  # noqa: BLE001
+        return []
+    out: list[Any] = []
+    try:
+        for a in all_a:
+            tid = str(getattr(a, "type_id", "") or "")
+            if tid.startswith("vehicle.") or tid.startswith("walker."):
+                out.append(a)
+        if out:
+            return out
+    except Exception:  # noqa: BLE001
+        pass
+    # Mock / older API: only filter() works
+    try:
+        out.extend(list(all_a.filter("vehicle.*")))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        out.extend(list(all_a.filter("walker.pedestrian.*")))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 def collect_dyn_objects(
     ego: Any,
     world: Any,
@@ -64,42 +235,63 @@ def collect_dyn_objects(
     lead_id = int(getattr(lead, "id", -1)) if lead is not None else -1
     items: list[dict[str, Any]] = []
 
-    def _consider(actor: Any, *, is_walker: bool) -> None:
+    snap = _try_snapshot(world)
+    ego_tf, ego_vel = _snap_kin(snap, ego_id)
+    if ego_tf is None:
         try:
-            if not actor.is_alive:
-                return
-            aid = int(actor.id)
+            ego_tf = ego.get_transform()
+        except Exception:  # noqa: BLE001
+            return out
+    if ego_vel is None:
+        try:
+            ego_vel = ego.get_velocity()
+        except Exception:  # noqa: BLE001
+            ego_vel = None
+    ex = float(ego_tf.location.x)
+    ey = float(ego_tf.location.y)
+    yaw = math.radians(float(ego_tf.rotation.yaw))
+    c, s = math.cos(yaw), math.sin(yaw)
+    if ego_vel is not None:
+        ego_spd = math.sqrt(
+            float(ego_vel.x) ** 2 + float(ego_vel.y) ** 2 + float(ego_vel.z) ** 2
+        )
+    else:
+        ego_spd = 0.0
+    r2 = (float(radius_m) * 1.15) ** 2
+    _bind_cache(world, ego_id)
+    snap_ids = _iter_snap_ids(snap)
+
+    def _append(
+        aid: int,
+        *,
+        is_walker: bool,
+        typ: str,
+        tf: Any,
+        vel: Any,
+        length_m: float,
+        width_m: float,
+    ) -> None:
+        try:
             if aid == ego_id:
                 return
-            loc = actor.get_location()
-            x, y = world_to_ego_xy(ego, float(loc.x), float(loc.y))
+            loc = tf.location
+            dxw = float(loc.x) - ex
+            dyw = float(loc.y) - ey
+            if dxw * dxw + dyw * dyw > r2:
+                return
+            x, y = _xy_to_ego(ex, ey, c, s, float(loc.x), float(loc.y))
             if x < -5.0 or x > radius_m:
                 return
             if abs(y) > radius_m * 0.6:
                 return
-            typ = ""
-            try:
-                typ = str(actor.type_id)
-            except Exception:  # noqa: BLE001
-                typ = "walker" if is_walker else "vehicle"
             cls = map_carla_class(typ, is_walker=is_walker)
             try:
-                ayaw = math.radians(float(actor.get_transform().rotation.yaw))
-                heading = _wrap_pi(ayaw - _ego_yaw_rad(ego))
+                heading = _wrap_pi(math.radians(float(tf.rotation.yaw)) - yaw)
             except Exception:  # noqa: BLE001
                 heading = 0.0
-            if is_walker:
-                length_m, width_m = 0.6, 0.6
-            else:
-                length_m, width_m = _bbox_lw(actor, 4.5, 1.8)
-            # Relative long velocity (lead-like): actor_speed_along_ego_x - ego_speed
+            rel_v = 0.0
             try:
-                ev = ego.get_velocity()
-                av = actor.get_velocity()
-                ego_spd = math.sqrt(ev.x**2 + ev.y**2 + ev.z**2)
-                # project actor vel onto ego forward
-                eyaw = _ego_yaw_rad(ego)
-                af = math.cos(eyaw) * av.x + math.sin(eyaw) * av.y
+                af = c * float(vel.x) + s * float(vel.y)
                 rel_v = float(af - ego_spd)
             except Exception:  # noqa: BLE001
                 rel_v = 0.0
@@ -128,16 +320,47 @@ def collect_dyn_objects(
         except Exception:  # noqa: BLE001
             return
 
-    try:
-        for v in world.get_actors().filter("vehicle.*"):
-            _consider(v, is_walker=False)
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        for w in world.get_actors().filter("walker.pedestrian.*"):
-            _consider(w, is_walker=True)
-    except Exception:  # noqa: BLE001
-        pass
+    if snap is not None and snap_ids:
+        _refresh_cache(world, snap_ids)
+        for aid, meta in list(_CACHE.items()):
+            if aid == ego_id:
+                continue
+            tf, vel = _snap_kin(snap, aid)
+            if tf is None:
+                continue
+            if vel is None:
+                vel = type("V", (), {"x": 0.0, "y": 0.0, "z": 0.0})()
+            _append(
+                aid,
+                is_walker=bool(meta["is_walker"]),
+                typ=str(meta["type_id"]),
+                tf=tf,
+                vel=vel,
+                length_m=float(meta["length_m"]),
+                width_m=float(meta["width_m"]),
+            )
+    else:
+        for actor in _traffic_actors(world):
+            tid = str(getattr(actor, "type_id", "") or "")
+            try:
+                tf = actor.get_transform()
+                vel = actor.get_velocity()
+            except Exception:  # noqa: BLE001
+                continue
+            is_walker = tid.startswith("walker")
+            if is_walker:
+                length_m, width_m = 0.6, 0.6
+            else:
+                length_m, width_m = _bbox_lw(actor, 4.5, 1.8)
+            _append(
+                int(actor.id),
+                is_walker=is_walker,
+                typ=tid,
+                tf=tf,
+                vel=vel,
+                length_m=length_m,
+                width_m=width_m,
+            )
 
     # Prefer lead, then nearer ahead
     items.sort(key=lambda it: (0 if it["is_lead"] else 1, it["long_m"], abs(it["lat_m"])))

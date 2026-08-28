@@ -43,6 +43,12 @@ def test_compose_adc(repo_root: Path, tmp_path: Path) -> None:
 
     assert sor.get("topology") == "ap_mcu_cp"
 
+    # No req.publish_policy on ADC: compose must not invent period_ms=50.
+    for svc in sor["services"]:
+        assert svc.get("trigger") == "unspecified"
+        assert "period_ms" not in svc
+        assert "expect_fps" not in svc
+
     report_path = repo_root / "projects/adc/reports/signal_lineage_report.yaml"
     assert report_path.is_file()
     report = yaml.safe_load(report_path.read_text(encoding="utf-8"))

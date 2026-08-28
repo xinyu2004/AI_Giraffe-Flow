@@ -13,9 +13,16 @@ from typing import Any, Callable, Optional
 
 from _instrument import ClusterState, draw_cluster
 from _camera_mount import CameraMount, load_camera_mount, scene_chase_pose
+from _perf import PerfAgg
 
 MODE_SCENE = "2"
 MODE_WINDSHIELD = "1"
+
+
+def scenario_view_wanted() -> bool:
+    """GF_SCENARIO_VIEW=0 skips pygame (iGPU bench). Default on."""
+    v = (os.environ.get("GF_SCENARIO_VIEW") or "1").strip().lower()
+    return v not in ("0", "off", "false", "no")
 
 
 def resolve_chase_cam_mode(raw: Optional[str] = None) -> str:
@@ -37,7 +44,7 @@ def resolve_chase_cam_mode(raw: Optional[str] = None) -> str:
 
 
 class ScenarioView:
-    """Dual RGB sensors → pygame; V or on-screen button toggles display mode."""
+    """One RGB sensor → pygame (second cam spawned on V toggle)."""
 
     def __init__(
         self,
@@ -77,9 +84,7 @@ class ScenarioView:
         h = int(height)
         self.width = w
         self.height = h
-        self._display = pygame.display.set_mode(
-            (w, h), pygame.HWSURFACE | pygame.DOUBLEBUF
-        )
+        self._display = pygame.display.set_mode((w, h), pygame.DOUBLEBUF)
         pygame.display.set_caption(str(title))
         font_name = pygame.font.get_default_font()
         self._font = pygame.font.Font(font_name, 18)
@@ -91,26 +96,35 @@ class ScenarioView:
             "xl": pygame.font.Font(font_name, 64),
         }
         self._clock = pygame.time.Clock()
+        self._perf = PerfAgg("pygame")
 
-        cx, cz, cpitch, cyaw, cfov = scene_chase_pose()
-        self._cameras[MODE_SCENE] = self._spawn_cam(
-            fov=cfov,
-            transform=carla.Transform(
-                carla.Location(x=cx, z=cz),
-                carla.Rotation(pitch=cpitch, yaw=cyaw),
-            ),
-            mode=MODE_SCENE,
-        )
-        self._cameras[MODE_WINDSHIELD] = self._spawn_cam(
-            fov=self._mount.fov,
-            transform=self._mount.as_carla_transform(carla),
-            mode=MODE_WINDSHIELD,
-        )
+        self._ensure_cam(self._mode)
         self._sync_spectator()
         print(
-            f"[view] pygame ChaseCam modes=1|2 mount_ref={self._mount.describe()} "
-            f"(camera owned by bridge)",
+            f"[view] pygame ChaseCam mode={self._mode} (1 cam, V spawns the other) "
+            f"mount_ref={self._mount.describe()} (camera owned by bridge)",
             flush=True,
+        )
+
+    def _ensure_cam(self, mode: str) -> None:
+        if self._cameras.get(mode) is not None:
+            return
+        carla = self._carla
+        if mode == MODE_SCENE:
+            cx, cz, cpitch, cyaw, cfov = scene_chase_pose()
+            self._cameras[mode] = self._spawn_cam(
+                fov=cfov,
+                transform=carla.Transform(
+                    carla.Location(x=cx, z=cz),
+                    carla.Rotation(pitch=cpitch, yaw=cyaw),
+                ),
+                mode=mode,
+            )
+            return
+        self._cameras[mode] = self._spawn_cam(
+            fov=self._mount.fov,
+            transform=self._mount.as_carla_transform(carla),
+            mode=mode,
         )
 
     def _spawn_cam(self, *, fov: float, transform: Any, mode: str) -> Any:
@@ -156,24 +170,11 @@ class ScenarioView:
         self._cameras.clear()
         self._surfaces = {MODE_SCENE: None, MODE_WINDSHIELD: None}
         self._vehicle = vehicle
-        cx, cz, cpitch, cyaw, cfov = scene_chase_pose()
-        self._cameras[MODE_SCENE] = self._spawn_cam(
-            fov=cfov,
-            transform=self._carla.Transform(
-                self._carla.Location(x=cx, z=cz),
-                self._carla.Rotation(pitch=cpitch, yaw=cyaw),
-            ),
-            mode=MODE_SCENE,
-        )
-        self._cameras[MODE_WINDSHIELD] = self._spawn_cam(
-            fov=self._mount.fov,
-            transform=self._mount.as_carla_transform(self._carla),
-            mode=MODE_WINDSHIELD,
-        )
+        self._ensure_cam(self._mode)
         self._sync_spectator()
         print(
-            f"[view] retarget chase cams → ego id={getattr(vehicle, 'id', '?')} "
-            f"(pygame window kept)",
+            f"[view] retarget chase cam → ego id={getattr(vehicle, 'id', '?')} "
+            f"mode={self._mode} (pygame window kept)",
             flush=True,
         )
 
@@ -184,9 +185,9 @@ class ScenarioView:
         return self._mount
 
     def toggle_mode(self) -> str:
-        self._mode = (
-            MODE_WINDSHIELD if self._mode == MODE_SCENE else MODE_SCENE
-        )
+        nxt = MODE_WINDSHIELD if self._mode == MODE_SCENE else MODE_SCENE
+        self._ensure_cam(nxt)
+        self._mode = nxt
         self._sync_spectator()
         print(f"[view] display={self._mode} (perception camera unchanged)", flush=True)
         return self._mode
@@ -268,6 +269,15 @@ class ScenarioView:
                 y += 22
         pygame.display.flip()
         self._clock.tick(30)
+        fps = float(self._clock.get_fps())
+        self._perf.tick(
+            extra={
+                "pygame_fps": f"{fps:.1f}",
+                "size": f"{self.width}x{self.height}",
+                "cams": f"{len(self._cameras)}",
+                "clock": "V",
+            }
+        )
         return True
 
     def destroy(self) -> None:

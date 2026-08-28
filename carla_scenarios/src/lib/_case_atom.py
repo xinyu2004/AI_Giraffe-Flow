@@ -38,7 +38,7 @@ from _verdict import (
     run_duration_loop,
     time_headway_s,
 )
-from _view import ScenarioView, gap_speed, run_loop
+from _view import ScenarioView, gap_speed, run_loop, scenario_view_wanted
 from _weather import apply_weather, apply_wiper, load_weather
 
 STOP = False
@@ -142,7 +142,7 @@ class AtomCase:
             view = ensure_view(
                 world, ego, view, no_window=no_window, title=title
             )
-        elif view is None and not no_window:
+        elif view is None and not no_window and scenario_view_wanted():
             try:
                 view = ScenarioView(
                     world,

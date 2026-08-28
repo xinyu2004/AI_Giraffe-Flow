@@ -90,8 +90,14 @@ int main() {
       }
     }
     if (!ok) {
-      // Soft gray keep-alive so FCM link stays up.
-      std::memset(plane.data(), 40 + static_cast<int>(seq % 20), need);
+      static bool logged_skip = false;
+      if (!logged_skip) {
+        std::cerr << "[ERROR] gf_frame_replay: no plane file; not publishing "
+                     "(no gray keep-alive)\n";
+        logged_skip = true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(40));
+      continue;
     }
     (void)gf_channel_publish(ch, plane.data(), need, now_ns(), seq);
     ++seq;

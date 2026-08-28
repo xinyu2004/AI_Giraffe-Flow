@@ -1845,6 +1845,10 @@ class FrameIngestDialog(QDialog):
         self._pixel.setEditable(True)
         for p in ("nv12", "nv21", "yuv422", "yuv444", "rgb8"):
             self._pixel.addItem(p, p)
+        self._fps = QSpinBox()
+        self._fps.setRange(0, 240)
+        self._fps.setSuffix(" fps")
+        self._fps.setToolTip("相机物理帧率。0=未填。Out expect_fps 须 ≤ 此值。")
         self._slot_ro = QLabel("")
         self._slot_ro.setStyleSheet("color:#5dade2;")
         form.addRow("id", self._id)
@@ -1852,6 +1856,7 @@ class FrameIngestDialog(QDialog):
         form.addRow("宽", self._w)
         form.addRow("高", self._h)
         form.addRow("pixel_format", self._pixel)
+        form.addRow("fps", self._fps)
         root.addLayout(form)
         row_btns = QHBoxLayout()
         btn_add = QPushButton("添加一路")
@@ -1867,6 +1872,7 @@ class FrameIngestDialog(QDialog):
         self._w.valueChanged.connect(lambda _v: self._apply_form_to_row())
         self._h.valueChanged.connect(lambda _v: self._apply_form_to_row())
         self._pixel.currentTextChanged.connect(lambda _t: self._apply_form_to_row())
+        self._fps.valueChanged.connect(lambda _v: self._apply_form_to_row())
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -1887,7 +1893,7 @@ class FrameIngestDialog(QDialog):
             cb.setEditText(value)
 
     def _default_slot(self, sid: str = "front") -> dict[str, Any]:
-        return {"id": sid, "w": 640, "h": 480, "pixel_format": "nv12"}
+        return {"id": sid, "w": 640, "h": 480, "pixel_format": "nv12", "fps": 30}
 
     def _load(self, fi: dict[str, Any], slots: list[dict[str, Any]]) -> None:
         default_pix = str(fi.get("pixel_format") or "nv12")
@@ -1904,6 +1910,7 @@ class FrameIngestDialog(QDialog):
                     "w": int(s.get("w") or fi.get("frame_w") or 640),
                     "h": int(s.get("h") or fi.get("frame_h") or 480),
                     "pixel_format": str(s.get("pixel_format") or default_pix),
+                    "fps": int(s.get("fps") or 0),
                 }
             )
         if not self._rows:
@@ -1917,7 +1924,9 @@ class FrameIngestDialog(QDialog):
         for r in self._rows:
             sid = str(r.get("id") or "?")
             pix = str(r.get("pixel_format") or "nv12")
-            self._list.addItem(f"{sid}  →  gf.channel.{sid}  ({pix})")
+            fps = int(r.get("fps") or 0)
+            extra = f"  {fps}fps" if fps > 0 else ""
+            self._list.addItem(f"{sid}  →  gf.channel.{sid}  ({pix}{extra})")
         self._list.blockSignals(False)
 
     def _on_row(self, row: int) -> None:
@@ -1930,6 +1939,7 @@ class FrameIngestDialog(QDialog):
             self._w.setValue(int(r.get("w") or 640))
             self._h.setValue(int(r.get("h") or 480))
             self._set_combo(self._pixel, str(r.get("pixel_format") or "nv12"))
+            self._fps.setValue(int(r.get("fps") or 0))
             self._sync_slot_label()
         finally:
             self._loading = False
@@ -1951,10 +1961,13 @@ class FrameIngestDialog(QDialog):
             "w": int(self._w.value()),
             "h": int(self._h.value()),
             "pixel_format": pix,
+            "fps": int(self._fps.value()),
         }
         item = self._list.item(row)
         if item is not None:
-            item.setText(f"{sid}  →  gf.channel.{sid}  ({pix})")
+            fps = int(self._fps.value())
+            extra = f"  {fps}fps" if fps > 0 else ""
+            item.setText(f"{sid}  →  gf.channel.{sid}  ({pix}{extra})")
 
     def _add_row(self) -> None:
         self._apply_form_to_row()
@@ -1995,6 +2008,7 @@ class FrameIngestDialog(QDialog):
                     "w": int(r.get("w") or 640),
                     "h": int(r.get("h") or 480),
                     "pixel_format": str(r.get("pixel_format") or "nv12"),
+                    "fps": int(r.get("fps") or 0),
                 }
             )
         fields: dict[str, Any] = {

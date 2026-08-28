@@ -22,7 +22,7 @@
     },
     "services": {
       "type": "array",
-      "description": "Method / event / field + QoS",
+      "description": "Method / event / field + trigger/period_ms/expect_fps from req.publish_policy (gf-config tab 1). period → period_ms; on_change → expect_fps (budget/warn band, no freeze). unspecified if SKU has no spec. Not PHM alive_period.",
       "items": { "type": "object" }
     },
     "deployments": {
@@ -87,6 +87,10 @@
     "imports_meta": {
       "type": "object",
       "description": "OEM ARXML/DBC import provenance"
+    },
+    "publish_policy": {
+      "type": "object",
+      "description": "Copy of req.yaml publish_policy after compose: services/channels maps with trigger (period|on_change), period_ms, expect_fps. Authoring is gf-config tab 1, not APP clocks."
     }
   },
   "additionalProperties": true

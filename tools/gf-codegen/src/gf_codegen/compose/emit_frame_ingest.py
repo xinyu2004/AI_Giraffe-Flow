@@ -107,12 +107,21 @@ def _normalize_slot(
         h = default_h
     buffers = 2  # AB double-buffer; not a product knob
     mount = _normalize_mount(raw.get("mount") if "mount" in raw else (default_mount or {}))
+    try:
+        fps = int(raw.get("fps") or 0)
+    except (TypeError, ValueError):
+        fps = 0
+    if fps < 0:
+        fps = 0
+    if fps > 240:
+        fps = 240
     return {
         "id": sid,
         "w": w,
         "h": h,
         "pixel_format": pixel,
         "buffers": buffers,
+        "fps": fps,
         "mount": mount,
     }
 
@@ -316,6 +325,7 @@ def emit_frame_ingest_hpp(cfg: dict[str, Any], out_path: Path) -> None:
         f"inline constexpr const char* kCameraTransport = {_c_str(cfg['camera_transport'])};",
         f"inline constexpr const char* kActiveSource = {_c_str(cfg['active_source'])};",
         f"inline constexpr const char* kCameraSlotFront = {_c_str(_slot_name(str(front['id'])))};",
+        f"inline constexpr std::uint32_t kCameraFpsFront = {int(front.get('fps') or 0)}u;",
         f"inline constexpr std::uint32_t kCameraSlotCount = {len(slots)}u;",
         f"inline constexpr const char* kFramePath = {_c_str(p.get('frame') or '')};",
         f"inline constexpr const char* kVehicleStateSlot = {_c_str(str(ch.get('vehicle_state') or 'gf.channel.vehicle_state'))};",
@@ -338,6 +348,7 @@ def emit_frame_ingest_hpp(cfg: dict[str, Any], out_path: Path) -> None:
         "  std::uint32_t h;",
         "  const char* pixel_format;",
         "  std::uint32_t buffers;",
+        "  std::uint32_t fps;  // 0 = unspecified; physical ceiling for expect_fps",
         "};",
         "",
         "inline constexpr CameraSlotFreeze kCameraSlots[] = {",
@@ -349,7 +360,8 @@ def emit_frame_ingest_hpp(cfg: dict[str, Any], out_path: Path) -> None:
             "  {"
             f"{_c_str(sid)}, {_c_str(slot_name)}, "
             f"{int(s['w'])}u, {int(s['h'])}u, "
-            f"{_c_str(s['pixel_format'])}, {int(s['buffers'])}u"
+            f"{_c_str(s['pixel_format'])}, {int(s['buffers'])}u, "
+            f"{int(s.get('fps') or 0)}u"
             "},"
         )
     lines += [
@@ -398,6 +410,7 @@ def emit_camera_contract_json(
                 "h": int(s["h"]),
                 "pixel_format": s["pixel_format"],
                 "buffers": int(s["buffers"]),
+                "fps": int(s.get("fps") or 0),
                 "mount": {
                     "id": m["id"],
                     "x": float(m["x"]),
@@ -427,8 +440,20 @@ def emit_frame_ingest(req: dict[str, Any], gen_dir: Path) -> dict[str, str]:
     project_dir = gen_dir.parent
     product = product_key(req, project_dir)
     cfg = normalize_frame_ingest(req, project_dir=project_dir)
+    # replay/file only: ensure parent of the yuv path. GfChannel (carla/isp/colorbar)
+    # must not recreate empty projects/*/runtime_ipc.
+    frame_path = ""
+    if isinstance(cfg.get("paths"), dict):
+        frame_path = str(cfg["paths"].get("frame") or "").strip()
     ipc = project_dir / "runtime_ipc"
-    ipc.mkdir(parents=True, exist_ok=True)  # scratch; whole dir is root-.gitignored
+    if frame_path:
+        Path(frame_path).parent.mkdir(parents=True, exist_ok=True)
+    elif ipc.is_dir():
+        try:
+            if not any(ipc.iterdir()):
+                ipc.rmdir()
+        except OSError:
+            pass
     hpp = gen_dir / "include" / "gf_gen" / "frame_ingest_config.hpp"
     emit_frame_ingest_hpp(cfg, hpp)
     legacy_env = gen_dir / "frame_ingest.env"

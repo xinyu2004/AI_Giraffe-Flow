@@ -556,6 +556,25 @@ TIP_EN: dict[str, str] = {
         "Services that must appear (required_services); "
         "compose/lineage checks the canvas covers them."
     ),
+    "每话题如何发布：周期 / 变化时。写入 req.publish_policy，"
+    "compose 进 SOR 与 generated/publish_policy.hpp。"
+    "周期口填 period_ms（车态默认 10）。变化时填 expect_fps（期望/告警带，不发冻帧）。"
+    "expect_fps 须 ≤ 相机 fps。这不是 PHM 喂狗，也不是 FCM 自己设帧率。": (
+        "How each topic publishes: period / on-change. "
+        "Written to req.publish_policy; compose → SOR and "
+        "generated/publish_policy.hpp. Period topics need period_ms "
+        "(vehicle default 10). on-change uses expect_fps as a budget/"
+        "warn band, not a send clock (no freeze). expect_fps must be "
+        "≤ camera fps. Not PHM alive, not an FCM-chosen frame rate."
+    ),
+    "period=按点发；on_change=有新样本才发（无冻帧）。": (
+        "period=cyclic; on_change=send only when a new sample exists (no freeze)."
+    ),
+    "周期：period_ms。变化时：expect_fps（预算/告警带，不是发报钟）。"
+    "0 fps=未填。须 ≤ frame_ingest 相机 fps。": (
+        "Period: period_ms. On-change: expect_fps (budget/warn band, "
+        "not a send clock). 0 fps=unset. Must be ≤ frame_ingest camera fps."
+    ),
     # buttons
     "新增一个功能组行，随后在 initial 里选开机状态。": (
         "Add a function-group row; then pick boot state under initial."

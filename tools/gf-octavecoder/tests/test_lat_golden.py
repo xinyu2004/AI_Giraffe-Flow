@@ -171,6 +171,6 @@ def test_generate_lat_headers() -> None:
 
     root = Path(__file__).resolve().parents[3]
     assert generate_sku(repo_root=root, sku="afc", force=True) == 0
-    for name in ("m_lat_lka.hpp", "m_lat_traj.hpp", "m_lon_acc_aeb.hpp"):
+    for name in ("m_lat_lka.hpp", "m_lat_traj.hpp", "m_lon_acc_aeb.hpp", "m_plan_tick.hpp"):
         p = root / "projects/afc/apps/planning/driving/oct_gen" / name
         assert p.is_file(), name

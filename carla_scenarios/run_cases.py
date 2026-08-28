@@ -50,7 +50,7 @@ from _carla_env import (  # noqa: E402
 )
 from _manifest import resolve_targets  # noqa: E402
 from _camera_mount import load_camera_mount  # noqa: E402
-from _view import ScenarioView  # noqa: E402
+from _view import ScenarioView, scenario_view_wanted  # noqa: E402
 from spawn.ic import set_natural_continue  # noqa: E402
 from spawn.boundary import reset_wrecked_ego  # noqa: E402
 from spawn.roles import ROLE_EGO, find_by_role  # noqa: E402
@@ -128,7 +128,14 @@ def _ensure_view(
     no_window: bool,
     title: str,
 ) -> Optional[ScenarioView]:
-    if no_window:
+    if no_window or not scenario_view_wanted():
+        if view is not None:
+            try:
+                view.destroy()
+            except Exception:  # noqa: BLE001
+                pass
+        if not no_window:
+            print("[run_cases] GF_SCENARIO_VIEW=0 — pygame off (iGPU)", flush=True)
         return None
     mount = load_camera_mount()
     if view is not None:

@@ -108,3 +108,84 @@ class BevFeed:
             except Exception:  # noqa: BLE001
                 return None
         return None
+
+
+class BevAsync:
+    """V-clock: compose off the plan path. Rate-limited; may drop. Never drop perc."""
+
+    def __init__(self, feed: BevFeed, hub: Any) -> None:
+        import queue
+        import threading
+
+        self._feed = feed
+        self._hub = hub
+        self._q: Any = queue.Queue(maxsize=1)
+        self._stop = threading.Event()
+        self._dropped = 0
+        self._last_sub = 0.0
+        try:
+            self._period = max(0.0, float(os.environ.get("GF_BEV_PERIOD_S") or "0.2"))
+        except ValueError:
+            self._period = 0.2
+        self._perf = None
+        try:
+            from _perf import PerfAgg  # noqa: WPS433
+
+            self._perf = PerfAgg("bev")
+        except Exception:  # noqa: BLE001
+            self._perf = None
+        print(
+            f"[octave_bridge] BEV V-clock period={self._period:.2f}s "
+            f"(GF_BEV_PERIOD_S, 0=every plan)",
+            flush=True,
+        )
+        self._th = threading.Thread(target=self._run, name="bev_v", daemon=True)
+        self._th.start()
+
+    def submit(self, view: PlanningView, result: PlanningResult) -> None:
+        import time
+
+        now = time.monotonic()
+        if self._period > 0.0 and (now - self._last_sub) < self._period:
+            self._dropped += 1
+            return
+        item = (view, result)
+        try:
+            self._q.put_nowait(item)
+            self._last_sub = now
+            return
+        except Exception:  # noqa: BLE001
+            self._dropped += 1
+
+    def dropped(self) -> int:
+        return int(self._dropped)
+
+    def stop(self) -> None:
+        self._stop.set()
+        try:
+            self._q.put_nowait(None)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _run(self) -> None:
+        import time
+
+        while not self._stop.is_set():
+            try:
+                item = self._q.get(timeout=0.2)
+            except Exception:  # noqa: BLE001
+                continue
+            if item is None:
+                break
+            view, result = item
+            t0 = time.perf_counter()
+            try:
+                cam = self._feed.update(view, result)
+                if cam is not None:
+                    self._hub.publish_row(cam)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[octave_bridge] BEV worker: {exc}", flush=True)
+            dt = time.perf_counter() - t0
+            if self._perf is not None:
+                self._perf.add("compose", dt)
+                self._perf.tick(extra={"drop": self._dropped})

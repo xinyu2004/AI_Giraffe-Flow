@@ -534,6 +534,22 @@ _EN: dict[str, str] = {
     "时序导出": "Trace export",
     "通信绑定": "Bindings",
     "验收": "Acceptance",
+    "发布策略": "Publish policy",
+    "触发": "Trigger",
+    "周期": "Period",
+    "变化时": "On change",
+    "语义服务": "Semantic services",
+    "通道": "Channels",
+    "ms / fps": "ms / fps",
+    "周期填 ms；变化时填 expect_fps（期望/告警带，不是发报钟）。须 ≤ 相机 fps。": (
+        "Period uses ms; on-change uses expect_fps (budget/warn band, not a send clock). Must be ≤ camera fps."
+    ),
+    "Out expect_fps 须 ≤ 相机 fps（{cam}）": (
+        "Out expect_fps must be ≤ camera fps ({cam})"
+    ),
+    "请在 frame_ingest 通道填写相机 fps": (
+        "Set camera fps on the frame_ingest lane"
+    ),
     "说明": "Description",
     "服务": "Services",
     "强制 lineage 门禁": "Require lineage gate",

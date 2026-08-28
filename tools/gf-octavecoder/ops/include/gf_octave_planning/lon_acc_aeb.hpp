@@ -6,7 +6,8 @@
 #include <algorithm>
 #include <cmath>
 
-// Corresponds to octave_planning/afc/m_lon_acc_aeb.m + gf_lon_exec.m
+// Corresponds to octave_planning/common/gf_lon_exec.m
+// m_lon_acc_aeb lives in plan_tick.hpp (wraps m_plan_tick, 1:1 with .m).
 
 namespace gf_octave_planning {
 
@@ -64,26 +65,6 @@ inline LonCtrl lon_exec(float v, float v_plan, float a_req) {
   c.throttle = p.acc_thr_hold;
   c.brake = 0.0f;
   return c;
-}
-
-inline LonCtrl m_lon_acc_aeb(float v, bool lead_valid, float d, float rel,
-                             float lead_lat_m = 0.0f, float e_y = 0.0f, float c1 = 0.0f,
-                             bool lane_valid = true) {
-  const PlanCal& p = plan_cal();
-  v = std::max(0.0f, v);
-  const PlanHorizon h = plan_horizon(v, lane_valid, e_y, c1, 1.0e6f);
-  bool lane_ok = lane_usable(lane_valid, e_y, c1);
-  if (std::fabs(e_y) > p.lat_ey_slow_m) {
-    lane_ok = false;
-  }
-  const float v_plan =
-      plan_v_at_s(0.0f, v, lead_valid, d, rel, lead_lat_m, h.D_see, lane_ok);
-  float a_req = lon_a_req(v, lead_valid, d, rel, lead_lat_m);
-  if (!lane_ok) {
-    a_req = std::max(a_req, 0.0f);
-    return lon_exec(v, 0.0f, a_req);
-  }
-  return lon_exec(v, v_plan, a_req);
 }
 
 }  // namespace gf_octave_planning

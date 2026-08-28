@@ -4,7 +4,7 @@
 > **怎么规划、冒烟：** [planning_v4_how.md](./planning_v4_how.md)。  
 > **BEV / CARLA 场景：** 后续会按本文重做（规划必须能画在 BEV 上；造场景要覆盖、并尽量超出 §冒烟）。现行 Host 已开始刀 1（计划对象 + 跟剖面执行）；完整视野/变道/环视仍按 how 文档分刀。
 
-金源是 `octave_planning/*.m`。**先改 `.m`，Host 认效果，再 `gf-octavecoder generate` 出 C 跑 SIL/HIL**；未认可前不要为对齐去改 `plan_cal.hpp`。能进表的进 `gf_plan_cal`（含视野、基准时域、`obj_n_max`）。每拍算力钉死在 `traj_n × obj_n_max`，不占满时间片。
+金源是 `octave_planning/*.m`。**先改 `.m`，Host 认效果，再 `gf-octavecoder generate` 出 C 跑 SIL/HIL**；未认可前不要为对齐去改 `plan_cal.hpp`。能进表的进 `gf_plan_cal`（含视野、基准时域、`obj_n_max`）。每拍算力钉死在 `traj_n × obj_n_max`，不占满时间片。Host 帧率与 SIL/HIL 复用：[host_fps_sil_hil.md](./host_fps_sil_hil.md)。
 
 ---
 

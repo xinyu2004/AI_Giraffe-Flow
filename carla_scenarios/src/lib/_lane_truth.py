@@ -9,6 +9,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+_MAP_BY_WORLD: dict[int, Any] = {}
+
 
 def _carla():
     import carla  # type: ignore
@@ -59,6 +61,37 @@ def _wrap_pi(a: float) -> float:
     return a
 
 
+def _cached_map(world: Any) -> Any:
+    """world.get_map() once per World (OpenDRIVE parse is expensive)."""
+    key = id(world)
+    mmap = _MAP_BY_WORLD.get(key)
+    if mmap is None:
+        mmap = world.get_map()
+        if len(_MAP_BY_WORLD) >= 4:
+            _MAP_BY_WORLD.clear()
+        _MAP_BY_WORLD[key] = mmap
+    return mmap
+
+
+def _ego_pose(ego: Any) -> tuple[float, float, float, float, float]:
+    """(ex, ey, cosθ, sinθ, yaw_rad) from one get_transform."""
+    et = ego.get_transform()
+    el = et.location
+    yaw = math.radians(float(et.rotation.yaw))
+    return float(el.x), float(el.y), math.cos(yaw), math.sin(yaw), yaw
+
+
+def world_to_ego_xy_cs(
+    ex: float, ey: float, c: float, s: float, wx: float, wy: float
+) -> tuple[float, float]:
+    """World XY → ego (x forward, y left+). c,s = cos/sin(ego yaw)."""
+    dx = float(wx) - ex
+    dy = float(wy) - ey
+    xf = c * dx + s * dy
+    y_left = s * dx - c * dy
+    return xf, y_left
+
+
 def world_to_ego_xy(ego: Any, wx: float, wy: float) -> tuple[float, float]:
     """World XY → ego frame (x forward, y left+).
 
@@ -66,19 +99,11 @@ def world_to_ego_xy(ego: Any, wx: float, wy: float) -> tuple[float, float]:
       x =  cosθ·dx + sinθ·dy
       y_left = sinθ·dx - cosθ·dy   (= −y_ue_right)
     """
-    et = ego.get_transform()
-    el = et.location
-    yaw = math.radians(float(et.rotation.yaw))
-    dx = float(wx) - float(el.x)
-    dy = float(wy) - float(el.y)
-    c, s = math.cos(yaw), math.sin(yaw)
-    xf = c * dx + s * dy
-    y_ue_right = -s * dx + c * dy
-    y_left = -y_ue_right
-    return xf, y_left
+    ex, ey, c, s, _yaw = _ego_pose(ego)
+    return world_to_ego_xy_cs(ex, ey, c, s, wx, wy)
 
 
-def _shoulder_lane_ids(world: Any, ref_wp: Any) -> set[int]:
+def _shoulder_lane_ids(world: Any, ref_wp: Any, mmap: Any = None) -> set[int]:
     """lane_id of Shoulder (etc.) on the same road — never countable."""
     out: set[int] = set()
     if world is None or ref_wp is None:
@@ -87,6 +112,7 @@ def _shoulder_lane_ids(world: Any, ref_wp: Any) -> set[int]:
         carla = _carla()
         loc = ref_wp.transform.location
         road_id = int(ref_wp.road_id)
+        cmap = mmap if mmap is not None else _cached_map(world)
         for ltype in (
             carla.LaneType.Shoulder,
             carla.LaneType.Parking,
@@ -94,7 +120,7 @@ def _shoulder_lane_ids(world: Any, ref_wp: Any) -> set[int]:
             carla.LaneType.Sidewalk,
         ):
             try:
-                swp = world.get_map().get_waypoint(
+                swp = cmap.get_waypoint(
                     loc, project_to_road=True, lane_type=ltype
                 )
             except Exception:  # noqa: BLE001
@@ -156,15 +182,20 @@ def _lane_chain_from_left(wp: Any, *, exclude_ids: set[int] | None = None) -> li
     return out
 
 
-def _road_c1(ego: Any, wp: Any) -> float:
+def _road_c1_yaw(ego_yaw: float, wp: Any) -> float:
     """Lane-center slope dy/dx in ego frame from road vs ego yaw."""
     try:
         lane_yaw = math.radians(float(wp.transform.rotation.yaw))
     except Exception:  # noqa: BLE001
         return 0.0
-    psi = _wrap_pi(lane_yaw - _ego_yaw_rad(ego))
+    psi = _wrap_pi(lane_yaw - ego_yaw)
     psi = max(-1.2, min(1.2, psi))
     return math.tan(psi)
+
+
+def _road_c1(ego: Any, wp: Any) -> float:
+    """Lane-center slope dy/dx in ego frame from road vs ego yaw."""
+    return _road_c1_yaw(_ego_yaw_rad(ego), wp)
 
 
 def _fit_c0_c1_c2(xs: list[float], ys: list[float]) -> tuple[float, float, float]:
@@ -209,12 +240,21 @@ def _fit_c0_c1_c2(xs: list[float], ys: list[float]) -> tuple[float, float, float
 
 
 def _sample_edge_poly(
-    ego: Any, wp: Any, *, side: str, half_w: float, horizon_m: float = 80.0
+    ego: Any,
+    wp: Any,
+    *,
+    side: str,
+    half_w: float,
+    horizon_m: float = 80.0,
+    pose: tuple[float, float, float, float, float] | None = None,
 ) -> tuple[float, float, float]:
     """Sample lane edge ahead in ego frame → (c0, c1, c2). y left+.
 
     CARLA/Unreal left at yaw θ: (sin θ, −cos θ); right = opposite.
     """
+    if pose is None:
+        pose = _ego_pose(ego)
+    ex, ey, c, s, ego_yaw = pose
     xs: list[float] = []
     ys: list[float] = []
     cur = wp
@@ -224,10 +264,9 @@ def _sample_edge_poly(
         try:
             loc = cur.transform.location
             yaw = math.radians(float(cur.transform.rotation.yaw))
-            # UE left = (sin, -cos)
             lx = float(loc.x) + sign * half_w * math.sin(yaw)
             ly = float(loc.y) + sign * half_w * (-math.cos(yaw))
-            xe, ye = world_to_ego_xy(ego, lx, ly)
+            xe, ye = world_to_ego_xy_cs(ex, ey, c, s, lx, ly)
             if xe >= -2.0:
                 xs.append(xe)
                 ys.append(ye)
@@ -244,7 +283,7 @@ def _sample_edge_poly(
         except Exception:  # noqa: BLE001
             break
     if not xs:
-        c1 = _road_c1(ego, wp)
+        c1 = _road_c1_yaw(ego_yaw, wp)
         return sign * half_w, c1, 0.0
     return _fit_c0_c1_c2(xs, ys)
 
@@ -311,8 +350,12 @@ def measure_lane_topology(ego: Any, world: Any) -> dict[str, Any]:
         return empty
 
     try:
-        el = ego.get_location()
-        wp = world.get_map().get_waypoint(
+        mmap = _cached_map(world)
+        et = ego.get_transform()
+        el = et.location
+        yaw = math.radians(float(et.rotation.yaw))
+        pose = (float(el.x), float(el.y), math.cos(yaw), math.sin(yaw), yaw)
+        wp = mmap.get_waypoint(
             el, project_to_road=True, lane_type=carla.LaneType.Driving
         )
     except Exception:  # noqa: BLE001
@@ -321,7 +364,7 @@ def measure_lane_topology(ego: Any, world: Any) -> dict[str, Any]:
         return empty
 
     # If project landed on a non-countable / excluded id, step to neighbor Driving.
-    exclude_ids = _shoulder_lane_ids(world, wp)
+    exclude_ids = _shoulder_lane_ids(world, wp, mmap=mmap)
     if not _is_countable_lane(wp) or (
         exclude_ids and int(getattr(wp, "lane_id", -1)) in exclude_ids
     ):
@@ -368,8 +411,8 @@ def measure_lane_topology(ego: Any, world: Any) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             aw = width
         ah = 0.5 * max(2.5, min(aw, 5.0))
-        lc0, lc1, lc2 = _sample_edge_poly(ego, awp, side="left", half_w=ah)
-        rc0, rc1, rc2 = _sample_edge_poly(ego, awp, side="right", half_w=ah)
+        lc0, lc1, lc2 = _sample_edge_poly(ego, awp, side="left", half_w=ah, pose=pose)
+        rc0, rc1, rc2 = _sample_edge_poly(ego, awp, side="right", half_w=ah, pose=pose)
         left_e = {"c0": lc0, "c1": lc1, "c2": lc2, "lane_i": i, "kind": "left"}
         right_e = {"c0": rc0, "c1": rc1, "c2": rc2, "lane_i": i, "kind": "right"}
         lane_lr.append((left_e, right_e))

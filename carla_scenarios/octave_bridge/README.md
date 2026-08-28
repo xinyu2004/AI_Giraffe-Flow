@@ -5,14 +5,15 @@ Host 规划调试环：`gf_carla_io` 孪生 + **Octave `.m`** → `vehicle_cmd`�
 ```text
 giraffe_client ──cosim──► octave_bridge ──vehicle_cmd──► giraffe
                                │
-                               ├─ oct2py → octave_planning/afc/*.m
+                               ├─ octave-cli stdio/file → octave_planning/afc/*.m
+                               │            （默认不再走 oct2py；GF_OCTAVE_IPC=oct2py 可回退）
                                │            ↑ 阈值：common/gf_plan_cal.m
                                └─ bev_feed → Foxglove WS :8765
                                       topic /gf/driving/bev/compressed
 ```
 
-规划运行真源是 `.m`（需本机 Octave CLI + `oct2py`）。**无后处理壳**；阈值在 `gf_plan_cal`。  
-**先改 `.m`，Host 认完再 `gf-octavecoder generate` 出 C。** 每拍一次 `m_plan_tick`（`traj_n × obj_n_max`），不占满时间片。
+规划运行真源是 `.m`（需本机 `octave-cli`）。**无后处理壳**；阈值在 `gf_plan_cal`。  
+**先改 `.m`，Host 认完再 `gf-octavecoder generate` 出 C。** 每拍 `m_plan_tick` 经 IPC 进出。Windows `auto` 走二进制 stdio（进程内 `_setmode`，需本机 `mkoctfile` 编一次 `gf_stdio_binmode_oct.oct`），失败再 file 双 seq。Octave `fopen` 打不开 Win32 named pipe，不要当默认。**不要**默认 `tcp`（Octave Socket 会段错误）。`GF_OCTAVE_IPC=auto|stdio|file|pipe|tcp|oct2py`。Linux `auto` 仍 stdio。BEV 默认 5Hz。见 [host_fps_sil_hil.md](../../docs/zh/driving/host_fps_sil_hil.md)。
 
 ## 跑
 
@@ -34,6 +35,8 @@ python -m octave_bridge --port 7600
 | `GF_GMT_SRC` | `…/gmt/src`（含 `gf_gmt/`） |
 | `GF_OCTAVE_PLAN_LOG` | `1` = 每 0.5s 打 `.m` 的 mode/thr/brk/steer/lat |
 | `GF_OCTAVE_KILL_STALE` | 默认 `1`：启动前清残留 `octave_bridge`/`octave-cli`（`--no-kill-stale` 关） |
+| `GF_OCTAVE_IPC` | `auto`（stdio→file）/`stdio`/`file`/`pipe`/`tcp`/`oct2py`。Win stdio 需 `mkoctfile` |
+| `GF_MKOCTFILE` | 可选；找不到时按 `octave-cli` 同目录搜 `mkoctfile` |
 
 改阈值：只改 `octave_planning/common/gf_plan_cal.m`。改完**重启** bridge。C++ `plan_cal.hpp` 等效果认可后再 generate。
 
@@ -47,7 +50,7 @@ python -m octave_bridge --port 7600
 |------|------|
 | `io_server` | 联仿听端口 |
 | `semantic_map` | POD ↔ PlanningView / PlanningResult |
-| `runtime` | 长驻 oct2py，调 `.m`（无壳） |
+| `runtime` | 长驻 octave-cli（stdio/file IPC），调 `.m` |
 | `bev_feed` / `foxglove_ws` | 同一 `LiveBevComposer` |
 
 ## 规划基线（lite）

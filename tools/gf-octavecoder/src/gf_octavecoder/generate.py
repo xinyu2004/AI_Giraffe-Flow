@@ -54,7 +54,7 @@ def _emit_afc_lon_hpp() -> str:
         + """
 #pragma once
 
-#include "gf_octave_planning/lon_acc_aeb.hpp"
+#include "gf_octave_planning/plan_tick.hpp"
 
 namespace oct_gen {
 
@@ -70,6 +70,39 @@ inline LonCtrl m_lon_acc_aeb(float v, bool lead_valid, float d, float rel,
                              bool lane_valid = true) {
   return gf_octave_planning::m_lon_acc_aeb(v, lead_valid, d, rel, lead_lat_m, e_y, c1,
                                            lane_valid);
+}
+
+}  // namespace oct_gen
+"""
+    )
+
+
+def _emit_afc_plan_tick_hpp() -> str:
+    """Bridge: m_plan_tick.m → gf_octave_planning. Not m_plan_tick_pack.m."""
+    return (
+        _HEADER
+        + """
+#pragma once
+
+#include "gf_octave_planning/plan_tick.hpp"
+
+namespace oct_gen {
+
+using gf_octave_planning::PlanObj;
+using gf_octave_planning::PlanTickOut;
+using gf_octave_planning::kObjNMax;
+using gf_octave_planning::kLatTrajPoints;
+using gf_octave_planning::lon_a_req_n;
+using gf_octave_planning::plan_occlusion;
+
+/** Corresponds to octave_planning/afc/m_plan_tick.m */
+inline PlanTickOut m_plan_tick(float v, float steer_deg, bool lane_valid, float e_y, float c0,
+                               float c1, float c2, float c3, float x_end, float lane_conf,
+                               float lane_count, const PlanObj* obj, int nobj, float D_see_prev,
+                               float T_plan_prev) {
+  return gf_octave_planning::m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end,
+                                         lane_conf, lane_count, obj, nobj, D_see_prev,
+                                         T_plan_prev);
 }
 
 }  // namespace oct_gen
@@ -166,6 +199,7 @@ def generate_sku(*, repo_root: Path, sku: str, force: bool = False) -> int:
             ("m_lon_acc_aeb.m", _emit_afc_lon_hpp),
             ("m_lat_lka.m", _emit_afc_lat_lka_hpp),
             ("m_lat_traj.m", _emit_afc_lat_traj_hpp),
+            ("m_plan_tick.m", _emit_afc_plan_tick_hpp),
         ):
             src = m_sku / name
             if src.is_file():

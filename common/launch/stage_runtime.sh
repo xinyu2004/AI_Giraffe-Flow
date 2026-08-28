@@ -194,20 +194,11 @@ else
   echo "${TAG} stage: skip platform/ (product path = hpp; set GF_STAGE_PLATFORM=1 to include)"
 fi
 
-# Python ingest helpers + carla module (copy, never absolute symlink)
-INGEST_APP="${PROJECT_DIR}/apps/frame_ingest"
-if [[ -d "${INGEST_APP}" ]]; then
-  for f in gf_frame_ingest.py gf_channel_py.py; do
-    [[ -f "${INGEST_APP}/${f}" ]] && cp -f "${INGEST_APP}/${f}" "${SHARE}/${f}"
-  done
-fi
-BRIDGE_SRC="${PROJECT_DIR}/tools/carla_bridge"
-if [[ -d "${BRIDGE_SRC}" ]]; then
-  rm -rf "${SHARE}/modules/carla_bridge"
-  mkdir -p "${SHARE}/modules"
-  cp -a "${BRIDGE_SRC}" "${SHARE}/modules/carla_bridge"
-  echo "${TAG} stage share ← carla_bridge (copied)"
-fi
+# Boundary modules are C++ binaries under bin/ (gf_frame_colorbar / gf_frame_replay /
+# gf_carla_io). Do not stage Python frame_ingest or tools/carla_bridge.
+rm -rf "${SHARE}/gf_frame_ingest.py" "${SHARE}/gf_channel_py.py" \
+  "${SHARE}/modules/carla_bridge" "${SHARE}/modules/carla_io" 2>/dev/null || true
+echo "${TAG} stage: no Python frame_ingest share (C++ modules in bin/)"
 
 # Product entry (demo name; rename freely — only a thin wrapper).
 # Same EM path on host and board; hang GMT_depend_launch from the host

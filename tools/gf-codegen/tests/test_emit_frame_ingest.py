@@ -18,6 +18,7 @@ def test_normalize_defaults() -> None:
     assert cfg["pixel_format"] == "nv12"
     assert cfg["ego_source"] == "gateway"
     assert cfg["bridge"]["enabled"] is False
+    assert cfg["camera_slots"][0]["fps"] == 0
     assert "dry_run" not in cfg["bridge"]
     assert cfg["paths"]["frame"] == ""
 
@@ -32,7 +33,7 @@ def test_emit_frame_ingest_carla(tmp_path: Path) -> None:
             "ego_source": "carla",
             "camera_transport": "shm",
             "active_source": "carla",
-            "camera_slots": [{"id": "front", "w": 640, "h": 480, "pixel_format": "nv12"}],
+            "camera_slots": [{"id": "front", "w": 640, "h": 480, "pixel_format": "nv12", "fps": 30}],
             "bridge": {
                 "enabled": True,
             },
@@ -59,17 +60,19 @@ def test_emit_frame_ingest_carla(tmp_path: Path) -> None:
     assert "kFramePath" in hpp
     assert "kTip" not in hpp
     assert not (gen / "frame_ingest.env").exists()
-    assert "camera_contract" in meta
     assert meta.get("product") == "afc"
     cam = json.loads(Path(meta["camera_contract"]).read_text(encoding="utf-8"))
     assert cam["schema"] == "camera_contract/v1"
     assert cam["product"] == "afc"
     assert cam["slots"][0]["slot_name"] == "gf.channel.front"
+    assert cam["slots"][0]["fps"] == 30
     assert cam["camera_transport"] == "shm"
+    assert "kCameraFpsFront = 30" in hpp
     host = Path(meta["camera_contract_host"])
     assert host == tmp_path / "carla_scenarios" / "config" / "afc" / "camera_contract.json"
     assert host.is_file()
     assert json.loads(host.read_text(encoding="utf-8"))["product"] == "afc"
+    assert not (proj / "runtime_ipc").exists()
 
 
 def test_normalize_active_source_enables_bridge() -> None:
@@ -152,6 +155,22 @@ def test_legacy_rgb_path_migrates_to_yuv(tmp_path: Path) -> None:
     )
     assert cfg["paths"]["frame"].endswith("front.yuv")
     assert not cfg["paths"]["frame"].startswith("/tmp/gf_")
+
+
+def test_emit_replay_mkdirs_runtime_ipc(tmp_path: Path) -> None:
+    req = {
+        "product": "AFC",
+        "frame_ingest": {
+            "active_source": "replay",
+            "paths": {"frame": "/tmp/gf_front.yuv"},
+        },
+    }
+    proj = tmp_path / "projects" / "afc"
+    gen = proj / "generated"
+    gen.mkdir(parents=True)
+    (tmp_path / "carla_scenarios").mkdir()
+    emit_frame_ingest(req, gen)
+    assert (proj / "runtime_ipc").is_dir()
 
 
 def test_gf_build_cmake_no_frame_ingest_env(tmp_path: Path) -> None:

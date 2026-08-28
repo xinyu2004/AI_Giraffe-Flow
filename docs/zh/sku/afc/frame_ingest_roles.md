@@ -41,6 +41,8 @@ Create 相机槽后 **exec** 独立模块（**无 Python**）：
 
 详见 [gateway_boundary.md](./gateway_boundary.md)。
 
-## publish_policy（债）
+Host 关相机 / Python NV12 门控与规划时间片：[host_fps_sil_hil.md](../../driving/host_fps_sil_hil.md)。板上视频走 C++ ingest，不要复用 giraffe 的 Python 转码。
 
-period / on-change 表驱动尚未落地；当前 gateway 固定周期同源发 Ego+In。
+## publish_policy
+
+`req.yaml`：Ego/In/`vehicle_cmd` period 10ms hold-last；Out on_change + `expect_fps`；`vehicle_state`/`fake_perc` on_change。运行时 FrameWatch 对身份 Error、对预算 Warn。OEM 映射表（源信号 → 哪些包）仍是 backlog，SIL 仍可同源各 due 各发。

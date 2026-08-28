@@ -20,9 +20,9 @@ bash projects/afc/scripts/run_sil.sh
 
 ## 配置
 
-- `req.yaml`（含 `frame_ingest` / `observability`）— **用 gf-config 编辑**
+- `req.yaml`（含 `frame_ingest` / `observability` / `publish_policy`）— **用 gf-config 编辑**
 - `integration/wiring.yaml` / `platform/*`
-- CARLA：`tools/carla_bridge/`
+- CARLA 联仿：板端 `apps/carla_io`（`gf_carla_io`）；上位机 `carla_scenarios/giraffe_client`
 
 ## Verify
 

@@ -62,7 +62,7 @@ gateway ──► vehicle_cmd ──► gf_carla_io ──► giraffe_client ─
 ## 遗留债
 
 - **入/出口 APP 边界**与**出口总线形态** — 未锁死（见下）。
-- publish_policy（period / on-change）— 阶段 2（SIL `vehicle_cmd` 暂 10ms；首帧前不发伪 thr/steer）。
+- publish_policy：Ego/In/`vehicle_cmd` **period 10ms hold-last**（seq/ts 前进）；Out/Trajectory **on_change**。cmd 在新 Traj 边沿额外一拍（AEB），不是冻帧。首帧 Traj 前不发伪 thr/steer。映射表 / 取消同源双发仍是 OEM backlog。
 - fake_perc 几何已由 `_lane_truth` + `_objects_truth` 填满 POD；非几何质量字段见 `backlog_truth_quality.md`。
 
 ### 入/出口 APP 边界 · 出口总线形态（为何 TBD）

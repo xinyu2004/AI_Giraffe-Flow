@@ -35,7 +35,7 @@ def _ensure_type(sor: dict[str, Any], type_id: str, fields: list[dict[str, Any]]
     types.append({"id": type_id, "kind": "struct", "fields": fields or []})
 
 
-def _ensure_service(sor: dict[str, Any], service_id: str, type_ref: str, period_ms: int = 50) -> None:
+def _ensure_service(sor: dict[str, Any], service_id: str, type_ref: str) -> None:
     services = sor.setdefault("services", [])
     if any(isinstance(s, dict) and s.get("id") == service_id for s in services):
         return
@@ -44,7 +44,6 @@ def _ensure_service(sor: dict[str, Any], service_id: str, type_ref: str, period_
             "id": service_id,
             "type_ref": type_ref,
             "kind": "event",
-            "period_ms": period_ms,
         }
     )
     sem = sor.setdefault("semantic_services", [])

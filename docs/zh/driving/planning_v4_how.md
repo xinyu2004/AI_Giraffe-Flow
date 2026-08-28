@@ -2,7 +2,7 @@
 
 > 配套 [planning_lon_v4.md](./planning_lon_v4.md) 的**做法说明书**。不是量产法规，是正常人逻辑 + 可冒烟。  
 > 表里「第一刀」= 结构必须先有；「后挂」= 输入或搜索来了接到同一份计划上。  
-> **金源只改 `.m`**，Host 认完再 generate C。每拍 `O(traj_n × obj_n_max)`，禁止重搜索占时间片。
+> **金源只改 `.m`**，Host 认完再 generate C。每拍 `O(traj_n × obj_n_max)`，禁止重搜索占时间片。Host 时钟/BEV/相机旁路见 [host_fps_sil_hil.md](./host_fps_sil_hil.md)（先稳 ≥20 Hz 再改标定）。
 
 ---
 

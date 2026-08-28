@@ -25,6 +25,7 @@ from gf_codegen.compose.mem_budget import fmt_bytes
 from gf_codegen.compose.merge_platform import merge_platform
 from gf_codegen.compose.merge_req import merge_req
 from gf_codegen.compose.observability import validate_observability
+from gf_codegen.compose.publish_policy import emit_publish_policy
 from gf_codegen.compose.write_sor import write_lineage, write_sor
 
 def _merge_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> None:
@@ -80,7 +81,7 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
         sor, paths.wiring, repo_root=paths.repo_root, project_dir=paths.project_dir
     )
 
-    merge_req(sor, paths.req)
+    policy_warnings = merge_req(sor, paths.req)
 
     with paths.req.open(encoding="utf-8") as f:
         req = yaml.safe_load(f) or {}
@@ -99,7 +100,7 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     report = run_lineage(sor, req)
     obs_err, obs_warn, obs_checks = validate_observability(req, wiring=wiring)
     report["project_id"] = paths.data.get("project_id") or report.get("project_id")
-    report["warnings"] = list(report.get("warnings") or []) + warnings + plat_warnings + obs_warn
+    report["warnings"] = list(report.get("warnings") or []) + warnings + plat_warnings + obs_warn + list(policy_warnings or [])
     report["errors"] = list(report.get("errors") or []) + plat_errors + obs_err
     report["checks"] = list(report.get("checks") or []) + plat_checks + obs_checks
     if plat_errors or obs_err:
@@ -125,6 +126,7 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     emit_observability_json(req, obs_json, wiring=wiring)
     gen_dir = paths.project_dir / "generated"
     fi_meta = emit_frame_ingest(req, gen_dir)
+    pub_meta = emit_publish_policy(req, gen_dir)
     plat_loaded = sor.get("platform_manifest") if isinstance(sor.get("platform_manifest"), dict) else {}
     deploy_meta = emit_deploy_config(
         req,
@@ -141,6 +143,7 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)
     report.setdefault("outputs", {})["observability"] = str(obs_json)
     report.setdefault("outputs", {})["frame_ingest_hpp"] = fi_meta["hpp"]
+    report.setdefault("outputs", {})["publish_policy_hpp"] = pub_meta["hpp"]
     if fi_meta.get("camera_contract"):
         report.setdefault("outputs", {})["camera_contract"] = fi_meta["camera_contract"]
     if fi_meta.get("camera_contract_host"):
@@ -167,6 +170,7 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     print(f"sku cmake wrote: {sku_cmake}")
     print(f"observability wrote: {obs_json}")
     print(f"frame_ingest wrote: {fi_meta['hpp']}")
+    print(f"publish_policy wrote: {pub_meta['hpp']}")
     if fi_meta.get("camera_contract_host"):
         print(
             f"camera_contract host export: {fi_meta['camera_contract_host']} "

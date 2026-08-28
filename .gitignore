@@ -12,8 +12,9 @@ install/
 middleware/.deps-prefix/
 compile_commands.json
 
-# SIL file-IPC scratch under each SKU (compose / scenarios mkdir at runtime)
-**/runtime_ipc/
+# Host Octave file IPC scratch (carla copy + repo)
+**/octave_planning/_planio/
+*.oct
 
 # Vendored trees live under middleware/; keep policy in deps/
 middleware/third_party/*/
@@ -104,3 +105,6 @@ carla_scenarios/results/latest.json
 
 # SKU-local CARLA endpoint overrides (carla_scenarios/carla.env is tracked)
 projects/**/carla.env
+
+# SIL file-IPC scratch (replay/file yuv only). Compose must not mkdir this for GfChannel.
+**/runtime_ipc/

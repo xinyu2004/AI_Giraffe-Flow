@@ -40,7 +40,7 @@ from _verdict import (  # noqa: E402
     print_verdict,
     time_headway_s,
 )
-from _view import ScenarioView, gap_speed, run_loop  # noqa: E402
+from _view import ScenarioView, gap_speed, run_loop, scenario_view_wanted  # noqa: E402
 from _weather import apply_weather, apply_wiper, load_weather  # noqa: E402
 from layouts.follow_straight import layout_acc_follow  # noqa: E402
 from judges.acc_headway import judge_acc  # noqa: E402
@@ -103,7 +103,7 @@ def run_session(
         view = ensure_view(
             world, ego, view, no_window=no_window, title=f"AFC {tag} — weather"
         )
-    elif view is None and not no_window:
+    elif view is None and not no_window and scenario_view_wanted():
         try:
             view = ScenarioView(
                 world,

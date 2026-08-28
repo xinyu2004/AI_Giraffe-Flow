@@ -8,9 +8,14 @@ from typing import Any
 import yaml
 
 
-def merge_req(sor: dict[str, Any], req_path: Path) -> None:
+from gf_codegen.compose.publish_policy import apply_publish_policy
+
+
+def merge_req(sor: dict[str, Any], req_path: Path) -> list[str]:
     with req_path.open(encoding="utf-8") as f:
         req = yaml.safe_load(f) or {}
+    if not isinstance(req, dict):
+        req = {}
 
     if req.get("topology"):
         sor["topology"] = req["topology"]
@@ -40,3 +45,5 @@ def merge_req(sor: dict[str, Any], req_path: Path) -> None:
         sor["compute_domains"] = [
             {"id": "ap_linux", "runtime": "gf_full", "hosts_gf_code": True}
         ]
+
+    return apply_publish_policy(sor, req)

@@ -418,18 +418,7 @@ if [[ "${INJECT_ON}" == "1" ]]; then
 
   FRAME_REPLAY_PID=""
   if [[ -n "${GF_INJECT_FRAMES_DIR:-}" ]]; then
-    REPLAY_PY="${PROJECT_DIR}/tools/carla_bridge/frame_replay.py"
-    PY="${GF_CARLA_PYTHON:-python3}"
-    if [[ -f "${REPLAY_PY}" && -d "${GF_INJECT_FRAMES_DIR}" ]]; then
-      echo "${TAG} frame_replay ← ${GF_INJECT_FRAMES_DIR} → ${GF_CARLA_FRAME_PATH}"
-      "${PY}" "${REPLAY_PY}" --frames-dir "${GF_INJECT_FRAMES_DIR}" \
-        --frame-path "${GF_CARLA_FRAME_PATH}" \
-        $([ "${GF_INJECT_LOOP:-0}" = "1" ] && echo --loop) \
-        >"${LOG_DIR}/frame_replay.log" 2>&1 &
-      FRAME_REPLAY_PID=$!
-    else
-      echo "${TAG} WARN: GF_INJECT_FRAMES_DIR set but replay missing/dir absent" >&2
-    fi
+    echo "${TAG} WARN: GF_INJECT_FRAMES_DIR ignored — Python tools/carla_bridge/frame_replay.py is gone; use GF_FRAME_SOURCE=replay + gf_frame_replay" >&2
   fi
 
   if [[ "${DRIVE_MODE}" == "playhead" || "${DRIVE_MODE}" == "controlled" || "${DRIVE_MODE}" == "wait" ]]; then

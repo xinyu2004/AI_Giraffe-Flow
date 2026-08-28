@@ -28,7 +28,7 @@ class BridgeState:
 
 
 class CosimIoServer:
-    """Listen GF_COSIM_PORT; on each inbound state/perc invoke on_tick → optional cmd blob."""
+    """Listen GF_COSIM_PORT; plan once per FAKE_PERC (state is cache only)."""
 
     def __init__(
         self,
@@ -132,29 +132,28 @@ class CosimIoServer:
 
         if self.on_tick is None:
             return
-        # Prefer planning on fake_perc (carries lanes/objs); state-only updates keep last perc.
-        if mtype == P.GF_COSIM_MSG_FAKE_PERC or (
-            mtype == P.GF_COSIM_MSG_VEHICLE_STATE and st.fake_perc is not None
-        ):
-            cmd = self.on_tick(st)
-            if cmd:
-                self._cmd_seq += 1
-                frame = P.pack_frame(
-                    P.GF_COSIM_MSG_VEHICLE_CMD, cmd, st.last_rx_ns, self._cmd_seq
-                )
-                cli.sendall(frame)
-                if not getattr(self, "_cmd_logged", False):
-                    self._cmd_logged = True
-                    # thr/brk/steer at CMD struct offsets — for ops log only
-                    from .protocol import CMD
+        # P clock: one plan per fake_perc. VEHICLE_STATE only refreshes cache.
+        if mtype != P.GF_COSIM_MSG_FAKE_PERC:
+            return
+        cmd = self.on_tick(st)
+        if not cmd:
+            return
+        self._cmd_seq += 1
+        frame = P.pack_frame(
+            P.GF_COSIM_MSG_VEHICLE_CMD, cmd, st.last_rx_ns, self._cmd_seq
+        )
+        cli.sendall(frame)
+        if not getattr(self, "_cmd_logged", False):
+            self._cmd_logged = True
+            from .protocol import CMD
 
-                    fields = CMD.unpack(cmd)
-                    print(
-                        f"[octave_bridge] first vehicle_cmd → giraffe "
-                        f"thr={fields[5]:.2f} brk={fields[6]:.2f} st={fields[7]:.2f} "
-                        f"mode={int(fields[10])}",
-                        flush=True,
-                    )
+            fields = CMD.unpack(cmd)
+            print(
+                f"[octave_bridge] first vehicle_cmd → giraffe "
+                f"thr={fields[5]:.2f} brk={fields[6]:.2f} st={fields[7]:.2f} "
+                f"mode={int(fields[10])}",
+                flush=True,
+            )
 
 
 def _recv_exact(sock: socket.socket, n: int) -> Optional[bytes]:

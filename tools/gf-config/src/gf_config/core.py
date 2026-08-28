@@ -434,6 +434,12 @@ class ProjectSession:
             pix = str(s.get("pixel_format") or "").strip()
             if pix:
                 entry["pixel_format"] = pix
+            try:
+                fps = int(s.get("fps") or 0)
+            except (TypeError, ValueError):
+                fps = 0
+            if fps > 0:
+                entry["fps"] = fps
             cleaned.append(entry)
         fi["camera_slots"] = cleaned
         self.dirty_req = True

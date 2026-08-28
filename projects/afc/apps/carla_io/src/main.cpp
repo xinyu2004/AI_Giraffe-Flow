@@ -5,6 +5,8 @@
 #include "gf_channel/gf_channel.h"
 #include "gf_channel/boundary_pods.h"
 #include "gf_channel/cosim_protocol.h"
+#include "gf_app/frame_watch.hpp"
+#include "gf_ara/log/logger.hpp"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -196,6 +198,15 @@ int main() {
   signal(SIGINT, OnSig);
   signal(SIGTERM, OnSig);
 
+  {
+    gf_ara::log::LogConfig cfg;
+    cfg.default_level = gf_ara::log::LogLevel::kWarn;
+    cfg.sinks = {"console", "dlt"};
+    cfg.dlt_app_id = "CIO ";
+    gf_ara::log::Logger::Instance().Configure(cfg);
+    gf_app::EnsureDiagLogSinks();
+  }
+
   const char* vs_slot = EnvOr("GF_VEHICLE_STATE_SLOT", "gf.channel.vehicle_state");
   const char* fp_slot = EnvOr("GF_FAKE_PERC_SLOT", "gf.channel.fake_perc");
   const char* cmd_slot = EnvOr("GF_VEHICLE_CMD_SLOT", "gf.channel.vehicle_cmd");
@@ -240,10 +251,24 @@ int main() {
   if (listen_fd < 0) {
     return 3;
   }
+
+  gf_app::FrameWatch rx_state;
+  gf_app::FrameWatch rx_perc;
+  gf_app::FrameWatch tx_cmd;
+  rx_state.Init("cio", "rx.tcp.state");
+  rx_state.BindChannel("vehicle_state");
+  rx_perc.Init("cio", "rx.tcp.fake_perc");
+  rx_perc.BindChannel("fake_perc");
+  tx_cmd.Init("cio", "tx.tcp.cmd");
+  tx_cmd.BindChannel("vehicle_cmd");
+  tx_cmd.EnablePeriodSilence();
+
   std::cout << "gf_carla_io: listen 0.0.0.0:" << port
             << " multi-cam (slot_id→gf.channel.<id>) vs=" << vs_slot << " fp=" << fp_slot
             << " cmd=" << cmd_slot << "\n";
-  std::cout << "gf_carla_io: waiting for giraffe_client (truth+cameras+cmd cosim)\n";
+  std::cout << "gf_carla_io: waiting for giraffe_client (truth+cameras+cmd cosim)"
+            << " frame_watch=identity+budget cmd[" << tx_cmd.PolicyHint() << "]"
+            << "\n";
 
   std::vector<std::uint8_t> payload;
   std::uint64_t cmd_seq_out = 0;
@@ -261,6 +286,11 @@ int main() {
     }
 
     (void)SendFrame(cli, GF_COSIM_MSG_HELLO, 0, 0, nullptr, 0);
+    rx_state.Reset();
+    rx_perc.Reset();
+    tx_cmd.Reset();
+    cmd_seq_out = 0;
+    last_cmd_seen = 0;
 
     while (!g_stop) {
       if (!cmd) {
@@ -279,6 +309,7 @@ int main() {
             got >= sizeof(c) && c.magic == GF_CH_VEHICLE_CMD_MAGIC && seq != last_cmd_seen) {
           last_cmd_seen = seq;
           ++cmd_seq_out;
+          tx_cmd.Observe(seq, c.timestamp_ns);
           if (!SendFrame(cli, GF_COSIM_MSG_VEHICLE_CMD, c.timestamp_ns, cmd_seq_out, &c,
                          sizeof(c))) {
             break;
@@ -289,7 +320,7 @@ int main() {
       pollfd pfd{};
       pfd.fd = cli;
       pfd.events = POLLIN;
-      const int pr = ::poll(&pfd, 1, 20);
+      const int pr = ::poll(&pfd, 1, 1);
       if (pr < 0) {
         if (errno == EINTR) {
           continue;
@@ -330,6 +361,7 @@ int main() {
           if (payload.size() >= sizeof(GfVehicleStatePod)) {
             const auto* st = reinterpret_cast<const GfVehicleStatePod*>(payload.data());
             if (st->magic == GF_CH_VEHICLE_STATE_MAGIC) {
+              rx_state.Observe(0, hdr.timestamp_ns, false, true);
               (void)gf_channel_publish(vs, st, sizeof(*st), hdr.timestamp_ns, hdr.seq);
             }
           }
@@ -338,6 +370,7 @@ int main() {
           if (payload.size() >= sizeof(GfFakePercPod)) {
             const auto* p = reinterpret_cast<const GfFakePercPod*>(payload.data());
             if (p->magic == GF_CH_FAKE_PERC_MAGIC) {
+              rx_perc.Observe(p->seq, p->timestamp_ns ? p->timestamp_ns : hdr.timestamp_ns);
               (void)gf_channel_publish(fp, p, sizeof(*p), hdr.timestamp_ns, hdr.seq);
             }
           }

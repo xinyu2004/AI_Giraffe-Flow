@@ -12,6 +12,7 @@
       "h": 480,
       "pixel_format": "nv12",
       "buffers": 2,
+      "fps": 30,
       "mount": {
         "id": "1",
         "x": 0.55,

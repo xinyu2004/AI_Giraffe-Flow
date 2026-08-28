@@ -17,6 +17,7 @@ sys.path.insert(0, str(_LIB))
 from _lane_truth import (  # noqa: E402
     _dedup_edges,
     world_to_ego_xy,
+    world_to_ego_xy_cs,
 )
 
 
@@ -67,6 +68,17 @@ def test_world_to_ego_left_yaw90():
     xf, yf = world_to_ego_xy(ego, 1.0, 0.0)
     assert abs(xf) < 1e-6
     assert yf == pytest.approx(1.0, abs=1e-6)
+
+
+def test_world_to_ego_xy_cs_matches_ego_api():
+    ego = _ego(2.0, -3.0, 35.0)
+    xf, yf = world_to_ego_xy(ego, 10.0, 4.0)
+    import math
+
+    yaw = math.radians(35.0)
+    xc, yc = world_to_ego_xy_cs(2.0, -3.0, math.cos(yaw), math.sin(yaw), 10.0, 4.0)
+    assert xf == pytest.approx(xc)
+    assert yf == pytest.approx(yc)
 
 
 def test_dedup_merges_shared_edge():

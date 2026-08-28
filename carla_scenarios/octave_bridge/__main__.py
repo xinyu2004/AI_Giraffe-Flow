@@ -16,11 +16,22 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from _proc_util import kill_matching  # noqa: E402
-from octave_bridge.bev_feed import BevFeed  # noqa: E402
+from octave_bridge.bev_feed import BevAsync, BevFeed  # noqa: E402
 from octave_bridge.foxglove_ws import FoxgloveBevHub  # noqa: E402
 from octave_bridge.io_server import BridgeState, CosimIoServer  # noqa: E402
-from octave_bridge.runtime import close_octave, plan_tick  # noqa: E402
+from octave_bridge.runtime import (  # noqa: E402
+    close_octave,
+    last_ipc,
+    last_plan_timing,
+    plan_tick,
+    warm_octave,
+)
 from octave_bridge.semantic_map import build_view, result_to_cmd_blob  # noqa: E402
+
+_LIB = _ROOT / "src" / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from _perf import PerfAgg  # noqa: E402
 
 STOP = False
 _CLEANED = False
@@ -32,11 +43,18 @@ def _on_sig(signum: int, _frame: object) -> None:
     print(f"[octave_bridge] signal {signum}", flush=True)
 
 
+_BEV_ASYNC: BevAsync | None = None
+
+
 def _cleanup(srv: CosimIoServer | None, hub: FoxgloveBevHub | None) -> None:
-    global _CLEANED
+    global _CLEANED, _BEV_ASYNC
     if _CLEANED:
         return
     _CLEANED = True
+    ba = _BEV_ASYNC
+    _BEV_ASYNC = None
+    if ba is not None:
+        ba.stop()
     if srv is not None:
         srv.stop()
     if hub is not None:
@@ -45,6 +63,7 @@ def _cleanup(srv: CosimIoServer | None, hub: FoxgloveBevHub | None) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    global _BEV_ASYNC
     ap = argparse.ArgumentParser(description="Host Octave planning bridge (gf_carla_io twin)")
     ap.add_argument("--host", default=os.environ.get("GF_OCTAVE_BRIDGE_HOST", "0.0.0.0"))
     ap.add_argument(
@@ -111,9 +130,26 @@ def main(argv: list[str] | None = None) -> int:
             hub = None
 
     plan_seq = 0
+    perf = PerfAgg("octave")
+    budget_s = 0.05
+    try:
+        budget_s = max(0.01, float(os.environ.get("GF_PLAN_BUDGET_S") or "0.05"))
+    except ValueError:
+        budget_s = 0.05
+    bev_async: BevAsync | None = None
+    if bev is not None and hub is not None:
+        bev_async = BevAsync(bev, hub)
+        _BEV_ASYNC = bev_async
+    try:
+        warm_octave()
+    except Exception as exc:
+        print(f"[octave_bridge] ERROR octave warm: {exc}", flush=True)
+        _cleanup(None, hub)
+        return 1
     print(
-        "[octave_bridge] engine=octave (.m) foxglove="
-        f"{'ws://127.0.0.1:' + str(args.foxglove_port) if hub else 'off'}",
+        "[octave_bridge] engine=octave (.m) trigger=FAKE_PERC window=1 pack=numeric "
+        f"budget={1000.0 * budget_s:.0f}ms foxglove="
+        f"{'ws://127.0.0.1:' + str(args.foxglove_port) + ' async' if hub else 'off'}",
         flush=True,
     )
 
@@ -124,11 +160,25 @@ def main(argv: list[str] | None = None) -> int:
             return None
         plan_seq += 1
         result = plan_tick(view, seq=plan_seq)
-        if bev is not None and hub is not None:
-            cam = bev.update(view, result)
-            if cam is not None:
-                hub.publish_row(cam)
-        return result_to_cmd_blob(result, speed_mps=view.ego.speed_mps, seq=plan_seq)
+        wall_s, m_s, ffi_s = last_plan_timing()
+        cmd = result_to_cmd_blob(result, speed_mps=view.ego.speed_mps, seq=plan_seq)
+        if bev_async is not None:
+            bev_async.submit(view, result)
+        perf.add("plan", wall_s)
+        perf.add("m", m_s)
+        perf.add("ffi", ffi_s)
+        if wall_s > budget_s:
+            perf.count("over_budget")
+        extra = {
+            "trig": "perc",
+            "seq": plan_seq,
+            "budget_ms": f"{1000.0 * budget_s:.0f}",
+            "ipc": last_ipc(),
+        }
+        if bev_async is not None:
+            extra["bev_drop"] = bev_async.dropped()
+        perf.tick(extra=extra)
+        return cmd
 
     srv = CosimIoServer(host=args.host, port=args.port, on_tick=on_tick)
     atexit.register(lambda: _cleanup(srv, hub))

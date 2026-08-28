@@ -13,6 +13,10 @@ CAL = {
     "d_cal_cap_m": 120.0,
     "d_fov_conf_m": 120.0,
     "d_see_lane_bad_m": 12.0,
+    "vis_up_alpha": 0.08,
+    "cutin_head_gain": 1.20,
+    "acc_time_gap_s": 1.7,
+    "acc_gap_min_m": 8.0,
     "aeb_decel_mps2": 6.0,
     "aeb_d_min_m": 4.5,
     "aeb_margin_m": 2.0,
@@ -65,25 +69,64 @@ def plan_v_cap_vis(D_see: float) -> float:
     return min(vc, p["cruise_v_mps"])
 
 
-def plan_horizon(v: float, lane_valid: bool, e_y: float, c1: float, x_end: float) -> tuple[float, float]:
+def plan_vis_slew(raw: float, prev: float, alpha: float) -> float:
+    if prev <= 0.0:
+        return raw
+    if raw < prev:
+        return raw
+    return prev + alpha * (raw - prev)
+
+
+def plan_horizon(
+    v: float,
+    lane_valid: bool,
+    e_y: float,
+    c1: float,
+    x_end: float,
+    D_occ: float | None = None,
+    D_fov: float | None = None,
+    D_see_prev: float = 0.0,
+    T_plan_prev: float = 0.0,
+) -> tuple[float, float]:
     p = CAL
-    D_fov = p["d_fov_conf_m"]
+    if D_occ is None:
+        D_occ = p["d_cal_cap_m"]
+    if D_fov is None:
+        D_fov = p["d_fov_conf_m"]
     D_vr = p["d_cal_cap_m"]
     if lane_usable(lane_valid, e_y, c1):
         if x_end > 0.5:
             D_vr = x_end
     else:
         D_vr = min(D_vr, p["d_see_lane_bad_m"])
-    D_see = min(D_fov, D_vr, p["d_cal_cap_m"])
-    T_plan = min(p["t_base_s"], D_see / max(v, p["traj_speed_floor_mps"]))
-    T_plan = max(T_plan, p["t_plan_min_s"])
+    D_raw = min(D_fov, D_vr, D_occ, p["d_cal_cap_m"])
+    D_see = plan_vis_slew(D_raw, D_see_prev, p.get("vis_up_alpha", 0.08))
+    T_raw = min(p["t_base_s"], D_see / max(v, p["traj_speed_floor_mps"]))
+    T_raw = max(T_raw, p["t_plan_min_s"])
+    T_plan = plan_vis_slew(T_raw, T_plan_prev, p.get("vis_up_alpha", 0.08))
     return D_see, T_plan
 
 
+def plan_obj_weight(lat: float, heading: float = 0.0, is_ped: float = 0.0) -> float:
+    p = CAL
+    w = plan_lat_weight(lat)
+    if is_ped != 0.0 and abs(lat) < p["lat_aeb_m"]:
+        w = max(w, 0.85)
+    if lat * heading < -0.02:
+        w = min(1.0, w + p.get("cutin_head_gain", 1.20) * min(abs(heading), 0.5))
+    return w
+
+
 def plan_v_at_s(
-    s: float, v_ego: float, lead_valid: bool, d: float, rel: float, lat: float, D_see: float, lane_ok: bool
+    s: float,
+    v_ego: float,
+    lead_valid: bool,
+    d: float,
+    rel: float,
+    lat: float,
+    D_see: float,
+    lane_ok: bool,
 ) -> float:
-    del v_ego, rel
     p = CAL
     v_cap = plan_v_cap_vis(D_see)
     if not lane_ok:
@@ -93,30 +136,41 @@ def plan_v_at_s(
     vi = v_cap
     if (not lead_valid) or d > p["lon_max_d_m"]:
         return vi
-    w = plan_lat_weight(lat)
+    w = plan_obj_weight(lat, 0.0, 0.0)
     if w <= 0.0:
         return vi
     gap = d - s
     a = max(p["aeb_decel_mps2"], 0.5)
     if gap <= p["aeb_d_min_m"]:
         return 0.0 if w > 0.5 else vi
-    v_safe = math.sqrt(max(0.0, 2.0 * a * (gap - p["aeb_d_min_m"])))
-    return min(vi, v_safe * w + v_cap * (1.0 - w))
+    vv = max(0.0, v_ego)
+    v_obj = max(0.0, vv + rel)
+    v_kin = math.sqrt(max(0.0, v_obj * v_obj + 2.0 * a * (gap - p["aeb_d_min_m"])))
+    v_gap = max(0.0, (gap - p["acc_gap_min_m"]) / max(p["acc_time_gap_s"], 0.2))
+    v_lim = min(v_kin, v_gap)
+    return min(vi, v_lim * w + v_cap * (1.0 - w))
 
 
-def lon_a_req(v: float, lead_valid: bool, d: float, rel: float, lat: float) -> float:
+def lon_a_req(v: float, lead_valid: bool, d: float, rel: float, lat: float, w: float | None = None) -> float:
     p = CAL
-    w = plan_lat_weight(lat)
+    if w is None:
+        w = plan_lat_weight(lat)
     if (not lead_valid) or w <= 0.0 or d > p["lon_max_d_m"]:
         return 0.0
     d_use = max(d, 0.05)
     a = max(p["aeb_decel_mps2"], 0.5)
     gap = max(d_use - p["aeb_d_min_m"], 0.2)
-    v_safe = math.sqrt(max(0.0, 2.0 * a * gap))
     vv = max(0.0, v)
+    v_obj = max(0.0, vv + rel)
     a_req = 0.0
-    if vv > v_safe:
-        a_req = min(a, (vv * vv) / (2.0 * gap))
+    if v_obj < 0.3:
+        v_safe = math.sqrt(max(0.0, 2.0 * a * gap))
+        if vv > v_safe:
+            a_req = min(a, (vv * vv) / (2.0 * gap))
+    else:
+        v_safe = math.sqrt(v_obj * v_obj + 2.0 * a * gap)
+        if vv > v_safe:
+            a_req = min(a, (vv * vv - v_obj * v_obj) / (2.0 * gap))
     if d_use < p["aeb_d_min_m"]:
         a_req = a
     return a_req * w
@@ -173,12 +227,21 @@ def m_lon_acc_aeb(
 ) -> dict:
     p = CAL
     v = max(0.0, v)
-    D_see, _t = plan_horizon(v, lane_valid, e_y, c1, 1.0e6)
+    D_fov = p["d_fov_conf_m"]
+    D_occ = p["d_cal_cap_m"]
+    if lead_valid:
+        w = plan_obj_weight(lead_lat_m)
+        if w >= 0.40 and w > 0.85:
+            D_occ = min(D_occ, max(0.0, d - 0.5 * 4.5))
+    D_see, _t = plan_horizon(v, lane_valid, e_y, c1, 1.0e6, D_occ, D_fov, 0.0, 0.0)
     lane_ok = lane_usable(lane_valid, e_y, c1)
     if abs(e_y) > p["lat_ey_slow_m"]:
         lane_ok = False
     v_plan = plan_v_at_s(0.0, v, lead_valid, d, rel, lead_lat_m, D_see, lane_ok)
     a_req = lon_a_req(v, lead_valid, d, rel, lead_lat_m)
+    if D_see < 40.0:
+        a_max = max(p["aeb_decel_mps2"], 0.5)
+        a_req = min(a_max, a_req * 1.25)
     if not lane_ok:
         v_plan = 0.0
     return lon_exec(v, v_plan, a_req)
@@ -248,3 +311,8 @@ def test_generate_lon_header() -> None:
     )
     assert "gf_octave_planning::m_lon_acc_aeb" in text
     assert "lon_exec" in text
+    tick = (root / "projects/afc/apps/planning/driving/oct_gen/m_plan_tick.hpp").read_text(
+        encoding="utf-8"
+    )
+    assert "gf_octave_planning::m_plan_tick" in tick
+    assert "m_plan_tick_pack" not in tick

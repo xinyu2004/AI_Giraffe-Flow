@@ -2,8 +2,8 @@
 #include "frame_source.hpp"
 
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
+#include "gf_ara/log/logger.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
-#include "gf_gen/proxy/ego_motion_proxy.hpp"
 #include "gf_gen/proxy/perception__in__st_proxy.hpp"
 #include "gf_gen/skeleton/perception_message__out__st_skeleton.hpp"
 
@@ -14,11 +14,13 @@
 
 #include "gf_channel/gf_channel.h"
 #include "gf_channel/boundary_pods.h"
+#include "gf_app/frame_watch.hpp"
 
 #include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -37,6 +39,37 @@ std::uint32_t EnvU32(const char* key, std::uint32_t def) {
     return def;
   }
   return static_cast<std::uint32_t>(std::strtoul(v, nullptr, 10));
+}
+
+// 1 = every Out; N = on-change + every Nth (default 40 ≈ 2s at 20 Hz).
+int LogEvery() {
+  const char* v = std::getenv("GF_APP_LOG_EVERY");
+  if (!v || !v[0]) {
+    return 40;
+  }
+  const int n = std::atoi(v);
+  return n < 1 ? 1 : n;
+}
+
+bool FMoved(float a, float b, float eps) { return std::fabs(a - b) > eps; }
+
+const char* FrameSourceLabel() {
+  const char* v = std::getenv("GF_FRAME_SOURCE");
+  if (!v || !v[0]) {
+    v = std::getenv("GF_ACTIVE_SOURCE");
+  }
+#if defined(GF_FCM_HAS_FRAME_INGEST)
+  if (!v || !v[0]) {
+    v = gf_gen::frame_ingest::kActiveSource;
+  }
+#endif
+  return (v && v[0]) ? v : "none";
+}
+
+// colorbar/synth keep camera-clock + keepalive until that work is filled in.
+bool ColorbarReserved() {
+  const char* s = FrameSourceLabel();
+  return std::strcmp(s, "colorbar") == 0 || std::strcmp(s, "synth") == 0;
 }
 
 const char* FakePercSlot() {
@@ -356,6 +389,8 @@ const char* KindName(gf_fcm::FrameSourceKind k) {
       return "file";
     case gf_fcm::FrameSourceKind::CarlaFile:
       return "carla_file";
+    case gf_fcm::FrameSourceKind::CameraShm:
+      return "camera_shm";
   }
   return "?";
 }
@@ -373,34 +408,71 @@ int main() {
 
   const auto frame_kind = gf_fcm::ParseFrameSource(nullptr);
   const auto backend = gf_fcm::ParseBackend(nullptr);
-  // Keep-alive cadence when In/Ego/camera stall — republish frozen Out, never clear.
+  const bool colorbar_reserved = ColorbarReserved();
+  // colorbar/synth only: keep Out keepalive. Other sources: PHM alive, no freeze Send.
   const std::uint32_t keep_ms = EnvU32("GF_OUT_KEEPALIVE_MS", 50);
   const char* model_env = std::getenv("GF_ONNX_MODEL");
   const std::string model_path = (model_env && model_env[0]) ? model_env : "";
 
   gf_fcm::FrameSource frames(frame_kind);
   gf_gen::Perception_In_StProxy in_sub{};
-  gf_gen::EgoMotionProxy ego_sub{};
   gf_gen::Perception_MESSAGE_Out_StSkeleton out_pub{};
 
   GfChannel* fake_ch = nullptr;
   std::uint64_t fake_seq = 0;
   float last_in_speed = -1.0f;
+  std::optional<std::uint32_t> last_in_frame;
+  std::optional<std::uint64_t> last_in_ts;
 
   std::uint64_t out_seq = 0;
   std::uint64_t last_keep_ns = 0;
+  std::uint32_t last_image_frame_id = 0;
   gf_gen::Perception_MESSAGE_Out_St last_out{};
   bool have_frozen = false;
   std::uint64_t last_truth_seq = 0;
   std::uint64_t last_truth_ts = 0;
-  std::uint64_t freeze_log_at = 0;
+  int last_truth_lanes = 0;
+  int last_truth_ego_lane = 0;
+  const int log_every = LogEvery();
+  gf_app::EnsureDiagLogSinks();
+  gf_app::FrameWatch rx_fake;
+  gf_app::FrameWatch rx_in;
+  gf_app::FrameWatch tx_out;
+  rx_fake.Init("fcm", "rx.fake_perc");
+  rx_fake.BindChannel("fake_perc");
+  rx_in.Init("fcm", "rx.perc_in");
+  rx_in.BindService("Perception_In_St");
+  tx_out.Init("fcm", "tx.out");
+  tx_out.BindService("Perception_MESSAGE_Out_St");
+  tx_out.BindCameraCeiling();
+  const char* last_log_mode = "";
+  int last_log_vd = -1;
+  int last_log_cipv = -1;
+  int last_log_lh = -1;
+  int last_log_lanes = -1;
+  int last_log_ego_lane = -1;
+  float last_log_lead = 0.0f;
+  float last_log_lat = 0.0f;
+  float last_log_rel_v = 0.0f;
+  float last_log_speed = -1.0f;
+  bool last_log_had_lead = false;
 
-  std::cout << "gf-perception-fcm: start frame_source=" << KindName(frame_kind)
+  std::cout << "gf-perception-fcm: start frame_source=" << FrameSourceLabel()
+            << " kind=" << KindName(frame_kind)
             << " backend="
             << (backend == gf_fcm::BackendKind::Onnx ? "onnx" : "stub")
             << " fake_perc=" << FakePercSlot()
-            << " (SIL fake_perc via GfChannel; FCM algo not production)"
-            << " keepalive_ms=" << keep_ms << std::endl;
+            << " (SIL fake_perc via GfChannel; FCM algo not production)";
+  if (colorbar_reserved) {
+    std::cout << " out=on-change keepalive_ms=" << keep_ms << " (colorbar reserved)";
+  } else {
+    std::cout << " out=on-change (no freeze keepalive)";
+  }
+  std::cout << " stdout=on-change+/" << log_every
+            << " m_frame_id=camera-only out_seq=update-only"
+            << " frame_watch=identity+budget"
+            << " out[" << tx_out.PolicyHint() << "]"
+            << " in[" << rx_in.PolicyHint() << "]" << std::endl;
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
@@ -412,120 +484,168 @@ int main() {
       fake_ch = gf_channel_open(FakePercSlot());
     }
 
-    std::optional<std::uint32_t> in_frame;
-    std::optional<std::uint64_t> in_ts;
     {
       auto taken = in_sub.Take();
       if (taken && taken.Value().has_value()) {
-        in_frame = taken.Value()->ipc_frame_counter;
-        in_ts = taken.Value()->timestamp_ns;
+        last_in_frame = taken.Value()->ipc_frame_counter;
+        last_in_ts = taken.Value()->timestamp_ns;
         last_in_speed = taken.Value()->vehicle_speed;
+        rx_in.Observe(*last_in_frame, *last_in_ts);
       }
     }
 
     const TruthSnapshot truth = ReadFakePerc(fake_ch, &fake_seq);
+    if (truth.file_ok) {
+      rx_fake.Observe(truth.seq, truth.timestamp_ns);
+    }
     const bool truth_fresh =
         truth.file_ok &&
         (truth.seq != last_truth_seq || truth.timestamp_ns != last_truth_ts ||
          (!have_frozen &&
           (truth.lead_valid || truth.lane_count > 0 || truth.dyn_n > 0)));
 
-    auto publish_out = [&](std::uint64_t ts, std::uint32_t frame_id) {
-      // Prefer Perception_In timestamp when present (real contract).
-      if (in_ts && *in_ts > 0) {
-        ts = *in_ts;
+    auto publish_out = [&](std::uint64_t ts, std::uint32_t image_frame_id) {
+      // image_frame_id: camera ingest seq only. No camera → 0.
+      if (!truth_fresh && last_in_ts && *last_in_ts > 0) {
+        ts = *last_in_ts;
       }
       gf_gen::Perception_MESSAGE_Out_St out{};
       const char* mode = "update";
       if (truth_fresh) {
-        FillOutFromTruth(out, truth, ts, frame_id);
+        FillOutFromTruth(out, truth, ts, image_frame_id);
         last_out = out;
         have_frozen = true;
         last_truth_seq = truth.seq;
         last_truth_ts = truth.timestamp_ns;
-      } else if (have_frozen) {
+        last_truth_lanes = static_cast<int>(truth.lane_count);
+        last_truth_ego_lane = static_cast<int>(truth.ego_lane_index_from_left);
+      } else if (have_frozen && colorbar_reserved) {
         out = last_out;
         out.Perception_DYN_OBJ_Out.m_time_stamp = ts / 1000ULL;
         out.Perception_LH_Out.m_time_stamp = ts / 1000ULL;
         out.Perception_LA_Out.m_time_stamp = ts / 1000ULL;
-        out.Perception_DYN_OBJ_Out.m_frame_id = frame_id;
-        out.Perception_LH_Out.m_frame_id = frame_id;
-        out.Perception_LA_Out.m_frame_id = frame_id;
         mode = "freeze";
-      } else {
-        FillOutFromTruth(out, TruthSnapshot{}, ts, frame_id);
+      } else if (colorbar_reserved) {
+        FillOutFromTruth(out, TruthSnapshot{}, ts, 0);
         mode = "idle";
+      } else {
+        gf_ara::log::Logger::Instance().Error(
+            "fcm", "tx.out rejected freeze/idle copy (not a new perception sample)");
+        return;
       }
       if (!static_cast<bool>(out_pub.Send(out))) {
         return;
       }
+      if (std::strcmp(mode, "update") == 0) {
+        ++out_seq;
+        tx_out.Observe(out_seq, ts);
+      }
       const auto& dyn = out.Perception_DYN_OBJ_Out;
       const auto& lh = out.Perception_LH_Out;
       const auto& la = out.Perception_LA_Out;
-      const bool log_it =
-          (std::strcmp(mode, "freeze") != 0) || (out_seq - freeze_log_at >= 50);
-      if (std::strcmp(mode, "freeze") == 0) {
-        if (log_it) {
-          freeze_log_at = out_seq;
-        } else {
-          ++out_seq;
-          return;
+      const int vd = static_cast<int>(dyn.m_OBJ_VD_Count);
+      const int cipv = static_cast<int>(dyn.m_OBJ_VD_CIPV_ID);
+      const int lh_n = static_cast<int>(lh.m_hostline_num);
+      const int lanes = (std::strcmp(mode, "update") == 0)
+                            ? static_cast<int>(truth.lane_count)
+                            : last_truth_lanes;
+      const int ego_lane = (std::strcmp(mode, "update") == 0)
+                               ? static_cast<int>(truth.ego_lane_index_from_left)
+                               : last_truth_ego_lane;
+      const bool had_lead = vd > 0;
+      const float lead = had_lead ? dyn.m_Obj_item[0].m_OBJ_Long_Distance : 0.0f;
+      const float lat = had_lead ? dyn.m_Obj_item[0].m_OBJ_Lat_Distance : 0.0f;
+      const float rel_v =
+          had_lead ? dyn.m_Obj_item[0].m_OBJ_Relative_Long_Velocity : 0.0f;
+      const bool changed =
+          std::strcmp(mode, last_log_mode) != 0 || vd != last_log_vd ||
+          cipv != last_log_cipv || lh_n != last_log_lh || lanes != last_log_lanes ||
+          ego_lane != last_log_ego_lane || had_lead != last_log_had_lead ||
+          (had_lead && (FMoved(lead, last_log_lead, 0.5f) ||
+                        FMoved(lat, last_log_lat, 0.5f) ||
+                        FMoved(rel_v, last_log_rel_v, 0.2f))) ||
+          (last_in_speed >= 0.0f && FMoved(last_in_speed, last_log_speed, 0.2f));
+      if (log_every <= 1 || changed ||
+          (out_seq % static_cast<std::uint64_t>(log_every) == 0)) {
+        std::cout << "gf-perception-fcm: out#" << out_seq << " mode=" << mode
+                  << " vd=" << vd << " ped=" << static_cast<int>(dyn.m_OBJ_Ped_Count)
+                  << " cipv=" << cipv << " lh=" << lh_n
+                  << " la=" << static_cast<int>(la.m_adj_line_num)
+                  << " lanes=" << lanes << " ego_lane=" << ego_lane;
+        if (had_lead) {
+          std::cout << " lead=" << lead << " lat=" << lat << " rel_v=" << rel_v;
         }
+        if (last_in_frame) {
+          std::cout << " in_frame=" << *last_in_frame;
+        }
+        if (last_in_speed >= 0.0f) {
+          std::cout << " in_speed=" << last_in_speed;
+        }
+        std::cout << std::endl;
+        last_log_mode = mode;
+        last_log_vd = vd;
+        last_log_cipv = cipv;
+        last_log_lh = lh_n;
+        last_log_lanes = lanes;
+        last_log_ego_lane = ego_lane;
+        last_log_had_lead = had_lead;
+        last_log_lead = lead;
+        last_log_lat = lat;
+        last_log_rel_v = rel_v;
+        last_log_speed = last_in_speed;
       }
-      std::cout << "gf-perception-fcm: out#" << out_seq << " mode=" << mode
-                << " vd=" << static_cast<int>(dyn.m_OBJ_VD_Count)
-                << " ped=" << static_cast<int>(dyn.m_OBJ_Ped_Count)
-                << " cipv=" << static_cast<int>(dyn.m_OBJ_VD_CIPV_ID)
-                << " lh=" << static_cast<int>(lh.m_hostline_num)
-                << " la=" << static_cast<int>(la.m_adj_line_num)
-                << " lanes=" << static_cast<int>(truth.lane_count)
-                << " ego_lane=" << static_cast<int>(truth.ego_lane_index_from_left);
-      if (dyn.m_OBJ_VD_Count > 0) {
-        std::cout << " lead=" << dyn.m_Obj_item[0].m_OBJ_Long_Distance
-                  << " lat=" << dyn.m_Obj_item[0].m_OBJ_Lat_Distance
-                  << " rel_v=" << dyn.m_Obj_item[0].m_OBJ_Relative_Long_Velocity;
-      }
-      if (in_frame) {
-        std::cout << " in_frame=" << *in_frame;
-      }
-      if (last_in_speed >= 0.0f) {
-        std::cout << " in_speed=" << last_in_speed;
-      }
-      std::cout << std::endl;
-      ++out_seq;
     };
 
-    if (frame_kind == gf_fcm::FrameSourceKind::None) {
-      // Wave-A: prefer In/Ego stamp; if stalled, keepalive frozen Out (no clear).
-      bool sent = false;
-      if (in_ts.has_value()) {
-        publish_out(*in_ts, in_frame ? *in_frame : static_cast<std::uint32_t>(out_seq));
-        sent = true;
-        last_keep_ns = gf_fcm::FrameSource::NowNs();
-      }
-      if (!sent) {
-        auto ego_taken = ego_sub.Take();
-        if (ego_taken && ego_taken.Value().has_value()) {
-          const auto& ego = *ego_taken.Value();
-          publish_out(ego.timestamp_ns, static_cast<std::uint32_t>(out_seq));
-          sent = true;
-          last_keep_ns = gf_fcm::FrameSource::NowNs();
+    const auto keep_due = [&]() {
+      const std::uint64_t now = gf_fcm::FrameSource::NowNs();
+      return last_keep_ns == 0 ||
+             (now - last_keep_ns >=
+              static_cast<std::uint64_t>(keep_ms) * 1000000ULL);
+    };
+
+    if (!colorbar_reserved) {
+      if (frame_kind != gf_fcm::FrameSourceKind::None) {
+        if (auto frame = frames.Poll()) {
+          if (backend == gf_fcm::BackendKind::Onnx) {
+            (void)gf_fcm::DetectOnnxOrHeuristic(*frame, model_path);
+          } else {
+            (void)gf_fcm::DetectStubFrame(*frame, out_seq);
+          }
+          last_image_frame_id = static_cast<std::uint32_t>(frame->meta.seq);
         }
       }
-      if (!sent) {
-        const std::uint64_t now = gf_fcm::FrameSource::NowNs();
-        if (last_keep_ns == 0 ||
-            (now - last_keep_ns >=
-             static_cast<std::uint64_t>(keep_ms) * 1000000ULL)) {
-          last_keep_ns = now;
-          publish_out(now, static_cast<std::uint32_t>(out_seq));
-        }
+      if (truth_fresh) {
+        const std::uint64_t ts =
+            truth.timestamp_ns ? truth.timestamp_ns
+                               : (last_in_ts && *last_in_ts > 0
+                                      ? *last_in_ts
+                                      : gf_fcm::FrameSource::NowNs());
+        const std::uint32_t img =
+            (frame_kind == gf_fcm::FrameSourceKind::None) ? 0u : last_image_frame_id;
+        publish_out(ts, img);
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
 
-    // Frame camera mode: new frame → Out; no frame → keepalive freeze (no timeout clear).
+    // colorbar/synth reserved: camera clock + keepalive unchanged.
+    if (frame_kind == gf_fcm::FrameSourceKind::None) {
+      if (truth_fresh) {
+        const std::uint64_t ts =
+            truth.timestamp_ns ? truth.timestamp_ns
+                               : (last_in_ts && *last_in_ts > 0
+                                      ? *last_in_ts
+                                      : gf_fcm::FrameSource::NowNs());
+        publish_out(ts, 0);
+        last_keep_ns = gf_fcm::FrameSource::NowNs();
+      } else if (have_frozen && keep_due()) {
+        last_keep_ns = gf_fcm::FrameSource::NowNs();
+        publish_out(last_keep_ns, 0);
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      continue;
+    }
+
     if (auto frame = frames.Poll()) {
       last_keep_ns = gf_fcm::FrameSource::NowNs();
       if (backend == gf_fcm::BackendKind::Onnx) {
@@ -534,21 +654,21 @@ int main() {
         (void)gf_fcm::DetectStubFrame(*frame, out_seq);
       }
       const std::uint64_t ts =
-          frame->meta.timestamp_ns != 0 ? frame->meta.timestamp_ns
-                                        : (in_ts ? *in_ts : last_keep_ns);
+          frame->meta.timestamp_ns != 0
+              ? frame->meta.timestamp_ns
+              : (last_in_ts && *last_in_ts > 0 ? *last_in_ts : last_keep_ns);
       publish_out(ts, static_cast<std::uint32_t>(frame->meta.seq));
-    } else {
-      const std::uint64_t now = gf_fcm::FrameSource::NowNs();
-      if (last_keep_ns == 0 ||
-          (now - last_keep_ns >=
-           static_cast<std::uint64_t>(keep_ms) * 1000000ULL)) {
-        last_keep_ns = now;
-        publish_out(in_ts ? *in_ts : now, static_cast<std::uint32_t>(out_seq));
-      }
+    } else if (truth_fresh) {
+      const std::uint64_t ts =
+          truth.timestamp_ns ? truth.timestamp_ns : gf_fcm::FrameSource::NowNs();
+      publish_out(ts, 0);
+      last_keep_ns = gf_fcm::FrameSource::NowNs();
+    } else if (have_frozen && keep_due()) {
+      last_keep_ns = gf_fcm::FrameSource::NowNs();
+      publish_out(last_keep_ns, 0);
     }
 
-    (void)ego_sub.Take();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
   if (fake_ch) {
     gf_channel_close(fake_ch);

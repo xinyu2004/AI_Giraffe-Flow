@@ -11,19 +11,17 @@
 | 只要 EM、不要 GMT 旁路 | `GF_GMT_DEPEND=0` + `run_sil.sh`，或直接 `gf_em_daemon / gf_em_daemon / giraffe_launch(debug)(debug)` | 无 Foxglove / inject / DoIP |
 | GMT inject | `GF_INJECT_MODE=playhead` 等 | `GMT_depend_launch` 停 EM，再起 RouDi+consumers+inject |
 
-配置真源：`gf-config → compose → deploy_config.hpp`。`GF_CARLA_*` 仅调试覆盖；相机路径默认在 ingest/gateway 二进制内。`carla_bridge` 以实体拷贝进 `share/frame_ingest/modules/`（非绝对 symlink）。
+配置真源：`gf-config → compose → deploy_config.hpp`。`GF_CARLA_*` 仅调试覆盖。联仿：`gf_carla_io` + `giraffe_client`（GfChannel / TCP），**无** Python `share/frame_ingest/modules/carla_bridge`。
 
 ## Layout
 
 ```text
 build-sil/runtime/
-  bin/     gf_em_daemon / gf_em_daemon / giraffe_launch(debug)(debug), gf_em_daemon, iox-roudi, dlt-daemon, gf_frame_ingest, apps
+  bin/     gf_em_daemon, giraffe_launch(debug), iox-roudi, dlt-daemon,
+           gf_frame_ingest, gf_carla_io, gf_frame_colorbar, gf_frame_replay, apps
   lib/     libgf_ara_*.so, libgf_osal.so, libgf_channel.so, libdlt.so*
   etc/     iox_roudi.toml
-  platform/  SKU yaml（作者态/兼容；行为真源在 hpp）
-  share/frame_ingest/
-    gf_frame_ingest.py, gf_channel_py.py
-    modules/carla_bridge/   # staged copy
+  platform/  仅 GF_STAGE_PLATFORM=1 时拷贝（作者态；行为真源在 hpp）
 ```
 
 ## 运行

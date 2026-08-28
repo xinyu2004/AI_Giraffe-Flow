@@ -2,6 +2,11 @@
 % C++ plan_cal.hpp is generated later — do not keep hpp in lockstep until Host signs off.
 
 function p = gf_plan_cal()
+  persistent cache
+  if ~isempty(cache)
+    p = cache;
+    return
+  end
   %% Corridor (lat, ego-frame y) — weights, not ACC/AEB modes
   p.lat_acc_m = 3.2;
   p.lat_aeb_m = 8.0;
@@ -79,4 +84,5 @@ function p = gf_plan_cal()
   %% Path samples (BEV)
   p.traj_blend_m = 14.0;
   p.traj_speed_floor_mps = 0.2;
+  cache = p;
 end

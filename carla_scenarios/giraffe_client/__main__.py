@@ -30,6 +30,7 @@ from _ctrl_tip import TipSender  # noqa: E402
 from _fake_perc_pack import pack_fake_perc_pod  # noqa: E402
 from _lane_truth import measure_lane_topology  # noqa: E402
 from _objects_truth import collect_dyn_objects  # noqa: E402
+from _perf import PerfAgg, dump_ue_settings, perf_enabled  # noqa: E402
 
 # POD magic / version — keep in sync with boundary_pods.h / cosim_protocol.h
 GF_CH_VEHICLE_STATE_MAGIC = 0x47565354
@@ -72,6 +73,12 @@ def _on_sig(signum: int, _frame: object) -> None:
 def _env(key: str, default: str = "") -> str:
     v = os.environ.get(key)
     return v if v is not None and v != "" else default
+
+
+def _giraffe_cam_on() -> bool:
+    """Host default off. Board/surround: GF_GIRAFFE_CAM=1."""
+    v = (_env("GF_GIRAFFE_CAM", "0")).strip().lower()
+    return v in ("1", "on", "true", "yes")
 
 
 def _now_ns() -> int:
@@ -118,6 +125,10 @@ class CosimSock:
     def connect(self, timeout_s: float = 5.0) -> None:
         s = socket.create_connection((self.host, self.port), timeout=timeout_s)
         s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 64 * 1024)
+        except OSError:
+            pass
         self.sock = s
         print(f"[giraffe_client] cosim connected {self.host}:{self.port}", flush=True)
 
@@ -270,21 +281,29 @@ def run() -> int:
     cosim_host = _env("GF_COSIM_HOST", "127.0.0.1")
     cosim_port = int(_env("GF_COSIM_PORT", "7600"))
     wait_hero_s = float(_env("GF_CARLA_WAIT_HERO_S", "120"))
+    want_cam = _giraffe_cam_on()
 
-    # Host camera rig (前视+环视) — no GF_PROJECT_DIR.
-    _lib = Path(__file__).resolve().parents[1] / "src" / "lib"
-    if str(_lib) not in sys.path:
-        sys.path.insert(0, str(_lib))
-    from _camera_mount import load_host_cameras  # noqa: WPS433
+    host_cams: list[Any] = []
+    if want_cam:
+        # Host camera rig (前视+环视) — no GF_PROJECT_DIR.
+        _lib = Path(__file__).resolve().parents[1] / "src" / "lib"
+        if str(_lib) not in sys.path:
+            sys.path.insert(0, str(_lib))
+        from _camera_mount import load_host_cameras  # noqa: WPS433
 
-    host_cams = load_host_cameras(enabled_only=True)
-    filt = _env("GF_COSIM_CAMERAS", "").strip()
-    if filt:
-        allow = {x.strip() for x in filt.split(",") if x.strip()}
-        host_cams = [c for c in host_cams if c.id in allow]
-        if not host_cams:
-            print("[giraffe_client] ERROR: GF_COSIM_CAMERAS filter empty set", file=sys.stderr)
-            return 2
+        host_cams = load_host_cameras(enabled_only=True)
+        filt = _env("GF_COSIM_CAMERAS", "").strip()
+        if filt:
+            allow = {x.strip() for x in filt.split(",") if x.strip()}
+            host_cams = [c for c in host_cams if c.id in allow]
+            if not host_cams:
+                print("[giraffe_client] ERROR: GF_COSIM_CAMERAS filter empty set", file=sys.stderr)
+                return 2
+    else:
+        print(
+            "[giraffe_client] camera off (GF_GIRAFFE_CAM=0) — no RGB/NV12/send_camera",
+            flush=True,
+        )
 
     try:
         import carla  # type: ignore
@@ -299,13 +318,14 @@ def run() -> int:
 
     print(
         f"[giraffe_client] UE {host}:{port} cosim->{cosim_host}:{cosim_port} "
-        f"cams={','.join(c.id for c in host_cams)}",
+        f"cam={'on ' + ','.join(c.id for c in host_cams) if want_cam else 'off'}",
         flush=True,
     )
 
     client = carla.Client(host, port)
     client.set_timeout(float(_env("GF_CARLA_CONNECT_TIMEOUT_S", "10")))
     world = client.get_world()
+    dump_ue_settings(world)
 
     cosim = CosimSock(cosim_host, cosim_port)
     deadline = time.monotonic() + float(_env("GF_COSIM_WAIT_S", "120"))
@@ -319,6 +339,7 @@ def run() -> int:
     if cosim.sock is None:
         print("[giraffe_client] ERROR: cannot connect gf_carla_io", file=sys.stderr)
         return 3
+    cosim.try_recv_cmd()  # drain HELLO; overlay-latest, do not wait per perc
 
     print("[giraffe_client] waiting for role_name=hero...", flush=True)
     hero = None
@@ -333,14 +354,34 @@ def run() -> int:
         cosim.close()
         return 4
 
-    print(f"[giraffe_client] attached hero id={hero.id}", flush=True)
+    loop_sleep_s = 0.05
+    try:
+        loop_sleep_s = max(0.0, float(_env("GF_COSIM_LOOP_S", "0.05")))
+    except ValueError:
+        loop_sleep_s = 0.05
+    cmd_wait_s = 2.0
+    try:
+        cmd_wait_s = max(0.2, float(_env("GF_COSIM_CMD_WAIT_S", "2")))
+    except ValueError:
+        cmd_wait_s = 2.0
 
-    bp_lib = world.get_blueprint_library()
+    print(
+        f"[giraffe_client] attached hero id={hero.id} "
+        f"cosim overlay-latest (no wait; first-cmd log after {cmd_wait_s:.1f}s)",
+        flush=True,
+    )
+
+    bp_lib = world.get_blueprint_library() if want_cam else None
     latest_rgb: dict[str, Optional[bytes]] = {c.id: None for c in host_cams}
+    latest_cam_t: dict[str, float] = {}
     lock = threading.Lock()
     sensors: dict[str, Any] = {}
+    perf = PerfAgg("giraffe")
+    last_ue_frame = -1
 
     def _attach_cameras(vehicle: Any) -> None:
+        if not want_cam:
+            return
         for old in list(sensors.values()):
             try:
                 old.stop()
@@ -368,12 +409,23 @@ def run() -> int:
                     rgb[i * 3 + 2] = array[o + 0]
                 with lock:
                     latest_rgb[_cid] = bytes(rgb)
+                    latest_cam_t[_cid] = time.perf_counter()
+                perf.count("cam_cb")
 
             cam.listen(_on_image)
             sensors[cid] = cam
             print(f"[giraffe_client] camera {cid} {cw}x{ch} {hc.mount.describe()}", flush=True)
 
     _attach_cameras(hero)
+    if perf_enabled():
+        cam_s = (
+            ",".join(f"{c.id}:{c.w}x{c.h}" for c in host_cams) if want_cam else "off"
+        )
+        print(
+            f"[perf][giraffe] loop_sleep={loop_sleep_s:.3f}s "
+            f"overlay-latest first_cmd_log={cmd_wait_s:.1f}s cams={cam_s}",
+            flush=True,
+        )
 
     thr = 0.0
     brk = 0.0
@@ -381,37 +433,18 @@ def run() -> int:
     tip_seq = 0
     perc_seq = 0
     cmd_seen = False
+    cmd_miss_logged = False
+    first_perc_mono = 0.0
     tip = TipSender()
     lane_log_once = False
 
     while not STOP:
+        t_loop = time.perf_counter()
         cur = _find_hero(world)
         if cur is not None and cur.id != hero.id:
             print(f"[giraffe_client] hero {hero.id} -> {cur.id}", flush=True)
             hero = cur
             _attach_cameras(hero)
-
-        cmd = cosim.try_recv_cmd()
-        if cmd:
-            thr = max(0.0, min(1.0, cmd["throttle"]))
-            brk = max(0.0, min(1.0, cmd["brake"]))
-            steer = max(-1.0, min(1.0, cmd["steer"]))
-            tip_seq += 1
-            tip.send(
-                seq=tip_seq,
-                throttle=thr,
-                brake=brk,
-                steer=steer,
-                target_speed_mps=float(cmd.get("target_speed_mps") or 0.0),
-                ctrl_mode=int(cmd.get("ctrl_mode") or 0),
-            )
-            if not cmd_seen:
-                cmd_seen = True
-                print(
-                    f"[giraffe_client] first vehicle_cmd thr={thr:.2f} brk={brk:.2f} "
-                    f"steer={steer:.2f} (UDP tip)",
-                    flush=True,
-                )
 
         try:
             ctrl = carla.VehicleControl(throttle=thr, brake=brk, steer=steer, hand_brake=False)
@@ -428,23 +461,27 @@ def run() -> int:
         steer_deg = float(hero.get_control().steer) * 70.0
 
         ts = _now_ns()
+        cam_ts: dict[str, float] = {}
         try:
-            cosim.send_state(
-                pack_vehicle_state(
-                    speed_mps=speed,
-                    yaw_rate_degps=yaw_rate,
-                    steer_deg=steer_deg,
-                    gear=4,
-                ),
-                ts,
+            t0 = time.perf_counter()
+            state_blob = pack_vehicle_state(
+                speed_mps=speed,
+                yaw_rate_degps=yaw_rate,
+                steer_deg=steer_deg,
+                gear=4,
             )
+            cosim.send_state(state_blob, ts)
+            t1 = time.perf_counter()
             lane = measure_lane_topology(hero, world)
+            t2 = time.perf_counter()
             dyn = collect_dyn_objects(hero, world)
+            t3 = time.perf_counter()
             perc_seq += 1
-            cosim.send_fake_perc(
-                pack_fake_perc_pod(lane=lane, dyn=dyn, seq=perc_seq, timestamp_ns=ts),
-                ts,
-            )
+            perc_blob = pack_fake_perc_pod(lane=lane, dyn=dyn, seq=perc_seq, timestamp_ns=ts)
+            cosim.send_fake_perc(perc_blob, ts)
+            t4 = time.perf_counter()
+            if first_perc_mono <= 0.0:
+                first_perc_mono = time.monotonic()
             if not lane_log_once:
                 lane_log_once = True
                 print(
@@ -454,19 +491,98 @@ def run() -> int:
                     f"reason={lane.get('lane_quality_reason')}",
                     flush=True,
                 )
-            with lock:
-                snap = {k: latest_rgb.get(k) for k in latest_rgb}
-            for hc in host_cams:
-                rgb = snap.get(hc.id)
-                if rgb is None:
-                    continue
-                nv12 = rgb_to_nv12(rgb, hc.w, hc.h)
-                cosim.send_camera(hc.id, hc.w, hc.h, nv12, ts)
+            tw = time.perf_counter()
+            cmd = cosim.try_recv_cmd()
+            perf.add("recv_cmd", time.perf_counter() - tw)
+            if cmd is None:
+                perf.count("cmd_hold")
+                if (
+                    not cmd_seen
+                    and not cmd_miss_logged
+                    and first_perc_mono > 0.0
+                    and (time.monotonic() - first_perc_mono) >= cmd_wait_s
+                ):
+                    cmd_miss_logged = True
+                    print(
+                        f"[giraffe_client] no vehicle_cmd after {cmd_wait_s:.1f}s — "
+                        "hold last ctrl (overlay-latest, world clock not blocked)",
+                        flush=True,
+                    )
+            if cmd:
+                thr = max(0.0, min(1.0, cmd["throttle"]))
+                brk = max(0.0, min(1.0, cmd["brake"]))
+                steer = max(-1.0, min(1.0, cmd["steer"]))
+                tip_seq += 1
+                tip.send(
+                    seq=tip_seq,
+                    throttle=thr,
+                    brake=brk,
+                    steer=steer,
+                    target_speed_mps=float(cmd.get("target_speed_mps") or 0.0),
+                    ctrl_mode=int(cmd.get("ctrl_mode") or 0),
+                )
+                try:
+                    hero.apply_control(
+                        carla.VehicleControl(
+                            throttle=thr, brake=brk, steer=steer, hand_brake=False
+                        )
+                    )
+                except Exception as exc:
+                    print(f"[giraffe_client] apply_control failed: {exc}", flush=True)
+                if not cmd_seen:
+                    cmd_seen = True
+                    print(
+                        f"[giraffe_client] first vehicle_cmd thr={thr:.2f} brk={brk:.2f} "
+                        f"steer={steer:.2f} (UDP tip)",
+                        flush=True,
+                    )
+            if want_cam:
+                with lock:
+                    snap = {k: latest_rgb.get(k) for k in latest_rgb}
+                    cam_ts = dict(latest_cam_t)
+                t_cam0 = time.perf_counter()
+                for hc in host_cams:
+                    rgb = snap.get(hc.id)
+                    if rgb is None:
+                        continue
+                    nv12 = rgb_to_nv12(rgb, hc.w, hc.h)
+                    cosim.send_camera(hc.id, hc.w, hc.h, nv12, ts)
+                perf.add("nv12", time.perf_counter() - t_cam0)
+            else:
+                perf.add("nv12", 0.0)
+            perf.add("send_st", t1 - t0)
+            perf.add("lane", t2 - t1)
+            perf.add("dyn", t3 - t2)
+            perf.add("send_perc", t4 - t3)
         except OSError as exc:
             print(f"[giraffe_client] cosim send failed: {exc} - reconnect?", flush=True)
             break
 
-        time.sleep(0.05)
+        try:
+            snap_w = world.get_snapshot()
+            if int(snap_w.frame) != last_ue_frame:
+                last_ue_frame = int(snap_w.frame)
+                perf.count("ue_frame")
+        except Exception:  # noqa: BLE001
+            snap_w = None
+
+        work = time.perf_counter() - t_loop
+        idle = max(0.0, loop_sleep_s - work)
+        perf.add("work", work)
+        perf.add("idle", idle)
+        cam_age_ms = -1.0
+        if cam_ts:
+            cam_age_ms = 1000.0 * (time.perf_counter() - min(cam_ts.values()))
+        extra = {
+            "cam_age_ms": f"{cam_age_ms:.0f}",
+            "work_ms": f"{1000.0 * work:.0f}",
+            "cam": "on" if want_cam else "off",
+            "cmd": "live" if cmd_seen else "hold",
+        }
+        if snap_w is not None:
+            extra["ue_dt_ms"] = f"{1000.0 * float(snap_w.timestamp.delta_seconds):.1f}"
+        perf.tick(extra=extra)
+        time.sleep(idle)
 
     for old in list(sensors.values()):
         try:

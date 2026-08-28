@@ -192,6 +192,6 @@ python3 cases/longitudinal/acc.py
 
 - 域收敛（眩光类 → `isp_env`）；按 **case 覆盖度** 取景，不绑「村庄↔日照」之类假关联  
 - 场景干净 = 少杂物、布景服务 case；环境车是正常的（非 FPS）  
-- FPS / 相机管线 / frame_ingest 性能（另开）  
+- FPS / 时间片：已记 [host_fps_sil_hil.md](../../../driving/host_fps_sil_hil.md)；P 与 perc 1:1，不抽帧换 Hz  
 - planning 真 SET；横向 lat-offset / HLB 真 beam 决策  
 - results 写入更完整的 VERDICT 字段（reason 等）

@@ -2,6 +2,7 @@
 
 #include "gf_octave_planning/clamp.hpp"
 #include "gf_octave_planning/plan_cal.hpp"
+#include "gf_octave_planning/plan_obj.hpp"
 
 #include <algorithm>
 #include <cmath>

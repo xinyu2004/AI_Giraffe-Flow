@@ -3,6 +3,7 @@
 
 function out = m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end, ...
                            lane_conf, lane_count, obj, D_see_prev, T_plan_prev)
+  t0 = tic;
   p = gf_plan_cal();
   v = max(0.0, v);
   if nargin < 10
@@ -71,4 +72,5 @@ function out = m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end,
   out.y_m = y_m;
   out.v_mps = v_s;
   out.allow_lc = allow_lc;
+  out.t_m_s = toc(t0);
 end

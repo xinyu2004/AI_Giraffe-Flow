@@ -12,7 +12,7 @@
 | `Perception_LA_Out` | 是（邻线；host avail≠2 时 FCM 可置 0） | **仅 BEV** |
 | APP / STATIC / FCF / HLB / FS / DSTSR / LRE / AF | **否**（空） | — |
 
-ONNX/`MakeFromDetect` 当前不写 Out；内容由 truth 驱动。freeze 只刷三处 `m_time_stamp` / `m_frame_id`。
+ONNX/`MakeFromDetect` 当前不写 Out；内容由 truth 驱动。SIL（非 colorbar）Out 只在 fake_perc 更新时发，不重发冻帧。
 
 契约头示例：`projects/afc/interfaces/fcm_perception/Perception_Out_messages.h`  
 FCM：`…/apps/perception/fcm/src/main.cpp`  
@@ -125,7 +125,7 @@ Planning **不读 LA**（无变道逻辑）。
 
 | 项 | 说明 |
 |----|------|
-| `projects/**/runtime_ipc/` | SIL 文件 IPC scratch；compose/`carla_scenarios` 运行时 `mkdir`；根 `.gitignore` 整目录忽略 |
+| `projects/**/runtime_ipc/` | 仅 replay/file 写 yuv 时才有；GfChannel 联仿不再创建。根 `.gitignore` 整目录忽略 |
 | `projects/**/build-sil/`（及 `build-*/`） | SIL 构建树；勿打包 |
 | 总清单 | [projects/UPLOAD_CHECKLIST.md](../../../projects/UPLOAD_CHECKLIST.md) |
 

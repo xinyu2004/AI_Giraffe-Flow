@@ -29,7 +29,7 @@ Scenario side (`carla_scenarios/src/lib/_camera_mount.py`) — **contract only**
 3. Else repo-relative `projects/afc/generated/camera_contract.json` if present  
 4. Missing / incomplete → **hard exit** (no invented numbers)
 
-No copy into `carla_scenarios/` — re-compose after camera_slots edits. SIL camera writer (`carla_bridge`) prefers ingest `GF_CAMERA_MOUNT_*` from hpp; falls back to the same `camera_contract.json`.
+No copy into `carla_scenarios/` for authoring — compose writes `carla_scenarios/config/<product>/camera_contract.json`. SIL camera writer is **`gf_carla_io`** ← **`giraffe_client`** (not `tools/carla_bridge`).
 
 ## Resident `gf_frame_ingest` (C++)
 
@@ -40,21 +40,20 @@ When the frame source is not `none`, compose freezes `host.frame_ingest` into `d
 | Environment | `gf_frame_ingest` | Python |
 |-------------|-------------------|--------|
 | **Board / onboard `runtime/`** | C++ only: Create GfChannel + ISP/V4L adapters | **Forbidden** (no interpreter, no `share/**/*.py`) |
-| **Host SIL** | Create slots, then may spawn modules (`--module-only`) | Allowed: `carla` / `colorbar` / `replay` |
+| **Host SIL** | Create slots, then **exec** C++ module (`gf_carla_io` / `gf_frame_replay` / `gf_frame_colorbar`) | **No** Python on this path |
 
 Policy (zh source of truth): [CONFIG_RUNTIME_POLICY.md](../../zh/operations/CONFIG_RUNTIME_POLICY.md) and backlog `BL-BOARD-NO-PY`. **Everything that ships with board `runtime/` / GMT onboard deps must stay Python-free** — not only the ISP source path.
 
 SIL details:
 
 - Freeze `kBridgeEnabled=false` or `kActiveSource=none` → **exit 0 immediately**
-- Else Create GfChannel, spawn Python module (`--module-only`) — **SIL only**
-- Shared lib at `runtime/lib/libgf_gf_channel.so` (RPATH / `LD_LIBRARY_PATH`)
-- Stale staged `modules/carla_bridge` copies: see `BL-STAGE-PY-MTIME`
+- Else Create GfChannel, exec C++ module — **SIL `GF_FRAME_SOURCE`**
+- Shared lib at `runtime/lib/libgf_channel.so` (RPATH / `LD_LIBRARY_PATH`)
 
 | Role | Owns | Does not |
 |------|------|----------|
 | **gf_frame_ingest (C++)** | Read hpp; Create slots; board adapters / SIL may spawn | World layout / ACC plot |
-| **carla module (SIL only)** | Camera→YUV, ego, apply cmd | Spawn hero |
+| **gf_carla_io + giraffe_client (SIL)** | Camera/truth TCP ↔ GfChannel; apply cmd | Spawn hero (that's `scenario_client`) |
 | **GfChannel** | shm image slots | ARA events |
 | **FCM** | Open+Latest | Create |
 | **carla_scenarios (host only)** | Client A place+IC | Camera write / compose |

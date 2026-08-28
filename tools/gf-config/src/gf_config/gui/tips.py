@@ -443,6 +443,17 @@ SKU_ACC_SVCS = (
     "验收必须出现的服务（required_services）；"
     "compose/lineage 会检查画布是否覆盖这些服务。"
 )
+SKU_PUBLISH = (
+    "每话题如何发布：周期 / 变化时。写入 req.publish_policy，"
+    "compose 进 SOR 与 generated/publish_policy.hpp。"
+    "周期口填 period_ms（车态默认 10）。变化时填 expect_fps（期望/告警带，不发冻帧）。"
+    "expect_fps 须 ≤ 相机 fps。这不是 PHM 喂狗，也不是 FCM 自己设帧率。"
+)
+SKU_PUBLISH_TRIGGER = "period=按点发；on_change=有新样本才发（无冻帧）。"
+SKU_PUBLISH_VALUE = (
+    "周期：period_ms。变化时：expect_fps（预算/告警带，不是发报钟）。"
+    "0 fps=未填。须 ≤ frame_ingest 相机 fps。"
+)
 
 # Buttons (short but still purposeful)
 BTN_ADD_FG = "新增一个功能组行，随后在 initial 里选开机状态。"
