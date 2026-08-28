@@ -24,6 +24,8 @@ from spawn.ic import (
     set_natural_continue,
 )
 from spawn.pick import (
+    prefer_center_lane,
+    tf_on_lane,
     offset_transform,
     pick_curve_transform,
     pick_cut_in_transforms,
@@ -32,6 +34,7 @@ from spawn.pick import (
 )
 from spawn.place import (
     ego_lead,
+    roll_npc,
     spawn_ego_lead,
     spawn_ego_only,
     spawn_named,
@@ -64,6 +67,8 @@ __all__ = [
     "handoff_keep_ego",
     "natural_continue",
     "offset_transform",
+    "prefer_center_lane",
+    "tf_on_lane",
     "pick_curve_transform",
     "pick_cut_in_transforms",
     "pick_follow_transforms",
@@ -77,6 +82,7 @@ __all__ = [
     "aeb_ego_seed",
     "set_natural_continue",
     "set_role",
+    "roll_npc",
     "spawn_ego_lead",
     "spawn_ego_only",
     "spawn_named",

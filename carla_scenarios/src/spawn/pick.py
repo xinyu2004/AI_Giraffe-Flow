@@ -4,6 +4,86 @@ from __future__ import annotations
 
 from typing import Any, Optional, Tuple
 
+# Sit on the pavement, not in the air. Physics-on from +0.3…0.5 m looks like a drop.
+_GROUND_Z_CLEAR_M = 0.08
+
+
+def _same_dir_lane(a: Any, b: Any) -> bool:
+    try:
+        return int(a.lane_id) * int(b.lane_id) > 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _lane_is_driving(wp: Any) -> bool:
+    if wp is None:
+        return False
+    try:
+        import carla  # type: ignore
+
+        lt = int(wp.lane_type)
+        bad = (
+            int(carla.LaneType.Shoulder)
+            | int(carla.LaneType.Parking)
+            | int(carla.LaneType.Sidewalk)
+            | int(carla.LaneType.Border)
+            | int(carla.LaneType.Median)
+        )
+        if lt & bad:
+            return False
+        return (lt & int(carla.LaneType.Driving)) != 0
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def prefer_center_lane(wp: Any) -> Any:
+    """Walk to a non-leftmost same-direction Driving lane when several exist.
+
+    n==1 → that lane; n==2 → the right of the pair; n>=3 → near (n-1)//2.
+    """
+    if wp is None or not _lane_is_driving(wp):
+        return wp
+    cur = wp
+    guard = 0
+    while guard < 16:
+        left = cur.get_left_lane()
+        if left is None or not _same_dir_lane(cur, left) or not _lane_is_driving(left):
+            break
+        cur = left
+        guard += 1
+    chain: list[Any] = []
+    guard = 0
+    while cur is not None and guard < 16:
+        if _lane_is_driving(cur):
+            chain.append(cur)
+        right = cur.get_right_lane()
+        if right is None or not _same_dir_lane(cur, right) or not _lane_is_driving(right):
+            break
+        cur = right
+        guard += 1
+    if len(chain) <= 1:
+        return wp
+    idx = (len(chain) - 1) // 2
+    if idx == 0:
+        idx = 1
+    return chain[idx]
+
+
+def tf_on_lane(wp: Any) -> Any:
+    """Waypoint pose, yaw = road, z = pavement + small clearance."""
+    import carla  # type: ignore
+
+    loc = wp.transform.location
+    yaw = float(wp.transform.rotation.yaw)
+    return carla.Transform(
+        carla.Location(
+            x=float(loc.x),
+            y=float(loc.y),
+            z=float(loc.z) + _GROUND_Z_CLEAR_M,
+        ),
+        carla.Rotation(pitch=0.0, yaw=yaw, roll=0.0),
+    )
+
 
 def _waypoint_ahead(wp: Any, distance_m: float) -> Optional[Any]:
     cur = wp
@@ -69,6 +149,9 @@ def pick_follow_transforms(
         )
         if wp is None or wp.is_junction:
             continue
+        wp = prefer_center_lane(wp)
+        if wp is None or wp.is_junction:
+            continue
         lead_wp = _waypoint_ahead(wp, lead_gap_m)
         if lead_wp is None or lead_wp.is_junction:
             continue
@@ -85,17 +168,8 @@ def pick_follow_transforms(
         else:
             score = need + float(getattr(wp, "lane_width", 3.5))
 
-        ego_tf = wp.transform
-        ego_tf.location.z += 0.35
-        # Face road forward explicitly (spawn-point yaw can disagree with lane).
-        ego_tf.rotation.yaw = wp.transform.rotation.yaw
-        ego_tf.rotation.pitch = 0.0
-        ego_tf.rotation.roll = 0.0
-        lead_tf = lead_wp.transform
-        lead_tf.location.z += 0.35
-        lead_tf.rotation.yaw = lead_wp.transform.rotation.yaw
-        lead_tf.rotation.pitch = 0.0
-        lead_tf.rotation.roll = 0.0
+        ego_tf = tf_on_lane(wp)
+        lead_tf = tf_on_lane(lead_wp)
         if best is None or score > best[2]:
             best = (ego_tf, lead_tf, score)
 
@@ -114,7 +188,7 @@ def pick_follow_transforms(
             carla.Location(
                 x=ego_tf.location.x + fwd.x * lead_gap_m,
                 y=ego_tf.location.y + fwd.y * lead_gap_m,
-                z=ego_tf.location.z + 0.5,
+                z=float(ego_tf.location.z),
             ),
             ego_tf.rotation,
         )
@@ -147,17 +221,16 @@ def pick_cut_in_transforms(
         )
         if wp is None or wp.is_junction:
             continue
+        wp = prefer_center_lane(wp)
+        if wp is None or wp.is_junction:
+            continue
         adj = _lane_side(wp, side)
         if adj is None or adj.lane_type != carla.LaneType.Driving:
             continue
         lead_wp = _waypoint_ahead(adj, lead_gap_m)
         if lead_wp is None:
             continue
-        ego_tf = wp.transform
-        ego_tf.location.z += 0.3
-        lead_tf = lead_wp.transform
-        lead_tf.location.z += 0.3
-        return ego_tf, lead_tf, wp
+        return tf_on_lane(wp), tf_on_lane(lead_wp), wp
 
     ego_tf, lead_tf = pick_follow_transforms(world, lead_gap_m=lead_gap_m)
     return ego_tf, lead_tf, None
@@ -180,6 +253,9 @@ def pick_curve_transform(
         )
         if wp is None or wp.is_junction:
             continue
+        wp = prefer_center_lane(wp)
+        if wp is None or wp.is_junction:
+            continue
         yaw0 = wp.transform.rotation.yaw
         end = _waypoint_ahead(wp, look_ahead_m)
         if end is None:
@@ -189,16 +265,21 @@ def pick_curve_transform(
             continue
         score = delta
         if best is None or score > best[1]:
-            tf = wp.transform
-            tf.location.z += 0.3
-            best = (tf, score)
+            best = (tf_on_lane(wp), score)
     if best is not None:
         return best[0]
     spawns = m.get_spawn_points()
     if not spawns:
         raise RuntimeError("no CARLA spawn points")
+    wp0 = m.get_waypoint(
+        spawns[0].location, project_to_road=True, lane_type=carla.LaneType.Driving
+    )
+    if wp0 is not None:
+        return tf_on_lane(prefer_center_lane(wp0) or wp0)
     tf = spawns[0]
-    tf.location.z += 0.3
+    tf.location.z = float(tf.location.z) + _GROUND_Z_CLEAR_M
+    tf.rotation.pitch = 0.0
+    tf.rotation.roll = 0.0
     return tf
 
 
@@ -235,6 +316,4 @@ def pick_lead_ahead_of(
     lead_wp = _waypoint_ahead(wp, float(lead_gap_m))
     if lead_wp is None:
         return offset_transform(ego_tf, forward_m=float(lead_gap_m))
-    lead_tf = lead_wp.transform
-    lead_tf.location.z += 0.3
-    return lead_tf
+    return tf_on_lane(lead_wp)

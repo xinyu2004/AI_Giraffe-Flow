@@ -326,7 +326,12 @@ void FillOutFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
     for (std::uint8_t i = 0; i < n; ++i) {
       auto& obj = dyn.m_Obj_item[i];
       obj.m_OBJ_ID = truth.obj_id[i] ? truth.obj_id[i] : static_cast<std::uint8_t>(i + 1);
-      obj.m_OBJ_Object_Class = truth.obj_class[i] ? truth.obj_class[i] : 1;
+      // CLS_PEDESTRIAN=5 is the ExtractPerc is_ped contract; height is display-only.
+      std::uint8_t cls = truth.obj_class[i] ? truth.obj_class[i] : 1;
+      if (truth.obj_ped[i]) {
+        cls = 5;
+      }
+      obj.m_OBJ_Object_Class = cls;
       obj.m_OBJ_Long_Distance = truth.obj_long[i];
       obj.m_OBJ_Lat_Distance = truth.obj_lat[i];
       obj.m_OBJ_Relative_Long_Velocity = truth.obj_rel_v[i];

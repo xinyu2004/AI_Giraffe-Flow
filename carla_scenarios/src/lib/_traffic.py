@@ -18,6 +18,8 @@ import random
 from typing import Any, Optional
 
 from _spawn import ROLE_EGO, ROLE_LEAD
+from spawn.pick import tf_on_lane
+from spawn.place import roll_npc
 
 ROLE_TRAFFIC_PREFIX = "traffic_"
 
@@ -114,11 +116,10 @@ def _snap_spawn_to_driving(world: Any, tf: Any) -> Optional[Any]:
     wp = _driving_wp_at(world, tf.location)
     if wp is None or getattr(wp, "is_junction", False):
         return None
-    out = wp.transform
-    out.location.z = float(out.location.z) + 0.35
-    out.rotation.pitch = 0.0
-    out.rotation.roll = 0.0
-    out.rotation.yaw = float(wp.transform.rotation.yaw)
+    try:
+        out = tf_on_lane(wp)
+    except Exception:  # noqa: BLE001
+        return None
     # Sanity: z should stay near road (reject underwater / flying spawns)
     try:
         if abs(float(out.location.z) - float(tf.location.z)) > 8.0:
@@ -139,8 +140,8 @@ def _in_ego_forward_cone(
     ego_tf: Any,
     spawn_loc: Any,
     *,
-    ahead_m: float = 55.0,
-    half_width_m: float = 4.5,
+    ahead_m: float = 90.0,
+    half_width_m: float = 10.0,
 ) -> bool:
     """True if spawn sits in ego's forward corridor (would 'pop' in front)."""
     try:
@@ -160,10 +161,10 @@ def _in_ego_forward_cone(
 
 def _configure_tm(tm: Any, vehicle: Any, *, density: int) -> None:
     try:
-        tm.vehicle_percentage_speed_difference(vehicle, random.uniform(-5.0, 25.0))
-        tm.ignore_lights_percentage(vehicle, 30.0 if density >= 2 else 10.0)
-        tm.auto_lane_change(vehicle, density >= 1)
-        tm.distance_to_leading_vehicle(vehicle, random.uniform(4.0, 10.0))
+        tm.vehicle_percentage_speed_difference(vehicle, random.uniform(-8.0, 12.0))
+        tm.ignore_lights_percentage(vehicle, 80.0 if density >= 1 else 50.0)
+        tm.auto_lane_change(vehicle, density >= 2)
+        tm.distance_to_leading_vehicle(vehicle, random.uniform(8.0, 14.0))
     except Exception:  # noqa: BLE001
         pass
 
@@ -194,6 +195,11 @@ def ensure_ambient_traffic(
 
     need = target - have
     tm = client.get_trafficmanager()
+    try:
+        tm.set_hybrid_physics_mode(True)
+        tm.set_hybrid_physics_radius(80.0)
+    except Exception:  # noqa: BLE001
+        pass
     lib = world.get_blueprint_library()
     bps = list(lib.filter("vehicle.*"))
     cars = [bp for bp in bps if "bike" not in bp.id and "bicycle" not in bp.id]
@@ -301,6 +307,7 @@ def ensure_ambient_traffic(
         try:
             actor.set_autopilot(True, tm.get_port())
             _configure_tm(tm, actor, density=density)
+            roll_npc(actor, 10.0)
         except Exception:  # noqa: BLE001
             try:
                 actor.destroy()

@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Tuple
 
 from spawn.ic import release_only
-from spawn.place import spawn_ego_lead
+from spawn.place import roll_npc, spawn_ego_lead
 from spawn.roles import ROLE_EGO, ROLE_LEAD
 
 
@@ -38,8 +38,10 @@ def layout_acc_follow(
         tm.vehicle_percentage_speed_difference(lead, float(lead_speed_diff_pct))
         tm.ignore_lights_percentage(lead, 100)
         tm.auto_lane_change(lead, False)
+        tm.distance_to_leading_vehicle(lead, 10.0)
     except Exception:  # noqa: BLE001
         pass
+    roll_npc(lead, 10.0)
 
     print(
         f"[layout] STRAIGHT_FOLLOW gap≈{lead_gap_m}m "

@@ -137,14 +137,12 @@ def _ensure_view(
         if not no_window:
             print("[run_cases] GF_SCENARIO_VIEW=0 — pygame off (iGPU)", flush=True)
         return None
-    mount = load_camera_mount()
     if view is not None:
         try:
             if int(getattr(view._vehicle, "id", -1)) == int(getattr(ego, "id", -2)):
                 return view
         except Exception:  # noqa: BLE001
             pass
-        # Same window: only remount chase sensors onto the new hero.
         try:
             view.retarget_vehicle(ego)
             return view
@@ -154,6 +152,7 @@ def _ensure_view(
                 view.destroy()
             except Exception:  # noqa: BLE001
                 pass
+    mount = load_camera_mount()
     try:
         v = ScenarioView(
             world,

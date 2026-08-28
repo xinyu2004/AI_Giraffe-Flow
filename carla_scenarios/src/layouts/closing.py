@@ -50,13 +50,19 @@ def layout_aeb_stopped(
         keep_ego=keep_ego,
     )
     release_ego(carla_mod, ego)
-    _hold_brake(carla_mod, lead)
-    # Sole exception: AEB may seed ego closing speed; Giraffe takes over on cmd.
-    aeb_ego_seed(True)
-    try:
-        const_on = closing_toward_lead(carla_mod, ego, ego_mps, lead)
-    finally:
-        aeb_ego_seed(False)
+    const_on = False
+    if keep_ego:
+        print(
+            f"[layout] {layout_name} keep_ego: no park-teleport / no ego seed",
+            flush=True,
+        )
+    else:
+        _hold_brake(carla_mod, lead)
+        aeb_ego_seed(True)
+        try:
+            const_on = closing_toward_lead(carla_mod, ego, ego_mps, lead)
+        finally:
+            aeb_ego_seed(False)
     ttc = gap_m / max(ego_mps, 0.1)
     print(
         f"[layout] {layout_name} gap≈{gap_m:.0f}m ego_v≈{ego_mps:.1f} "
@@ -69,7 +75,8 @@ def layout_aeb_stopped(
         "ego_mps": ego_mps,
         "ttc0": round(ttc, 2),
         "const_vel": const_on,
-        "ic": "aeb_ego_seed",
+        "keep_ego": keep_ego,
+        "ic": "aeb_ego_seed" if not keep_ego else "giraffe_only",
     }
 
 
@@ -94,13 +101,14 @@ def layout_aeb_ccru(
     )
     # Slow rolling lead instead of full stop.
     lead_mps = float(os.environ.get("GF_AEB_CCRU_LEAD_MPS") or "3")
-    try:
-        lead.apply_control(carla_mod.VehicleControl(throttle=0.15, brake=0.0))
-        closing_along_heading(carla_mod, lead, lead_mps)
-    except Exception:  # noqa: BLE001
-        pass
+    if not keep_ego:
+        try:
+            lead.apply_control(carla_mod.VehicleControl(throttle=0.15, brake=0.0))
+            closing_along_heading(carla_mod, lead, lead_mps)
+        except Exception:  # noqa: BLE001
+            pass
+        meta["lead_ic"] = "closing_along_heading"
     meta["lead_mps"] = lead_mps
-    meta["lead_ic"] = "closing_along_heading"
     return ego, lead, meta
 
 
@@ -116,6 +124,24 @@ def layout_aeb_intersection_cross(
     gap_m = float(os.environ.get("GF_AEB_X_GAP_M") or "32")
     ego_mps = float(os.environ.get("GF_AEB_X_EGO_MPS") or "10")
     lateral_m = float(os.environ.get("GF_AEB_X_LAT_M") or "6")
+    if keep_ego:
+        ego, lead = spawn_ego_lead(
+            world,
+            lead_gap_m=gap_m,
+            reset=True,
+            require_straight=True,
+            keep_ego=True,
+        )
+        release_ego(carla_mod, ego)
+        print("[layout] INTERSECTION_CROSS keep_ego: no lateral pop", flush=True)
+        return ego, lead, {
+            "layout": "aeb_intersection_cross",
+            "gap_m": gap_m,
+            "ego_mps": ego_mps,
+            "keep_ego": True,
+            "const_vel": False,
+            "ic": "giraffe_only",
+        }
     ego, _lead = spawn_ego_lead(
         world,
         lead_gap_m=gap_m,
@@ -211,12 +237,13 @@ def layout_aeb_occluded_lateral(
     )
     meta["layout"] = "occluded_lateral"
     meta["reveal_s"] = float(os.environ.get("GF_AEB_OCC_REVEAL_S") or "2.0")
-    # Park occluded until reveal hook moves it.
-    try:
-        lead.disable_constant_velocity()
-    except Exception:  # noqa: BLE001
-        pass
-    _hold_brake(carla_mod, lead)
+    meta["keep_ego"] = keep_ego
+    if not keep_ego:
+        try:
+            lead.disable_constant_velocity()
+        except Exception:  # noqa: BLE001
+            pass
+        _hold_brake(carla_mod, lead)
     return ego, lead, meta
 
 
@@ -230,7 +257,7 @@ def tick_aeb_handoff(
     import carla as _c  # type: ignore
 
     layout = str(meta.get("layout") or "")
-    if lead is not None and layout in ("aeb_stopped", "fcw"):
+    if lead is not None and layout in ("aeb_stopped", "fcw") and not meta.get("keep_ego"):
         try:
             lead.apply_control(
                 _c.VehicleControl(throttle=0.0, brake=1.0, hand_brake=True)
@@ -240,7 +267,9 @@ def tick_aeb_handoff(
 
     if layout == "occluded_lateral" and not meta.get("revealed"):
         reveal_s = float(meta.get("reveal_s") or 2.0)
-        if elapsed >= reveal_s and lead is not None:
+        if meta.get("keep_ego"):
+            meta["revealed"] = True
+        elif elapsed >= reveal_s and lead is not None:
             meta["revealed"] = True
             try:
                 from spawn.pick import offset_transform as _off

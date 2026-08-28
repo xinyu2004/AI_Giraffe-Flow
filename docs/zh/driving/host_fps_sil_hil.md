@@ -105,11 +105,21 @@ iceoryx / GfChannel 覆盖写最新是通信合同：发送方与收通道正常
 
 C 规划进程没有 `get_actors` / Octave unpack。剩下要避开的冗余：胖 `Perception_Out` 只 `Take` 一次、立刻抽成 ≤8 行 `PlanObj` + 车道标量；occlusion / `v_at_s` / `a_req_n` 只扫这张表，不要再走 FCM 数组。`gf_plan_cal` 在 C 里是常量，无 Host 每函数重建税。
 
-### P3 — 再改 `.m` 标定 / packing
+### P3 — 再改 `.m` 标定（packing 已对齐）
 
-碰撞 log（a_req 偏晚、CIPV hop、起步 0.72、`e_y`）等 **P 稳定且一拍有数** 再动。P2 generate 不等于 Host 算法签收。
+碰撞 log（a_req 偏晚、CIPV hop、起步 0.72、`e_y`）等 **P 稳定且一拍有数** 再动 `.m`。P2 generate 不等于 Host 算法签收。
 
-互证只比 **同一组 `m_plan_tick` 入参**。Host `_pack_obj` 与板 `ExtractPerc` 仍可能表不同（空目标 dummy 999 vs `nobj=0`、lead/CIPV、heading 单位、`lane_count`）——那是效果分叉，不是 SOA/10ms 的锅；对齐 packing 时再收，**不要**把板上传数倒灌进 `.m`。
+互证只比 **同一组 `m_plan_tick` 入参**。Host `_pack_obj` / `_pack_in` 与板 `ExtractPerc` / `HostLaneFromPerc` 已对齐：
+
+| 项 | 合同 |
+|----|------|
+| 空目标 | `[]` / `nobj=0`（`_dummy_in` 的 999 只给 FFI 预热） |
+| 顺序 | CIPV 先行，再其余；无 dyn 仅 lead 时合成一行（heading 用 rad） |
+| 行人 | `cls==5` → `is_ped`；FCM `obj_ped` 也写成 class 5 |
+| `x_end` | 公布 VR，缺则 60；不再地板 20 m |
+| `lane_count` | 有效车道为 1，有 adj 为 2（`.m` 只测 `>=2`） |
+
+**不要**把板上传数倒灌进 `.m`。Colorbar / gateway 映射表 / VehicleBus 周期仍是后续债，不在本拍。
 
 ## 4. 明确不做
 

@@ -83,7 +83,8 @@ HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
       continue;
     }
     conf = std::max(conf, line.m_LH_Confidence);
-    const float x1 = std::max(line.m_LH_First_VR_End, 20.0f);
+    // Same as Host _fcm_style_perc: use published VR, else 60. Do not invent 20 m.
+    const float x1 = (line.m_LH_First_VR_End > 0.5f) ? line.m_LH_First_VR_End : 60.0f;
     if (line.m_LH_Side == 1) {
       have_l = true;
       lc0 = line.m_LH_Line_First_C0;
@@ -167,12 +168,13 @@ void TryPushObj(PercView& v, const ObjT& o) {
   row.lat = lat;
   row.len_m = std::max(o.m_OBJ_Length, 0.5f);
   row.cls = static_cast<float>(o.m_OBJ_Object_Class);
-  row.heading = o.m_OBJ_Heading;
+  row.heading = o.m_OBJ_Heading;  // radians, same as Host heading_rad
   row.is_ped = (static_cast<int>(o.m_OBJ_Object_Class) == 5) ? 1.0f : 0.0f;
   v.obj[v.nobj++] = row;
 }
 
-// One walk of dyn[] + one walk of hostlines. Do not LeadFromPerc then pack again.
+// One walk of dyn[] + one walk of hostlines. Empty → nobj=0 (Host _pack_obj []).
+// CIPV first, then the rest. Do not LeadFromPerc then pack again.
 PercView ExtractPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
   PercView v{};
   v.lane = HostLaneFromPerc(perc);

@@ -99,7 +99,6 @@ class AtomCase:
     ) -> Tuple[int, Optional[ScenarioView]]:
         stop = stop_flag or (lambda: STOP)
         load_local_env()
-        mount = load_camera_mount()
         meta: dict[str, Any] = {
             "keep_ego": keep_ego,
             "preserve_ego": preserve_ego,
@@ -133,7 +132,7 @@ class AtomCase:
         print(
             f"[{self.tag}] READY host={carla_host()}:{carla_port()} "
             f"ego={ego.id} target={getattr(target, 'id', None)} "
-            f"duration_s={duration_s} mount_ref={mount.describe()} "
+            f"duration_s={duration_s} "
             f"keep_ego={int(keep_ego)} preserve_ego={int(preserve_ego)}",
             flush=True,
         )
@@ -144,6 +143,7 @@ class AtomCase:
             )
         elif view is None and not no_window and scenario_view_wanted():
             try:
+                mount = load_camera_mount()
                 view = ScenarioView(
                     world,
                     ego,

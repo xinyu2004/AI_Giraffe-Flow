@@ -148,12 +148,26 @@ def _parse_slot(raw: dict[str, Any], path: Path) -> HostCamera:
     )
 
 
+_CAMS_CACHE: dict[str, List[HostCamera]] = {}
+_MOUNT_CACHE: dict[str, CameraMount] = {}
+
+
+def reset_camera_contract_cache() -> None:
+    """Tests only: drop memo so the next load hits disk."""
+    _CAMS_CACHE.clear()
+    _MOUNT_CACHE.clear()
+
+
 def load_host_cameras(*, enabled_only: bool = True) -> List[HostCamera]:
-    """All slots from camera_contract (N 路由 compose 决定)."""
+    """All slots from camera_contract (N 路由 compose 决定). Cached per path."""
     path = camera_contract_path()
     if path is None:
         print(_missing_hint(), file=sys.stderr)
         raise SystemExit(2)
+    key = f"{path.resolve()}|{int(enabled_only)}"
+    hit = _CAMS_CACHE.get(key)
+    if hit is not None:
+        return list(hit)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
@@ -172,14 +186,21 @@ def load_host_cameras(*, enabled_only: bool = True) -> List[HostCamera]:
         + ", ".join(c.id for c in out),
         flush=True,
     )
-    return out
+    _CAMS_CACHE[key] = list(out)
+    return list(out)
 
 
 def load_camera_mount() -> CameraMount:
     """Front (or first) mount — scenario pygame / single-cam callers."""
+    path = camera_contract_path()
+    key = str(path.resolve()) if path is not None else ""
+    hit = _MOUNT_CACHE.get(key)
+    if hit is not None:
+        return hit
     cams = load_host_cameras(enabled_only=True)
     front = next((c for c in cams if c.id == "front"), cams[0])
     print(f"[camera_mount] {front.mount.describe()} <- contract", flush=True)
+    _MOUNT_CACHE[key] = front.mount
     return front.mount
 
 
@@ -198,5 +219,6 @@ __all__ = [
     "host_cameras_path",
     "load_camera_mount",
     "load_host_cameras",
+    "reset_camera_contract_cache",
     "scene_chase_pose",
 ]

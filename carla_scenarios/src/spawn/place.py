@@ -13,6 +13,7 @@ from spawn.pick import (
     pick_curve_transform,
     pick_follow_transforms,
     pick_lead_ahead_of,
+    tf_on_lane,
 )
 from spawn.roles import (
     ROLE_EGO,
@@ -72,6 +73,31 @@ def _set_transform_at_rest(actor: Any, transform: Any, *, park: bool = False) ->
         _park_handbrake(actor)
 
 
+def roll_npc(actor: Any, speed_mps: float = 10.0) -> None:
+    """Drop handbrake and seed world-frame speed so TM does not sit parked."""
+    if actor is None:
+        return
+    speed = abs(float(speed_mps))
+    try:
+        import carla  # type: ignore
+
+        actor.apply_control(
+            carla.VehicleControl(
+                throttle=0.35,
+                brake=0.0,
+                steer=0.0,
+                hand_brake=False,
+                reverse=False,
+            )
+        )
+        fwd = actor.get_transform().get_forward_vector()
+        actor.set_target_velocity(
+            carla.Vector3D(float(fwd.x) * speed, float(fwd.y) * speed, 0.0)
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def spawn_named(
     world: Any,
     *,
@@ -82,7 +108,7 @@ def spawn_named(
     clear_radius_m: float = 16.0,
     keep_yaw: bool = False,
 ) -> Any:
-    """Spawn a role actor. Retries nearby poses and map spawn points."""
+    """Spawn a role actor. Retry along the same lane only — never town-wide pop."""
     if destroy_existing:
         from spawn.roles import safe_destroy
 
@@ -105,46 +131,31 @@ def spawn_named(
                 lane_type=carla.LaneType.Driving,
             )
             if wp is None:
-                out = tf
-            else:
-                out = wp.transform
-                if keep_yaw:
-                    out.rotation.yaw = float(tf.rotation.yaw)
-                out.rotation.pitch = 0.0
-                out.rotation.roll = 0.0
-            out.location.z = float(out.location.z) + 0.25
+                return tf
+            out = tf_on_lane(wp)
+            if keep_yaw:
+                out.rotation.yaw = float(tf.rotation.yaw)
             return out
         except Exception:  # noqa: BLE001
             return tf
 
     attempts: list[Any] = [_snap(transform)]
+    # XY only — no dz (air drop) and no map-wide spawn-point fallback (pop).
     nudges = (
-        (0.0, 1.5, 0.0),
-        (0.0, -1.5, 0.0),
-        (2.0, 0.0, 0.0),
-        (-2.0, 0.0, 0.0),
-        (4.0, 0.0, 0.3),
-        (0.0, 3.5, 0.0),
-        (0.0, -3.5, 0.0),
-        (8.0, 0.0, 0.0),
-        (12.0, 0.0, 0.0),
-        (0.0, 7.0, 0.0),
-        (0.0, -7.0, 0.0),
+        (0.0, 1.5),
+        (0.0, -1.5),
+        (2.0, 0.0),
+        (-2.0, 0.0),
+        (0.0, 3.5),
+        (0.0, -3.5),
+        (8.0, 0.0),
+        (12.0, 0.0),
     )
-    for fwd, right, dz in nudges:
-        tf = offset_transform(transform, forward_m=fwd, right_m=right)
-        if abs(dz) > 1e-6:
-            tf.location.z = float(tf.location.z) + dz
-        attempts.append(_snap(tf))
-    try:
-        for sp in list(world.get_map().get_spawn_points())[:40]:
-            attempts.append(_snap(sp))
-    except Exception:  # noqa: BLE001
-        pass
+    for fwd, right in nudges:
+        attempts.append(_snap(offset_transform(transform, forward_m=fwd, right_m=right)))
 
     last_err: Optional[BaseException] = None
     radius = max(12.0, float(clear_radius_m))
-    # New hero/lead: do not protect a ghost of the same role while placing.
     protect = {ROLE_EGO, ROLE_LEAD} - {role}
     for i, bp in enumerate(cands[:6]):
         set_role(bp, role)
@@ -246,16 +257,16 @@ def ego_lead(
             clear_radius_m=16.0,
         )
     else:
-        _set_transform_at_rest(lead, lead_tf, park=True)
+        _set_transform_at_rest(lead, lead_tf, park=False)
 
     tick_world(world)
-    # Quiet lead after place. Ego velocity: Giraffe-only (no park/handbrake on hero).
+    # Quiet velocities after a cold place. keep_ego: leave both moving.
     try:
         import carla  # type: ignore
 
-        lead.disable_constant_velocity()
-        lead.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
         if not keep_ego:
+            lead.disable_constant_velocity()
+            lead.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
             ego.disable_constant_velocity()
             ego.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
     except Exception:  # noqa: BLE001
@@ -274,20 +285,38 @@ def spawn_ego_lead(
     require_straight: bool = True,
     keep_ego: bool = False,
 ) -> Tuple[Any, Any]:
-    """Pick follow transforms then place. keep_ego → lead relative to current ego."""
+    """Pick follow transforms then place. keep_ego → keep hero+lead; no FOV teleport."""
     existing = find_by_role(world, ROLE_EGO) if keep_ego else None
+    existing_lead = find_by_role(world, ROLE_LEAD) if keep_ego else None
     if existing is not None:
+        if existing_lead is not None:
+            print(
+                f"[place] natural continue: keep ego id={existing.id} "
+                f"lead id={existing_lead.id} (no teleport)",
+                flush=True,
+            )
+            return existing, existing_lead
+        # Need a lead but none in world: place far ahead, not in the 80 m FOV.
+        gap = max(float(lead_gap_m), 90.0)
         ego_tf = existing.get_transform()
-        lead_tf = pick_lead_ahead_of(world, ego_tf, lead_gap_m=lead_gap_m)
+        lead_tf = pick_lead_ahead_of(world, ego_tf, lead_gap_m=gap)
         print(
             f"[place] natural continue: keep ego id={existing.id} "
-            f"lead ahead ≈{lead_gap_m}m",
+            f"new lead ahead ≈{gap:.0f}m",
             flush=True,
         )
-    else:
-        ego_tf, lead_tf = pick_follow_transforms(
-            world, lead_gap_m=lead_gap_m, require_straight=require_straight
+        return ego_lead(
+            world,
+            ego_tf=ego_tf,
+            lead_tf=lead_tf,
+            ego_filter=ego_filter,
+            lead_filter=lead_filter,
+            keep_ego=True,
+            reset=reset,
         )
+    ego_tf, lead_tf = pick_follow_transforms(
+        world, lead_gap_m=lead_gap_m, require_straight=require_straight
+    )
     return ego_lead(
         world,
         ego_tf=ego_tf,
@@ -308,10 +337,9 @@ def spawn_ego_only(
     reset_others: bool = True,
 ) -> Any:
     """Spawn/reposition hero; optionally clear lead. keep_ego → leave hero pose."""
-    if reset_others:
+    if reset_others and not keep_ego:
         destroy_role(world, ROLE_LEAD)
-        if not keep_ego:
-            destroy_role(world, ROLE_EGO)
+        destroy_role(world, ROLE_EGO)
         tick_world(world)
 
     ego = find_by_role(world, ROLE_EGO)

@@ -85,7 +85,6 @@ def run_session(
     load_local_env()
     cfg = load_weather(preset)
     apply_weather(world, carla, cfg)
-    mount = load_camera_mount()
     ego, lead, _meta = layout_acc_follow(
         carla, client, world, lead_gap_m=32.0, keep_ego=keep_ego
     )
@@ -95,7 +94,7 @@ def run_session(
     print(
         f"[{tag}] READY host={carla_host()}:{carla_port()} "
         f"ego={ego.id} lead={lead.id} duration_s={duration_s} "
-        f"weather={cfg.describe()} mount_ref={mount.describe()}",
+        f"weather={cfg.describe()} keep_ego={int(keep_ego)}",
         flush=True,
     )
 
@@ -105,6 +104,7 @@ def run_session(
         )
     elif view is None and not no_window and scenario_view_wanted():
         try:
+            mount = load_camera_mount()
             view = ScenarioView(
                 world,
                 ego,

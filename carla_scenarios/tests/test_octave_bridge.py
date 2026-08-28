@@ -406,3 +406,89 @@ def test_bev_feed_imports() -> None:
 
     feed = BevFeed()
     assert feed is not None
+
+
+def test_pack_obj_empty_is_nobj_zero() -> None:
+    from octave_bridge.runtime import _pack_in, _pack_obj
+    from octave_bridge.semantic_map import PercView, PlanningView
+
+    assert _pack_obj(PercView()) == []
+    vec = _pack_in(PlanningView())
+    assert vec[13] == 0.0
+    assert vec[14] == 0.0
+
+
+def test_pack_obj_cipv_first_then_rest() -> None:
+    from octave_bridge.runtime import _pack_obj
+    from octave_bridge.semantic_map import DynObj, PercView
+
+    perc = PercView(
+        cipv_id=2,
+        objects=[
+            DynObj(obj_id=1, long_m=40.0, lat_m=2.0, rel_v_mps=-1.0, obj_class=1),
+            DynObj(
+                obj_id=2,
+                long_m=20.0,
+                lat_m=0.1,
+                rel_v_mps=-2.0,
+                obj_class=1,
+                heading_rad=0.05,
+                len_m=4.5,
+            ),
+        ],
+    )
+    rows = _pack_obj(perc)
+    assert len(rows) == 2
+    assert rows[0][0] == pytest.approx(20.0)
+    assert rows[0][5] == pytest.approx(0.05)
+    assert rows[1][0] == pytest.approx(40.0)
+
+
+def test_pack_obj_ped_class5_sets_is_ped() -> None:
+    from octave_bridge.runtime import _pack_obj
+    from octave_bridge.semantic_map import DynObj, PercView
+
+    perc = PercView(
+        objects=[
+            DynObj(
+                obj_id=1,
+                long_m=15.0,
+                lat_m=0.5,
+                obj_class=5,
+                is_ped=0,
+                heading_rad=0.2,
+                len_m=0.6,
+            ),
+        ],
+    )
+    rows = _pack_obj(perc)
+    assert rows[0][4] == pytest.approx(5.0)
+    assert rows[0][6] == pytest.approx(1.0)
+    assert rows[0][5] == pytest.approx(0.2)
+
+
+def test_pack_obj_lead_only_keeps_heading() -> None:
+    from octave_bridge.runtime import _pack_obj
+    from octave_bridge.semantic_map import PercView
+
+    perc = PercView(
+        lead_valid=True,
+        lead_distance_m=30.0,
+        lead_rel_speed_mps=-1.0,
+        lead_lat_m=0.2,
+        lead_heading_rad=0.08,
+    )
+    rows = _pack_obj(perc)
+    assert len(rows) == 1
+    assert rows[0][0] == pytest.approx(30.0)
+    assert rows[0][5] == pytest.approx(0.08)
+
+
+def test_pack_in_lane_count_matches_extractperc() -> None:
+    from octave_bridge.runtime import _pack_in
+    from octave_bridge.semantic_map import LaneLine, PercView, PlanningView
+
+    view = PlanningView()
+    view.perc = PercView(lane_valid=True, lane_count=3, adj=[LaneLine(side=1)])
+    vec = _pack_in(view)
+    assert vec[10] == pytest.approx(2.0)

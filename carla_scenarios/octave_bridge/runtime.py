@@ -1033,43 +1033,72 @@ def _lane_ok(perc: Any) -> bool:
     )
 
 
+# Same drop band as planning/driving ExtractPerc (kObjDMaxM).
+_OBJ_D_MAX_M = 130.0
+
+
+def _obj_row(o: Any) -> Optional[list[float]]:
+    d = float(o.long_m)
+    if int(getattr(o, "obj_id", 0) or 0) == 0 or d < 0.0 or d > _OBJ_D_MAX_M:
+        return None
+    cls = float(o.obj_class or 1)
+    is_ped = 1.0 if (int(o.is_ped or 0) or int(cls) == 5) else 0.0
+    return [
+        d,
+        float(o.rel_v_mps),
+        float(o.lat_m),
+        max(float(o.len_m or 4.5), 0.5),
+        cls,
+        float(o.heading_rad or 0.0),
+        is_ped,
+    ]
+
+
+def _obj_already(rows: list[list[float]], d: float, lat: float) -> bool:
+    for r in rows:
+        if abs(r[0] - d) < 1.5 and abs(r[2] - lat) < 0.8:
+            return True
+    return False
+
+
 def _pack_obj(perc: Any) -> list[list[float]]:
-    """n×7: d, rel, lat, len, cls, heading, is_ped. Cap obj_n_max."""
+    """n×7: d, rel, lat, len, cls, heading, is_ped. Same order as ExtractPerc.
+
+    Empty → [] (nobj=0). ``_dummy_in`` stays FFI warmup only, not a scene pack.
+    CIPV first, then the rest. Lead-only (no dyn) matches FCM FillOutFromTruth.
+    """
     n_max = _OBJ_N_MAX
     rows: list[list[float]] = []
-    lead_d = float(perc.lead_distance_m)
-    lead_lat = float(perc.lead_lat_m)
-    if perc.lead_valid:
-        rows.append(
-            [
-                lead_d,
-                float(perc.lead_rel_speed_mps),
-                lead_lat,
-                4.5,
-                1.0,
-                0.0,
-                0.0,
-            ]
-        )
-    for o in perc.objects:
-        rec = [
-            float(o.long_m),
-            float(o.rel_v_mps),
-            float(o.lat_m),
-            float(o.len_m or 4.5),
-            float(o.obj_class or 1),
-            float(o.heading_rad or 0.0),
-            float(o.is_ped or 0),
-        ]
-        if perc.lead_valid and abs(rec[0] - lead_d) < 1.5 and abs(rec[2] - lead_lat) < 0.8:
-            rows[0] = rec
+    objs = list(perc.objects or [])
+    cipv_id = int(getattr(perc, "cipv_id", 0) or 0)
+    if cipv_id:
+        for o in objs:
+            if int(o.obj_id) == cipv_id:
+                rec = _obj_row(o)
+                if rec is not None:
+                    rows.append(rec)
+                break
+    elif perc.lead_valid and not objs:
+        d = float(perc.lead_distance_m)
+        if 0.0 <= d <= _OBJ_D_MAX_M:
+            rows.append(
+                [
+                    d,
+                    float(perc.lead_rel_speed_mps),
+                    float(perc.lead_lat_m),
+                    4.5,
+                    1.0,
+                    float(getattr(perc, "lead_heading_rad", 0.0) or 0.0),
+                    0.0,
+                ]
+            )
+    for o in objs:
+        rec = _obj_row(o)
+        if rec is None or _obj_already(rows, rec[0], rec[2]):
             continue
         if len(rows) >= n_max:
             break
         rows.append(rec)
-    if not rows:
-        # oct2py-safe dummy: out of lon_max / lat weight
-        return [[999.0, 0.0, 99.0, 4.5, 1.0, 0.0, 0.0]]
     return rows[:n_max]
 
 
@@ -1088,7 +1117,11 @@ def _pack_in(view: PlanningView) -> list[float]:
     vec[7] = float(perc.c3)
     vec[8] = float(perc.x_end)
     vec[9] = float(perc.lane_conf)
-    vec[10] = float(perc.lane_count)
+    # Same as HostLaneFromPerc: 1, or 2 if adj present. .m only tests >= 2.
+    lane_n = 1.0
+    if perc.lane_valid and perc.adj:
+        lane_n = 2.0
+    vec[10] = lane_n
     vec[11] = float(_D_SEE_PREV)
     vec[12] = float(_T_PLAN_PREV)
     n = min(_OBJ_N_MAX, len(rows))

@@ -67,13 +67,14 @@ class PercView:
     lead_distance_m: float = 0.0
     lead_rel_speed_mps: float = 0.0
     lead_lat_m: float = 0.0
+    lead_heading_rad: float = 0.0
     lane_valid: bool = False
     e_y: float = 0.0
     c1: float = 0.0
     c0: float = 0.0
     c2: float = 0.0
     c3: float = 0.0
-    x_end: float = 100.0
+    x_end: float = 60.0
     lane_conf: float = 0.0
     lane_count: int = 0
 
@@ -228,6 +229,7 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
         perc.lead_distance_m = lead_d
         perc.lead_rel_speed_mps = float(fp.get("lead_rel_speed_mps") or 0.0)
         perc.lead_lat_m = lead_lat
+        perc.lead_heading_rad = float(fp.get("lead_heading_rad") or 0.0)
     elif perc.objects:
         cipv = next((o for o in perc.objects if o.obj_id == perc.cipv_id), None)
         lead = cipv or perc.objects[0]
@@ -236,6 +238,7 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
             perc.lead_distance_m = lead.long_m
             perc.lead_rel_speed_mps = lead.rel_v_mps
             perc.lead_lat_m = lead.lat_m
+            perc.lead_heading_rad = lead.heading_rad
             if not perc.cipv_id:
                 perc.cipv_id = lead.obj_id
     return perc

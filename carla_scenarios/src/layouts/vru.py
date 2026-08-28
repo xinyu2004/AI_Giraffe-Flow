@@ -47,12 +47,32 @@ def layout_aeb_pedestrian(
     lat_m = float(os.environ.get("GF_AEB_PED_LAT_M") or "5")
     ped_speed = float(os.environ.get("GF_AEB_PED_MPS") or "1.4")
 
+    if keep_ego:
+        ego, lead = spawn_ego_lead(
+            world,
+            lead_gap_m=gap_m,
+            reset=True,
+            require_straight=True,
+            keep_ego=True,
+        )
+        release_ego(carla_mod, ego)
+        print("[layout] AEB_PED keep_ego: no VRU pop in FOV", flush=True)
+        return ego, lead, {
+            "layout": "aeb_pedestrian",
+            "gap_m": gap_m,
+            "ego_mps": ego_mps,
+            "keep_ego": True,
+            "const_vel": False,
+            "ic": "giraffe_only",
+            "vru_kind": "continue",
+        }
+
     ego, lead_dummy = spawn_ego_lead(
         world,
         lead_gap_m=gap_m,
         reset=True,
         require_straight=True,
-        keep_ego=keep_ego,
+        keep_ego=False,
     )
     safe_destroy(lead_dummy)
     destroy_role(world, ROLE_LEAD)
@@ -128,12 +148,32 @@ def layout_aeb_bicycle(
     ego_mps = float(os.environ.get("GF_AEB_BIKE_EGO_MPS") or "10")
     bike_mps = float(os.environ.get("GF_AEB_BIKE_MPS") or "4")
 
+    if keep_ego:
+        ego, lead = spawn_ego_lead(
+            world,
+            lead_gap_m=gap_m,
+            reset=True,
+            require_straight=True,
+            keep_ego=True,
+        )
+        release_ego(carla_mod, ego)
+        print("[layout] BICYCLE keep_ego: no bike pop in FOV", flush=True)
+        return ego, lead, {
+            "layout": "aeb_bicycle",
+            "gap_m": gap_m,
+            "ego_mps": ego_mps,
+            "keep_ego": True,
+            "const_vel": False,
+            "ic": "giraffe_only",
+            "vru_kind": "continue",
+        }
+
     ego, _ = spawn_ego_lead(
         world,
         lead_gap_m=gap_m,
         reset=True,
         require_straight=True,
-        keep_ego=keep_ego,
+        keep_ego=False,
     )
     destroy_role(world, ROLE_LEAD)
     release_ego(carla_mod, ego)
