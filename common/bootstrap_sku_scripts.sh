@@ -27,7 +27,6 @@ mkdir -p "${DEST}"
 declare -A MAP=(
   [project_env.sh]="_common.sh"
   [compile.sh]="compile_sil.sh"
-  [stage_runtime.sh]="stage_sil_runtime.sh"
   [run.sh]="run_sil.sh"
   [gmt_depend.sh]="GMT_depend_launch.sh"
   [obs_inject.sh]="obs_inject.sh"
@@ -35,7 +34,7 @@ declare -A MAP=(
 
 copied=0
 skipped=0
-for tmpl in project_env.sh compile.sh stage_runtime.sh run.sh gmt_depend.sh obs_inject.sh; do
+for tmpl in project_env.sh compile.sh run.sh gmt_depend.sh obs_inject.sh; do
   src="${SRC}/${tmpl}"
   [[ -f "${src}" ]] || { echo "ERROR: missing template ${src}" >&2; exit 1; }
   dest_name="${MAP[${tmpl}]}"

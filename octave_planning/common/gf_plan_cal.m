@@ -7,16 +7,28 @@ function p = gf_plan_cal()
     p = cache;
     return
   end
-  %% Corridor (lat, ego-frame y) — weights, not ACC/AEB modes
+  %% Corridor — EU cal (not a 8 m cone). W / object width are cal, not FCM.
+  % Lane: EC motorway typical 3.50–3.75 m; take 3.50.
+  % Ego M1 typical 1.80 m. Truck/HGV max width 2.55 m (Dir. 96/53/EC).
+  p.lane_width_m = 3.50;
+  p.ego_width_m = 1.80;
+  p.pass_clear_m = 0.30;
+  p.obj_width_car_m = 1.80;
+  p.obj_width_truck_m = 2.55;
+  p.obj_width_ped_m = 0.60;
+  p.occ_overlap_min_m = 0.30;
+  p.lon_max_d_m = 80.0;
   p.lat_acc_m = 3.2;
   p.lat_aeb_m = 8.0;
   p.lat_merge_m = 1.0;
-  p.lon_max_d_m = 80.0;
 
   %% Horizon / visibility. Recover slow, degrade fast (vis_up_alpha per tick).
   p.t_base_s = 10.0;
   p.t_plan_min_s = 1.0;
   p.d_cal_cap_m = 120.0;
+  % Driving optical wedge (deg, full). Camera contract front fov=100; inner 50 is
+  % the cone we dare treat as clear. Bearing from ego +x, not poly heading.
+  p.see_fov_deg = 50.0;
   p.d_fov_conf_m = 120.0;
   p.d_fov_conf_min = 0.20;
   p.d_see_lane_bad_m = 12.0;
@@ -33,10 +45,12 @@ function p = gf_plan_cal()
   %% Occlusion / lane-change gate (flag only; no second corridor yet)
   p.occ_w_min = 0.40;
   p.cls_truck = 2.0;
+  p.cls_ped = 5.0;
   p.t_lc_min_s = 6.0;
   p.d_lc_min_m = 40.0;
   p.lc_conf_min = 0.50;
   p.cutin_head_gain = 1.20;
+  p.cutin_approach_m = 1.50;
 
   %% Kinematics (constraint scale, not a mode switch)
   p.aeb_decel_mps2 = 6.0;

@@ -22,8 +22,8 @@ function out = m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end,
     T_plan_prev = 0.0;
   end
 
-  D_fov = p.d_fov_conf_m * gf_clamp(lane_conf, p.d_fov_conf_min, 1.0);
-  D_occ = gf_plan_occlusion(obj);
+  D_occ = gf_plan_occlusion(obj, c0);
+  D_fov = gf_plan_d_fov(c0, c1, c2, c3, x_end);
   [D_see, T_plan] = gf_plan_horizon(v, lane_valid, e_y, c1, x_end, ...
                                    D_occ, D_fov, D_see_prev, T_plan_prev);
 
@@ -34,13 +34,13 @@ function out = m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end,
 
   [x_m, y_m, horizon_m] = m_lat_traj(v, D_see, T_plan, lane_valid, ...
                                     c0, c1, c2, c3, x_end);
-  v_s = gf_plan_speed_profile(x_m, v, obj, D_see, lane_ok);
+  v_s = gf_plan_speed_profile(x_m, v, obj, D_see, lane_ok, c0);
   if isempty(v_s)
     v_plan = 0.0;
   else
     v_plan = v_s(1);
   end
-  a_req = gf_lon_a_req_n(v, obj);
+  a_req = gf_lon_a_req_n(v, obj, c0);
   if D_see < p.d_vis_tight_m
     a_max = max(p.aeb_decel_mps2, 0.5);
     a_req = min(a_max, a_req * p.a_req_vis_gain);

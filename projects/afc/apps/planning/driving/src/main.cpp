@@ -193,6 +193,57 @@ PercView ExtractPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
   for (int i = 0; i < n_src; ++i) {
     TryPushObj(v, dyn.m_Obj_item[i]);
   }
+  const auto& st = perc.Perception_STATIC_OBJ_Out;
+  const int n_st = std::min(10, static_cast<int>(st.m_Static_OBJ_Count));
+  for (int i = 0; i < n_st; ++i) {
+    const auto& o = st.m_Obj_item[i];
+    if (o.m_OBJ_ID == 0 || o.m_OBJ_Long_Distance < 0.0f ||
+        o.m_OBJ_Long_Distance > kObjDMaxM) {
+      continue;
+    }
+    if (ObjAlreadyPacked(v.obj, v.nobj, o.m_OBJ_Long_Distance, o.m_OBJ_Lat_Distance)) {
+      continue;
+    }
+    if (v.nobj >= oct_gen::kObjNMax) {
+      break;
+    }
+    oct_gen::PlanObj row{};
+    row.d = o.m_OBJ_Long_Distance;
+    row.rel = 0.0f;
+    row.lat = o.m_OBJ_Lat_Distance;
+    row.len_m = std::max(o.m_OBJ_Length, 0.5f);
+    row.cls = static_cast<float>(o.m_OBJ_Object_Class);
+    row.heading = o.m_OBJ_Heading;
+    row.is_ped = (static_cast<int>(o.m_OBJ_Object_Class) == 5) ? 1.0f : 0.0f;
+    v.obj[v.nobj++] = row;
+  }
+  const auto& tsr = perc.Perception_DSTSR_Out;
+  const int n_tsr = std::min(6, static_cast<int>(tsr.m_tsr_num));
+  for (int i = 0; i < n_tsr; ++i) {
+    const auto& it = tsr.m_TSR_Item[i];
+    const int name = static_cast<int>(it.m_DSTSR_Sign_Name);
+    // e_trafficSignals=164, e_stopAhead=196 — phantom stop, no new .m I/O.
+    if (name != 164 && name != 196) {
+      continue;
+    }
+    const float d = it.m_DSTSR_Sign_Long_Distance;
+    const float lat = it.m_DSTSR_Sign_Lat_Distance;
+    if (d < 0.0f || d > kObjDMaxM) {
+      continue;
+    }
+    if (ObjAlreadyPacked(v.obj, v.nobj, d, lat) || v.nobj >= oct_gen::kObjNMax) {
+      continue;
+    }
+    oct_gen::PlanObj row{};
+    row.d = d;
+    row.rel = 0.0f;
+    row.lat = lat;
+    row.len_m = 1.0f;
+    row.cls = 1.0f;
+    row.heading = 0.0f;
+    row.is_ped = 0.0f;
+    v.obj[v.nobj++] = row;
+  }
   return v;
 }
 

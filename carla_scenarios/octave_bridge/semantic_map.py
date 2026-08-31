@@ -14,6 +14,13 @@ CTRL_MODE_IDS = {"cruise": 0, "acc": 1, "aeb": 2, "pullaway": 3}
 CTRL_MODE_NAMES = {v: k for k, v in CTRL_MODE_IDS.items()}
 
 _VR_CAP = 130.0
+_E_TRAFFIC_SIGNALS = 164
+_E_STOP_AHEAD = 196
+
+
+def _keep_adj(side: int) -> bool:
+    # Display may include next-next (5/6). Refuse empty / unknown side.
+    return side != 0
 
 
 @dataclass
@@ -49,6 +56,15 @@ class DynObj:
     len_m: float = 4.5
     wid_m: float = 1.8
     is_ped: int = 0
+    assign: int = 3
+
+
+@dataclass
+class TsrItem:
+    name: int = 0
+    long_m: float = 0.0
+    lat_m: float = 0.0
+    relevancy: int = 0
 
 
 @dataclass
@@ -59,6 +75,8 @@ class PercView:
     adj: list[LaneLine] = field(default_factory=list)
     lane_width_m: float = 3.5
     objects: list[DynObj] = field(default_factory=list)
+    static: list[DynObj] = field(default_factory=list)
+    tsr: list[TsrItem] = field(default_factory=list)
     cipv_id: int = 0
     vd_count: int = 0
     ped_count: int = 0
@@ -113,9 +131,10 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
     lane_count = int(fp.get("lane_count") or 0)
     avail = int(fp.get("lane_avail") or 0)
     conf = float(fp.get("lane_conf") or 0.0)
-    vr_end = float(fp.get("lane_vr_end_m") or 0.0)
-    if vr_end > _VR_CAP:
-        vr_end = _VR_CAP
+    map_vr = float(fp.get("lane_vr_end_m") or 0.0)
+    if map_vr > _VR_CAP:
+        map_vr = _VR_CAP
+    vr_end = map_vr
 
     left_c0 = float(fp.get("host_left_c0") or 1.75)
     right_c0 = float(fp.get("host_right_c0") or -1.75)
@@ -137,12 +156,48 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
         avail = 0
         conf = 0.0
         vr_end = 0.0
+        map_vr = 0.0
     if width < 0.5:
         width = max(2.5, left_c0 - right_c0)
+
+    objs_in = fp.get("obj") or []
+    dyn_n = min(13, int(fp.get("dyn_n") or 0))
+    for i, o in enumerate(objs_in[:dyn_n]):
+        perc.objects.append(
+            DynObj(
+                obj_id=int(o.get("id") or (i + 1)),
+                obj_class=int(o.get("cls") or 1),
+                long_m=float(o.get("long_m") or 0.0),
+                lat_m=float(o.get("lat_m") or 0.0),
+                rel_v_mps=float(o.get("rel_v_mps") or 0.0),
+                heading_rad=float(o.get("heading_rad") or 0.0),
+                len_m=float(o.get("len_m") or 4.5),
+                wid_m=float(o.get("wid_m") or 1.8),
+                is_ped=int(o.get("is_ped") or 0),
+                assign=int(o.get("assign") or 3),
+            )
+        )
+
+    for i, o in enumerate(fp.get("stat") or []):
+        perc.static.append(
+            DynObj(
+                obj_id=int(o.get("id") or (i + 1)),
+                obj_class=int(o.get("cls") or 1),
+                long_m=float(o.get("long_m") or 0.0),
+                lat_m=float(o.get("lat_m") or 0.0),
+                rel_v_mps=0.0,
+                heading_rad=float(o.get("heading_rad") or 0.0),
+                len_m=float(o.get("len_m") or 2.0),
+                wid_m=float(o.get("wid_m") or 0.6),
+                assign=int(o.get("assign") or 3),
+            )
+        )
+
     if avail == 0 or vr_end < 0.5 or conf < 0.1:
         avail = 0
         conf = min(conf, 0.05)
         vr_end = 0.0
+        map_vr = 0.0
         left_c2 = right_c2 = 0.0
 
     perc.lane_width_m = width
@@ -187,33 +242,30 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
     adj_n = int(fp.get("adj_n") or 0) if avail == 2 else 0
     adj_n = min(4, max(0, adj_n))
     for i in range(adj_n):
+        side = int(fp["adj_side"][i])
+        c0 = float(fp["adj_c0"][i])
+        if not _keep_adj(side):
+            continue
         perc.adj.append(
             LaneLine(
-                side=int(fp["adj_side"][i]),
-                c0=float(fp["adj_c0"][i]),
+                side=side,
+                c0=c0,
                 c1=float(fp["adj_c1"][i]),
                 c2=float(fp["adj_c2"][i]),
-                vr_end=vr_end,
+                vr_end=map_vr,
                 conf=conf * 0.95,
                 avail=avail,
                 lanemark_type=int(fp["adj_type"][i]) or 2,
             )
         )
 
-    objs_in = fp.get("obj") or []
-    dyn_n = min(13, int(fp.get("dyn_n") or 0))
-    for i, o in enumerate(objs_in[:dyn_n]):
-        perc.objects.append(
-            DynObj(
-                obj_id=int(o.get("id") or (i + 1)),
-                obj_class=int(o.get("cls") or 1),
+    for o in fp.get("tsr") or []:
+        perc.tsr.append(
+            TsrItem(
+                name=int(o.get("name") or 0),
                 long_m=float(o.get("long_m") or 0.0),
                 lat_m=float(o.get("lat_m") or 0.0),
-                rel_v_mps=float(o.get("rel_v_mps") or 0.0),
-                heading_rad=float(o.get("heading_rad") or 0.0),
-                len_m=float(o.get("len_m") or 4.5),
-                wid_m=float(o.get("wid_m") or 1.8),
-                is_ped=int(o.get("is_ped") or 0),
+                relevancy=int(o.get("rel") or 0),
             )
         )
     perc.vd_count = int(fp.get("vd_count") or 0)

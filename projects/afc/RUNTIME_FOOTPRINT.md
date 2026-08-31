@@ -21,7 +21,7 @@
 rm -rf projects/afc/build-sil/runtime/observability \
        projects/afc/build-sil/runtime/logs \
        projects/afc/build-sil/logs
-# 或重新 compile_sil / stage（会 rm -rf runtime 再拷产品文件）
+# 或 GF_FORCE_COMPILE=1 bash projects/afc/scripts/run_sil.sh（wipe runtime 后再 sync）
 ```
 
 `build-sil` 四百兆级属正常（含 iceoryx 构建）；勿与 **runtime 载荷**混淆。

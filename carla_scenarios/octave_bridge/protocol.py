@@ -55,8 +55,15 @@ _FP_HEAD = struct.Struct(
     "4B"
 )
 assert _FP_HEAD.size == 156
-FP_SIZE = _FP_HEAD.size + _MAX_OBJ * _OBJ.size
-assert FP_SIZE == 520
+FP_V1_SIZE = _FP_HEAD.size + _MAX_OBJ * _OBJ.size
+assert FP_V1_SIZE == 520
+_TSR = struct.Struct("<HBx2f")
+_STAT = struct.Struct("<BBBB5f")
+_TAIL_HEAD = struct.Struct("<BB2x")
+_MAX_TSR = 6
+_MAX_STAT = 6
+FP_SIZE = FP_V1_SIZE + _TAIL_HEAD.size + _MAX_TSR * _TSR.size + _MAX_STAT * _STAT.size
+assert FP_SIZE == 740
 
 
 def pack_frame(msg_type: int, payload: bytes, ts: int, seq: int) -> bytes:
@@ -119,11 +126,11 @@ def unpack_vehicle_state(blob: bytes) -> Optional[dict]:
 
 
 def unpack_fake_perc(blob: bytes) -> Optional[dict]:
-    if len(blob) < FP_SIZE:
+    if len(blob) < FP_V1_SIZE:
         return None
     f = _FP_HEAD.unpack_from(blob)
     magic, ver = f[0], f[1]
-    if magic != GF_CH_FAKE_PERC_MAGIC or ver != GF_CH_POD_VERSION:
+    if magic != GF_CH_FAKE_PERC_MAGIC or ver not in (1, 2):
         return None
     # indices mirror _FP_HEAD.pack order in _fake_perc_pack.py
     i = 2
@@ -228,7 +235,7 @@ def unpack_fake_perc(blob: bytes) -> Optional[dict]:
             }
         )
 
-    return {
+    out = {
         "valid": int(valid),
         "timestamp_ns": int(ts),
         "seq": int(seq),
@@ -265,4 +272,47 @@ def unpack_fake_perc(blob: bytes) -> Optional[dict]:
         "adj_c2": [float(x) for x in adj_c2],
         "adj_type": [int(x) for x in adj_type],
         "obj": objs,
+        "tsr": [],
+        "stat": [],
+        "tsr_n": 0,
+        "stat_n": 0,
     }
+    if ver >= 2 and len(blob) >= FP_SIZE:
+        tsr_n, stat_n = _TAIL_HEAD.unpack_from(blob, FP_V1_SIZE)
+        tsr_n = min(_MAX_TSR, int(tsr_n))
+        stat_n = min(_MAX_STAT, int(stat_n))
+        tsr_off = FP_V1_SIZE + _TAIL_HEAD.size
+        tsrs = []
+        for i in range(tsr_n):
+            name, rel, lon, lat = _TSR.unpack_from(blob, tsr_off + i * _TSR.size)
+            tsrs.append(
+                {
+                    "name": int(name),
+                    "rel": int(rel),
+                    "long_m": float(lon),
+                    "lat_m": float(lat),
+                }
+            )
+        stat_off = tsr_off + _MAX_TSR * _TSR.size
+        stats = []
+        for i in range(stat_n):
+            sid, cls, assign, _pad, lon, lat, hdg, ln, wd = _STAT.unpack_from(
+                blob, stat_off + i * _STAT.size
+            )
+            stats.append(
+                {
+                    "id": int(sid),
+                    "cls": int(cls),
+                    "assign": int(assign),
+                    "long_m": float(lon),
+                    "lat_m": float(lat),
+                    "heading_rad": float(hdg),
+                    "len_m": float(ln),
+                    "wid_m": float(wd),
+                }
+            )
+        out["tsr"] = tsrs
+        out["stat"] = stats
+        out["tsr_n"] = tsr_n
+        out["stat_n"] = stat_n
+    return out

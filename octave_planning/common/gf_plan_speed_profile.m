@@ -1,8 +1,11 @@
 % Piecewise v along path x. Same obj matrix as v_at_s.
-function v_s = gf_plan_speed_profile(x_m, v_ego, obj, D_see, lane_ok)
+function v_s = gf_plan_speed_profile(x_m, v_ego, obj, D_see, lane_ok, c0)
+  if nargin < 6 || isempty(c0)
+    c0 = 0.0;
+  end
   n = length(x_m);
   v_s = zeros(1, n);
   for i = 1:n
-    v_s(i) = gf_plan_v_at_s(x_m(i), v_ego, obj, D_see, lane_ok);
+    v_s(i) = gf_plan_v_at_s(x_m(i), v_ego, obj, D_see, lane_ok, c0);
   end
 end

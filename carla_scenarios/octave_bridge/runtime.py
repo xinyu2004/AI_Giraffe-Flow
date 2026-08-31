@@ -1099,6 +1099,25 @@ def _pack_obj(perc: Any) -> list[list[float]]:
         if len(rows) >= n_max:
             break
         rows.append(rec)
+    for o in list(getattr(perc, "static", None) or []):
+        rec = _obj_row(o)
+        if rec is None or _obj_already(rows, rec[0], rec[2]):
+            continue
+        if len(rows) >= n_max:
+            break
+        rec[1] = 0.0
+        rows.append(rec)
+    for t in list(getattr(perc, "tsr", None) or []):
+        name = int(getattr(t, "name", 0) or 0)
+        if name not in (164, 196):
+            continue
+        d = float(getattr(t, "long_m", 0.0) or 0.0)
+        lat = float(getattr(t, "lat_m", 0.0) or 0.0)
+        if d < 0.0 or d > _OBJ_D_MAX_M or _obj_already(rows, d, lat):
+            continue
+        if len(rows) >= n_max:
+            break
+        rows.append([d, 0.0, lat, 1.0, 1.0, 0.0, 0.0])
     return rows[:n_max]
 
 

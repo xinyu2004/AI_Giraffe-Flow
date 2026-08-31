@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # HIL: cross-compile for board (default aarch64-linux-gnu).
-#   bootstrap (cross) → compose(mtime) → cmake(按需) → build(增量) → optional stage
+#   bootstrap (cross) → cmake(按需) → build(增量) → sync runtime
 #
 # Usage:
 #   bash projects/afc/scripts/compile_hil.sh
@@ -9,9 +9,7 @@
 # Note: cross bootstrap overwrites middleware/.deps-prefix; re-run host bootstrap
 # when switching back to SIL.
 #
-# Env:
-#   GF_FORCE_COMPILE=1   force cmake configure configure
-#   GF_STAGE_HIL=1       also stage build-hil/runtime (default 0)
+# GF_FORCE_COMPILE 只属于 run_hil，compile 不读。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,13 +64,7 @@ fi
 echo "${TAG} cmake --build HIL (incremental) ..."
 cmake --build "${BUILD_HIL}" -j"$(nproc)"
 
-if [[ "${GF_STAGE_HIL:-0}" == "1" ]]; then
-  if gf_sil_need_stage; then
-    bash "${SCRIPT_DIR}/stage_sil_runtime.sh"
-  else
-    echo "${TAG} stage HIL: up-to-date → $(gf_sil_runtime_dir)"
-  fi
-fi
+gf_sil_sync_runtime
 
 echo "${TAG} compile_hil OK (binaries for board; try runtime/bin/giraffe_launch on target)"
 file "${BUILD_HIL}/middleware/exec/gf_em_daemon" 2>/dev/null || true

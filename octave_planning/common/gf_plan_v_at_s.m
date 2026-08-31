@@ -1,6 +1,9 @@
 % Planned speed at station s. obj = n×7 (see gf_plan_obj_unpack). Take-strict.
-function vi = gf_plan_v_at_s(s, v_ego, obj, D_see, lane_ok)
+function vi = gf_plan_v_at_s(s, v_ego, obj, D_see, lane_ok, c0)
   p = gf_plan_cal();
+  if nargin < 6 || isempty(c0)
+    c0 = 0.0;
+  end
   v_cap = gf_plan_v_cap_vis(D_see);
   if ~lane_ok
     vi = 0.0;
@@ -11,7 +14,7 @@ function vi = gf_plan_v_at_s(s, v_ego, obj, D_see, lane_ok)
     return;
   end
   vi = v_cap;
-  [n, d, rel, lat, ~, ~, hdg, ped] = gf_plan_obj_unpack(obj);
+  [n, d, rel, lat, len_m, cls, hdg, ped] = gf_plan_obj_unpack(obj);
   if n < 1
     return;
   end
@@ -21,7 +24,7 @@ function vi = gf_plan_v_at_s(s, v_ego, obj, D_see, lane_ok)
     if d(k) > p.lon_max_d_m
       continue;
     end
-    w = gf_plan_obj_weight(lat(k), hdg(k), ped(k));
+    w = gf_plan_obj_weight(lat(k), hdg(k), ped(k), len_m(k), cls(k), c0);
     if w <= 0.0
       continue;
     end

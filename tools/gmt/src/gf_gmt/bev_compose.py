@@ -8,13 +8,11 @@ Primary inputs (iceoryx → tap NDJSON):
 
 Output topic: /gf/driving/bev/compressed (foxglove.CompressedImage JSON).
 
-Demo range contract (FOV is optical only — not these numbers):
+Demo range contract:
   D_work ≈ 120 m — soft working / validity band (not a hard BEV cut)
-  D_bev  = 130 m — canvas ≈ D_work×1.1; lanes/ticks/objects drawn to this
-Object fill color is by stable OBJ_ID palette (video overlay will share later).
-Trajectory polyline = planning `/gf/Trajectory` (the plan, not this-tick mode):
-  each segment colored by `points_v_mps` (red=slow/stop → green=cruise);
-  dashed cyan = `D_see`; HUD `v` / `D` / `T`. Fallback if no v[]: thr−brk color.
+  D_bev  = 130 m — canvas ≈ D_work×1.1; gray marks/ticks/objects drawn to this
+  Teal wash + cap + path = host lane only, to D_see. Triangles only if an
+  in-lane object notched the opening. No FOV overlay. Gray marks follow VR_End.
 
 BEV lane geometry comes only from FCM Out (Perception_LH_Out host lines and
 Perception_LA_Out adjacent lines). Mark style follows gold lanemark_type
@@ -27,6 +25,7 @@ expand_rows_with_bev(..., script=...) tests if callers still pass a script.
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -75,6 +74,245 @@ def color_for_obj_id(obj_id: int) -> tuple[int, int, int]:
     if obj_id <= 0:
         return _ID_PALETTE[0]
     return _ID_PALETTE[(int(obj_id) - 1) % len(_ID_PALETTE)]
+
+
+def fill_convex_poly(
+    buf: bytearray,
+    width: int,
+    height: int,
+    pts: list[tuple[int, int]],
+    fill: tuple[int, int, int],
+    *,
+    outline: tuple[int, int, int] | None = None,
+    y_clip0: int = 0,
+) -> None:
+    """Solid scanline fill of a convex polygon (rotated vehicle boxes)."""
+    if len(pts) < 3:
+        return
+    xs_at: dict[int, list[float]] = {}
+    n = len(pts)
+    for i in range(n):
+        x0, y0 = pts[i]
+        x1, y1 = pts[(i + 1) % n]
+        if y0 == y1:
+            continue
+        if y0 > y1:
+            x0, y0, x1, y1 = x1, y1, x0, y0
+        y_lo = max(int(y_clip0), int(y0))
+        y_hi = min(height - 1, int(y1))
+        if y_hi < y_lo:
+            continue
+        dy = float(y1 - y0)
+        for y in range(y_lo, y_hi + 1):
+            t = max(0.0, min(1.0, (y - y0) / dy))
+            xs_at.setdefault(y, []).append(x0 + t * (x1 - x0))
+    if not xs_at:
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        xa = max(0, min(xs))
+        xb = min(width, max(xs) + 1)
+        ya = max(int(y_clip0), min(ys))
+        yb = min(height, max(ys) + 1)
+        if xa < xb and ya < yb:
+            _fill_rect(buf, width, height, xa, ya, xb, yb, fill)
+    else:
+        for y, xs in xs_at.items():
+            xa = max(0, int(math.floor(min(xs))))
+            xb = min(width - 1, int(math.ceil(max(xs))))
+            if xa <= xb:
+                _fill_rect(buf, width, height, xa, y, xb + 1, y + 1, fill)
+    if outline is not None:
+        for i in range(n):
+            a = pts[i]
+            b = pts[(i + 1) % n]
+            _line(buf, width, height, a[0], a[1], b[0], b[1], outline, thick=2)
+
+
+def dash_line(
+    buf: bytearray,
+    width: int,
+    height: int,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+    rgb: tuple[int, int, int],
+    *,
+    thick: int = 2,
+    dash_on: int = 7,
+    dash_off: int = 6,
+) -> None:
+    dx = float(x1 - x0)
+    dy = float(y1 - y0)
+    length = math.hypot(dx, dy)
+    if length < 1.5:
+        return
+    ux, uy = dx / length, dy / length
+    pos = 0.0
+    on = float(max(2, dash_on))
+    off = float(max(1, dash_off))
+    while pos < length:
+        a = pos
+        b = min(length, pos + on)
+        _line(
+            buf,
+            width,
+            height,
+            int(round(x0 + ux * a)),
+            int(round(y0 + uy * a)),
+            int(round(x0 + ux * b)),
+            int(round(y0 + uy * b)),
+            rgb,
+            thick=thick,
+        )
+        pos = b + off
+
+
+def d_see_paint_marks(
+    host_cap: tuple[float, float, float, float],
+    *,
+    far_left: tuple[float, float] | None = None,
+    far_right: tuple[float, float] | None = None,
+) -> tuple[
+    list[tuple[float, float, float, float]],
+    list[tuple[tuple[float, float], tuple[float, float], tuple[float, float]]],
+]:
+    """Host-lane cap; triangles only when adj marks continue past an occupy notch."""
+    segs: list[tuple[float, float, float, float]] = []
+    tris: list[tuple[tuple[float, float], tuple[float, float], tuple[float, float]]] = []
+    x0, y0, x1, y1 = (float(v) for v in host_cap)
+    if max(abs(x1 - x0), abs(y1 - y0)) < 0.2:
+        return segs, tris
+    if y0 <= y1:
+        xl, yl, xr, yr = x0, y0, x1, y1
+    else:
+        xl, yl, xr, yr = x1, y1, x0, y0
+    segs.append((xl, yl, xr, yr))
+    if far_left is not None:
+        xf, yf = float(far_left[0]), float(far_left[1])
+        if yf > max(yl, yr) + 0.35:
+            segs.append((xr, yr, xf, yf))
+            tris.append(((xr, yr), (xf, yf), (xf, yr)))
+    if far_right is not None:
+        xf, yf = float(far_right[0]), float(far_right[1])
+        if yf < min(yl, yr) - 0.35:
+            segs.append((xl, yl, xf, yf))
+            tris.append(((xl, yl), (xf, yf), (xf, yl)))
+    return segs, tris
+
+
+# In-host-lane band; matches _objects_truth assign==HOST when |y|<=1.5.
+_SEE_HOST_LAT_M = 1.5
+_SEE_CANVAS_MARGIN_M = 3.0
+_SEE_FILL = (44, 124, 144)
+_SEE_CAP = (96, 224, 236)
+_SEE_CAP_LIP_M = 2.0
+# 1:1 gf_plan_cal.m see_fov_deg (length of host wash, not a drawn cone).
+_SEE_FOV_DEG = 50.0
+
+
+def see_cap_x_m(
+    opening_m: float,
+    x_draw_m: float,
+    *,
+    margin_m: float = _SEE_CANVAS_MARGIN_M,
+) -> float:
+    """Paint station for the see cap: opening, but not flush with the canvas rim."""
+    hi = min(float(x_draw_m), D_BEV_M) - max(0.0, float(margin_m))
+    return max(0.0, min(float(opening_m), hi))
+
+
+def see_opening_m(
+    host_vr_m: float,
+    objects: list[BevDynObj],
+    *,
+    host_lat_m: float = _SEE_HOST_LAT_M,
+) -> float:
+    """See opening: nearest in-lane dyn, else mark VR. Adjacent-lane objects do not notch."""
+    opening = max(0.0, float(host_vr_m))
+    lat_max = max(0.8, float(host_lat_m))
+    for obj in objects:
+        x = float(obj.x_m)
+        y = float(obj.y_m)
+        if x <= 0.5 or x >= opening:
+            continue
+        if abs(y) > lat_max:
+            continue
+        opening = x
+    return opening
+
+
+def optical_d_along_poly(
+    c0: float,
+    c1: float,
+    c2: float,
+    c3: float,
+    x_end: float,
+    *,
+    cap_m: float = 120.0,
+    step_m: float = 2.0,
+) -> float:
+    """Along-poly optical see. 1:1 gf_plan_d_fov.m (bearing, not heading)."""
+    d = min(float(cap_m), float(x_end) if float(x_end) > 0.5 else float(cap_m))
+    half = 0.5 * math.radians(_SEE_FOV_DEG)
+    x = 2.0
+    while x <= d + 1e-6:
+        y = c0 + c1 * x + c2 * x * x + c3 * x * x * x
+        if abs(math.atan2(y, x)) > half:
+            return x
+        x += step_m
+    return d
+
+
+def optical_d_from_host(host_lanes: list[HostLanePoly], host_vr_m: float) -> float:
+    """Mid-corridor poly from host L/R. Empty → mark VR."""
+    vr = max(0.0, float(host_vr_m))
+    if not host_lanes:
+        return vr
+    n = float(len(host_lanes))
+    c0 = sum(float(p.c0) for p in host_lanes) / n
+    c1 = sum(float(p.c1) for p in host_lanes) / n
+    c2 = sum(float(p.c2) for p in host_lanes) / n
+    c3 = sum(float(p.c3) for p in host_lanes) / n
+    return optical_d_along_poly(c0, c1, c2, c3, vr if vr > 0.5 else 120.0)
+
+
+def driving_see_m(
+    st: LiveBevState,
+    host_vr_m: float,
+    objects: list[BevDynObj],
+) -> float:
+    """HUD D: Trajectory D_see_m if published, else min(in-lane occupy, optical)."""
+    if float(st.traj_d_see_m) > 0.5:
+        return float(st.traj_d_see_m)
+    occ = see_opening_m(host_vr_m, objects)
+    opt = optical_d_from_host(st.host_lanes, host_vr_m)
+    return min(occ, opt)
+
+
+def occupy_notched(host_vr_m: float, occupy_opening_m: float, *, slack_m: float = 2.0) -> bool:
+    """True only when an in-lane object cut the opening inside mark VR."""
+    return float(occupy_opening_m) + float(slack_m) < float(host_vr_m)
+
+
+def see_far_adj(
+    adj_lanes: list[AdjLanePoly],
+    opening_m: float,
+) -> tuple[AdjLanePoly | None, AdjLanePoly | None]:
+    """Closest adj on each side whose mark continues past the opening (skip next-next if ±1 exists)."""
+    left: list[AdjLanePoly] = []
+    right: list[AdjLanePoly] = []
+    for al in adj_lanes:
+        if float(al.x1) <= float(opening_m) + 2.0:
+            continue
+        y0 = al.y_at(0.0)
+        if y0 > 0.2:
+            left.append(al)
+        elif y0 < -0.2:
+            right.append(al)
+    far_l = min(left, key=lambda a: a.y_at(0.0)) if left else None
+    far_r = max(right, key=lambda a: a.y_at(0.0)) if right else None
+    return far_l, far_r
 
 
 @dataclass
@@ -359,7 +597,6 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     import math
 
     bg = (24, 28, 36)
-    asphalt_host = (54, 58, 68)
     lh_c = (235, 235, 250)
     la_c = (170, 175, 190)
     dash_c = (200, 200, 90)
@@ -443,7 +680,6 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
         host_vr = min(D_BEV_M, max(p.x1 for p in st.host_lanes))
     x_draw = max(0.0, host_vr)
     tick_stub_m = 0.55
-    xe_span = (x_draw / max(0.2, abs(c_psi)) + 10.0) if x_draw > 0.5 else 0.0
 
     def e2p_road(xr: float, yr: float) -> tuple[int, int]:
         return int(ox - (yr - y_mid) * sy), int(oy - xr * sx)
@@ -480,23 +716,44 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
                     _line(buf, width, height, prev[0], prev[1], pt[0], pt[1], color, thick=thick)
             prev = pt
 
-    # Host asphalt only within VR
-    if x_draw > 0.5 and (left_poly is not None or right_poly is not None):
-        steps_a = max(24, int(xe_span) // 2 + 1)
-        for i in range(steps_a + 1):
-            xe = min(x_draw, (xe_span) * i / max(1, steps_a))
+    def _pix_on_canvas(pt: tuple[int, int]) -> bool:
+        return 0 <= pt[0] < width and 28 <= pt[1] < height
+
+    # Host-lane teal to D_see. Gray FCM marks still go to VR.
+    d_see = 0.0
+    if st.host_lanes:
+        host_ends = [float(p.x1) for p in st.host_lanes if float(p.x1) > 0.5]
+        if host_ends:
+            d_see = min(host_ends)
+    blockers_early = list(st.perc_objects)
+    occupy_open = see_opening_m(d_see, blockers_early)
+    opening = driving_see_m(st, d_see, blockers_early)
+    xe_cap = see_cap_x_m(opening, x_draw)
+    if xe_cap >= 2.0 and (left_poly is not None or right_poly is not None):
+        steps_s = max(24, int(xe_cap) // 2 + 1)
+        prev_l: tuple[int, int] | None = None
+        prev_r: tuple[int, int] | None = None
+        for i in range(steps_s + 1):
+            xe = min(xe_cap, xe_cap * i / max(1, steps_s))
             if left_poly is not None and xe > left_poly.x1:
                 continue
             if right_poly is not None and xe > right_poly.x1:
                 continue
-            ya, yb = _host_y_ego(xe, "r"), _host_y_ego(xe, "l")
-            p_a, p_b = e2p_ego(xe, ya), e2p_ego(xe, yb)
-            xa, xb = sorted((p_a[0], p_b[0]))
-            py = (p_a[1] + p_b[1]) // 2
-            xr, _ = ego_to_road(xe, 0.5 * (ya + yb))
-            if xr < -1.0 or xr > x_draw + 2.0:
+            pl = e2p_ego(xe, _host_y_ego(xe, "l"))
+            pr = e2p_ego(xe, _host_y_ego(xe, "r"))
+            if not (_pix_on_canvas(pl) or _pix_on_canvas(pr)):
+                prev_l, prev_r = None, None
                 continue
-            _fill_rect(buf, width, height, xa, max(28, py), xb + 1, min(height, py + 3), asphalt_host)
+            if prev_l is not None and prev_r is not None:
+                fill_convex_poly(
+                    buf,
+                    width,
+                    height,
+                    [prev_r, prev_l, pl, pr],
+                    _SEE_FILL,
+                    y_clip0=28,
+                )
+            prev_l, prev_r = pl, pr
 
     for hl in st.host_lanes:
         _draw_poly_road(hl, lh_c, thick=3, dashed=hl.is_dashed)
@@ -504,21 +761,22 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     for al in st.adj_lanes:
         _draw_poly_road(al, la_c, thick=2, dashed=al.is_dashed)
 
-    # Host center dashes / ruler only when host lanes are available within VR
+    # Host center dashes only inside the visible patch. Distance ticks still follow VR.
     if x_draw > 0.5 and st.host_lanes:
         y_host_mid_e = 0.5 * (_host_y_ego(0.0, "l") + _host_y_ego(0.0, "r"))
+        dash_hi = xe_cap if xe_cap >= 2.0 else x_draw
+
+        def _pt_at_road_x(xr: float) -> tuple[int, int]:
+            xe = xr * c_psi
+            ye = 0.5 * (_host_y_ego(xe, "l") + _host_y_ego(xe, "r"))
+            return e2p_ego(xe, ye)
+
         for seg in range(-int(dash_period), int(x_draw) + int(dash_period), max(1, int(dash_period // 2))):
             x0 = float(seg) - scroll
             x1 = x0 + dash_period * 0.45
-            if x1 < 0 or x0 > x_draw:
+            if x1 < 0 or x0 > dash_hi:
                 continue
-
-            def _pt_at_road_x(xr: float) -> tuple[int, int]:
-                xe = xr * c_psi
-                ye = 0.5 * (_host_y_ego(xe, "l") + _host_y_ego(xe, "r"))
-                return e2p_ego(xe, ye)
-
-            p0, p1 = _pt_at_road_x(max(0.0, x0)), _pt_at_road_x(min(x_draw, x1))
+            p0, p1 = _pt_at_road_x(max(0.0, x0)), _pt_at_road_x(min(dash_hi, x1))
             _line(buf, width, height, p0[0], p0[1], p1[0], p1[1], dash_c, thick=2)
 
         def _corridor_yr(xr_t: float) -> tuple[float, float]:
@@ -566,12 +824,21 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
             v_hi = max(12.0, max(st.traj_v[: nseg + 1]))
         fallback_c = traj_color_for_lon(st)
         fallback_th = traj_thickness_for_lon(st)
+        x_hi = opening if opening > 0.5 else x_draw
         for i in range(nseg):
-            a = e2p_ego(st.traj_x[i], st.traj_y[i])
-            b = e2p_ego(st.traj_x[i + 1], st.traj_y[i + 1])
+            x0, y0 = float(st.traj_x[i]), float(st.traj_y[i])
+            x1, y1 = float(st.traj_x[i + 1]), float(st.traj_y[i + 1])
+            if min(x0, x1) > x_hi:
+                break
+            if x1 > x_hi and x1 > x0 + 1e-6:
+                t = (x_hi - x0) / (x1 - x0)
+                y1 = y0 + t * (y1 - y0)
+                x1 = x_hi
+            a = e2p_ego(x0, y0)
+            b = e2p_ego(x1, y1)
             if has_v:
                 v0 = st.traj_v[i]
-                v1 = st.traj_v[i + 1]
+                v1 = st.traj_v[min(i + 1, len(st.traj_v) - 1)]
                 col = traj_color_for_v(0.5 * (v0 + v1), v_hi)
                 th = traj_seg_thickness(v0, v1)
             else:
@@ -579,24 +846,51 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
                 th = fallback_th
             _line(buf, width, height, a[0], a[1], b[0], b[1], col, thick=th)
 
-    d_see = float(st.traj_d_see_m or 0.0)
-    if d_see < 1.0 and st.traj_x:
-        d_see = float(st.traj_x[-1])
-    if d_see >= 2.0:
-        xr_see = min(d_see, x_draw if x_draw > 1.0 else D_BEV_M)
-        pad = 0.8
-        p_a = e2p_road(xr_see, y_span_min - pad)
-        p_b = e2p_road(xr_see, y_span_max + pad)
-        see_c = (90, 210, 230)
-        steps = 8
-        for k in range(0, steps, 2):
-            t0 = k / steps
-            t1 = (k + 1) / steps
-            xa = int(p_a[0] + (p_b[0] - p_a[0]) * t0)
-            ya = int(p_a[1] + (p_b[1] - p_a[1]) * t0)
-            xb = int(p_a[0] + (p_b[0] - p_a[0]) * t1)
-            yb = int(p_a[1] + (p_b[1] - p_a[1]) * t1)
-            _line(buf, width, height, xa, ya, xb, yb, see_c, thick=2)
+    if opening >= 2.0:
+        xe_see = xe_cap if xe_cap >= 2.0 else see_cap_x_m(opening, x_draw)
+        pL = ego_to_road(xe_see, _host_y_ego(xe_see, "l"))
+        pR = ego_to_road(xe_see, _host_y_ego(xe_see, "r"))
+        far_l = far_r = None
+        if occupy_notched(d_see, occupy_open):
+            al_l, al_r = see_far_adj(st.adj_lanes, occupy_open)
+            if al_l is not None:
+                xe_f = min(float(al_l.x1), D_BEV_M)
+                far_l = ego_to_road(xe_f, al_l.y_at(xe_f))
+            if al_r is not None:
+                xe_f = min(float(al_r.x1), D_BEV_M)
+                far_r = ego_to_road(xe_f, al_r.y_at(xe_f))
+        segs, tris = d_see_paint_marks(
+            (pL[0], pL[1], pR[0], pR[1]),
+            far_left=far_l,
+            far_right=far_r,
+        )
+        for tri in tris:
+            fill_convex_poly(
+                buf,
+                width,
+                height,
+                [e2p_road(px, py) for px, py in tri],
+                _SEE_FILL,
+                y_clip0=28,
+            )
+        if xe_see >= 2.0 and (left_poly is not None or right_poly is not None):
+            xe_lip = max(0.0, xe_see - _SEE_CAP_LIP_M)
+            fill_convex_poly(
+                buf,
+                width,
+                height,
+                [
+                    e2p_ego(xe_lip, _host_y_ego(xe_lip, "r")),
+                    e2p_ego(xe_lip, _host_y_ego(xe_lip, "l")),
+                    e2p_ego(xe_see, _host_y_ego(xe_see, "l")),
+                    e2p_ego(xe_see, _host_y_ego(xe_see, "r")),
+                ],
+                _SEE_CAP,
+                y_clip0=28,
+            )
+        for x0, y0, x1, y1 in segs[1:]:
+            pa, pb = e2p_road(x0, y0), e2p_road(x1, y1)
+            dash_line(buf, width, height, pa[0], pa[1], pb[0], pb[1], _SEE_CAP, thick=2)
 
     if st.nearest_cm is not None and st.nearest_cm > 0:
         dist_m = max(0.5, min(float(st.nearest_cm) / 100.0, D_BEV_M))
@@ -614,8 +908,6 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
             )
         ]
 
-    max_hx = max(2, int(0.42 * lane_w * sy))
-
     def _paint_box_road(
         xe: float,
         ye: float,
@@ -630,31 +922,18 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
         heading_r = heading_ego - psi
         c = math.cos(heading_r)
         s = math.sin(heading_r)
-        hl, hw = 0.5 * length_m, 0.5 * width_m
-        if abs(heading_r) < 0.08:
-            hx = max(2, min(max_hx, int(hw * sy)))
-            hy = max(2, int(hl * sx))
-            cx, cy = e2p_road(xr, yr)
-            if outline is not None:
-                _fill_rect(
-                    buf, width, height, cx - hx - 2, cy - hy - 2, cx + hx + 2, cy + hy + 2, outline
-                )
-            _fill_rect(buf, width, height, cx - hx, cy - hy, cx + hx, cy + hy, fill)
-            return
-        steps_l = max(4, int(length_m * sx / 2) + 1)
-        steps_w = max(3, int(width_m * sy / 2) + 1)
-        for i in range(steps_l + 1):
-            for j in range(steps_w + 1):
-                dl = -hl + length_m * i / steps_l
-                dw = -hw + width_m * j / steps_w
-                pxr = xr + dl * c - dw * s
-                pyr = yr + dl * s + dw * c
-                px, py = e2p_road(pxr, pyr)
-                col = outline if (
-                    outline is not None and (i in (0, steps_l) or j in (0, steps_w))
-                ) else fill
-                if 0 <= px < width and 0 <= py < height:
-                    _fill_rect(buf, width, height, px, py, px + 1, py + 1, col)
+        hl = 0.5 * max(float(length_m), 1.2)
+        hw = 0.5 * max(float(width_m), 1.0)
+        corners_m = (
+            (xr + hl * c - hw * s, yr + hl * s + hw * c),
+            (xr + hl * c + hw * s, yr + hl * s - hw * c),
+            (xr - hl * c + hw * s, yr - hl * s - hw * c),
+            (xr - hl * c - hw * s, yr - hl * s + hw * c),
+        )
+        pts = [e2p_road(pxr, pyr) for pxr, pyr in corners_m]
+        fill_convex_poly(
+            buf, width, height, pts, fill, outline=outline, y_clip0=28
+        )
 
     for obj in objs:
         xr, _yr = ego_to_road(obj.x_m, obj.y_m)
@@ -687,7 +966,7 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     spark = 8 + int(st.odom_m * 10) % max(1, width - 16)
     _fill_rect(buf, width, height, spark, 6, spark + 3, 22, (240, 240, 80))
 
-    hud = f"V{v_plan:4.1f} D{d_see:3.0f} T{float(st.traj_t_plan_s):3.1f}"
+    hud = f"V{v_plan:4.1f} D{opening:3.0f} T{float(st.traj_t_plan_s):3.1f}"
     if st.allow_lc:
         hud += " LC"
     _blit_text(buf, width, height, 140, 7, hud, (220, 224, 230), scale=1)

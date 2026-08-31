@@ -10,14 +10,22 @@
 namespace gf_octave_planning {
 
 struct PlanCal {
+  float lane_width_m{3.50f};
+  float ego_width_m{1.80f};
+  float pass_clear_m{0.30f};
+  float obj_width_car_m{1.80f};
+  float obj_width_truck_m{2.55f};
+  float obj_width_ped_m{0.60f};
+  float occ_overlap_min_m{0.30f};
+  float lon_max_d_m{80.0f};
   float lat_acc_m{3.2f};
   float lat_aeb_m{8.0f};
   float lat_merge_m{1.0f};
-  float lon_max_d_m{80.0f};
 
   float t_base_s{10.0f};
   float t_plan_min_s{1.0f};
   float d_cal_cap_m{120.0f};
+  float see_fov_deg{50.0f};  // driving wedge; camera 100°, inner 50. 1:1 gf_plan_cal.m
   float d_fov_conf_m{120.0f};
   float d_fov_conf_min{0.20f};
   float d_see_lane_bad_m{12.0f};
@@ -32,10 +40,12 @@ struct PlanCal {
 
   float occ_w_min{0.40f};
   float cls_truck{2.0f};
+  float cls_ped{5.0f};
   float t_lc_min_s{6.0f};
   float d_lc_min_m{40.0f};
   float lc_conf_min{0.50f};
   float cutin_head_gain{1.20f};
+  float cutin_approach_m{1.50f};
 
   float aeb_decel_mps2{6.0f};
   float aeb_d_min_m{4.5f};
@@ -144,6 +154,27 @@ inline float plan_vis_slew(float raw, float prev, float alpha) {
   return prev + alpha * (raw - prev);
 }
 
+// 1:1 gf_plan_d_fov.m — optical bearing along poly. Not road-tangent heading.
+inline float plan_d_fov(float c0, float c1, float c2, float c3, float x_end) {
+  const PlanCal& p = plan_cal();
+  float D_fov = p.d_cal_cap_m;
+  if (x_end > 0.5f) {
+    D_fov = std::min(D_fov, x_end);
+  }
+  const float half = 0.5f * p.see_fov_deg * 3.14159265f / 180.0f;
+  const float step = 2.0f;
+  for (float x = 2.0f; x <= D_fov + 1e-6f; x += step) {
+    const float y = c0 + c1 * x + c2 * x * x + c3 * x * x * x;
+    if (std::fabs(std::atan2(y, x)) > half) {
+      return x;
+    }
+  }
+  return D_fov;
+}
+
+// 1:1 gf_plan_horizon.m — D_see = min(D_vr, D_occ, D_fov, cap) + slew.
+// D_vr is FCM host VR_End (marks). D_fov is optical along-poly. Do not write either into VR_End.
+// Heading-change is not see — do not revive D_curve / D_bend here.
 inline PlanHorizon plan_horizon(float v, bool lane_valid, float e_y, float c1, float x_end,
                                float D_occ, float D_fov, float D_see_prev, float T_plan_prev) {
   const PlanCal& p = plan_cal();
@@ -156,7 +187,7 @@ inline PlanHorizon plan_horizon(float v, bool lane_valid, float e_y, float c1, f
   } else {
     D_vr = std::min(D_vr, p.d_see_lane_bad_m);
   }
-  const float D_raw = std::min({D_fov, D_vr, D_occ, p.d_cal_cap_m});
+  const float D_raw = std::min(D_vr, std::min(D_occ, std::min(D_fov, p.d_cal_cap_m)));
   h.D_see = plan_vis_slew(D_raw, D_see_prev, p.vis_up_alpha);
   float T_raw = std::min(p.t_base_s, h.D_see / std::max(v, p.traj_speed_floor_mps));
   T_raw = std::max(T_raw, p.t_plan_min_s);
@@ -166,7 +197,7 @@ inline PlanHorizon plan_horizon(float v, bool lane_valid, float e_y, float c1, f
 
 inline PlanHorizon plan_horizon(float v, bool lane_valid, float e_y, float c1, float x_end) {
   const PlanCal& p = plan_cal();
-  return plan_horizon(v, lane_valid, e_y, c1, x_end, p.d_cal_cap_m, p.d_fov_conf_m, 0.0f, 0.0f);
+  return plan_horizon(v, lane_valid, e_y, c1, x_end, p.d_cal_cap_m, p.d_cal_cap_m, 0.0f, 0.0f);
 }
 
 // 1:1 gf_lon_a_req.m — 6-arg w is take-strict (already weighted).

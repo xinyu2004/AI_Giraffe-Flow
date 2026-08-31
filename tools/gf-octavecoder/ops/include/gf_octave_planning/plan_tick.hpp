@@ -39,8 +39,8 @@ inline PlanTickOut m_plan_tick(float v, float steer_deg, bool lane_valid, float 
     obj = nullptr;
   }
 
-  const float D_fov = p.d_fov_conf_m * clamp(lane_conf, p.d_fov_conf_min, 1.0f);
-  out.D_occ = plan_occlusion(obj, nobj);
+  out.D_occ = plan_occlusion(obj, nobj, c0);
+  const float D_fov = plan_d_fov(c0, c1, c2, c3, x_end);
   const PlanHorizon hz =
       plan_horizon(v, lane_valid, e_y, c1, x_end, out.D_occ, D_fov, D_see_prev, T_plan_prev);
   out.D_see = hz.D_see;
@@ -53,9 +53,9 @@ inline PlanTickOut m_plan_tick(float v, float steer_deg, bool lane_valid, float 
 
   out.path = m_lat_traj(v, out.D_see, out.T_plan, lane_valid, c0, c1, c2, c3, x_end);
   const int npts = std::min(kLatTrajPoints, std::max(2, p.traj_n));
-  plan_speed_profile(out.path.x_m, npts, v, obj, nobj, out.D_see, lane_ok, out.path.v_mps);
+  plan_speed_profile(out.path.x_m, npts, v, obj, nobj, out.D_see, lane_ok, out.path.v_mps, c0);
   const float v_plan = out.path.v_mps[0];
-  float a_req = lon_a_req_n(v, obj, nobj);
+  float a_req = lon_a_req_n(v, obj, nobj, c0);
   if (out.D_see < p.d_vis_tight_m) {
     const float a_max = std::max(p.aeb_decel_mps2, 0.5f);
     a_req = std::min(a_max, a_req * p.a_req_vis_gain);

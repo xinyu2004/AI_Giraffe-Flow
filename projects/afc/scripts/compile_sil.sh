@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # SIL: host compile for afc
-#   bootstrap → require generated/ (gf-config) → cmake → build(Ninja/Make 增量) → ctest(可选) → stage(mtime)
+#   bootstrap → require generated/ (gf-config) → cmake → build(Ninja/Make 增量) → ctest(可选) → sync runtime
 #
-# 无内容 SHA stamp。差异编译交给构建系统（mtime + depfile）；壳只对 stage 做 -newer；compose 仅 gf-config。
+# 无内容 SHA stamp。差异编译交给构建系统（mtime + depfile）；sync 只盖比 runtime 新的产物。
+# GF_FORCE_COMPILE 只属于 run_sil / run_hil，compile 不读。
 #
 # Usage:
 #   bash projects/afc/scripts/compile_sil.sh
@@ -13,7 +14,6 @@
 #   GF_CC / GF_CXX            host compilers
 #   GF_SIL_TOOLCHAIN_FILE     optional CMake toolchain
 #   GF_DEPS_PREFIX            optional deps prefix
-#   GF_FORCE_COMPILE=1        force cmake configure + stage（build 仍由 Ninja 增量）
 #   GF_CTEST=1                run ctest（默认跳过；CI 请显式打开）
 set -euo pipefail
 
@@ -77,10 +77,6 @@ else
   echo "${TAG} ctest skipped (set GF_CTEST=1 to run)"
 fi
 
-if gf_sil_need_stage; then
-  bash "${SCRIPT_DIR}/stage_sil_runtime.sh"
-else
-  echo "${TAG} stage: up-to-date (mtime; skip) → $(gf_sil_runtime_dir)"
-fi
+gf_sil_sync_runtime
 
 echo "${TAG} compile_sil OK — returning to caller"

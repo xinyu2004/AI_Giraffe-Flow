@@ -11,9 +11,13 @@ enum {
   GF_CH_VEHICLE_STATE_MAGIC = 0x47565354u, /* 'GVST' */
   GF_CH_VEHICLE_CMD_MAGIC = 0x4756434du,   /* 'GVCM' */
   GF_CH_FAKE_PERC_MAGIC = 0x47465043u,     /* 'GFPC' */
-  GF_CH_POD_VERSION = 1u,
+  GF_CH_POD_VERSION = 1u,                 /* vehicle_state / cmd */
+  GF_CH_FAKE_PERC_VERSION = 2u,           /* v1=520 B head; v2=+TSR/STATIC tail */
+  GF_CH_FAKE_PERC_V1_SIZE = 520u,
   GF_CH_FAKE_PERC_MAX_OBJ = 13u,
   GF_CH_FAKE_PERC_MAX_ADJ = 4u,
+  GF_CH_FAKE_PERC_MAX_TSR = 6u,
+  GF_CH_FAKE_PERC_MAX_STAT = 6u,
 };
 
 #pragma pack(push, 1)
@@ -58,6 +62,26 @@ typedef struct GfFakePercObj {
   float rel_v_mps;
 } GfFakePercObj;
 
+typedef struct GfFakePercTsr {
+  uint16_t sign_name; /* DSTSR_Sign_Name */
+  uint8_t relevancy;  /* DSTSR_Relevancy */
+  uint8_t pad;
+  float long_m;
+  float lat_m;
+} GfFakePercTsr;
+
+typedef struct GfFakePercStat {
+  uint8_t id;
+  uint8_t cls;
+  uint8_t assign;
+  uint8_t pad;
+  float long_m;
+  float lat_m;
+  float heading_rad;
+  float len_m;
+  float wid_m;
+} GfFakePercStat;
+
 typedef struct GfFakePercPod {
   uint32_t magic;
   uint16_t version;
@@ -99,6 +123,12 @@ typedef struct GfFakePercPod {
   float adj_c2[GF_CH_FAKE_PERC_MAX_ADJ];
   uint8_t adj_type[GF_CH_FAKE_PERC_MAX_ADJ];
   GfFakePercObj obj[GF_CH_FAKE_PERC_MAX_OBJ];
+  /* v2 tail — ignored when version==1 or payload is 520 B */
+  uint8_t tsr_n;
+  uint8_t stat_n;
+  uint8_t pad1[2];
+  GfFakePercTsr tsr[GF_CH_FAKE_PERC_MAX_TSR];
+  GfFakePercStat stat[GF_CH_FAKE_PERC_MAX_STAT];
 } GfFakePercPod;
 #pragma pack(pop)
 

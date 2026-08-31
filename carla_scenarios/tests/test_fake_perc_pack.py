@@ -77,7 +77,7 @@ def test_pack_size_and_magic() -> None:
     assert len(blob) == _FP_SIZE
     magic, ver, _res, ts, seq = struct.unpack_from("<IHHQQ", blob, 0)
     assert magic == 0x47465043
-    assert ver == 1
+    assert ver == 2
     assert ts == 123
     assert seq == 7
     # lane_count @ offset after header QQ + start of BBBB valid,lead,lane,ego
@@ -102,3 +102,34 @@ def test_pack_empty_lane() -> None:
     assert fields[5] == 1  # valid
     assert fields[7] == 0  # lane_count
     assert fields[28] == 0  # adj_n
+
+
+def test_pack_tsr_static_tail() -> None:
+    from _fake_perc_pack import _FP_V1_SIZE, _STAT, _TAIL_HEAD, _TSR
+
+    tsr = {
+        "tsr_n": 1,
+        "tsr0_name": 196,
+        "tsr0_long": 32.0,
+        "tsr0_lat": 1.2,
+        "tsr0_rel": 0,
+        "stat_n": 1,
+        "stat0_id": 7,
+        "stat0_cls": 1,
+        "stat0_assign": 3,
+        "stat0_long": 18.0,
+        "stat0_lat": 0.1,
+        "stat0_heading": 0.0,
+        "stat0_len": 2.0,
+        "stat0_wid": 0.5,
+    }
+    blob = pack_fake_perc_pod(lane={"lane_count": 1, "adj_n": 0}, dyn={"dyn_n": 0}, tsr=tsr)
+    assert len(blob) == _FP_SIZE
+    tsr_n, stat_n = _TAIL_HEAD.unpack_from(blob, _FP_V1_SIZE)
+    assert tsr_n == 1 and stat_n == 1
+    name, _rel, lon, _lat = _TSR.unpack_from(blob, _FP_V1_SIZE + _TAIL_HEAD.size)
+    assert name == 196 and abs(lon - 32.0) < 1e-3
+    sid, _cls, _assign, _p, slon, _slat, _h, _ln, _wd = _STAT.unpack_from(
+        blob, _FP_V1_SIZE + _TAIL_HEAD.size + 6 * _TSR.size
+    )
+    assert sid == 7 and abs(slon - 18.0) < 1e-3

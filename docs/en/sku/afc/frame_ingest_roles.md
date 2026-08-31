@@ -66,7 +66,7 @@ du -sh projects/afc/build-sil/runtime
 
 ## compile stamp
 
-`run_sil` still always calls `compile_sil`. Stamp match → `up-to-date` (skip compose/build/ctest/stage). Force: `GF_FORCE_COMPILE=1`.
+`run_sil` still always calls `compile_sil`. Ninja incremental build, then artifact mtime sync into `runtime/`. `GF_FORCE_COMPILE=1` on `run_sil` / `run_hil` only: wipe `runtime/` + cmake sentinel, then compile.
 
 ## carla.env
 

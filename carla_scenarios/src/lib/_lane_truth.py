@@ -311,21 +311,39 @@ def _dedup_edges(
     return out
 
 
-def _side_code_for_edge(
-    c0: float, *, host_left: float, host_right: float, ego_idx: int, n_lanes: int
-) -> int:
-    """Map corridor edge to gold LA_Line_Side relative to host."""
-    if c0 > host_left + 0.2:
-        if ego_idx >= 2 and c0 > host_left + 3.0:
-            return 6
-        return 1
-    if c0 < host_right - 0.2:
-        if ego_idx + 2 < n_lanes and c0 < host_right - 3.0:
-            return 5
-        return 4
-    if abs(c0 - host_left) <= abs(c0 - host_right):
-        return 2
-    return 3
+def _edge_dict(e: dict[str, Any], side: int) -> dict[str, Any]:
+    return {
+        "side": side,
+        "c0": float(e["c0"]),
+        "c1": float(e["c1"]),
+        "c2": float(e["c2"]),
+    }
+
+
+def adj_from_chain_neighbors(
+    lane_lr: list[tuple[dict[str, Any], dict[str, Any]]],
+    ego_idx: int,
+) -> list[dict[str, Any]]:
+    """Same-dir corridor edges by topology (not a lateral gate).
+
+    ±1: side 1 = left-neighbor left, side 4 = right-neighbor right.
+    ±2: side 6 / 5 (next-next) for display of the extra corridor; planning does not read LA.
+    Opposite / median never enter the same-direction Driving chain.
+    """
+    adj: list[dict[str, Any]] = []
+    n = len(lane_lr)
+    if n == 0:
+        return adj
+    idx = max(0, min(int(ego_idx), n - 1))
+    if idx >= 1:
+        adj.append(_edge_dict(lane_lr[idx - 1][0], 1))
+    if idx + 1 < n:
+        adj.append(_edge_dict(lane_lr[idx + 1][1], 4))
+    if idx + 2 < n:
+        adj.append(_edge_dict(lane_lr[idx + 2][1], 5))
+    if idx >= 2:
+        adj.append(_edge_dict(lane_lr[idx - 2][0], 6))
+    return adj
 
 
 def measure_lane_topology(ego: Any, world: Any) -> dict[str, Any]:
@@ -441,24 +459,7 @@ def measure_lane_topology(ego: Any, world: Any) -> dict[str, Any]:
     c1 = 0.5 * (hl_c1 + hr_c1)
     c2 = 0.5 * (hl_c2 + hr_c2)
 
-    adj: list[dict[str, Any]] = []
-    for e in corridor:
-        c0 = float(e["c0"])
-        if abs(c0 - hl_c0) < 0.3 or abs(c0 - hr_c0) < 0.3:
-            continue
-        side = _side_code_for_edge(
-            c0, host_left=hl_c0, host_right=hr_c0, ego_idx=ego_idx, n_lanes=len(chain)
-        )
-        adj.append(
-            {
-                "side": side,
-                "c0": c0,
-                "c1": float(e["c1"]),
-                "c2": float(e["c2"]),
-            }
-        )
-        if len(adj) >= 4:
-            break
+    adj = adj_from_chain_neighbors(lane_lr, ego_idx)
 
     all_c0 = [hl_c0, hr_c0] + [float(a["c0"]) for a in adj]
     y_lo, y_hi = min(all_c0), max(all_c0)
@@ -536,7 +537,6 @@ def assess_lane_poly_quality(
     if half < 0.5:
         half = 0.5 * width
     psi = abs(math.atan(float(host_c1)))
-    abs_c2 = abs(float(host_c2))
     lat_off = abs(mid)
 
     # Soft fail on extreme yaw: keep short near-field lines (BEV/planning), not blackout.
@@ -575,12 +575,12 @@ def assess_lane_poly_quality(
         conf = 0.35
         vr = min(vr, 25.0)
         reason = "poly_lat_offset"
-    elif psi > math.radians(25.0) or lat_off > 0.55 * width or abs_c2 > 0.02:
+    elif psi > math.radians(25.0) or lat_off > 0.55 * width:
         avail = 1
         conf = 0.45
         vr = min(vr, 35.0)
         reason = "poly_degraded"
-    if psi > math.radians(32.0) or abs_c2 > 0.035:
+    if psi > math.radians(32.0):
         avail = 1 if avail == 2 else avail
         conf = min(conf, 0.30)
         vr = min(vr, 20.0)

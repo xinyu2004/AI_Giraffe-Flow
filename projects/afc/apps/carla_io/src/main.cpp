@@ -367,11 +367,13 @@ int main() {
           }
           break;
         case GF_COSIM_MSG_FAKE_PERC:
-          if (payload.size() >= sizeof(GfFakePercPod)) {
-            const auto* p = reinterpret_cast<const GfFakePercPod*>(payload.data());
-            if (p->magic == GF_CH_FAKE_PERC_MAGIC) {
-              rx_perc.Observe(p->seq, p->timestamp_ns ? p->timestamp_ns : hdr.timestamp_ns);
-              (void)gf_channel_publish(fp, p, sizeof(*p), hdr.timestamp_ns, hdr.seq);
+          if (payload.size() >= GF_CH_FAKE_PERC_V1_SIZE) {
+            GfFakePercPod pod{};
+            const auto n = std::min(payload.size(), sizeof(pod));
+            std::memcpy(&pod, payload.data(), n);
+            if (pod.magic == GF_CH_FAKE_PERC_MAGIC) {
+              rx_perc.Observe(pod.seq, pod.timestamp_ns ? pod.timestamp_ns : hdr.timestamp_ns);
+              (void)gf_channel_publish(fp, &pod, sizeof(pod), hdr.timestamp_ns, hdr.seq);
             }
           }
           break;

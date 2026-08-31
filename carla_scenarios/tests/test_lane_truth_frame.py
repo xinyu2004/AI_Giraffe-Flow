@@ -16,6 +16,7 @@ sys.path.insert(0, str(_LIB))
 
 from _lane_truth import (  # noqa: E402
     _dedup_edges,
+    adj_from_chain_neighbors,
     world_to_ego_xy,
     world_to_ego_xy_cs,
 )
@@ -165,3 +166,64 @@ def test_assess_lane_poly_degraded():
     )
     assert q["lane_avail"] == 1
     assert q["lane_vr_end_m"] <= 35.0
+
+
+def test_assess_lane_poly_gentle_curve_keeps_vr():
+    from _lane_truth import assess_lane_poly_quality
+
+    q = assess_lane_poly_quality(
+        host_left_c0=1.75,
+        host_right_c0=-1.75,
+        host_c1=0.0,
+        host_c2=0.008,
+        lane_width_m=3.5,
+    )
+    assert q["lane_vr_end_m"] >= 80.0
+    assert q["lane_avail"] == 2
+    assert q["reason"] == "ok"
+
+
+def _edge(c0: float) -> dict:
+    return {"c0": c0, "c1": 0.0, "c2": 0.0}
+
+
+def _four_lane_lr() -> list:
+    """4×3.5 m, y left+, ego-centered on lane 1: host ±1.75."""
+    return [
+        (_edge(5.25), _edge(1.75)),
+        (_edge(1.75), _edge(-1.75)),
+        (_edge(-1.75), _edge(-5.25)),
+        (_edge(-5.25), _edge(-8.75)),
+    ]
+
+
+def test_adj_chain_second_of_four_keeps_outers_and_next_next():
+    """ego_lane=1 on 4 lanes: ±1 plus right next-next (5th edge / 4th corridor)."""
+    adj = adj_from_chain_neighbors(_four_lane_lr(), 1)
+    assert [(a["side"], a["c0"]) for a in adj] == [(1, 5.25), (4, -5.25), (5, -8.75)]
+
+
+def test_adj_chain_leftmost_right_and_next_next():
+    adj = adj_from_chain_neighbors(_four_lane_lr(), 0)
+    assert [(a["side"], a["c0"]) for a in adj] == [(4, -1.75), (5, -5.25)]
+
+
+def test_adj_chain_rightmost_left_and_next_next():
+    adj = adj_from_chain_neighbors(_four_lane_lr(), 3)
+    assert [(a["side"], a["c0"]) for a in adj] == [(1, -1.75), (6, 1.75)]
+
+
+def test_adj_chain_middle_of_three_no_next_next():
+    lr = [
+        (_edge(5.25), _edge(1.75)),
+        (_edge(1.75), _edge(-1.75)),
+        (_edge(-1.75), _edge(-5.25)),
+    ]
+    adj = adj_from_chain_neighbors(lr, 1)
+    assert [a["side"] for a in adj] == [1, 4]
+    assert [a["c0"] for a in adj] == [5.25, -5.25]
+
+
+def test_adj_chain_empty_or_solo():
+    assert adj_from_chain_neighbors([], 0) == []
+    assert adj_from_chain_neighbors([(_edge(1.75), _edge(-1.75))], 0) == []

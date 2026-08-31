@@ -128,11 +128,33 @@ struct TruthSnapshot {
   std::uint8_t lane_avail{2};
   float lane_conf{0.95f};
   float lane_vr_end_m{130.0f};
+  std::uint8_t tsr_n{0};
+  std::uint16_t tsr_name[6]{};
+  std::uint8_t tsr_rel[6]{};
+  float tsr_long[6]{};
+  float tsr_lat[6]{};
+  std::uint8_t stat_n{0};
+  std::uint8_t stat_id[6]{};
+  std::uint8_t stat_cls[6]{};
+  std::uint8_t stat_assign[6]{};
+  float stat_long[6]{};
+  float stat_lat[6]{};
+  float stat_heading[6]{};
+  float stat_len[6]{};
+  float stat_wid[6]{};
 };
+
+bool KeepAdjLine(std::uint8_t side) {
+  // Display may include next-next (5/6). Refuse empty / unknown side.
+  return side != 0;
+}
 
 TruthSnapshot FromFakePercPod(const GfFakePercPod& p) {
   TruthSnapshot t{};
-  if (p.magic != GF_CH_FAKE_PERC_MAGIC || p.version != GF_CH_POD_VERSION || !p.valid) {
+  if (p.magic != GF_CH_FAKE_PERC_MAGIC || !p.valid) {
+    return t;
+  }
+  if (p.version != 1 && p.version != GF_CH_FAKE_PERC_VERSION) {
     return t;
   }
   t.file_ok = true;
@@ -185,6 +207,26 @@ TruthSnapshot FromFakePercPod(const GfFakePercPod& p) {
   t.lane_avail = p.lane_avail;
   t.lane_conf = p.lane_conf;
   t.lane_vr_end_m = p.lane_vr_end_m;
+  if (p.version >= 2) {
+    t.tsr_n = std::min<std::uint8_t>(p.tsr_n, 6);
+    for (int i = 0; i < t.tsr_n; ++i) {
+      t.tsr_name[i] = p.tsr[i].sign_name;
+      t.tsr_rel[i] = p.tsr[i].relevancy;
+      t.tsr_long[i] = p.tsr[i].long_m;
+      t.tsr_lat[i] = p.tsr[i].lat_m;
+    }
+    t.stat_n = std::min<std::uint8_t>(p.stat_n, 6);
+    for (int i = 0; i < t.stat_n; ++i) {
+      t.stat_id[i] = p.stat[i].id;
+      t.stat_cls[i] = p.stat[i].cls;
+      t.stat_assign[i] = p.stat[i].assign;
+      t.stat_long[i] = p.stat[i].long_m;
+      t.stat_lat[i] = p.stat[i].lat_m;
+      t.stat_heading[i] = p.stat[i].heading_rad;
+      t.stat_len[i] = p.stat[i].len_m;
+      t.stat_wid[i] = p.stat[i].wid_m;
+    }
+  }
   return t;
 }
 
@@ -201,7 +243,7 @@ TruthSnapshot ReadFakePerc(GfChannel* ch, std::uint64_t* last_seq) {
   std::uint16_t fmt = 0;
   const int r =
       gf_channel_latest(ch, &pod, sizeof(pod), &got, last_seq, &ts, &w, &h, &fmt);
-  if (r != 1 || got < sizeof(GfFakePercPod)) {
+  if (r != 1 || got < GF_CH_FAKE_PERC_V1_SIZE) {
     return t;
   }
   return FromFakePercPod(pod);
@@ -228,10 +270,11 @@ void FillLanesFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
   float width = truth.lane_width_m;
   std::uint8_t avail = truth.lane_avail;
   float conf = truth.lane_conf;
-  float vr_end = truth.lane_vr_end_m;
-  if (vr_end > kVrCap) {
-    vr_end = kVrCap;
+  float map_vr = truth.lane_vr_end_m;
+  if (map_vr > kVrCap) {
+    map_vr = kVrCap;
   }
+  float vr_end = map_vr;
   if (truth.lane_count == 0) {
     left_c0 = 1.75f;
     right_c0 = -1.75f;
@@ -243,6 +286,7 @@ void FillLanesFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
     avail = 0;
     conf = 0.0f;
     vr_end = 0.0f;
+    map_vr = 0.0f;
   }
   if (width < 0.5f) {
     width = std::max(2.5f, left_c0 - right_c0);
@@ -252,6 +296,7 @@ void FillLanesFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
     avail = 0;
     conf = std::min(conf, 0.05f);
     vr_end = 0.0f;
+    map_vr = 0.0f;
     left_c2 = right_c2 = 0.0f;
   }
 
@@ -289,24 +334,29 @@ void FillLanesFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
   auto& la = out.Perception_LA_Out;
   la.m_frame_id = frame_id;
   la.m_time_stamp = timestamp_ns / 1000ULL;
-  // Adj only when host poly is healthy (detected); degraded/invalid → no adj.
-  const std::uint8_t adj_n =
-      (avail == 2) ? truth.adj_n : static_cast<std::uint8_t>(0);
-  la.m_adj_line_num = adj_n;
-  for (std::uint8_t i = 0; i < adj_n && i < 4; ++i) {
-    auto& line = la.m_adj_line[i];
-    line.LA_Track_ID = static_cast<std::uint8_t>(10 + i);
-    line.m_LA_Confidence = conf * 0.95f;
-    line.m_LA_Availability_State = avail;
-    line.m_LA_View_Range_Start = 0.0f;
-    line.m_LA_View_Range_End = vr_end;
-    line.m_LA_Lanemark_Type = truth.adj_type[i] ? truth.adj_type[i] : 2;
-    line.m_LA_Line_Side = truth.adj_side[i];
-    line.m_LA_Line_C0 = truth.adj_c0[i];
-    line.m_LA_Line_C1 = truth.adj_c1[i];
-    line.m_LA_Line_C2 = truth.adj_c2[i];
-    line.m_LA_Line_C3 = 0.0f;
+  // Adj when host poly is healthy (detected). ±1 and next-next (display); opposite not in truth.
+  std::uint8_t adj_out = 0;
+  if (avail == 2) {
+    for (std::uint8_t i = 0; i < truth.adj_n && i < 4 && adj_out < 4; ++i) {
+      if (!KeepAdjLine(truth.adj_side[i])) {
+        continue;
+      }
+      auto& line = la.m_adj_line[adj_out];
+      line.LA_Track_ID = static_cast<std::uint8_t>(10 + adj_out);
+      line.m_LA_Confidence = conf * 0.95f;
+      line.m_LA_Availability_State = avail;
+      line.m_LA_View_Range_Start = 0.0f;
+      line.m_LA_View_Range_End = map_vr;
+      line.m_LA_Lanemark_Type = truth.adj_type[i] ? truth.adj_type[i] : 2;
+      line.m_LA_Line_Side = truth.adj_side[i];
+      line.m_LA_Line_C0 = truth.adj_c0[i];
+      line.m_LA_Line_C1 = truth.adj_c1[i];
+      line.m_LA_Line_C2 = truth.adj_c2[i];
+      line.m_LA_Line_C3 = 0.0f;
+      ++adj_out;
+    }
   }
+  la.m_adj_line_num = adj_out;
 }
 
 void FillOutFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
@@ -345,31 +395,69 @@ void FillOutFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
       obj.m_OBJ_Object_Age = 1;
       obj.m_OBJ_Class_Probability = 0.9f;
     }
-    return;
-  }
-  if (!truth.lead_valid) {
-    dyn.m_OBJ_VD_Count = 0;
+  } else if (truth.lead_valid) {
+    dyn.m_OBJ_VD_Count = 1;
     dyn.m_OBJ_Ped_Count = 0;
-    dyn.m_OBJ_VD_CIPV_ID = 0;
-    return;
+    dyn.m_OBJ_VD_CIPV_ID = 1;
+    auto& obj = dyn.m_Obj_item[0];
+    obj.m_OBJ_ID = 1;
+    obj.m_OBJ_Object_Class = 1;
+    obj.m_OBJ_Long_Distance = truth.lead_distance_m;
+    obj.m_OBJ_Lat_Distance = truth.lead_lat_m;
+    obj.m_OBJ_Relative_Long_Velocity = truth.lead_rel_speed_mps;
+    obj.m_OBJ_Relative_Lat_Velocity = 0.0f;
+    obj.m_OBJ_Lane_Assignment = truth.lead_lane_assignment;
+    obj.m_OBJ_Heading = truth.lead_heading_rad;
+    obj.m_OBJ_Width = 1.8f;
+    obj.m_OBJ_Length = 4.5f;
+    obj.m_OBJ_Height = 1.5f;
+    obj.m_OBJ_Existence_Probability = 0.95f;
+    obj.m_OBJ_Object_Age = 1;
   }
-  dyn.m_OBJ_VD_Count = 1;
-  dyn.m_OBJ_Ped_Count = 0;
-  dyn.m_OBJ_VD_CIPV_ID = 1;
-  auto& obj = dyn.m_Obj_item[0];
-  obj.m_OBJ_ID = 1;
-  obj.m_OBJ_Object_Class = 1;
-  obj.m_OBJ_Long_Distance = truth.lead_distance_m;
-  obj.m_OBJ_Lat_Distance = truth.lead_lat_m;
-  obj.m_OBJ_Relative_Long_Velocity = truth.lead_rel_speed_mps;
-  obj.m_OBJ_Relative_Lat_Velocity = 0.0f;
-  obj.m_OBJ_Lane_Assignment = truth.lead_lane_assignment;
-  obj.m_OBJ_Heading = truth.lead_heading_rad;
-  obj.m_OBJ_Width = 1.8f;
-  obj.m_OBJ_Length = 4.5f;
-  obj.m_OBJ_Height = 1.5f;
-  obj.m_OBJ_Existence_Probability = 0.95f;
-  obj.m_OBJ_Object_Age = 1;
+
+  auto& tsr = out.Perception_DSTSR_Out;
+  tsr.m_frame_id = frame_id;
+  tsr.m_time_stamp = timestamp_ns / 1000ULL;
+  tsr.m_tsr_num = std::min<std::uint8_t>(truth.tsr_n, 6);
+  for (std::uint8_t i = 0; i < tsr.m_tsr_num; ++i) {
+    auto& it = tsr.m_TSR_Item[i];
+    it.m_DSTSR_ID = static_cast<std::uint8_t>(i + 1);
+    it.m_DSTSR_Sign_Name = static_cast<decltype(it.m_DSTSR_Sign_Name)>(truth.tsr_name[i]);
+    it.m_DSTSR_Sign_Long_Distance = truth.tsr_long[i];
+    it.m_DSTSR_Sign_Lat_Distance = truth.tsr_lat[i];
+    it.m_DSTSR_Sign_Height = 2.0f;
+    it.m_DSTSR_Sign_Shape = static_cast<decltype(it.m_DSTSR_Sign_Shape)>(1);
+    it.m_DSTSR_Relevancy = static_cast<decltype(it.m_DSTSR_Relevancy)>(truth.tsr_rel[i]);
+    it.m_DSTSR_Confidence = 0.9f;
+    it.m_DSTSR_Relevancy_Confidence = 0.85f;
+  }
+
+  auto& st = out.Perception_STATIC_OBJ_Out;
+  st.m_frame_id = frame_id;
+  st.m_time_stamp = timestamp_ns / 1000ULL;
+  st.m_Static_OBJ_Count = std::min<std::uint8_t>(truth.stat_n, 10);
+  std::uint8_t scipv = 0;
+  for (std::uint8_t i = 0; i < st.m_Static_OBJ_Count; ++i) {
+    auto& obj = st.m_Obj_item[i];
+    obj.m_OBJ_ID = truth.stat_id[i] ? truth.stat_id[i] : static_cast<std::uint8_t>(i + 1);
+    obj.m_OBJ_Object_Class = static_cast<decltype(obj.m_OBJ_Object_Class)>(
+        truth.stat_cls[i] ? truth.stat_cls[i] : 1);
+    obj.m_OBJ_Width = truth.stat_wid[i] > 0.2f ? truth.stat_wid[i] : 0.6f;
+    obj.m_OBJ_Length = truth.stat_len[i] > 0.2f ? truth.stat_len[i] : 2.0f;
+    obj.m_OBJ_Lane_Assignment = static_cast<decltype(obj.m_OBJ_Lane_Assignment)>(
+        truth.stat_assign[i] ? truth.stat_assign[i] : 3);
+    obj.m_OBJ_Long_Distance = truth.stat_long[i];
+    obj.m_OBJ_Lat_Distance = truth.stat_lat[i];
+    obj.m_OBJ_Heading = truth.stat_heading[i];
+    obj.m_OBJ_Existence_Probability = 0.9f;
+    obj.m_OBJ_Object_Age = 1;
+    obj.m_OBJ_Class_Probability = 0.85f;
+    if (scipv == 0 && (truth.stat_assign[i] == 0 || truth.stat_assign[i] == 3) &&
+        truth.stat_long[i] > 0.5f) {
+      scipv = obj.m_OBJ_ID;
+    }
+  }
+  st.STAT_OBJ_Static_CIPV_ID = scipv;
 }
 
 gf_gen::Perception_MESSAGE_Out_St MakeEmptyOut(std::uint64_t timestamp_ns) {

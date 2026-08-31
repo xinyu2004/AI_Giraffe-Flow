@@ -481,8 +481,248 @@ def test_bev_plan_v_colormap_and_png() -> None:
     )
     assert cam is not None
     assert comp.state.traj_v[2] == 4.0
+    assert comp.state.traj_t_plan_s == 5.0
     assert comp.state.traj_d_see_m == 40.0
     assert comp.state.allow_lc
+
+
+def test_d_see_paint_is_host_cap_and_side_triangles() -> None:
+    from gf_gmt.bev_compose import LiveBevState, d_see_paint_marks, render_ego_bev_png
+
+    segs, tris = d_see_paint_marks(
+        (40.0, -1.75, 40.0, 1.75),
+        far_left=(120.0, 5.5),
+        far_right=(120.0, -5.5),
+    )
+    assert len(segs) == 3
+    assert len(tris) == 2
+    cap = segs[0]
+    assert cap[0] == cap[2] == 40.0
+    assert abs(cap[3] - cap[1]) == 3.5
+    assert all(s[0] == 40.0 and s[2] == 120.0 for s in segs[1:])
+    assert not any(s[0] == s[2] == 40.0 and abs(s[3] - s[1]) > 8.0 for s in segs)
+    for tri in tris:
+        xs = [p[0] for p in tri]
+        assert min(xs) == 40.0 and max(xs) == 120.0
+
+    segs_vr, tris_vr = d_see_paint_marks((80.0, -1.75, 80.0, 1.75))
+    assert len(segs_vr) == 1
+    assert tris_vr == []
+
+    segs_no_adj, tris_no_adj = d_see_paint_marks((40.0, -1.75, 40.0, 1.75))
+    assert len(segs_no_adj) == 1
+    assert tris_no_adj == []
+
+    segs_host, tris_host = d_see_paint_marks(
+        (40.0, -1.75, 40.0, 1.75),
+        far_left=(120.0, 1.8),
+        far_right=(120.0, -1.8),
+    )
+    assert len(segs_host) == 1
+    assert tris_host == []
+
+    segs_17, tris_17 = d_see_paint_marks(
+        (17.0, -1.75, 17.0, 1.75),
+        far_left=(120.0, 5.25),
+        far_right=(120.0, -5.25),
+    )
+    assert len(tris_17) == 2
+    assert segs_17[0][0] == segs_17[0][2] == 17.0
+
+    from gf_gmt.bev_compose import HostLanePoly
+
+    png = render_ego_bev_png(
+        LiveBevState(
+            host_lanes=[
+                HostLanePoly(side=1, c0=1.75, x1=40.0),
+                HostLanePoly(side=2, c0=-1.75, x1=40.0),
+            ],
+            traj_x=[0.0, 40.0],
+            traj_y=[0.0, 0.0],
+        )
+    )
+    assert png.startswith(b"\x89PNG")
+
+
+def test_see_opening_in_lane_not_adjacent() -> None:
+    from gf_gmt.bev_compose import BevDynObj, see_opening_m
+
+    assert abs(see_opening_m(120.0, [BevDynObj(1, 17.3, 0.009)]) - 17.3) < 1e-9
+    assert abs(see_opening_m(120.0, [BevDynObj(1, 41.0, 2.35)]) - 120.0) < 1e-9
+    assert abs(see_opening_m(120.0, []) - 120.0) < 1e-9
+
+
+def test_driving_see_prefers_plan_over_mark() -> None:
+    from gf_gmt.bev_compose import BevDynObj, HostLanePoly, LiveBevState, driving_see_m
+
+    lead = [BevDynObj(1, 17.3, 0.009)]
+    host = [
+        HostLanePoly(side=1, c0=1.75, x1=120.0),
+        HostLanePoly(side=2, c0=-1.75, x1=120.0),
+    ]
+    with_plan = LiveBevState(
+        host_lanes=host,
+        perc_objects=lead,
+        traj_d_see_m=17.0,
+        traj_x=[0.0, 17.0],
+        traj_y=[0.0, 0.0],
+    )
+    assert abs(driving_see_m(with_plan, 120.0, lead) - 17.0) < 1e-9
+    no_plan = LiveBevState(host_lanes=host, perc_objects=lead)
+    assert abs(driving_see_m(no_plan, 120.0, lead) - 17.3) < 1e-9
+    adj_only = [BevDynObj(2, 41.0, 2.35)]
+    empty_plan = LiveBevState(host_lanes=host, perc_objects=adj_only)
+    assert abs(driving_see_m(empty_plan, 120.0, adj_only) - 120.0) < 1e-9
+    path_only = LiveBevState(host_lanes=host, traj_x=[0.0, 22.0], traj_y=[0.0, 0.0])
+    assert abs(driving_see_m(path_only, 120.0, []) - 120.0) < 1e-9
+    horizon_only = LiveBevState(host_lanes=host, traj_horizon_m=40.0, traj_x=[0.0, 40.0])
+    assert abs(driving_see_m(horizon_only, 120.0, []) - 120.0) < 1e-9
+    curve = [
+        HostLanePoly(side=1, c0=1.75, c2=0.02, x1=120.0),
+        HostLanePoly(side=2, c0=-1.75, c2=0.02, x1=120.0),
+    ]
+    curve_st = LiveBevState(host_lanes=curve)
+    d_opt = driving_see_m(curve_st, 120.0, [])
+    assert 10.0 <= d_opt <= 50.0
+
+
+def test_occupy_notched_only_with_in_lane_object() -> None:
+    from gf_gmt.bev_compose import occupy_notched
+
+    assert occupy_notched(120.0, 17.0)
+    assert not occupy_notched(120.0, 120.0)
+    assert not occupy_notched(120.0, 119.0)
+
+
+def test_see_far_prefers_immediate_over_next_next() -> None:
+    from gf_gmt.bev_compose import AdjLanePoly, see_far_adj
+
+    al1 = AdjLanePoly(side=1, c0=5.25, x1=120.0)
+    al4 = AdjLanePoly(side=4, c0=-5.25, x1=120.0)
+    al5 = AdjLanePoly(side=5, c0=-8.75, x1=120.0)
+    far_l, far_r = see_far_adj([al1, al4, al5], 17.0)
+    assert far_l is al1
+    assert far_r is al4
+    none_l, none_r = see_far_adj([al1, al4], 120.0)
+    assert none_l is None and none_r is None
+
+
+def test_see_cap_insets_from_canvas() -> None:
+    from gf_gmt.bev_compose import D_BEV_M, see_cap_x_m
+
+    assert abs(see_cap_x_m(17.0, 130.0) - 17.0) < 1e-9
+    assert see_cap_x_m(130.0, 130.0) < D_BEV_M - 2.0
+    assert see_cap_x_m(120.0, 120.0) < 120.0
+
+
+def _png_to_rgb(png: bytes, width: int, height: int) -> bytes:
+    import struct
+    import zlib
+
+    i = 8
+    idat = b""
+    while i + 8 <= len(png):
+        ln = struct.unpack(">I", png[i : i + 4])[0]
+        typ = png[i + 4 : i + 8]
+        data = png[i + 8 : i + 8 + ln]
+        i += 12 + ln
+        if typ == b"IDAT":
+            idat += data
+        if typ == b"IEND":
+            break
+    raw = zlib.decompress(idat)
+    stride = 1 + width * 3
+    out = bytearray()
+    for y in range(height):
+        row = raw[y * stride : (y + 1) * stride]
+        out.extend(row[1:])
+    return bytes(out)
+
+
+def test_see_host_wash_and_cap_empty_curve() -> None:
+    from gf_gmt.bev_compose import (
+        _SEE_CAP,
+        _SEE_FILL,
+        HostLanePoly,
+        LiveBevState,
+        d_see_paint_marks,
+        driving_see_m,
+        occupy_notched,
+        render_ego_bev_png,
+    )
+
+    host = [
+        HostLanePoly(side=1, c0=1.75, c2=0.02, x1=130.0),
+        HostLanePoly(side=2, c0=-1.75, c2=0.02, x1=130.0),
+    ]
+    st = LiveBevState(host_lanes=host)
+    d_opt = driving_see_m(st, 130.0, [])
+    assert 10.0 <= d_opt <= 80.0
+    assert not occupy_notched(130.0, 130.0)
+    _segs, tris = d_see_paint_marks((d_opt, -1.75, d_opt, 1.75))
+    assert tris == []
+    w, h = 480, 360
+    rgb = _png_to_rgb(render_ego_bev_png(st, width=w, height=h), w, h)
+    n_cap = n_fill = 0
+    cr, cg, cb = _SEE_CAP
+    fr, fg, fb = _SEE_FILL
+    for i in range(0, len(rgb), 3):
+        if rgb[i] == cr and rgb[i + 1] == cg and rgb[i + 2] == cb:
+            n_cap += 1
+        elif rgb[i] == fr and rgb[i + 1] == fg and rgb[i + 2] == fb:
+            n_fill += 1
+    assert n_fill > 400
+    assert n_cap > 80
+
+
+def test_bev_rotated_box_is_solid_not_ticks() -> None:
+    from gf_gmt.bev_compose import (
+        BevDynObj,
+        LiveBevState,
+        fill_convex_poly,
+        render_ego_bev_png,
+    )
+
+    def _count(buf: bytearray, rgb: tuple[int, int, int]) -> int:
+        n = 0
+        for i in range(0, len(buf), 3):
+            if buf[i] == rgb[0] and buf[i + 1] == rgb[1] and buf[i + 2] == rgb[2]:
+                n += 1
+        return n
+
+    w, h = 80, 80
+    red = (255, 0, 0)
+    buf = bytearray(bytes((0, 0, 0)) * (w * h))
+    fill_convex_poly(buf, w, h, [(10, 10), (50, 10), (50, 25), (10, 25)], red)
+    assert _count(buf, red) >= 40 * 15 * 0.9
+
+    green = (0, 255, 0)
+    buf = bytearray(bytes((0, 0, 0)) * (w * h))
+    # 90° slab: long axis is vertical (the old 1×1 sampler looked like a tick).
+    fill_convex_poly(buf, w, h, [(36, 8), (46, 8), (46, 58), (36, 58)], green)
+    assert _count(buf, green) >= 10 * 50 * 0.9
+
+    blue = (0, 0, 255)
+    buf = bytearray(bytes((0, 0, 0)) * (w * h))
+    fill_convex_poly(buf, w, h, [(40, 8), (62, 30), (40, 52), (18, 30)], blue)
+    n_rot = _count(buf, blue)
+    assert n_rot > 200
+
+    png = render_ego_bev_png(
+        LiveBevState(
+            perc_objects=[
+                BevDynObj(
+                    obj_id=1,
+                    x_m=80.0,
+                    y_m=0.0,
+                    length_m=12.0,
+                    width_m=2.6,
+                    heading_rad=1.57,
+                )
+            ]
+        )
+    )
+    assert png.startswith(b"\x89PNG")
 
 
 def test_bev_prefers_planning_traj_when_adas() -> None:

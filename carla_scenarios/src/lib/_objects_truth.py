@@ -18,6 +18,19 @@ CLS_TWO_WHEELER = 9
 _MAX_DYN = 13
 _RADIUS_M = 90.0
 
+
+def _stable_obj_id(actor_id: int, slot: int) -> int:
+    """Map CARLA actor id → FCM uint8. Same actor keeps the same id across frames."""
+    try:
+        aid = int(actor_id)
+    except (TypeError, ValueError):
+        aid = 0
+    if 1 <= aid <= 255:
+        return aid
+    if aid > 255:
+        return (aid % 254) + 1
+    return max(1, int(slot) + 1)
+
 # Static actor attrs (type_id / bbox). Kinematics come from snapshot each tick.
 _CACHE: dict[int, dict[str, Any]] = {}
 _SKIP: set[int] = set()
@@ -366,12 +379,12 @@ def collect_dyn_objects(
     items.sort(key=lambda it: (0 if it["is_lead"] else 1, it["long_m"], abs(it["lat_m"])))
     items = items[: max(1, min(max_n, _MAX_DYN))]
 
-    # Stable 1..n IDs; CIPV = lead if present else nearest host-lane ahead
+    # Stable IDs follow CARLA actor (uint8); CIPV = that object's id, not list slot.
     cipv_id = 0
     vd_n = 0
     ped_n = 0
     for i, it in enumerate(items):
-        oid = i + 1
+        oid = _stable_obj_id(int(it.get("actor_id") or 0), i)
         it["id"] = oid
         if it["is_walker"]:
             ped_n += 1

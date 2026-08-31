@@ -5,16 +5,27 @@ from __future__ import annotations
 import math
 
 CAL = {
+    "lane_width_m": 3.50,
+    "ego_width_m": 1.80,
+    "pass_clear_m": 0.30,
+    "obj_width_car_m": 1.80,
+    "obj_width_truck_m": 2.55,
+    "obj_width_ped_m": 0.60,
+    "occ_overlap_min_m": 0.30,
+    "cls_truck": 2.0,
+    "cls_ped": 5.0,
     "lat_aeb_m": 8.0,
     "lat_merge_m": 1.0,
     "lon_max_d_m": 80.0,
     "t_base_s": 10.0,
     "t_plan_min_s": 1.0,
     "d_cal_cap_m": 120.0,
+    "see_fov_deg": 50.0,
     "d_fov_conf_m": 120.0,
     "d_see_lane_bad_m": 12.0,
     "vis_up_alpha": 0.08,
     "cutin_head_gain": 1.20,
+    "cutin_approach_m": 1.50,
     "acc_time_gap_s": 1.7,
     "acc_gap_min_m": 8.0,
     "aeb_decel_mps2": 6.0,
@@ -77,6 +88,22 @@ def plan_vis_slew(raw: float, prev: float, alpha: float) -> float:
     return prev + alpha * (raw - prev)
 
 
+def plan_d_fov(c0: float, c1: float, c2: float, c3: float, x_end: float) -> float:
+    p = CAL
+    D_fov = p["d_cal_cap_m"]
+    if x_end > 0.5:
+        D_fov = min(D_fov, x_end)
+    half = 0.5 * p["see_fov_deg"] * math.pi / 180.0
+    step = 2.0
+    x = 2.0
+    while x <= D_fov + 1e-6:
+        y = c0 + c1 * x + c2 * x * x + c3 * x * x * x
+        if abs(math.atan2(y, x)) > half:
+            return x
+        x += step
+    return D_fov
+
+
 def plan_horizon(
     v: float,
     lane_valid: bool,
@@ -92,14 +119,14 @@ def plan_horizon(
     if D_occ is None:
         D_occ = p["d_cal_cap_m"]
     if D_fov is None:
-        D_fov = p["d_fov_conf_m"]
+        D_fov = p["d_cal_cap_m"]
     D_vr = p["d_cal_cap_m"]
     if lane_usable(lane_valid, e_y, c1):
         if x_end > 0.5:
             D_vr = x_end
     else:
         D_vr = min(D_vr, p["d_see_lane_bad_m"])
-    D_raw = min(D_fov, D_vr, D_occ, p["d_cal_cap_m"])
+    D_raw = min(D_vr, D_occ, D_fov, p["d_cal_cap_m"])
     D_see = plan_vis_slew(D_raw, D_see_prev, p.get("vis_up_alpha", 0.08))
     T_raw = min(p["t_base_s"], D_see / max(v, p["traj_speed_floor_mps"]))
     T_raw = max(T_raw, p["t_plan_min_s"])
@@ -107,13 +134,49 @@ def plan_horizon(
     return D_see, T_plan
 
 
-def plan_obj_weight(lat: float, heading: float = 0.0, is_ped: float = 0.0) -> float:
+def plan_obj_width(cls: float, is_ped: float = 0.0) -> float:
     p = CAL
-    w = plan_lat_weight(lat)
-    if is_ped != 0.0 and abs(lat) < p["lat_aeb_m"]:
-        w = max(w, 0.85)
-    if lat * heading < -0.02:
-        w = min(1.0, w + p.get("cutin_head_gain", 1.20) * min(abs(heading), 0.5))
+    if is_ped != 0.0 or cls == p["cls_ped"]:
+        return p["obj_width_ped_m"]
+    if cls == p["cls_truck"]:
+        return p["obj_width_truck_m"]
+    return p["obj_width_car_m"]
+
+
+def plan_lane_occupy(
+    c0: float, lat: float, len_m: float, cls: float, heading: float, is_ped: float = 0.0
+) -> float:
+    p = CAL
+    W = p["lane_width_m"]
+    wo = plan_obj_width(cls, is_ped)
+    half = 0.5 * (wo * abs(math.cos(heading)) + max(len_m, 0.5) * abs(math.sin(heading)))
+    y0, y1 = c0 - 0.5 * W, c0 + 0.5 * W
+    return max(0.0, min(y1, lat + half) - max(y0, lat - half))
+
+
+def plan_can_pass(occupy: float, cls: float = 1.0, is_ped: float = 0.0) -> bool:
+    p = CAL
+    if (is_ped != 0.0 or cls == p["cls_ped"]) and occupy > 1e-3:
+        return False
+    return (p["lane_width_m"] - occupy) >= (p["ego_width_m"] + p["pass_clear_m"])
+
+
+def plan_obj_weight(
+    lat: float,
+    heading: float = 0.0,
+    is_ped: float = 0.0,
+    len_m: float = 4.5,
+    cls: float = 1.0,
+    c0: float = 0.0,
+) -> float:
+    p = CAL
+    occupy = plan_lane_occupy(c0, lat, len_m, cls, heading, is_ped)
+    w = 0.0 if plan_can_pass(occupy, cls, is_ped) else 1.0
+    wo = plan_obj_width(cls, is_ped)
+    half = 0.5 * (wo * abs(math.cos(heading)) + max(len_m, 0.5) * abs(math.sin(heading)))
+    gap = (abs(lat - c0) - half) - 0.5 * p["lane_width_m"]
+    if gap < p.get("cutin_approach_m", 1.50) and lat * heading < -0.02:
+        w = min(1.0, max(w, 0.55) + p.get("cutin_head_gain", 1.20) * min(abs(heading), 0.5))
     return w
 
 
@@ -154,7 +217,7 @@ def plan_v_at_s(
 def lon_a_req(v: float, lead_valid: bool, d: float, rel: float, lat: float, w: float | None = None) -> float:
     p = CAL
     if w is None:
-        w = plan_lat_weight(lat)
+        w = plan_obj_weight(lat)
     if (not lead_valid) or w <= 0.0 or d > p["lon_max_d_m"]:
         return 0.0
     d_use = max(d, 0.05)
@@ -230,8 +293,8 @@ def m_lon_acc_aeb(
     D_fov = p["d_fov_conf_m"]
     D_occ = p["d_cal_cap_m"]
     if lead_valid:
-        w = plan_obj_weight(lead_lat_m)
-        if w >= 0.40 and w > 0.85:
+        occupy = plan_lane_occupy(0.0, lead_lat_m, 4.5, 1.0, 0.0, 0.0)
+        if occupy >= p["occ_overlap_min_m"]:
             D_occ = min(D_occ, max(0.0, d - 0.5 * 4.5))
     D_see, _t = plan_horizon(v, lane_valid, e_y, c1, 1.0e6, D_occ, D_fov, 0.0, 0.0)
     lane_ok = lane_usable(lane_valid, e_y, c1)
@@ -287,10 +350,62 @@ def test_horizon_bad_lane_short() -> None:
     assert T_bad <= T_good
 
 
+def test_horizon_c1_alone_does_not_cut_d_see() -> None:
+    D_straight, _ = plan_horizon(12.0, True, 0.0, 0.0, 120.0)
+    D_same_vr, _ = plan_horizon(12.0, True, 0.0, 0.20, 120.0)
+    D_short_vr, _ = plan_horizon(12.0, True, 0.0, 0.0, 40.0)
+    assert D_straight >= 80.0
+    assert abs(D_same_vr - D_straight) < 1e-3
+    assert 39.0 <= D_short_vr <= 40.0
+
+
+def test_horizon_in_lane_occ_cuts_from_mark_vr() -> None:
+    D_see, _ = plan_horizon(12.0, True, 0.0, 0.0, 120.0, D_occ=17.0, D_see_prev=120.0)
+    assert abs(D_see - 17.0) < 1e-6
+
+
+def test_horizon_adj_occ_does_not_cut() -> None:
+    D_see, _ = plan_horizon(12.0, True, 0.0, 0.0, 120.0, D_occ=120.0, D_see_prev=120.0)
+    assert abs(D_see - 120.0) < 1e-6
+
+
+def test_d_fov_straight_keeps_cap() -> None:
+    assert abs(plan_d_fov(0.0, 0.0, 0.0, 0.0, 120.0) - 120.0) < 1e-6
+
+
+def test_d_fov_curve_bearing_cuts() -> None:
+    D_fov = plan_d_fov(0.0, 0.0, 0.02, 0.0, 120.0)
+    assert 10.0 <= D_fov <= 50.0
+    D_see, _ = plan_horizon(12.0, True, 0.0, 0.0, 120.0, D_fov=D_fov)
+    assert abs(D_see - D_fov) < 1e-6
+
+
+def test_d_fov_is_bearing_not_heading() -> None:
+    # Constant C1: road heading is constant; bearing = atan(C1). 0.20 rad ≈ 11° < 25°.
+    assert abs(plan_d_fov(0.0, 0.20, 0.0, 0.0, 120.0) - 120.0) < 1e-6
+
+
 def test_cutin_lat_has_weight() -> None:
-    assert plan_lat_weight(2.6) > 0.5
+    assert plan_obj_weight(0.0) >= 0.99
+    assert plan_obj_weight(3.5) < 0.1
     c = m_lon_acc_aeb(3.9, True, 34.4, -3.9, -2.6)
     assert c["throttle"] >= 0.0
+
+
+def test_in_lane_pass_not_stop() -> None:
+    # W=3.5, We=1.8, clear=0.3; ~0.5 m occupy still passable.
+    occ = plan_lane_occupy(0.0, 2.15, 4.5, 1.0, 0.0)
+    assert 0.4 < occ < 0.7
+    assert plan_can_pass(occ)
+    assert plan_obj_weight(2.15) < 0.1
+    # Centered car blocks.
+    assert plan_obj_weight(0.0) >= 0.99
+    # Adjacent parallel car: pass.
+    assert plan_obj_weight(3.5) < 0.1
+    # Ped on lane: no squeeze.
+    assert plan_obj_weight(0.8, 0.0, 1.0, 0.8, 5.0) >= 0.99
+    # Off-lane CIPV (this log: lat≈-10) + heading toward ego must not raise w.
+    assert plan_obj_weight(-10.3, 0.4, 0.0, 4.5, 1.0) < 0.1
 
 
 def test_overshoot_brakes() -> None:

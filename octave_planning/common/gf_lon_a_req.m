@@ -5,7 +5,7 @@ function a_req = gf_lon_a_req(v, lead_valid, d, rel, lat, w_in)
   if nargin >= 6
     w = w_in;
   else
-    w = gf_plan_lat_weight(lat);
+    w = gf_plan_obj_weight(lat, 0.0, 0.0);
   end
   if ~lead_valid || w <= 0.0 || d > p.lon_max_d_m
     return;

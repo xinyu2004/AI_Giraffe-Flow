@@ -43,7 +43,11 @@
 实际时域/距离由「我这拍能信的视野」收：
 
 ```text
-D_see = min( D_fov_conf,  D_vr,  D_occlusion,  D_cal_cap )
+D_vr   = FCM 本车道 min(L,R) VR_End     （标线尺；规划只消费，不回写）
+D_occ  = 本车道 occupy 近端面
+D_fov  = 光学楔：沿 poly |atan2(y,x)| 出 see_fov_deg（相机 100° 内 50°）
+D_wx   = 天气占位（SIL = cap）
+D_see  = slew(min(D_vr, D_occ, D_fov, D_wx, cap))
 T_plan = min( T_base,  D_see / max(v, v_floor) )
 D_plan = min( D_see,  v * T_plan 的夹紧 )
 ```
@@ -51,13 +55,13 @@ D_plan = min( D_see,  v * T_plan 的夹紧 )
 | 量 | 含义 | 从哪来 |
 |----|------|--------|
 | `T_base` | 基准思考时间，量级 10 s | cal |
-| `D_fov_conf` | 相机 FOV、清晰度、探测置信能支撑的距离 | cal 表 + 感知质量（不是写死米数） |
-| `D_vr` | 车道可视距离（LH VR_End 等） | 感知 |
-| `D_occlusion` | 前方大车等挡住的有效视线 | 场景（大车尾部之后打折或截断） |
+| `x_end` / `VR_End` | 本车道**标线**尽头（质量门 + cap；前车不进这把尺） | 感知 LH |
+| `D_see` | 敢当畅通的驾驶尺（内部；路径/`v_cap`/BEV 青/HUD `D`） | 规划 |
 | `D_cal_cap` | 演示/算力上限 | cal |
 
-视野好、没挡：计划就接近 10 s，能看出后面几秒要不要变道、要不要收油。  
-进隧道口致盲、大车挡死、线模糊：计划**缩短**，人也会改成「先看清再想远」。缩短的是计划长度，不是改成无计划的分档刹车。
+弯道是光学：点出驾驶楔就收 `D_see`，灰线仍跟 `VR_End`。不要用切线航向（`D_curve`/`D_bend`）冒充看不见。跟停走 DYN/STATIC：砍 `D_occ`→`D_see`，不砍 `VR_End`。BEV 青洗 = 楔 ∩ 本车道。Host Trajectory 可带 `D_see_m`。`VR_Start` / LRE / 负 d 后挂。
+
+视野好、直道、无挡：计划接近 10 s。线糊、前车挡、弯出视场、雾：`D_see` 缩短，路径不得越过。
 
 ---
 

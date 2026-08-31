@@ -131,24 +131,145 @@ gf_octavecoder_sync() {
     "${py}" -m gf_octavecoder generate --repo-root "${ROOT}" --sku "${sku}"
 }
 
-# Stage when runtime incomplete, or build products newer than staged copies.
-gf_sil_need_stage() {
-  local rt build em_src em_dst
+# run_sil / run_hil only. compile_* never reads GF_FORCE_COMPILE.
+# Wipe runtime + configure sentinel so the next compile reconfigures and re-syncs.
+gf_sil_force_runtime_if_requested() {
+  [[ "${GF_FORCE_COMPILE:-0}" == "1" ]] || return 0
+  local rt s
   rt="$(gf_sil_runtime_dir)"
-  build="$(gf_sil_build_root)"
-  [[ "${GF_FORCE_COMPILE:-0}" == "1" ]] && return 0
-  em_dst="${rt}/bin/gf_em_daemon"
-  [[ -x "${em_dst}" ]] || return 0
-  [[ -x "${rt}/bin/iox-roudi" ]] || return 0
-  [[ -e "${rt}/lib/libgf_channel.so" || -e "${rt}/lib/libgf_channel.so.0" ]] || return 0
-  em_src="${build}/middleware/exec/gf_em_daemon"
-  [[ -f "${em_src}" && "${em_src}" -nt "${em_dst}" ]] && return 0
-  if [[ -d "${build}/lib" ]]; then
-    if find "${build}/lib" -maxdepth 1 -name 'libgf_*.so*' -newer "${em_dst}" -print -quit 2>/dev/null | grep -q .; then
-      return 0
-    fi
+  s="$(gf_sil_cmake_configure_sentinel)"
+  echo "${TAG} GF_FORCE_COMPILE=1 — wipe ${rt} and ${s}"
+  rm -rf "${rt}"
+  rm -f "${s}"
+}
+
+# Copy src → dest if dest missing or src newer. Preserves src mtime (cp -a).
+gf_sil_sync_file() {
+  local src="$1" dest="$2"
+  if [[ ! -e "${src}" ]]; then
+    return 1
   fi
-  return 1
+  if [[ -e "${dest}" && ! "${src}" -nt "${dest}" ]]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "${dest}")"
+  cp -a "${src}" "${dest}"
+  echo "${TAG} sync ← ${src}"
+  _gf_sil_sync_copied=$((_gf_sil_sync_copied + 1))
+  return 0
+}
+
+# After cmake --build: cover only newer (or missing) artifacts into runtime/.
+# No rm -rf, no source-tree walk, no SHA. Ninja already decided who rebuilt.
+gf_sil_sync_runtime() {
+  local build rt rel src exe line path so
+  build="$(gf_sil_build_root)"
+  rt="$(gf_sil_runtime_dir)"
+  _gf_sil_sync_copied=0
+  mkdir -p "${rt}/bin" "${rt}/lib" "${rt}/etc"
+
+  if ! gf_sil_sync_file "${build}/middleware/exec/gf_em_daemon" "${rt}/bin/gf_em_daemon"; then
+    echo "${TAG} ERROR: missing gf_em_daemon: ${build}/middleware/exec/gf_em_daemon" >&2
+    return 1
+  fi
+  if ! gf_sil_sync_file "${build}/iox-roudi" "${rt}/bin/iox-roudi"; then
+    echo "${TAG} ERROR: missing iox-roudi: ${build}/iox-roudi" >&2
+    return 1
+  fi
+
+  src="${build}/_dep-manifest/dlt-daemon/src/daemon/dlt-daemon"
+  [[ -f "${src}" ]] && gf_sil_sync_file "${src}" "${rt}/bin/dlt-daemon" || true
+
+  for rel in \
+    apps/frame_ingest/gf_frame_ingest \
+    apps/perception/fcm/gf_perception_fcm \
+    apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway \
+    apps/planning/driving/gf_planning_driving
+  do
+    src="${build}/${rel}"
+    [[ -f "${src}" ]] && gf_sil_sync_file "${src}" "${rt}/bin/$(basename "${src}")" || true
+  done
+  if [[ "${GF_STAGE_DEBUG_BRIDGE:-1}" == "1" ]]; then
+    for rel in \
+      apps/debug_bridge/iox_obs_tap/gf_iox_obs_tap \
+      apps/debug_bridge/iox_obs_inject/gf_iox_obs_inject
+    do
+      src="${build}/${rel}"
+      [[ -f "${src}" ]] && gf_sil_sync_file "${src}" "${rt}/bin/$(basename "${src}")" || true
+    done
+  fi
+  if [[ -d "${build}/apps" ]]; then
+    while IFS= read -r -d '' exe; do
+      [[ "$(basename "${exe}")" == gf_* ]] || continue
+      gf_sil_sync_file "${exe}" "${rt}/bin/$(basename "${exe}")" || true
+    done < <(find "${build}/apps" -type f -name 'gf_*' -executable -print0 2>/dev/null)
+  fi
+
+  if [[ -f "${build}/gf_doip_ota_server" ]]; then
+    gf_sil_sync_file "${build}/gf_doip_ota_server" "${rt}/bin/gf_doip_ota_server" || true
+  elif [[ -f "${build}/middleware/diag/gf_doip_ota_server" ]]; then
+    gf_sil_sync_file "${build}/middleware/diag/gf_doip_ota_server" "${rt}/bin/gf_doip_ota_server" || true
+  fi
+
+  if [[ -d "${build}/lib" ]]; then
+    while IFS= read -r -d '' so; do
+      gf_sil_sync_file "${so}" "${rt}/lib/$(basename "${so}")" || true
+    done < <(find "${build}/lib" -maxdepth 1 -type f -name 'libgf_*.so*' -print0 2>/dev/null)
+  fi
+  if [[ -d "${build}/middleware" ]]; then
+    while IFS= read -r -d '' so; do
+      gf_sil_sync_file "${so}" "${rt}/lib/$(basename "${so}")" || true
+    done < <(find "${build}/middleware" -type f \( -name 'libgf_*.so' -o -name 'libgf_*.so.*' \) \
+      ! -path '*/runtime/*' ! -path '*/third_party/*' ! -path '*/.deps-prefix/*' -print0 2>/dev/null)
+  fi
+
+  src="${PROJECT_DIR}/generated/iox_roudi.toml"
+  if [[ -f "${src}" ]]; then
+    gf_sil_sync_file "${src}" "${rt}/etc/iox_roudi.toml" || true
+  else
+    echo "${TAG} ERROR: missing ${src}" >&2
+    return 1
+  fi
+
+  if [[ "${_gf_sil_sync_copied}" -gt 0 ]] && command -v ldd >/dev/null 2>&1; then
+    export LD_LIBRARY_PATH="${rt}/lib:${build}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    for exe in "${rt}/bin/"*; do
+      [[ -f "${exe}" && -x "${exe}" ]] || continue
+      case "$(basename "${exe}")" in
+        *.sh|giraffe_launch|run_on_target.sh) continue ;;
+      esac
+      while IFS= read -r line; do
+        path="$(awk '/=>/ {print $3}' <<<"${line}")"
+        [[ -n "${path}" && "${path}" != "not" && -f "${path}" ]] || continue
+        case "${path}" in
+          /lib/*|/lib64/*|/usr/lib/*|/usr/lib64/*) continue ;;
+        esac
+        gf_sil_sync_file "${path}" "${rt}/lib/$(basename "${path}")" || true
+      done < <(ldd "${exe}" 2>/dev/null || true)
+    done
+  fi
+
+  if [[ "${GF_STAGE_GIRAFFE_LAUNCH:-1}" == "1" && ! -x "${rt}/bin/giraffe_launch" ]]; then
+    cat >"${rt}/bin/giraffe_launch" <<'EOS'
+#!/usr/bin/env bash
+# DEBUG ONLY — board uses systemd/init (common/deploy/). Self-contained runtime.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export GF_BUILD_DIR="${ROOT}"
+export GF_RUNTIME_DIR="${ROOT}"
+export GF_IOX_TOML="${ROOT}/etc/iox_roudi.toml"
+export LD_LIBRARY_PATH="${ROOT}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+if [[ -d "${ROOT}/platform" ]]; then
+  export GF_PLATFORM_DIR="${ROOT}/platform"
+fi
+exec "${ROOT}/bin/gf_em_daemon" --build-dir "${ROOT}" "$@"
+EOS
+    chmod +x "${rt}/bin/giraffe_launch"
+    ln -sfn giraffe_launch "${rt}/bin/run_on_target.sh"
+    echo "${TAG} sync wrote ${rt}/bin/giraffe_launch"
+  fi
+
+  echo "${TAG} sync runtime OK (${_gf_sil_sync_copied} files) → ${rt}"
 }
 
 # cmake -S/-B every run dirties Unix Makefiles and rebuilds iceoryx/etc. for no reason.
@@ -162,7 +283,6 @@ gf_sil_need_cmake_configure() {
   local build sentinel
   build="$(gf_sil_build_root)"
   sentinel="$(gf_sil_cmake_configure_sentinel)"
-  [[ "${GF_FORCE_COMPILE:-0}" == "1" ]] && return 0
   [[ -f "${build}/CMakeCache.txt" ]] || return 0
   [[ -f "${sentinel}" ]] || return 0
   if [[ -f "${GEN_OUT}/gf_build.cmake" && "${GEN_OUT}/gf_build.cmake" -nt "${sentinel}" ]]; then

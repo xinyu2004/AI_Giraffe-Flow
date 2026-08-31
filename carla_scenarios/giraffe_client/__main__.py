@@ -30,6 +30,7 @@ from _ctrl_tip import TipSender  # noqa: E402
 from _fake_perc_pack import pack_fake_perc_pod  # noqa: E402
 from _lane_truth import measure_lane_topology  # noqa: E402
 from _objects_truth import collect_dyn_objects  # noqa: E402
+from _tsr_static_truth import collect_tsr_static  # noqa: E402
 from _perf import PerfAgg, dump_ue_settings, perf_enabled  # noqa: E402
 
 # POD magic / version — keep in sync with boundary_pods.h / cosim_protocol.h
@@ -475,9 +476,12 @@ def run() -> int:
             lane = measure_lane_topology(hero, world)
             t2 = time.perf_counter()
             dyn = collect_dyn_objects(hero, world)
+            tsr_stat = collect_tsr_static(hero, world)
             t3 = time.perf_counter()
             perc_seq += 1
-            perc_blob = pack_fake_perc_pod(lane=lane, dyn=dyn, seq=perc_seq, timestamp_ns=ts)
+            perc_blob = pack_fake_perc_pod(
+                lane=lane, dyn=dyn, tsr=tsr_stat, seq=perc_seq, timestamp_ns=ts
+            )
             cosim.send_fake_perc(perc_blob, ts)
             t4 = time.perf_counter()
             if first_perc_mono <= 0.0:

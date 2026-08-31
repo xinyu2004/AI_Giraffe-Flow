@@ -19,7 +19,7 @@ bash common/bootstrap_sku_scripts.sh afc
 
 ```text
 common/
-  launch/           project_env.sh compile.sh stage_runtime.sh
+  launch/           project_env.sh compile.sh
                     run.sh gmt_depend.sh obs_inject.sh
   deploy/
     systemd/        giraffe-em.service.example
@@ -33,7 +33,6 @@ common/
 |----------|---------------------|
 | `project_env.sh` | `_common.sh` |
 | `compile.sh` | `compile_sil.sh`, `compile_hil.sh` (fork after copy) |
-| `stage_runtime.sh` | `stage_sil_runtime.sh` |
 | `run.sh` | `run_sil.sh`, `run_hil.sh` |
 | `gmt_depend.sh` | `GMT_depend_launch.sh` |
 | `obs_inject.sh` | `obs_inject.sh` |

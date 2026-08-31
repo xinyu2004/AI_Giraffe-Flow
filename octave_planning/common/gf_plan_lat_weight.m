@@ -1,4 +1,4 @@
-% 0 far-adjacent … 1 in-path. 1:1 plan_lat_weight().
+% Legacy 8 m cone. Brake/sight now use gf_plan_lane_occupy / gf_plan_can_pass.
 function w = gf_plan_lat_weight(alat)
   p = gf_plan_cal();
   aa = abs(alat);

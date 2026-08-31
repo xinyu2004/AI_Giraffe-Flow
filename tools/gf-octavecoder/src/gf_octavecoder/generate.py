@@ -93,6 +93,8 @@ using gf_octave_planning::PlanTickOut;
 using gf_octave_planning::kObjNMax;
 using gf_octave_planning::kLatTrajPoints;
 using gf_octave_planning::lon_a_req_n;
+using gf_octave_planning::plan_can_pass;
+using gf_octave_planning::plan_lane_occupy;
 using gf_octave_planning::plan_occlusion;
 
 /** Corresponds to octave_planning/afc/m_plan_tick.m */

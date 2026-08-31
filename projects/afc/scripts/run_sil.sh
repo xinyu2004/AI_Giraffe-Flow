@@ -25,7 +25,8 @@
 #   GF_LIVE_PORT     default 8766 (GMT GUI live bridge)
 #   GF_OBS_OUT       GMT Record / MCAP root (default build-sil/observability — never under runtime/)
 #   GF_SYNTH_BEV       default 1 — Foxglove live bridge composes BEV from EgoMotion/Trajectory
-#   GF_SKIP_COMPILE=1  skip compile_sil (assume already built)
+#   GF_SKIP_COMPILE=1     skip compile_sil (assume already built)
+#   GF_FORCE_COMPILE=1    wipe runtime + cmake sentinel, then compile_sil (run only)
 #   GF_INJECT_SESSION  continuous 必填；playhead 可选（GMT stream，可不设）
 #   GF_INJECT_MODE     continuous (default) | playhead — playhead waits for GMT on GF_INJECT_PORT
 #   GF_INJECT_PORT     default 8767 (playhead control TCP)
@@ -136,8 +137,9 @@ fi
 RUN_APPS=""
 
 if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
+  gf_sil_force_runtime_if_requested
   bash "${SCRIPT_DIR}/compile_sil.sh"
-  echo "${TAG} compile/stage done → bring-up EM (+ GMT depend unless GF_GMT_DEPEND=0)"
+  echo "${TAG} compile/sync done → bring-up EM (+ GMT depend unless GF_GMT_DEPEND=0)"
 fi
 
 # deploy_config.hpp still grepped for Flow/EM (frame_ingest freeze is in binaries only).

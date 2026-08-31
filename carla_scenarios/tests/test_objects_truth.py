@@ -119,7 +119,8 @@ def test_collect_dyn_ahead_vehicle() -> None:
     assert dyn["dyn_n"] == 1
     assert dyn["vd_count"] == 1
     assert dyn["ped_count"] == 0
-    assert dyn["cipv_id"] == 1
+    assert dyn["cipv_id"] == 2
+    assert dyn["obj0_id"] == 2
     assert dyn["obj0_long"] == pytest.approx(25.0, abs=0.05)
     assert dyn["obj0_lat"] == pytest.approx(0.0, abs=0.05)
     assert dyn["obj0_rel_v"] == pytest.approx(-2.0, abs=0.05)
@@ -154,7 +155,8 @@ def test_collect_dyn_prefers_lead_id() -> None:
     dyn = collect_dyn_objects(ego, world, lead=marked)
     assert dyn["dyn_n"] == 2
     assert dyn["obj0_long"] == pytest.approx(30.0, abs=0.05)
-    assert dyn["cipv_id"] == 1
+    assert dyn["obj0_id"] == 9
+    assert dyn["cipv_id"] == 9
 
 
 def test_dyn_cache_second_tick_skips_full_get_actors() -> None:
@@ -182,3 +184,19 @@ def test_dyn_cache_fetches_only_new_id() -> None:
     assert world.get_actors_id_queries == [[5]]
     assert dyn["dyn_n"] == 2
     assert dyn["obj0_long"] == pytest.approx(15.0, abs=0.05)
+    assert {dyn["obj0_id"], dyn["obj1_id"]} == {5, 2}
+
+
+def test_obj_id_follows_actor_not_slot() -> None:
+    """Adding a nearer car must not recolor the farther one (no slot remap)."""
+    ego = _Actor(1, "vehicle.tesla.model3", 0.0, 0.0)
+    far = _Actor(20, "vehicle.audi.tt", 30.0, 0.0)
+    world = _World([ego, far])
+    first = collect_dyn_objects(ego, world)
+    assert first["obj0_id"] == 20
+    near = _Actor(7, "vehicle.nissan.patrol", 15.0, 0.0)
+    world._actors.append(near)
+    second = collect_dyn_objects(ego, world)
+    by_id = {second["obj0_id"]: second["obj0_long"], second["obj1_id"]: second["obj1_long"]}
+    assert by_id[20] == pytest.approx(30.0, abs=0.05)
+    assert by_id[7] == pytest.approx(15.0, abs=0.05)

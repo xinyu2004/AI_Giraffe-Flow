@@ -11,8 +11,11 @@ from typing import Any, Mapping
 
 GF_CH_FAKE_PERC_MAGIC = 0x47465043
 GF_CH_POD_VERSION = 1
+GF_CH_FAKE_PERC_VERSION = 2
 _MAX_OBJ = 13
 _MAX_ADJ = 4
+_MAX_TSR = 6
+_MAX_STAT = 6
 
 _OBJ = struct.Struct("<BBBB6f")
 assert _OBJ.size == 28
@@ -33,8 +36,16 @@ _FP_HEAD = struct.Struct(
     "4B"
 )
 assert _FP_HEAD.size == 156
-_FP_SIZE = _FP_HEAD.size + _MAX_OBJ * _OBJ.size
-assert _FP_SIZE == 520
+_FP_V1_SIZE = _FP_HEAD.size + _MAX_OBJ * _OBJ.size
+assert _FP_V1_SIZE == 520
+_TSR = struct.Struct("<HBx2f")
+assert _TSR.size == 12
+_STAT = struct.Struct("<BBBB5f")
+assert _STAT.size == 24
+_TAIL_HEAD = struct.Struct("<BB2x")
+assert _TAIL_HEAD.size == 4
+_FP_SIZE = _FP_V1_SIZE + _TAIL_HEAD.size + _MAX_TSR * _TSR.size + _MAX_STAT * _STAT.size
+assert _FP_SIZE == 740
 
 
 def _u8(v: Any, default: int = 0) -> int:
@@ -55,10 +66,11 @@ def pack_fake_perc_pod(
     *,
     lane: Mapping[str, Any],
     dyn: Mapping[str, Any],
+    tsr: Mapping[str, Any] | None = None,
     seq: int = 0,
     timestamp_ns: int | None = None,
 ) -> bytes:
-    """Build full fake_perc blob from measure_lane_topology + collect_dyn_objects."""
+    """Build full fake_perc blob from lane + dyn + optional TSR/STATIC (v2)."""
     ts = int(timestamp_ns if timestamp_ns is not None else time.time_ns())
 
     lead_long = _f(dyn.get("lead_from_dyn_long"), 0.0)
@@ -108,7 +120,7 @@ def pack_fake_perc_pod(
 
     head = _FP_HEAD.pack(
         GF_CH_FAKE_PERC_MAGIC,
-        GF_CH_POD_VERSION,
+        GF_CH_FAKE_PERC_VERSION,
         0,
         ts,
         int(seq) & 0xFFFFFFFFFFFFFFFF,
@@ -180,5 +192,34 @@ def pack_fake_perc_pod(
         )
         off = _FP_HEAD.size + i * _OBJ.size
         buf[off : off + len(obj)] = obj
+
+    extra = tsr or {}
+    tsr_n = min(_MAX_TSR, max(0, _u8(extra.get("tsr_n"), 0)))
+    stat_n = min(_MAX_STAT, max(0, _u8(extra.get("stat_n"), 0)))
+    tail_off = _FP_V1_SIZE
+    buf[tail_off : tail_off + _TAIL_HEAD.size] = _TAIL_HEAD.pack(tsr_n, stat_n)
+    tsr_off = tail_off + _TAIL_HEAD.size
+    for i in range(tsr_n):
+        rec = _TSR.pack(
+            int(extra.get(f"tsr{i}_name") or 0) & 0xFFFF,
+            _u8(extra.get(f"tsr{i}_rel"), 0),
+            _f(extra.get(f"tsr{i}_long"), 0.0),
+            _f(extra.get(f"tsr{i}_lat"), 0.0),
+        )
+        buf[tsr_off + i * _TSR.size : tsr_off + (i + 1) * _TSR.size] = rec
+    stat_off = tsr_off + _MAX_TSR * _TSR.size
+    for i in range(stat_n):
+        rec = _STAT.pack(
+            _u8(extra.get(f"stat{i}_id"), i + 1) or (i + 1),
+            _u8(extra.get(f"stat{i}_cls"), 1) or 1,
+            _u8(extra.get(f"stat{i}_assign"), 3) or 3,
+            0,
+            _f(extra.get(f"stat{i}_long"), 0.0),
+            _f(extra.get(f"stat{i}_lat"), 0.0),
+            _f(extra.get(f"stat{i}_heading"), 0.0),
+            _f(extra.get(f"stat{i}_len"), 2.0),
+            _f(extra.get(f"stat{i}_wid"), 0.6),
+        )
+        buf[stat_off + i * _STAT.size : stat_off + (i + 1) * _STAT.size] = rec
 
     return bytes(buf)
