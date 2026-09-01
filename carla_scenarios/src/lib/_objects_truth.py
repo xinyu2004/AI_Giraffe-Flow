@@ -17,6 +17,9 @@ CLS_TWO_WHEELER = 9
 
 _MAX_DYN = 13
 _RADIUS_M = 90.0
+SEE_FOV_DEG = 50.0
+_HOST_LANE_HALF_M = 1.75
+_OCC_PAD_M = 2.0
 
 
 def _stable_obj_id(actor_id: int, slot: int) -> int:
@@ -41,9 +44,9 @@ def map_carla_class(type_id: str, *, is_walker: bool = False) -> int:
     t = (type_id or "").lower()
     if is_walker or "walker" in t or "pedestrian" in t:
         return CLS_PEDESTRIAN
-    if "truck" in t or "bus" in t or "firetruck" in t or "ambulance" in t:
+    if "truck" in t or "bus" in t or "firetruck" in t or "ambulance" in t or "carlacola" in t or "sprinter" in t or "fusorosa" in t or "hgv" in t:
         return CLS_TRUCK
-    if "motorcycle" in t or "motorbike" in t:
+    if "motorcycle" in t or "motorbike" in t or "harley" in t or "kawasaki" in t or "yamaha" in t or "ninja" in t:
         return CLS_MOTORBIKE
     if "bicycle" in t or "bike" in t:
         return CLS_BICYCLE
@@ -67,6 +70,37 @@ def _xy_to_ego(ex: float, ey: float, c: float, s: float, wx: float, wy: float) -
     xf = c * dx + s * dy
     y_left = s * dx - c * dy
     return xf, y_left
+
+
+def optic_in_wedge(x: float, y: float, *, fov_deg: float = SEE_FOV_DEG) -> bool:
+    """Forward driving wedge: x>0 and |atan2(y,x)| ≤ half of see_fov_deg (50°)."""
+    if float(x) <= 0.0:
+        return False
+    half = 0.5 * float(fov_deg) * math.pi / 180.0
+    return abs(math.atan2(float(y), float(x))) <= half
+
+
+def drop_host_behind_occupy(
+    items: list[dict[str, Any]],
+    *,
+    lane_half_m: float = _HOST_LANE_HALF_M,
+    pad_m: float = _OCC_PAD_M,
+) -> list[dict[str, Any]]:
+    """Host-lane objects beyond the nearest occupy face are optically hidden."""
+    host = [
+        it
+        for it in items
+        if abs(float(it["lat_m"])) <= lane_half_m and float(it["long_m"]) > 0.0
+    ]
+    if not host:
+        return items
+    occ = min(float(it["long_m"]) for it in host)
+    out: list[dict[str, Any]] = []
+    for it in items:
+        if abs(float(it["lat_m"])) <= lane_half_m and float(it["long_m"]) > occ + pad_m:
+            continue
+        out.append(it)
+    return out
 
 
 def _try_snapshot(world: Any) -> Any:
@@ -293,9 +327,9 @@ def collect_dyn_objects(
             if dxw * dxw + dyw * dyw > r2:
                 return
             x, y = _xy_to_ego(ex, ey, c, s, float(loc.x), float(loc.y))
-            if x < -5.0 or x > radius_m:
+            if x > radius_m or abs(y) > radius_m * 0.6:
                 return
-            if abs(y) > radius_m * 0.6:
+            if not optic_in_wedge(x, y):
                 return
             cls = map_carla_class(typ, is_walker=is_walker)
             try:
@@ -319,7 +353,7 @@ def collect_dyn_objects(
                 {
                     "actor_id": aid,
                     "class": cls,
-                    "long_m": float(max(0.0, x)),
+                    "long_m": float(x),
                     "lat_m": float(y),
                     "heading_rad": float(heading),
                     "length_m": float(length_m),
@@ -375,6 +409,7 @@ def collect_dyn_objects(
                 width_m=width_m,
             )
 
+    items = drop_host_behind_occupy(items)
     # Prefer lead, then nearer ahead
     items.sort(key=lambda it: (0 if it["is_lead"] else 1, it["long_m"], abs(it["lat_m"])))
     items = items[: max(1, min(max_n, _MAX_DYN))]

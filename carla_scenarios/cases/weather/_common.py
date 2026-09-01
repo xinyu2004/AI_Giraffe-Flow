@@ -27,12 +27,18 @@ from _carla_env import (  # noqa: E402
 )
 from _instrument import (  # noqa: E402
     CtrlProbe,
+    ego_yaw_rate_degps,
     make_cluster_state,
     mps_to_kph,
     prime_run_meta,
 )
 from _camera_mount import load_camera_mount  # noqa: E402
-from _traffic import ensure_ambient_traffic  # noqa: E402
+from _traffic import (  # noqa: E402
+    allow_ambient_peds,
+    ensure_ambient_traffic,
+    maintain_ambient_traffic,
+)
+from _tsr_static_truth import collect_hud_signs  # noqa: E402
 from _verdict import (  # noqa: E402
     CmdProbe,
     Sample,
@@ -89,7 +95,17 @@ def run_session(
         carla, client, world, lead_gap_m=32.0, keep_ego=keep_ego
     )
     apply_wiper(ego, cfg.wiper_speed)
-    ensure_ambient_traffic(carla, client, world, near=ego, log_prefix=f"[{tag}]")
+    peds_ok = allow_ambient_peds(tag, keep_ego=keep_ego)
+    ensure_ambient_traffic(
+        carla,
+        client,
+        world,
+        near=ego,
+        rebuild=not keep_ego,
+        log_prefix=f"[{tag}]",
+        allow_peds=peds_ok,
+        fixture=lead,
+    )
 
     print(
         f"[{tag}] READY host={carla_host()}:{carla_port()} "
@@ -128,6 +144,16 @@ def run_session(
         seq["n"] += 1
         cmd.poll()
         ctrl.poll()
+        maintain_ambient_traffic(
+            carla,
+            client,
+            world,
+            near=ego,
+            fixture=lead,
+            elapsed_s=elapsed,
+            allow_peds=peds_ok,
+            log_prefix=f"[{tag}]",
+        )
         gap, es, ls, rel = gap_speed(ego, lead)
         th = time_headway_s(gap, es)
         collided = actors_colliding(ego, lead)
@@ -144,15 +170,18 @@ def run_session(
         )
         if view is not None:
             tgt = None
-            mode = "ACC"
+            mode = ""
             if ctrl.seen and ctrl.target_speed_mps is not None:
                 tgt = mps_to_kph(ctrl.target_speed_mps)
-                if ctrl.mode:
-                    mode = ctrl.mode.upper()
+                mode = (ctrl.mode or "").upper()
+            ttc = None
+            closing = es - ls
+            if gap > 0.5 and closing > 0.3:
+                ttc = gap / closing
+            signs = collect_hud_signs(ego, world)
             view.set_cluster(
                 make_cluster_state(
                     tag=tag,
-                    template="acc",
                     elapsed=elapsed,
                     duration_s=duration_s,
                     ego_mps=es,
@@ -163,6 +192,13 @@ def run_session(
                     ctrl_ok=cmd.seen_control,
                     tgt_kph=tgt,
                     mode=mode if cmd.seen_control else "",
+                    ttc_s=ttc,
+                    yaw_rate_degps=ego_yaw_rate_degps(ego),
+                    sig=signs.get("sig"),
+                    sig_m=signs.get("sig_m"),
+                    ped=signs.get("ped"),
+                    ped_m=signs.get("ped_m"),
+                    limit_kph=signs.get("limit_kph"),
                     meta={"weather": cfg.preset},
                 )
             )

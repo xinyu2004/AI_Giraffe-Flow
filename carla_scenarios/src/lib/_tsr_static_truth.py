@@ -170,3 +170,97 @@ def collect_tsr_static(ego: Any, world: Any) -> dict[str, Any]:
         out[f"stat{i}_len"] = float(it["len"])
         out[f"stat{i}_wid"] = float(it["wid"])
     return out
+
+
+def hud_light_label(state: Any) -> str | None:
+    """CARLA TrafficLightState or name → RED / YEL / GRN."""
+    raw = str(getattr(state, "name", state) or "").strip().lower()
+    if raw == "red":
+        return "RED"
+    if raw == "yellow":
+        return "YEL"
+    if raw == "green":
+        return "GRN"
+    return None
+
+
+def collect_hud_signs(ego: Any, world: Any) -> dict[str, Any]:
+    """Nearest ahead light (incl. green) and speed landmark for the instrument.
+
+    FCM DSTSR still only packs red/yellow (collect_tsr_static). Green is HUD-only
+    so the driver can see a junction was recognized.
+    """
+    out: dict[str, Any] = {
+        "sig": None,
+        "sig_m": None,
+        "limit_kph": None,
+        "ped": None,
+        "ped_m": None,
+    }
+    try:
+        ex, ey, c, s, _yaw = _ego_pose(ego)
+    except Exception:  # noqa: BLE001
+        return out
+    try:
+        lights = world.get_actors().filter("traffic.traffic_light")
+    except Exception:  # noqa: BLE001
+        lights = []
+    best: tuple[float, str] | None = None
+    for tl in lights or []:
+        try:
+            loc = tl.get_location()
+            xf, yf = world_to_ego_xy_cs(ex, ey, c, s, float(loc.x), float(loc.y))
+            if xf < 2.0 or xf > _RADIUS_M or abs(yf) > 18.0:
+                continue
+            label = hud_light_label(tl.get_state())
+            if label is None:
+                continue
+            if best is None or xf < best[0]:
+                best = (xf, label)
+        except Exception:  # noqa: BLE001
+            continue
+    if best is not None:
+        out["sig_m"] = float(best[0])
+        out["sig"] = best[1]
+    try:
+        marks = world.get_map().get_all_landmarks()
+    except Exception:  # noqa: BLE001
+        marks = []
+    lim_best: tuple[float, float] | None = None
+    for lm in marks or []:
+        try:
+            typ = str(getattr(lm, "type", "") or "")
+            if typ not in ("206", "274"):
+                continue
+            loc = lm.transform.location
+            xf, yf = world_to_ego_xy_cs(ex, ey, c, s, float(loc.x), float(loc.y))
+            if xf < 2.0 or xf > _RADIUS_M or abs(yf) > 18.0:
+                continue
+            kph = float(getattr(lm, "value", 0.0) or 0.0)
+            if kph < 3.0:
+                continue
+            if lim_best is None or xf < lim_best[0]:
+                lim_best = (xf, kph)
+        except Exception:  # noqa: BLE001
+            continue
+    if lim_best is not None:
+        out["limit_kph"] = float(lim_best[1])
+    try:
+        walkers = world.get_actors().filter("walker.*")
+    except Exception:  # noqa: BLE001
+        walkers = []
+    ped_best: tuple[float, str] | None = None
+    for w in walkers or []:
+        try:
+            loc = w.get_location()
+            xf, yf = world_to_ego_xy_cs(ex, ey, c, s, float(loc.x), float(loc.y))
+            if xf < 2.0 or xf > _RADIUS_M or abs(yf) > 14.0:
+                continue
+            if ped_best is None or xf < ped_best[0]:
+                ped_best = (xf, "PED")
+        except Exception:  # noqa: BLE001
+            continue
+    if ped_best is not None:
+        out["ped_m"] = float(ped_best[0])
+        out["ped"] = ped_best[1]
+    return out

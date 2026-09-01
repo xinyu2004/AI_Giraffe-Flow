@@ -16,7 +16,6 @@ carla_scenarios/
     layouts/         # layout families (≠ product domain dirs under cases/)
     lib/             # AtomCase, view, verdict, carla_env…
     judges/
-    cluster_templates/
 ```
 
 ## Architecture snapshot (Client A)
@@ -136,7 +135,7 @@ See [frame_ingest_roles.md](./frame_ingest_roles.md).
   - `GF_SCENARIO_DURATION_S=8` (most cases)  
   - `GF_SCENARIO_DURATION_ISP_S=25` (tunnel / ISP enter+exit)  
   - `GF_CARLA_TOWN=Town04` (optional load after connect; independent of UE startup map; empty = keep)  
-  - `GF_TRAFFIC_DENSITY=1` (TM ambient on all cases; 0=off; batch never wipes between cases, only top-up)  
+  - `GF_TRAFFIC_NUMBER=18` (~N new see-cone units per rolling 5 s; simultaneous ≈ N/2; host exam window empty; 0=off)  
   - `GF_SCENARIO_WRITE_RESULTS=1` (batch `results/` report; default on; `0` / `--no-results` off)  
 - `GF_SCENARIO_STOP_ON_FAIL=0` continue; `=1` / `--stop-on-fail` abort.  
 - AEB family: collision early-exit fail.  
@@ -150,8 +149,8 @@ See `carla_scenarios/results/README.md`.
 
 - v3 translucent **top bar + hood band**:  
   - top: `i/N keyword·id` · `t / T s`  
-  - band: speed kph · SET · TGT · **template slots** (th/gap, TTC, …) · CTRL  
-- Feature plugins: `src/cluster_templates/` (sibling of `lib/` / `layouts/` / `judges/`; unknown → `common`).  
+  - band: speed · SET · TGT · gap / th / TTC · **SIG** (R/Y/G + m) · **PED** · LIM · yaw · CTRL  
+- Empty slots show `--`. No per-case skins. SIG is the nearest CARLA light (green shown on HUD; FCM still packs red/yellow only).  
 - **CTRL**: green blink with control; red blink without.  
 - No CAM / View chrome; keyboard `V` still toggles ChaseCam silently.
 

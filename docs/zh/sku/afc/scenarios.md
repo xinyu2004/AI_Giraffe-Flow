@@ -15,7 +15,6 @@ carla_scenarios/
     layouts/         # 按布景族组合积木（≠ cases 产品域目录）
     lib/             # AtomCase、view、verdict、carla_env…
     judges/
-    cluster_templates/
 ```
 
 ## 架构快照（Client A）
@@ -147,7 +146,7 @@ python3 cases/longitudinal/acc.py
   - `GF_SCENARIO_DURATION_S=8`（多数 case）  
   - `GF_SCENARIO_DURATION_ISP_S=25`（隧道 / ISP，进出需要更长）  
   - `GF_CARLA_TOWN=Town04`（连上后可选切图；与 UE 是否先开该图无关；空=保持当前图）  
-  - `GF_TRAFFIC_DENSITY=1`（全 case 走廊刷 TM 环境车；0 关；批跑 case 间不清理，只补到目标）  
+  - `GF_TRAFFIC_NUMBER=18`（任意滚动 5 秒窗口约新出现 N 辆进 see-cone；同时约 N/2；本车道考场窗空；0 关）  
   - `GF_SCENARIO_WRITE_RESULTS=1`（批跑是否写 `results/` 报告；默认开；`0` / `--no-results` 关）  
 - `GF_SCENARIO_STOP_ON_FAIL=0` 失败继续；`=1` / `--stop-on-fail` 遇首个 fail 停。  
 - AEB 族：碰撞 early-exit fail。  
@@ -161,8 +160,8 @@ python3 cases/longitudinal/acc.py
 
 - 全画幅半透明 **顶栏 + 底带**（v3）：  
   - 顶栏：`i/N keyword·id` · `t / T s`  
-  - 底带：车速 kph · SET · TGT · **template 特性槽**（th/gap、TTC…）· CTRL  
-- 特性槽插件：`src/cluster_templates/`（与 `lib/` / `layouts/` / `judges/` 同级；未知 → `common`）。  
+  - 底带：车速 · SET · TGT · gap / th / TTC · **SIG**（红/黄/绿+距离）· **PED** · LIM · yaw · CTRL  
+- 空槽画 `--`。不按 case 换皮。SIG 来自 CARLA 灯（绿也显示；FCM 仍只打包红/黄）。  
 - **CTRL**：有控车 **绿闪**；无信号 **红闪**。  
 - 不上仪表：fps、相机安装、fov、CAM。  
 - 无 View 按钮；键盘 `V` 仍可静默切换 ChaseCam。

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from typing import Any, Optional, Tuple
 
@@ -15,6 +16,18 @@ from spawn.pick import offset_transform
 from spawn.place import spawn_ego_lead, spawn_named
 from spawn.roles import ROLE_LEAD, safe_destroy
 from _verdict import CmdProbe, release_ego
+
+
+def _pair_gap_speed(ego: Any, lead: Any) -> tuple[float, float]:
+    """Measured gap (m) and ego speed (m/s). Zeros if actors are unreadable."""
+    try:
+        ev = ego.get_velocity()
+        ego_mps = math.hypot(float(ev.x), float(ev.y))
+        el, ll = ego.get_location(), lead.get_location()
+        gap_m = math.hypot(float(ll.x) - float(el.x), float(ll.y) - float(el.y))
+        return gap_m, ego_mps
+    except Exception:  # noqa: BLE001
+        return 0.0, 0.0
 
 
 def _hold_brake(carla_mod: Any, vehicle: Any) -> None:
@@ -52,6 +65,8 @@ def layout_aeb_stopped(
     release_ego(carla_mod, ego)
     const_on = False
     if keep_ego:
+        gap_m, ego_mps = _pair_gap_speed(ego, lead)
+        ic_s = "giraffe_only"
         print(
             f"[layout] {layout_name} keep_ego: no park-teleport / no ego seed",
             flush=True,
@@ -63,10 +78,11 @@ def layout_aeb_stopped(
             const_on = closing_toward_lead(carla_mod, ego, ego_mps, lead)
         finally:
             aeb_ego_seed(False)
+        ic_s = "aeb_ego_seed+closing_toward_lead"
     ttc = gap_m / max(ego_mps, 0.1)
     print(
         f"[layout] {layout_name} gap≈{gap_m:.0f}m ego_v≈{ego_mps:.1f} "
-        f"TTC≈{ttc:.1f}s const={int(const_on)} ic=aeb_ego_seed+closing_toward_lead",
+        f"TTC≈{ttc:.1f}s const={int(const_on)} ic={ic_s}",
         flush=True,
     )
     return ego, lead, {
@@ -238,6 +254,12 @@ def layout_aeb_occluded_lateral(
     meta["layout"] = "occluded_lateral"
     meta["reveal_s"] = float(os.environ.get("GF_AEB_OCC_REVEAL_S") or "2.0")
     meta["keep_ego"] = keep_ego
+    if keep_ego:
+        print(
+            "[layout] occluded_lateral keep_ego: wrapper of intersection_cross "
+            "(same no-FOV-pop; not a wrong case)",
+            flush=True,
+        )
     if not keep_ego:
         try:
             lead.disable_constant_velocity()

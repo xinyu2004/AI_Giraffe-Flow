@@ -22,13 +22,13 @@ from _carla_env import (
 from _instrument import (
     CtrlProbe,
     ego_yaw_rate_degps,
-    infer_cluster_template,
     make_cluster_state,
     mps_to_kph,
     prime_run_meta,
 )
 from _camera_mount import load_camera_mount
-from _traffic import ensure_ambient_traffic
+from _traffic import allow_ambient_peds, ensure_ambient_traffic, maintain_ambient_traffic
+from _tsr_static_truth import collect_hud_signs
 from _verdict import (
     CmdProbe,
     Sample,
@@ -68,7 +68,6 @@ class AtomCase:
     hud_lines: list[str] = field(default_factory=list)  # unused; cluster replaces HUD
     on_tick: Optional[TickHook] = None
     default_duration_s: float = 10.0
-    cluster_template: Optional[str] = None  # None → infer from tag
 
     def run_dry(self, duration_s: float, period_s: float) -> int:
         print(
@@ -124,8 +123,16 @@ class AtomCase:
             meta["natural_continue"] = True
         if weather_cfg is not None:
             apply_wiper(ego, weather_cfg.wiper_speed)
+        peds_ok = allow_ambient_peds(self.tag, meta, keep_ego=keep_ego)
         ensure_ambient_traffic(
-            carla, client, world, near=ego, log_prefix=f"[{self.tag}]"
+            carla,
+            client,
+            world,
+            near=ego,
+            rebuild=not keep_ego,
+            log_prefix=f"[{self.tag}]",
+            allow_peds=peds_ok,
+            fixture=target,
         )
 
         title = self.title or f"AFC {self.tag}"
@@ -165,7 +172,6 @@ class AtomCase:
         ctrl = CtrlProbe()
         seq = {"n": 0}
         done = {"hit": False}
-        tmpl = self.cluster_template or infer_cluster_template(self.tag)
         th_lo = float(os.environ.get("GF_ACC_TH_LO") or "1.0")
         th_hi = float(os.environ.get("GF_ACC_TH_HI") or "2.5")
 
@@ -182,6 +188,16 @@ class AtomCase:
             ctrl.poll()
             if self.on_tick is not None:
                 self.on_tick(elapsed, ego, target, meta, cmd)
+            maintain_ambient_traffic(
+                carla,
+                client,
+                world,
+                near=ego,
+                fixture=target,
+                elapsed_s=elapsed,
+                allow_peds=peds_ok,
+                log_prefix=f"[{self.tag}]",
+            )
 
             if target is not None:
                 gap, es, ls, rel = gap_speed(ego, target)
@@ -207,32 +223,35 @@ class AtomCase:
                 mode = ""
                 if ctrl.seen and ctrl.target_speed_mps is not None:
                     tgt = mps_to_kph(ctrl.target_speed_mps)
-                    mode = (ctrl.mode or tmpl).upper()
-                elif cmd.seen_control:
-                    mode = tmpl.upper()
+                    mode = (ctrl.mode or "").upper()
                 ttc = None
-                if tmpl == "aeb" and gap > 0:
-                    closing = max(0.1, es - ls) if target is not None else max(0.1, es)
-                    ttc = gap / closing
-                yaw = ego_yaw_rate_degps(ego) if tmpl == "lateral" else None
+                if gap > 0.5 and target is not None:
+                    closing = es - ls
+                    if closing > 0.3:
+                        ttc = gap / closing
+                signs = collect_hud_signs(ego, world)
                 view.set_cluster(
                     make_cluster_state(
                         tag=self.tag,
-                        template=tmpl,
                         elapsed=elapsed,
                         duration_s=duration_s,
                         ego_mps=es,
                         gap_m=gap,
-                        th_s=th if tmpl in ("acc", "follow") else None,
+                        th_s=th,
                         th_lo=th_lo,
                         th_hi=th_hi,
                         ctrl_ok=cmd.seen_control,
                         tgt_kph=tgt,
                         mode=mode,
                         ttc_s=ttc,
-                        yaw_rate_degps=yaw,
+                        yaw_rate_degps=ego_yaw_rate_degps(ego),
+                        sig=signs.get("sig"),
+                        sig_m=signs.get("sig_m"),
+                        ped=signs.get("ped"),
+                        ped_m=signs.get("ped_m"),
+                        limit_kph=signs.get("limit_kph"),
                         meta=meta,
-                        alert="AEB" if (tmpl == "aeb" and collided) else "",
+                        alert="HIT" if collided else "",
                     )
                 )
 

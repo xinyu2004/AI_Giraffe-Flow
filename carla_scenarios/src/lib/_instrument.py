@@ -1,29 +1,15 @@
 """Instrument-cluster overlay (top bar + hood bottom band).
 
-Layout v3 (agreed): translucent top bar + hood band; compact speed / SET / TGT;
-feature slots from ``src/cluster_templates/*`` (unknown → common).
+One generic hood: speed / SET / TGT / gap / th / TTC / SIG / LIM / yaw / CTRL.
+Empty fields show --. No per-case template skins.
 """
 
 from __future__ import annotations
 
 import os
-import sys
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Optional  # Any used by make_cluster_state / ego helpers
-
-# Templates live at src/cluster_templates/ (sibling of lib/), not under lib/.
-_SRC = Path(__file__).resolve().parent.parent
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
-try:
-    from cluster_templates import resolve_template
-except ImportError as exc:  # pragma: no cover - hard fail: HUD feature slots missing
-    raise ImportError(
-        "cluster_templates not found — expected carla_scenarios/src/cluster_templates/. "
-        "HUD feature slots (th/gap/TTC/…) will not draw."
-    ) from exc
+from typing import Any, Optional
 
 MISSING = "--"
 
@@ -99,11 +85,14 @@ class ClusterState:
     beam: str = ""
     limit_kph: Optional[float] = None
     ttc_s: Optional[float] = None
+    sig: Optional[str] = None
+    sig_m: Optional[float] = None
+    ped: Optional[str] = None
+    ped_m: Optional[float] = None
 
     # ChaseCam: "1"=windshield, "2"=scene (ScenarioView.pump fills this)
     cam_mode: str = "1"
 
-    template: str = "common"
     # Wall time for CTRL blink (set by view each frame); None → time.time()
     now_s: Optional[float] = None
 
@@ -148,23 +137,6 @@ def acc_set_kph_default() -> Optional[float]:
         return None
 
 
-def infer_cluster_template(tag: str) -> str:
-    """Map case id → instrument template (plugin under cluster_templates/)."""
-    t = (tag or "").strip().lower()
-    if t.startswith("aeb") or t == "fcw":
-        return "aeb"
-    if t.startswith("acc") or t in ("isa_limit_follow",):
-        return "acc"
-    if t.startswith(("lka", "ldw", "elk", "lcc")):
-        return "lateral"
-    if t.startswith("hlb") or "night_glare" in t or "night_lead" in t:
-        return "hlb"
-    if t.startswith("tsr") or t.startswith("isa"):
-        return "tsr"
-    # weather follow cases use template explicitly ("acc")
-    return "common"
-
-
 def ego_yaw_rate_degps(ego: Any) -> Optional[float]:
     try:
         av = ego.get_angular_velocity()
@@ -176,7 +148,6 @@ def ego_yaw_rate_degps(ego: Any) -> Optional[float]:
 def make_cluster_state(
     *,
     tag: str,
-    template: Optional[str] = None,
     elapsed: float,
     duration_s: float,
     ego_mps: float,
@@ -192,28 +163,26 @@ def make_cluster_state(
     yaw_rate_degps: Optional[float] = None,
     beam: str = "",
     limit_kph: Optional[float] = None,
+    sig: Optional[str] = None,
+    sig_m: Optional[float] = None,
+    ped: Optional[str] = None,
+    ped_m: Optional[float] = None,
     alert: str = "",
     meta: Optional[dict[str, Any]] = None,
+    template: Optional[str] = None,
 ) -> ClusterState:
-    """Build ClusterState for any case (ACC-style chrome + feature slots)."""
+    """Build ClusterState. template= is ignored (kept so old callers do not break)."""
+    del template
     run = load_run_meta()
     case_id = str(run.get("case_id") or tag)
     keyword = str(run.get("keyword") or "")
-    tmpl = (template or infer_cluster_template(tag)).strip().lower()
     meta = meta or {}
-
-    if set_kph is None and tmpl in ("acc", "follow"):
+    if set_kph is None:
         set_kph = acc_set_kph_default()
-    if not beam and tmpl == "hlb":
-        beam = str(meta.get("beam") or "LB")
-    if limit_kph is None and tmpl in ("tsr", "isa"):
-        if meta.get("speed_limit_kph") is not None:
-            limit_kph = float(meta["speed_limit_kph"])
-        else:
-            try:
-                limit_kph = float(os.environ.get("GF_TSR_LIMIT_KPH") or "60")
-            except ValueError:
-                limit_kph = 60.0
+    if limit_kph is None and meta.get("speed_limit_kph") is not None:
+        limit_kph = float(meta["speed_limit_kph"])
+    if not beam:
+        beam = str(meta.get("beam") or "")
     if mode and not ctrl_ok:
         mode = ""
 
@@ -238,12 +207,31 @@ def make_cluster_state(
         beam=beam,
         limit_kph=limit_kph,
         ttc_s=ttc_s,
-        template=tmpl,
+        sig=sig,
+        sig_m=sig_m,
+        ped=ped,
+        ped_m=ped_m,
     )
 
 
+def _slot(
+    display: Any,
+    font: Any,
+    label: str,
+    value: str,
+    x: int,
+    y: int,
+    *,
+    mute: tuple[int, int, int],
+    value_c: tuple[int, int, int],
+) -> int:
+    display.blit(font.render(label, True, mute), (x, y - 12))
+    display.blit(font.render(value, True, value_c), (x, y + 4))
+    return x + max(font.size(label)[0], font.size(value)[0]) + 16
+
+
 def draw_cluster(pygame: Any, display: Any, fonts: dict[str, Any], st: ClusterState) -> None:
-    """v3 layout: top bar (case + time) + hood band (speed/SET/TGT + template + CTRL)."""
+    """Top bar (case + time) + hood: speed/SET/TGT + live slots + CTRL."""
     w, h = display.get_size()
     band_h = max(96, int(h * 0.20))
     band_y = h - band_h
@@ -263,12 +251,6 @@ def draw_cluster(pygame: Any, display: Any, fonts: dict[str, Any], st: ClusterSt
     mute = (160, 168, 178)
     accent = (80, 210, 120)
     warn = (220, 70, 70)
-    colors = {
-        "white": white,
-        "mute": mute,
-        "accent": accent,
-        "warn": warn,
-    }
 
     # Top bar (v3): case i/N · keyword·id  |  t / T s
     kid = st.keyword or st.case_id or "case"
@@ -279,30 +261,59 @@ def draw_cluster(pygame: Any, display: Any, fonts: dict[str, Any], st: ClusterSt
     rw = font.size(right)[0]
     display.blit(font.render(right, True, white), (w - rw - 12, 6))
 
-    # Main row (hood): speed | SET | TGT | <cluster_templates feature slots>
-    main_y = band_y + 28
+    # Hood: speed | SET | TGT | gap th TTC | SIG LIM yaw
+    main_y = band_y + 22
     x = 16
     speed_s = fmt_num(st.speed_kph, digits=0)
-    display.blit(font_lg.render(speed_s, True, white), (x, main_y - 14))
-    display.blit(font_sm.render("kph", True, mute), (x + font_lg.size(speed_s)[0] + 6, main_y))
-    x = 110
-    display.blit(font_sm.render("SET", True, mute), (x, main_y - 14))
-    display.blit(font.render(fmt_num(st.set_kph), True, white), (x + 36, main_y - 16))
-    x = 210
-    display.blit(font_sm.render("TGT", True, mute), (x, main_y - 14))
+    display.blit(font_lg.render(speed_s, True, white), (x, main_y - 8))
+    display.blit(font_sm.render("kph", True, mute), (x + font_lg.size(speed_s)[0] + 6, main_y + 6))
+    x = 108
+    display.blit(font_sm.render("SET", True, mute), (x, main_y - 8))
+    display.blit(font.render(fmt_num(st.set_kph), True, white), (x + 32, main_y - 10))
+    x = 200
+    display.blit(font_sm.render("TGT", True, mute), (x, main_y - 8))
     tgt_col = mute if st.tgt_kph is None else white
-    display.blit(font.render(fmt_num(st.tgt_kph), True, tgt_col), (x + 36, main_y - 16))
+    display.blit(font.render(fmt_num(st.tgt_kph), True, tgt_col), (x + 32, main_y - 10))
 
-    resolve_template(st.template)(
-        pygame,
-        display,
-        fonts,
-        colors,
-        st,
-        band_y=band_y,
-        band_h=band_h,
-        main_y=main_y,
+    row2 = main_y + 36
+    x = 16
+    gap_s = fmt_num(st.gap_m, digits=0) if st.gap_m is not None else MISSING
+    th_s = f"{st.th_s:0.1f}" if st.th_s is not None else MISSING
+    ttc_s = f"{st.ttc_s:0.1f}" if st.ttc_s is not None else MISSING
+    x = _slot(display, font_sm, "gap", f"{gap_s}m", x, row2, mute=mute, value_c=white)
+    x = _slot(display, font_sm, "th", f"{th_s}s", x, row2, mute=mute, value_c=white)
+    ttc_c = warn if st.ttc_s is not None and st.ttc_s < 3.0 else white
+    x = _slot(display, font_sm, "TTC", f"{ttc_s}s", x, row2, mute=mute, value_c=ttc_c)
+
+    sig_c = mute
+    if st.sig == "RED":
+        sig_c = warn
+    elif st.sig == "YEL":
+        sig_c = (230, 190, 60)
+    elif st.sig == "GRN":
+        sig_c = accent
+    sig_v = MISSING if not st.sig else (
+        f"{st.sig} {st.sig_m:0.0f}m" if st.sig_m is not None else st.sig
     )
+    x = _slot(display, font_sm, "SIG", sig_v, x, row2, mute=mute, value_c=sig_c)
+    ped_v = MISSING if not st.ped else (
+        f"{st.ped} {st.ped_m:0.0f}m" if st.ped_m is not None else st.ped
+    )
+    ped_c = accent if st.ped else mute
+    x = _slot(display, font_sm, "PED", ped_v, x, row2, mute=mute, value_c=ped_c)
+    lim_v = fmt_num(st.limit_kph, digits=0) if st.limit_kph is not None else MISSING
+    x = _slot(display, font_sm, "LIM", lim_v, x, row2, mute=mute, value_c=white)
+    if st.yaw_rate_degps is not None:
+        _slot(
+            display,
+            font_sm,
+            "yaw",
+            f"{st.yaw_rate_degps:0.1f}",
+            x,
+            row2,
+            mute=mute,
+            value_c=white,
+        )
 
     # CTRL lamp: ~2 Hz blink — green when ok, red when no signal.
     by = h - 22

@@ -11,7 +11,12 @@ import pytest
 _LIB = Path(__file__).resolve().parents[1] / "src" / "lib"
 sys.path.insert(0, str(_LIB))
 
-from _objects_truth import collect_dyn_objects, reset_dyn_object_cache  # noqa: E402
+from _objects_truth import (  # noqa: E402
+    collect_dyn_objects,
+    drop_host_behind_occupy,
+    optic_in_wedge,
+    reset_dyn_object_cache,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -149,12 +154,12 @@ def test_collect_dyn_walker_and_no_snapshot() -> None:
 
 def test_collect_dyn_prefers_lead_id() -> None:
     ego = _Actor(1, "vehicle.tesla.model3", 0.0, 0.0)
-    near = _Actor(2, "vehicle.audi.tt", 12.0, 0.0)
-    marked = _Actor(9, "vehicle.nissan.patrol", 30.0, 0.0)
-    world = _World([ego, near, marked])
+    marked = _Actor(9, "vehicle.nissan.patrol", 12.0, 0.0)
+    side = _Actor(2, "vehicle.audi.tt", 20.0, 3.5)
+    world = _World([ego, marked, side])
     dyn = collect_dyn_objects(ego, world, lead=marked)
     assert dyn["dyn_n"] == 2
-    assert dyn["obj0_long"] == pytest.approx(30.0, abs=0.05)
+    assert dyn["obj0_long"] == pytest.approx(12.0, abs=0.05)
     assert dyn["obj0_id"] == 9
     assert dyn["cipv_id"] == 9
 
@@ -174,7 +179,7 @@ def test_dyn_cache_second_tick_skips_full_get_actors() -> None:
 
 def test_dyn_cache_fetches_only_new_id() -> None:
     ego = _Actor(1, "vehicle.tesla.model3", 0.0, 0.0)
-    a = _Actor(2, "vehicle.audi.tt", 20.0, 0.0)
+    a = _Actor(2, "vehicle.audi.tt", 20.0, 3.5)
     world = _World([ego, a])
     collect_dyn_objects(ego, world)
     b = _Actor(5, "vehicle.nissan.patrol", 15.0, 0.0)
@@ -183,15 +188,14 @@ def test_dyn_cache_fetches_only_new_id() -> None:
     assert world.get_actors_calls == 2
     assert world.get_actors_id_queries == [[5]]
     assert dyn["dyn_n"] == 2
-    assert dyn["obj0_long"] == pytest.approx(15.0, abs=0.05)
     assert {dyn["obj0_id"], dyn["obj1_id"]} == {5, 2}
 
 
 def test_obj_id_follows_actor_not_slot() -> None:
-    """Adding a nearer car must not recolor the farther one (no slot remap)."""
+    """Adding a nearer host car must not recolor an adjacent-lane object."""
     ego = _Actor(1, "vehicle.tesla.model3", 0.0, 0.0)
-    far = _Actor(20, "vehicle.audi.tt", 30.0, 0.0)
-    world = _World([ego, far])
+    side = _Actor(20, "vehicle.audi.tt", 30.0, 3.5)
+    world = _World([ego, side])
     first = collect_dyn_objects(ego, world)
     assert first["obj0_id"] == 20
     near = _Actor(7, "vehicle.nissan.patrol", 15.0, 0.0)
@@ -200,3 +204,42 @@ def test_obj_id_follows_actor_not_slot() -> None:
     by_id = {second["obj0_id"]: second["obj0_long"], second["obj1_id"]: second["obj1_long"]}
     assert by_id[20] == pytest.approx(30.0, abs=0.05)
     assert by_id[7] == pytest.approx(15.0, abs=0.05)
+
+
+def test_optic_in_wedge() -> None:
+    assert optic_in_wedge(20.0, 0.0)
+    assert not optic_in_wedge(-8.0, 0.0)
+    assert not optic_in_wedge(0.0, 5.0)
+    assert not optic_in_wedge(10.0, 20.0)
+
+
+def test_collect_dyn_skips_rear_and_wide_bearing() -> None:
+    ego = _Actor(1, "vehicle.tesla.model3", 0.0, 0.0)
+    rear = _Actor(2, "vehicle.audi.tt", -12.0, 0.0)
+    wide = _Actor(3, "vehicle.nissan.patrol", 15.0, 30.0)
+    world = _World([ego, rear, wide])
+    dyn = collect_dyn_objects(ego, world)
+    assert dyn["dyn_n"] == 0
+
+
+def test_collect_dyn_drops_occluded_host() -> None:
+    ego = _Actor(1, "vehicle.tesla.model3", 0.0, 0.0)
+    occ = _Actor(2, "vehicle.audi.tt", 12.0, 0.0)
+    hidden = _Actor(3, "vehicle.nissan.patrol", 30.0, 0.0)
+    side = _Actor(4, "vehicle.bmw.grandtourer", 28.0, 3.5)
+    world = _World([ego, occ, hidden, side])
+    dyn = collect_dyn_objects(ego, world)
+    ids = {dyn[f"obj{i}_id"] for i in range(dyn["dyn_n"])}
+    assert 2 in ids
+    assert 3 not in ids
+    assert 4 in ids
+
+
+def test_drop_host_behind_occupy_keeps_adjacent() -> None:
+    items = [
+        {"lat_m": 0.0, "long_m": 12.0},
+        {"lat_m": 0.0, "long_m": 30.0},
+        {"lat_m": 3.5, "long_m": 28.0},
+    ]
+    out = drop_host_behind_occupy(items)
+    assert [it["long_m"] for it in out] == [12.0, 28.0]
