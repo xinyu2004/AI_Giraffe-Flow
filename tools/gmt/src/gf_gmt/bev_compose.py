@@ -53,6 +53,11 @@ D_BEV_M = 130.0
 # Back-compat alias (prefer D_WORK_M / D_BEV_M in new code).
 D_PERC_M = D_WORK_M
 
+# GB-style lane dash: 6 m paint + 9 m gap (along-road metres, not pixels).
+DASH_ON_M = 6.0
+DASH_GAP_M = 9.0
+DASH_PERIOD_M = DASH_ON_M + DASH_GAP_M
+
 # Stable ID → RGB (adjacent hues). Video overlay will reuse the same map.
 _ID_PALETTE: tuple[tuple[int, int, int], ...] = (
     (220, 90, 90),
@@ -126,6 +131,121 @@ def fill_convex_poly(
             a = pts[i]
             b = pts[(i + 1) % n]
             _line(buf, width, height, a[0], a[1], b[0], b[1], outline, thick=2)
+
+
+def dash_lit_m(s_m: float, *, scroll_m: float = 0.0) -> bool:
+    """True on the 6 m painted part of a 6+9 dash cycle (world-fixed via scroll)."""
+    period = DASH_PERIOD_M
+    u = (float(s_m) - float(scroll_m)) % period
+    if u < 0.0:
+        u += period
+    return u < DASH_ON_M
+
+
+def _vsub(a: tuple[float, float, float], b: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _vdot(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _vcross(a: tuple[float, float, float], b: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    )
+
+
+def _vnorm(a: tuple[float, float, float]) -> tuple[float, float, float]:
+    n = math.sqrt(_vdot(a, a)) or 1.0
+    return (a[0] / n, a[1] / n, a[2] / n)
+
+
+@dataclass
+class BevCam:
+    """Behind-above pinhole looking down the road. +x forward, +y left, +z up."""
+
+    ox: float
+    oy_pp: float
+    f: float
+    cpos: tuple[float, float, float]
+    right: tuple[float, float, float]
+    up: tuple[float, float, float]
+    fwd: tuple[float, float, float]
+
+    def project(self, x: float, y: float, z: float = 0.0) -> tuple[int, int]:
+        rel = (x - self.cpos[0], y - self.cpos[1], z - self.cpos[2])
+        xc = _vdot(rel, self.right)
+        yc = _vdot(rel, self.up)
+        zc = max(0.85, _vdot(rel, self.fwd))
+        u = self.ox + self.f * xc / zc
+        v = self.oy_pp - self.f * yc / zc
+        return int(round(u)), int(round(v))
+
+
+def bev_cam_basis(
+    *,
+    back_m: float = 8.0,
+    height_m: float = 14.0,
+    look_m: float = 36.0,
+) -> tuple[
+    tuple[float, float, float],
+    tuple[float, float, float],
+    tuple[float, float, float],
+    tuple[float, float, float],
+]:
+    cpos = (-float(back_m), 0.0, float(height_m))
+    tgt = (float(look_m), 0.0, 0.0)
+    fwd = _vnorm(_vsub(tgt, cpos))
+    right = _vnorm(_vcross(fwd, (0.0, 0.0, 1.0)))
+    if abs(_vdot(right, right)) < 1e-8:
+        right = (0.0, -1.0, 0.0)
+    up = _vnorm(_vcross(right, fwd))
+    return cpos, right, up, fwd
+
+
+def make_bev_cam(
+    width: int,
+    height: int,
+    *,
+    x_far_m: float = D_BEV_M,
+) -> BevCam:
+    """Fit pinhole so ego is near the bottom and D_bev sits under the HUD."""
+    ox = float(width) * 0.5
+    oy_ego = float(height) - 44.0
+    y_far = 32.0
+    cpos, right, up, fwd = bev_cam_basis()
+
+    def _yz(x: float, y: float, z: float) -> tuple[float, float]:
+        rel = (x - cpos[0], y - cpos[1], z - cpos[2])
+        return _vdot(rel, up), max(0.85, _vdot(rel, fwd))
+
+    yc0, zc0 = _yz(0.0, 0.0, 0.0)
+    yc1, zc1 = _yz(float(x_far_m), 0.0, 0.0)
+    a0, a1 = yc0 / zc0, yc1 / zc1
+    den = a0 - a1
+    if abs(den) < 1e-6:
+        f = 420.0
+        oy_pp = oy_ego
+    else:
+        f = (y_far - oy_ego) / den
+        if f < 40.0:
+            f = 420.0
+        oy_pp = oy_ego + f * a0
+    return BevCam(ox=ox, oy_pp=oy_pp, f=f, cpos=cpos, right=right, up=up, fwd=fwd)
+
+
+def obj_height_m(obj_class: int) -> float:
+    c = int(obj_class)
+    if c == 5:
+        return 1.7
+    if c == 2:
+        return 3.0
+    if c in (3, 4, 9):
+        return 1.4
+    return 1.5
 
 
 def dash_line(
@@ -589,10 +709,10 @@ def _blit_text(
 
 
 def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360) -> bytes:
-    """Lane-anchored BEV: +x along host-lane heading, +y left of road.
+    """Lane-anchored perception view: behind-above pinhole, +x road, +y left.
 
-    Ego-frame polys/objects from FCM are rotated into the road frame so extreme
-    yaw no longer squashes the corridor. Canvas D_bev; objects/lanes to D_bev.
+    Ego-frame polys/objects from FCM are rotated into the road frame. Dashed
+    marks are 6 m paint + 9 m gap in road metres. Canvas D_bev.
     """
     import math
 
@@ -610,9 +730,7 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     buf = bytearray(bytes(bg) * (width * height))
     _fill_rect(buf, width, height, 0, 0, width, 28, text_bar)
 
-    ox, oy = width // 2, height - 44
-    usable_h = max(80.0, float(oy - 28))
-    sx = usable_h / D_BEV_M
+    cam = make_bev_cam(width, height)
     lane_w = float(st.lane_width_m) if st.lane_width_m > 0.5 else 3.5
     half = 0.5 * lane_w
 
@@ -663,17 +781,11 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
             y_road_samples.append(yr)
     if y_road_samples:
         y_span_min, y_span_max = min(y_road_samples), max(y_road_samples)
-        span_y = max(lane_w, y_span_max - y_span_min)
     else:
-        y_span_min, y_span_max, span_y = -half, half, lane_w
+        y_span_min, y_span_max = -half, half
     y_mid = 0.5 * (y_span_min + y_span_max)
-    sy = min(
-        52.0 / max(lane_w, 2.5),
-        (width * 0.88) / max(span_y + 2.0, lane_w * 1.4),
-    )
 
-    dash_period = 12.0
-    scroll = st.odom_m % dash_period
+    scroll = float(st.odom_m) % DASH_PERIOD_M
     # Draw horizon = min(canvas, host VR). Never extrapolate past Out VR_End.
     host_vr = D_BEV_M
     if st.host_lanes:
@@ -681,11 +793,12 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     x_draw = max(0.0, host_vr)
     tick_stub_m = 0.55
 
-    def e2p_road(xr: float, yr: float) -> tuple[int, int]:
-        return int(ox - (yr - y_mid) * sy), int(oy - xr * sx)
+    def e2p_road(xr: float, yr: float, zr: float = 0.0) -> tuple[int, int]:
+        return cam.project(xr, yr - y_mid, zr)
 
-    def e2p_ego(xe: float, ye: float) -> tuple[int, int]:
-        return e2p_road(*ego_to_road(xe, ye))
+    def e2p_ego(xe: float, ye: float, zr: float = 0.0) -> tuple[int, int]:
+        xr, yr = ego_to_road(xe, ye)
+        return e2p_road(xr, yr, zr)
 
     def _draw_poly_road(
         poly: HostLanePoly | AdjLanePoly,
@@ -699,8 +812,9 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
         if x_hi <= x_lo + 0.25:
             return
         prev: tuple[int, int] | None = None
+        prev_lit = False
         span = x_hi - x_lo
-        steps = max(24, int(span) // 2 + 1)
+        steps = max(48, int(span * 2) + 1)
         for i in range(steps + 1):
             xe = x_lo + span * i / steps
             if xe > float(poly.x1) + 1e-3:
@@ -711,10 +825,11 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
                 prev = None
                 continue
             pt = e2p_road(xr, yr)
-            if prev is not None:
-                if not dashed or i % 3 != 0:
-                    _line(buf, width, height, prev[0], prev[1], pt[0], pt[1], color, thick=thick)
+            lit = (not dashed) or dash_lit_m(xe, scroll_m=scroll)
+            if prev is not None and lit and prev_lit:
+                _line(buf, width, height, prev[0], prev[1], pt[0], pt[1], color, thick=thick)
             prev = pt
+            prev_lit = lit
 
     def _pix_on_canvas(pt: tuple[int, int]) -> bool:
         return 0 <= pt[0] < width and 28 <= pt[1] < height
@@ -771,10 +886,12 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
             ye = 0.5 * (_host_y_ego(xe, "l") + _host_y_ego(xe, "r"))
             return e2p_ego(xe, ye)
 
-        for seg in range(-int(dash_period), int(x_draw) + int(dash_period), max(1, int(dash_period // 2))):
-            x0 = float(seg) - scroll
-            x1 = x0 + dash_period * 0.45
-            if x1 < 0 or x0 > dash_hi:
+        k0 = int(math.floor((-DASH_PERIOD_M - scroll) / DASH_PERIOD_M))
+        k1 = int(math.ceil((x_draw + DASH_PERIOD_M - scroll) / DASH_PERIOD_M))
+        for k in range(k0, k1 + 1):
+            x0 = float(k) * DASH_PERIOD_M - scroll
+            x1 = x0 + DASH_ON_M
+            if x1 < 0.0 or x0 > dash_hi:
                 continue
             p0, p1 = _pt_at_road_x(max(0.0, x0)), _pt_at_road_x(min(dash_hi, x1))
             _line(buf, width, height, p0[0], p0[1], p1[0], p1[1], dash_c, thick=2)
@@ -917,6 +1034,7 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
         fill: tuple[int, int, int],
         *,
         outline: tuple[int, int, int] | None = None,
+        height_m: float = 1.5,
     ) -> None:
         xr, yr = ego_to_road(xe, ye)
         heading_r = heading_ego - psi
@@ -924,15 +1042,32 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
         s = math.sin(heading_r)
         hl = 0.5 * max(float(length_m), 1.2)
         hw = 0.5 * max(float(width_m), 1.0)
+        hh = max(0.6, float(height_m))
         corners_m = (
             (xr + hl * c - hw * s, yr + hl * s + hw * c),
             (xr + hl * c + hw * s, yr + hl * s - hw * c),
             (xr - hl * c + hw * s, yr - hl * s - hw * c),
             (xr - hl * c - hw * s, yr - hl * s + hw * c),
         )
-        pts = [e2p_road(pxr, pyr) for pxr, pyr in corners_m]
+        bot = [e2p_road(pxr, pyr, 0.0) for pxr, pyr in corners_m]
+        top = [e2p_road(pxr, pyr, hh) for pxr, pyr in corners_m]
+        shade = (
+            max(0, int(fill[0] * 0.55)),
+            max(0, int(fill[1] * 0.55)),
+            max(0, int(fill[2] * 0.55)),
+        )
+        fill_convex_poly(buf, width, height, bot, shade, y_clip0=28)
+        for i in range(4):
+            fill_convex_poly(
+                buf,
+                width,
+                height,
+                [bot[i], bot[(i + 1) % 4], top[(i + 1) % 4], top[i]],
+                fill,
+                y_clip0=28,
+            )
         fill_convex_poly(
-            buf, width, height, pts, fill, outline=outline, y_clip0=28
+            buf, width, height, top, fill, outline=outline, y_clip0=28
         )
 
     for obj in objs:
@@ -951,10 +1086,11 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
             float(obj.heading_rad),
             fill,
             outline=cipv_outline if obj.is_cipv else None,
+            height_m=obj_height_m(int(obj.obj_class)),
         )
 
     # Ego: nose relative to road = -psi
-    _paint_box_road(0.0, 0.0, 4.5, 1.8, 0.0, ego_c)
+    _paint_box_road(0.0, 0.0, 4.5, 1.8, 0.0, ego_c, height_m=1.5)
 
     bar_w = int(min(120, max(8, st.speed_mps * 6)))
     _fill_rect(buf, width, height, 8, 6, 8 + bar_w, 14, (80, 180, 90))

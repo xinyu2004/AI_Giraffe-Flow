@@ -639,6 +639,34 @@ def _png_to_rgb(png: bytes, width: int, height: int) -> bytes:
     return bytes(out)
 
 
+def test_bev_dash_is_6m_on_9m_gap() -> None:
+    from gf_gmt.bev_compose import DASH_GAP_M, DASH_ON_M, DASH_PERIOD_M, dash_lit_m
+
+    assert DASH_ON_M == 6.0
+    assert DASH_GAP_M == 9.0
+    assert DASH_PERIOD_M == 15.0
+    assert dash_lit_m(0.0)
+    assert dash_lit_m(5.9)
+    assert not dash_lit_m(6.1)
+    assert not dash_lit_m(14.9)
+    assert dash_lit_m(15.0)
+    assert dash_lit_m(6.0, scroll_m=6.0)
+
+
+def test_bev_cam_near_is_larger_than_far() -> None:
+    from gf_gmt.bev_compose import make_bev_cam
+
+    cam = make_bev_cam(480, 360)
+    n0 = cam.project(8.0, -1.8)
+    n1 = cam.project(8.0, 1.8)
+    f0 = cam.project(80.0, -1.8)
+    f1 = cam.project(80.0, 1.8)
+    near_w = abs(n1[0] - n0[0])
+    far_w = abs(f1[0] - f0[0])
+    assert near_w > far_w * 1.4
+    assert cam.project(0.0, 0.0)[1] > cam.project(120.0, 0.0)[1]
+
+
 def test_see_host_wash_and_cap_empty_curve() -> None:
     from gf_gmt.bev_compose import (
         _SEE_CAP,
