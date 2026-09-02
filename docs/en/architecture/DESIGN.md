@@ -1,7 +1,7 @@
 # Giraffe Flow Design Document
 
-> Document version: 0.1 (architecture baseline)  
-> Status: for review; large-scale implementation has not started  
+> Document version: 0.2 (architecture baseline; SIL + closed-loop workload landed)  
+> Status: living design; details follow code and [ROADMAP](../operations/ROADMAP.md)  
 > **中文:** [DESIGN.md](../../zh/architecture/DESIGN.md)  
 > Companion workflow: [WORKFLOW.md](../operations/WORKFLOW.md)
 
@@ -9,10 +9,12 @@
 
 ## 1. Vision and positioning
 
-Giraffe Flow is a **lightweight cross-platform platform stack** targeting:
+Giraffe Flow is **Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop virtual world, Foxglove, and CI/CD — see it, stress it, pass it on the bench; the hardware is the last mile.**
 
-- Embedded boards (primary deployment goal)
-- Desktop Linux (early bring-up, simulation, host tooling)
+- Bench (host) — virtual world, Foxglove, gf-config / codegen / GMT, CI
+- Hardware (last mile) — trimmable `gf_ara::*` (ARM Linux primary); **CD only what passed**
+
+Perception and planning in-tree are a **closed-loop workload**, not a production ADAS product. They exist to prove the middleware and tools: robustness / isolation (hold-last), latency (overlay-latest vs wait), fault localization (tap / Foxglove), inject replay, EM bring-up, CI/CD, and config fidelity (OEM deltas in gateway).
 
 It borrows ideas from the AUTOSAR Adaptive Platform (AP):
 
@@ -258,7 +260,7 @@ AI_Giraffe-Flow/
   schemas/                 # SOR contract, semver
   middleware/              # on-board runtime: core/com/bindings/osal/hal/…
     third_party/           # upstream checkouts (after pins)
-  tools/                   # codegen, bridge/ros2 (host)
+  tools/                   # gf-config, gf-codegen, gf-octavecoder, gmt, gmt_board (host)
   apps/                    # reference processes; customer prod apps in other repos
   projects/                # OEM inputs + per-SKU req.yaml
   dep-manifest/                    # third-party manifests + version lock

@@ -4,8 +4,7 @@ Semantic-level **stubs** so the platform runs without external production compon
 
 | Simulator | Publishes (example) |
 |-----------|---------------------|
-| [perception_feed](perception_feed/) | `semantic.ObjectList` |
-| [planning_feed](planning_feed/) | `semantic.Trajectory` (optional) |
+| [uss_feed](uss_feed/) | `semantic.UssZones` |
 | [cp_ipc_peer](cp_ipc_peer/) | MCU CP IPC peer for gateway testing |
 
 Switch to production: change SOR `product_variants[].components[].package` only.

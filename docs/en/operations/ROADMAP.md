@@ -4,8 +4,8 @@
 > Design: [DESIGN.md](../architecture/DESIGN.md)  
 > Config: [MIDDLEWARE_CONFIG_PLAN.md](../../zh/operations/MIDDLEWARE_CONFIG_PLAN.md)
 
-**P0–P2.5 closed** (desktop MVP: gf-config · main-chain SIL · GMT/Foxglove).  
-**Current: P3 deepen & expand** — config/middleware/cert-ready support/DoIP·OTA first; real board & real MCU are a late sprint gate.
+**P0–P2.5 closed** (gf-config · multi-process SIL · GMT/Foxglove). In-tree FCM + planning are a **closed-loop workload** to validate middleware and tools (latency, isolation, fault localization, CI/CD) — not a perception/planning product.  
+**Current: P3 deepen & expand** — config/middleware/cert-ready support/DoIP·OTA; **hardware is the last mile** (board / MCU sprint gate). Pass on the bench, then CD.
 
 ## Summary
 
@@ -44,7 +44,7 @@ We do **not** sell / perform ISO 26262 certification or hold ASIL certificates f
 
 ## Next
 
-1. **Product demo:** CARLA + Foxglove (fake perception → FCM passthrough → planning lite).
+1. **Workload loop (SIL):** CARLA + Foxglove — FCM + planning as load to measure com / GMT / latency, not as the product.
 2. **Board zero-Python:** onboard `runtime/` (including **entire `frame_ingest`**, not only ISP) and any GMT/EM board deps must not require Python — zh backlog `BL-BOARD-NO-PY`. Python stays host-SIL only (`carla_bridge` / scenarios / gf-config / GMT PC).
 3. Cloud CI + release; P3z / wave E (AM62 / board / vsomeip / RAUC / soak).
 
@@ -56,7 +56,7 @@ We do **not** sell / perform ISO 26262 certification or hold ASIL certificates f
 |-------------------|----------|
 | Config freeze → hpp; camera_slot / driving·parking topics | Implement `BL-BOARD-NO-PY` on board |
 | Foxglove camera path + hero reattach (SIL) | Stage py mtime (`BL-STAGE-PY-MTIME`); cloud CI |
-| Client A/B roles + camera contract docs | Fake-perception → planning demo depth |
+| Client A/B roles + camera contract docs | Workload viz (lane marks) depth |
 
 Source of truth (zh): [CONFIG_RUNTIME_POLICY.md](../../zh/operations/CONFIG_RUNTIME_POLICY.md) · [AP_LITE_BACKLOG.md](../../zh/operations/AP_LITE_BACKLOG.md) · [frame_ingest_roles.md](../sku/afc/frame_ingest_roles.md).
 

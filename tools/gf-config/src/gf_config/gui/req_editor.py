@@ -67,8 +67,8 @@ _RECORD_MODES = [
     ("full", "全量"),
     ("off", "关闭"),
 ]
-TAP_APP = "debug_bridge/iox_obs_tap"
-INJECT_APP = "debug_bridge/iox_obs_inject"
+TAP_APP = "gmt_board/iox_obs_tap"
+INJECT_APP = "gmt_board/iox_obs_inject"
 _AUTO_APPS = frozenset({TAP_APP, INJECT_APP})
 
 _POLICY_SERVICES = (

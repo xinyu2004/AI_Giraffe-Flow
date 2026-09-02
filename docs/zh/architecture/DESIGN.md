@@ -1,7 +1,7 @@
 # Giraffe Flow 设计文档
 
-> 文档版本：0.1（架构基线）  
-> 状态：供评审，尚未进入大规模实现  
+> 文档版本：0.2（架构基线；SIL + 闭环载荷已落地）  
+> 状态：随代码演进；细节以实现与 [ROADMAP](../operations/ROADMAP.md) 为准  
 > **English:** [DESIGN.md](../../en/architecture/DESIGN.md)  
 > 配套流程：[操作流程 WORKFLOW.md](../operations/WORKFLOW.md)
 
@@ -9,10 +9,12 @@
 
 ## 1. 愿景与定位
 
-Giraffe Flow 是一套**轻量跨平台平台软件**，目标用户同时覆盖：
+Giraffe Flow 是 **Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop virtual world, Foxglove, and CI/CD — see it, stress it, pass it on the bench; the hardware is the last mile.**
 
-- 嵌入式板端（优先落地）
-- 普通桌面 Linux（前期调试、仿真、工具链）
+- 台架（主机）— 虚拟世界、Foxglove、gf-config / codegen / GMT、CI
+- 真机（last mile）— 可裁剪 `gf_ara::*`（ARM Linux 优先）；**过了才 CD**
+
+仓内感知和规划是 **闭环载荷，不是量产 ADAS 产品**。用来验证中间件和工具：健壮性 / 隔离（hold-last）、时延（overlay-latest vs wait）、故障定位（tap / Foxglove）、回灌复现、EM 拉起、CI/CD、配置保真（OEM 差异在 gateway）。
 
 它借鉴 AUTOSAR Adaptive Platform（AP）中的：
 
@@ -29,7 +31,7 @@ Giraffe Flow 是一套**轻量跨平台平台软件**，目标用户同时覆盖
 - **ROS 2** 互操作（DDS）
 - 可裁剪、可移植的部署（非完整 AP 14+ daemon）
 
-产品策略：**工程平台优先**（先可用、可观测、可迁移），功能安全认证路径后置。
+认证后置：先把中间件与工具跑通、可观测、可迁移；ISO 26262 证书不在本仓交付。
 
 ---
 
@@ -317,9 +319,11 @@ AI_Giraffe-Flow/
   schemas/                 # SOR 契约，semver
   middleware/              # 板端 runtime：core/com/bindings/osal/hal/…
     third_party/           # 上游检出（钉扎后）
-  tools/gf-codegen/           # gf-codegen
-  tools/bridge/            # 主机侧桥（如 ROS2）
-  tools/gmt/               # GMT
+  tools/gf-codegen/        # gf-codegen
+  tools/gf-config/         # author GUI
+  tools/gf-octavecoder/    # .m → C
+  tools/gmt/               # GMT host
+  tools/gmt_board/         # tap / inject / gf_foxglove_ws
   apps/adapters|simulators/
   projects/                # OEM 集成输入（req.yaml 含契约与部署裁剪）
   dep-manifest/                    # 第三方依赖清单与版本锁

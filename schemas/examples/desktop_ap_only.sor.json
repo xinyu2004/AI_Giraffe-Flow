@@ -19,7 +19,7 @@
       "bindings": ["iceoryx"],
       "capabilities": ["simulators", "desktop_debug"],
       "components": [
-        { "package": "giraffe/simulators/perception_feed", "provides": ["semantic.ObjectList"] }
+        { "package": "oem/perception", "provides": ["semantic.ObjectList"] }
       ],
       "adapters": ["adapter.vehicle_motion_gateway"]
     }

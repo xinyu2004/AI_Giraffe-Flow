@@ -1,6 +1,6 @@
 # carla_scenarios
 
-CARLA Client A — product scenario suite for AFC（布景 + IC；连续控车应走 Giraffe→bridge）。
+CARLA Client A — AFC 场景套件（布景 + IC；连续控车应走 Giraffe→bridge）。主机侧压力源，不是控制器。
 
 **文档（架构 / 分层 / 门禁 / 已知问题）：**
 

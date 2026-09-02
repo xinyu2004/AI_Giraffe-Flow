@@ -45,7 +45,7 @@ GMT gui --project projects/afc
 **另一台电脑：** 默认 `GF_WS_HOST=0.0.0.0`，Studio 填 `ws://<SIL 主机 LAN IP>:8765`。
 
 **白名单：** A 页 `live_tap.services` → compose → `observability.json`。`production-release` 不编 tap。  
-**tap 加入时机：** Verify / `compile_sil` 时 compose 自动把 `debug_bridge/iox_obs_tap` 写入 `GF_APPS`（勿手写进 apps）。
+**tap 加入时机：** Verify / `compile_sil` 时 compose 自动把 `gmt_board/iox_obs_tap` 写入 `GF_APPS`（勿手写进 apps）。
 
 **画布：** B 页拖绿色/橙色圆点改边（Out 拉线用 Ctrl+拖）。
 
@@ -152,6 +152,6 @@ GF_SKIP_COMPILE=1 GF_INJECT_SESSION=projects/afc/build-sil/observability/session
   bash projects/afc/scripts/run_sil.sh
 ```
 
-`vehicle-debug` compose 会编 `debug_bridge/iox_obs_inject`；`production-release` 不编。  
-详情：[tools/debug_bridge/iox_obs_inject/README.md](../../../tools/debug_bridge/iox_obs_inject/README.md)  
-（构建产物仍在 `$GF_BUILD_DIR/apps/debug_bridge/...`，与 compose id 一致。）
+`vehicle-debug` compose 会编 `gmt_board/iox_obs_inject`；`production-release` 不编。  
+详情：[tools/gmt_board/iox_obs_inject/README.md](../../../tools/gmt_board/iox_obs_inject/README.md)  
+（构建产物仍在 `$GF_BUILD_DIR/apps/gmt_board/...`，与 compose id 一致。）

@@ -11,8 +11,9 @@ Output topic: /gf/driving/bev/compressed (foxglove.CompressedImage JSON).
 Demo range contract:
   D_work ≈ 120 m — soft working / validity band (not a hard BEV cut)
   D_bev  = 130 m — canvas ≈ D_work×1.1; gray marks/ticks/objects drawn to this
-  Teal wash + cap + path = host lane only, to D_see. Triangles only if an
-  in-lane object notched the opening. No FOV overlay. Gray marks follow VR_End.
+  Portrait 400×800 so ~120 m of 6+9 m dashes have enough vertical pixels.
+  Perspective view: no optical-blind teal wash. Gray marks follow VR_End.
+  HUD D still follows planning D_see. Path stops at in-lane occupy, not D_fov.
 
 BEV lane geometry comes only from FCM Out (Perception_LH_Out host lines and
 Perception_LA_Out adjacent lines). Mark style follows gold lanemark_type
@@ -52,6 +53,14 @@ D_WORK_M = 120.0
 D_BEV_M = 130.0
 # Back-compat alias (prefer D_WORK_M / D_BEV_M in new code).
 D_PERC_M = D_WORK_M
+
+# Portrait: ~120 m forward needs height; a few lanes only need width.
+BEV_W = 400
+BEV_H = 800
+# Camera further/higher so the near plane does not splay lanes off the canvas.
+BEV_CAM_BACK_M = 22.0
+BEV_CAM_HEIGHT_M = 40.0
+BEV_CAM_LOOK_M = 60.0
 
 # GB-style lane dash: 6 m paint + 9 m gap (along-road metres, not pixels).
 DASH_ON_M = 6.0
@@ -134,9 +143,9 @@ def fill_convex_poly(
 
 
 def dash_lit_m(s_m: float, *, scroll_m: float = 0.0) -> bool:
-    """True on the 6 m painted part of a 6+9 dash cycle (world-fixed via scroll)."""
+    """True on the 6 m painted part. scroll_m = odom → world-fixed (flows toward ego)."""
     period = DASH_PERIOD_M
-    u = (float(s_m) - float(scroll_m)) % period
+    u = (float(s_m) + float(scroll_m)) % period
     if u < 0.0:
         u += period
     return u < DASH_ON_M
@@ -187,9 +196,9 @@ class BevCam:
 
 def bev_cam_basis(
     *,
-    back_m: float = 8.0,
-    height_m: float = 14.0,
-    look_m: float = 36.0,
+    back_m: float = BEV_CAM_BACK_M,
+    height_m: float = BEV_CAM_HEIGHT_M,
+    look_m: float = BEV_CAM_LOOK_M,
 ) -> tuple[
     tuple[float, float, float],
     tuple[float, float, float],
@@ -708,7 +717,7 @@ def _blit_text(
         cx += (5 + 1) * sc
 
 
-def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360) -> bytes:
+def render_ego_bev_png(st: LiveBevState, *, width: int = BEV_W, height: int = BEV_H) -> bytes:
     """Lane-anchored perception view: behind-above pinhole, +x road, +y left.
 
     Ego-frame polys/objects from FCM are rotated into the road frame. Dashed
@@ -831,10 +840,7 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
             prev = pt
             prev_lit = lit
 
-    def _pix_on_canvas(pt: tuple[int, int]) -> bool:
-        return 0 <= pt[0] < width and 28 <= pt[1] < height
-
-    # Host-lane teal to D_see. Gray FCM marks still go to VR.
+    # HUD D still uses driving see. Paint is not clipped to the optical wedge.
     d_see = 0.0
     if st.host_lanes:
         host_ends = [float(p.x1) for p in st.host_lanes if float(p.x1) > 0.5]
@@ -843,32 +849,6 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     blockers_early = list(st.perc_objects)
     occupy_open = see_opening_m(d_see, blockers_early)
     opening = driving_see_m(st, d_see, blockers_early)
-    xe_cap = see_cap_x_m(opening, x_draw)
-    if xe_cap >= 2.0 and (left_poly is not None or right_poly is not None):
-        steps_s = max(24, int(xe_cap) // 2 + 1)
-        prev_l: tuple[int, int] | None = None
-        prev_r: tuple[int, int] | None = None
-        for i in range(steps_s + 1):
-            xe = min(xe_cap, xe_cap * i / max(1, steps_s))
-            if left_poly is not None and xe > left_poly.x1:
-                continue
-            if right_poly is not None and xe > right_poly.x1:
-                continue
-            pl = e2p_ego(xe, _host_y_ego(xe, "l"))
-            pr = e2p_ego(xe, _host_y_ego(xe, "r"))
-            if not (_pix_on_canvas(pl) or _pix_on_canvas(pr)):
-                prev_l, prev_r = None, None
-                continue
-            if prev_l is not None and prev_r is not None:
-                fill_convex_poly(
-                    buf,
-                    width,
-                    height,
-                    [prev_r, prev_l, pl, pr],
-                    _SEE_FILL,
-                    y_clip0=28,
-                )
-            prev_l, prev_r = pl, pr
 
     for hl in st.host_lanes:
         _draw_poly_road(hl, lh_c, thick=3, dashed=hl.is_dashed)
@@ -876,10 +856,10 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
     for al in st.adj_lanes:
         _draw_poly_road(al, la_c, thick=2, dashed=al.is_dashed)
 
-    # Host center dashes only inside the visible patch. Distance ticks still follow VR.
+    # Host center dashes along the full mark range. Distance ticks still follow VR.
     if x_draw > 0.5 and st.host_lanes:
         y_host_mid_e = 0.5 * (_host_y_ego(0.0, "l") + _host_y_ego(0.0, "r"))
-        dash_hi = xe_cap if xe_cap >= 2.0 else x_draw
+        dash_hi = x_draw
 
         def _pt_at_road_x(xr: float) -> tuple[int, int]:
             xe = xr * c_psi
@@ -941,7 +921,7 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
             v_hi = max(12.0, max(st.traj_v[: nseg + 1]))
         fallback_c = traj_color_for_lon(st)
         fallback_th = traj_thickness_for_lon(st)
-        x_hi = opening if opening > 0.5 else x_draw
+        x_hi = occupy_open if occupy_open > 0.5 else x_draw
         for i in range(nseg):
             x0, y0 = float(st.traj_x[i]), float(st.traj_y[i])
             x1, y1 = float(st.traj_x[i + 1]), float(st.traj_y[i + 1])
@@ -962,52 +942,6 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = 480, height: int = 360)
                 col = fallback_c
                 th = fallback_th
             _line(buf, width, height, a[0], a[1], b[0], b[1], col, thick=th)
-
-    if opening >= 2.0:
-        xe_see = xe_cap if xe_cap >= 2.0 else see_cap_x_m(opening, x_draw)
-        pL = ego_to_road(xe_see, _host_y_ego(xe_see, "l"))
-        pR = ego_to_road(xe_see, _host_y_ego(xe_see, "r"))
-        far_l = far_r = None
-        if occupy_notched(d_see, occupy_open):
-            al_l, al_r = see_far_adj(st.adj_lanes, occupy_open)
-            if al_l is not None:
-                xe_f = min(float(al_l.x1), D_BEV_M)
-                far_l = ego_to_road(xe_f, al_l.y_at(xe_f))
-            if al_r is not None:
-                xe_f = min(float(al_r.x1), D_BEV_M)
-                far_r = ego_to_road(xe_f, al_r.y_at(xe_f))
-        segs, tris = d_see_paint_marks(
-            (pL[0], pL[1], pR[0], pR[1]),
-            far_left=far_l,
-            far_right=far_r,
-        )
-        for tri in tris:
-            fill_convex_poly(
-                buf,
-                width,
-                height,
-                [e2p_road(px, py) for px, py in tri],
-                _SEE_FILL,
-                y_clip0=28,
-            )
-        if xe_see >= 2.0 and (left_poly is not None or right_poly is not None):
-            xe_lip = max(0.0, xe_see - _SEE_CAP_LIP_M)
-            fill_convex_poly(
-                buf,
-                width,
-                height,
-                [
-                    e2p_ego(xe_lip, _host_y_ego(xe_lip, "r")),
-                    e2p_ego(xe_lip, _host_y_ego(xe_lip, "l")),
-                    e2p_ego(xe_see, _host_y_ego(xe_see, "l")),
-                    e2p_ego(xe_see, _host_y_ego(xe_see, "r")),
-                ],
-                _SEE_CAP,
-                y_clip0=28,
-            )
-        for x0, y0, x1, y1 in segs[1:]:
-            pa, pb = e2p_road(x0, y0), e2p_road(x1, y1)
-            dash_line(buf, width, height, pa[0], pa[1], pb[0], pb[1], _SEE_CAP, thick=2)
 
     if st.nearest_cm is not None and st.nearest_cm > 0:
         dist_m = max(0.5, min(float(st.nearest_cm) / 100.0, D_BEV_M))

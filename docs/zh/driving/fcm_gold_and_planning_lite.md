@@ -1,6 +1,6 @@
 # FCM 金样变量 & Planning lite
 
-> 日期：2026-08 · SIL 产品 demo 口径（驾驶链路归档，不绑某一 SKU 文档树）。  
+> 日期：2026-08 · SIL 闭环载荷归档（驾驶链路，不绑某一 SKU 文档树）。感知/规划用来压中间件，不是产品。  
 > 链：`giraffe_client`（`_lane_truth` + `_objects_truth` → `GfFakePercPod` / cosim）→ **FCM** → iceoryx `Perception_MESSAGE_Out_St` → **planning** + **Foxglove BEV**。
 
 ## 总览

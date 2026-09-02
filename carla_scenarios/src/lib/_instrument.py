@@ -1,6 +1,6 @@
 """Instrument-cluster overlay (top bar + hood bottom band).
 
-One generic hood: speed / SET / TGT / gap / th / TTC / SIG / LIM / yaw / CTRL.
+Top: case / time. Hood left: speed / SET / TGT / CTRL. Hood right: gap th TTC / SIG PED LIM yaw.
 Empty fields show --. No per-case template skins.
 """
 
@@ -231,7 +231,7 @@ def _slot(
 
 
 def draw_cluster(pygame: Any, display: Any, fonts: dict[str, Any], st: ClusterState) -> None:
-    """Top bar (case + time) + hood: speed/SET/TGT + live slots + CTRL."""
+    """Top bar (case + time) + hood: driving left, exam right."""
     w, h = display.get_size()
     band_h = max(96, int(h * 0.20))
     band_y = h - band_h
@@ -252,7 +252,7 @@ def draw_cluster(pygame: Any, display: Any, fonts: dict[str, Any], st: ClusterSt
     accent = (80, 210, 120)
     warn = (220, 70, 70)
 
-    # Top bar (v3): case i/N · keyword·id  |  t / T s
+    # Top bar: case i/N · keyword·id  |  t / T s
     kid = st.keyword or st.case_id or "case"
     cid = st.case_id or kid
     left = f"{st.case_index}/{st.case_total}  {kid}·{cid}"
@@ -261,7 +261,6 @@ def draw_cluster(pygame: Any, display: Any, fonts: dict[str, Any], st: ClusterSt
     rw = font.size(right)[0]
     display.blit(font.render(right, True, white), (w - rw - 12, 6))
 
-    # Hood: speed | SET | TGT | gap th TTC | SIG LIM yaw
     main_y = band_y + 22
     x = 16
     speed_s = fmt_num(st.speed_kph, digits=0)
@@ -275,15 +274,15 @@ def draw_cluster(pygame: Any, display: Any, fonts: dict[str, Any], st: ClusterSt
     tgt_col = mute if st.tgt_kph is None else white
     display.blit(font.render(fmt_num(st.tgt_kph), True, tgt_col), (x + 32, main_y - 10))
 
-    row2 = main_y + 36
-    x = 16
+    exam_x = max(320, int(w * 0.42))
     gap_s = fmt_num(st.gap_m, digits=0) if st.gap_m is not None else MISSING
     th_s = f"{st.th_s:0.1f}" if st.th_s is not None else MISSING
     ttc_s = f"{st.ttc_s:0.1f}" if st.ttc_s is not None else MISSING
-    x = _slot(display, font_sm, "gap", f"{gap_s}m", x, row2, mute=mute, value_c=white)
-    x = _slot(display, font_sm, "th", f"{th_s}s", x, row2, mute=mute, value_c=white)
+    x = exam_x
+    x = _slot(display, font_sm, "gap", f"{gap_s}m", x, main_y, mute=mute, value_c=white)
+    x = _slot(display, font_sm, "th", f"{th_s}s", x, main_y, mute=mute, value_c=white)
     ttc_c = warn if st.ttc_s is not None and st.ttc_s < 3.0 else white
-    x = _slot(display, font_sm, "TTC", f"{ttc_s}s", x, row2, mute=mute, value_c=ttc_c)
+    x = _slot(display, font_sm, "TTC", f"{ttc_s}s", x, main_y, mute=mute, value_c=ttc_c)
 
     sig_c = mute
     if st.sig == "RED":
@@ -295,6 +294,8 @@ def draw_cluster(pygame: Any, display: Any, fonts: dict[str, Any], st: ClusterSt
     sig_v = MISSING if not st.sig else (
         f"{st.sig} {st.sig_m:0.0f}m" if st.sig_m is not None else st.sig
     )
+    row2 = main_y + 36
+    x = exam_x
     x = _slot(display, font_sm, "SIG", sig_v, x, row2, mute=mute, value_c=sig_c)
     ped_v = MISSING if not st.ped else (
         f"{st.ped} {st.ped_m:0.0f}m" if st.ped_m is not None else st.ped

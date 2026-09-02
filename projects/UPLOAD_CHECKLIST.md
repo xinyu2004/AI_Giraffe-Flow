@@ -25,7 +25,7 @@
 | 路径 | 说明 |
 |------|------|
 | `middleware/` | 静态：core / com / bindings / osal / hal …（不含 third_party 检出与 `.deps-prefix`） |
-| `tools/gf-codegen/`、`tools/bridge/` | gf-codegen；可选 ROS2 桥（主机侧） |
+| `tools/gf-codegen/`、`tools/gf-config/`、`tools/gmt/`、`tools/gmt_board/`、`tools/gf-octavecoder/` | 配置 / 生成 / 观测；板上 Foxglove 在 gmt_board |
 | `projects/` | 集成输入 + 项目脚本；契约在 `req.yaml`；`adc` / `afc` 均可 compose |
 | `apps/` | 参考 App 源码 |
 | `schemas/`、`cmake/`、`scripts/`、`dep-manifest/`、`docs/`、`devops/`、`common/deploy/` | 契约、构建、CI 门禁、板端 unit 样例、文档 |

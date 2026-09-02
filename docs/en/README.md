@@ -2,9 +2,11 @@
 
 **中文文档:** [../zh/README.md](../zh/README.md) · Root: [../../README.md](../../README.md)
 
+Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop virtual world, Foxglove, and CI/CD — see it, stress it, pass it on the bench; the hardware is the last mile.
+
 | Document | Description |
 |----------|-------------|
-| [architecture/DESIGN.md](architecture/DESIGN.md) | Architecture (primary design) |
+| [architecture/DESIGN.md](architecture/DESIGN.md) | Architecture (middleware + toolchain; perc/planning as workload) |
 | [architecture/module-decision-matrix.md](architecture/module-decision-matrix.md) | AP keep/defer matrix (stub) |
 | [architecture/transport-binding-guide.md](architecture/transport-binding-guide.md) | Transport selection (stub) |
 | [architecture/naming-compatibility.md](architecture/naming-compatibility.md) | `gf_ara` ↔ `gf` (stub) |
@@ -14,6 +16,9 @@
 | [architecture/sor-authoring.md](architecture/sor-authoring.md) | **SOR authoring / `import oem` contract** |
 | [architecture/architect-tools.md](architecture/architect-tools.md) | DAG / signal tools (stub) |
 | [operations/WORKFLOW.md](operations/WORKFLOW.md) | Operational workflows |
+| [operations/ROADMAP.md](operations/ROADMAP.md) | Roadmap |
+| [sku/afc/scenarios.md](sku/afc/scenarios.md) | CARLA scenarios |
+| [../../devops/README.md](../../devops/README.md) | Bench CI → CD last mile (hardware) |
 | [dependencies/README.md](dependencies/README.md) | Third-party dependency docs |
 
 ## Reading order

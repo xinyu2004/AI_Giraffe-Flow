@@ -29,6 +29,7 @@
 | BL-IOX-SHM-USED | iceoryx SHM 度量改为**实际使用**而非**分配/预留** | deferred | 平台硬化 / 观测 | 今日 `mem_budget` / `iox_shm_report` 多为 RouDi reserve / mempool **allocated** 上界；需区分 used vs allocated（payload 占用、mgmt 实测）并进 Verify/UI |
 | BL-BOARD-NO-PY | **板端 runtime 零 Python**（含 frame_ingest） | deferred | P3z 真板 / 载荷收口 | **政策：**凡会随 `runtime/` / GMT 依赖上板的组件，**不得**依赖 Python 解释器或 `share/**/*.py`。`gf_frame_ingest` 板端路径 = C++ only（Create GfChannel + ISP/V4L 等适配，**禁止** `execlp(python…)`）。`carla_bridge.py` / replay / colorbar 模块 **仅宿主机 SIL**；板端 stage **不得**打进 Python 模块。资源：板端环境复杂且紧，Python 运行时与依赖一律不上板 |
 | BL-STAGE-PY-MTIME | stage 对 SIL 主机侧 `tools/carla_bridge/*.py` 做 mtime 增量拷贝 | deferred | SIL 工具链卫生 | 仅影响**宿主机** SIL；与 BL-BOARD-NO-PY 正交。今日改 py 后 `compile_sil` 常 skip stage → 仍跑旧拷贝 |
+| BL-GMT-FOX-PY | Python Foxglove 收口（JSONL 回放 / MCAP 辅助 / Host `octave_bridge/foxglove_ws.py`） | deferred | 观测收口 | SIL 直播已是 C `gf_foxglove_ws`；已删 `--stdin`。目标：C 读 JSONL 或 Host 也走 C 后再删 `bridge_foxglove.py` |
 
 ## 本轮已纳入（对照，非后置）
 

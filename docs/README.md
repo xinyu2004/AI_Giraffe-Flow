@@ -1,5 +1,7 @@
 # Documentation hub
 
+Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop virtual world, Foxglove, and CI/CD — see it, stress it, pass it on the bench; the hardware is the last mile.
+
 | Language | Index |
 |----------|-------|
 | **English** | [docs/en/README.md](en/README.md) |

@@ -1,6 +1,6 @@
 """GMT → inject control client (TCP JSON lines, playhead mode).
 
-Protocol matches tools/debug_bridge/iox_obs_inject (GF_INJECT_MODE=playhead).
+Protocol matches tools/gmt_board/iox_obs_inject (GF_INJECT_MODE=playhead).
 GMT never launches run_sil — only connects to an already-running inject.
 
 GMT owns the full session and pushes A/B windows / single-frame inject cmds;

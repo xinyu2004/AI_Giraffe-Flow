@@ -1,8 +1,6 @@
 # middleware/
 
-Board-deployable packages. Public API: `gf_ara::*`; internals: `gf::*`.
-
-Enable subsets per SKU via SOR / `req.yaml` `runtime_modules[]`.
+Board-deployable SOA packages (`gf_ara::*`) — the last mile after the bench (virtual world · Foxglove · CI) has passed. SKU perception/planning apps are a **workload** on top of this runtime (robustness, latency, localization of faults) — not the middleware product itself. Trim via SOR / `req.yaml` `runtime_modules[]`.
 
 **与架构 GIF SoC 芯片对齐**（`result_pic/Giraffe_Flow/Giraffe_Flow.gif`）：
 

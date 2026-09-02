@@ -167,8 +167,9 @@ gf_sil_sync_runtime() {
   done
   if [[ "${GF_STAGE_DEBUG_BRIDGE:-1}" == "1" ]]; then
     for rel in \
-      apps/debug_bridge/iox_obs_tap/gf_iox_obs_tap \
-      apps/debug_bridge/iox_obs_inject/gf_iox_obs_inject
+      apps/gmt_board/iox_obs_tap/gf_iox_obs_tap \
+      apps/gmt_board/iox_obs_foxglove/gf_foxglove_ws \
+      apps/gmt_board/iox_obs_inject/gf_iox_obs_inject
     do
       src="${build}/${rel}"
       [[ -f "${src}" ]] && gf_sil_sync_file "${src}" "${rt}/bin/$(basename "${src}")" || true

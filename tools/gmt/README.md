@@ -11,8 +11,8 @@ In multi-process SIL, terminal logs rarely answer “who published what, when.�
 | **`gf-config`** | Authoring GUI (tab 1 canvas = design-time graph) |
 | `GMT architect lineage\|dag` | CI / export |
 | `GMT measure record\|tag\|export\|import-ndjson` | Record, trim, MCAP/**VCD**, tap NDJSON import |
-| `GMT bridge foxglove` | Studio live / JSONL (8765) |
-| `GMT bridge live` | GMT GUI live WebSocket (8766) |
+| `GMT bridge foxglove` | JSONL replay / offline Studio (SIL live is C `gf_foxglove_ws` :8765) |
+| `GMT bridge live` | GMT GUI live WebSocket (8766; optional / not started by `run_sil`) |
 | **`GMT gui`** | Live / Tag / animated DAG / **Graphics** / **playhead inject** / **OTA/UDS (DoIP)** / export |
 
 ```bash
@@ -51,7 +51,7 @@ GMT gui --project projects/afc/project.yaml
 - GMT **does not start SIL**  
 
 Prerequisite: `gf-config` tab A `live_tap` on + `compile_sil` done.  
-`run_sil` / `GMT_depend_launch` fans tap to Live (8766) and Foxglove (8765).
+`run_sil` / `GMT_depend_launch` starts **C** `gf_foxglove_ws` on 8765 and tees tap NDJSON for GMT record. Python Foxglove is JSONL replay / MCAP helper only.
 
 Board / EM-only: `runtime/bin/giraffe_launch`, or `GF_GMT_DEPEND=0 bash …/run_sil.sh`.
 
@@ -67,7 +67,7 @@ GF_INJECT_MODE=playhead \
 
 GMT: open session → **Inject** → connect `host:8767` → “follow playhead” → scrub.
 
-**continuous:** board reads a file. See [`iox_obs_inject`](../../tools/debug_bridge/iox_obs_inject/README.md).
+**continuous:** board reads a file. See [`iox_obs_inject`](../../tools/gmt_board/iox_obs_inject/README.md).
 
 ```bash
 GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \

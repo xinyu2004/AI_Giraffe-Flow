@@ -80,7 +80,6 @@ def pids_matching(pattern: str) -> list[int]:
 wanted = set()
 if os.environ.get("GF_SIL_LIVE_ON") == "1":
     wanted.add(int(os.environ["GF_SIL_PORT_WS"]))
-    wanted.add(int(os.environ["GF_SIL_PORT_LIVE"]))
 if os.environ.get("GF_SIL_INJECT_ON") == "1":
     wanted.add(int(os.environ["GF_SIL_PORT_INJ"]))
 if os.environ.get("GF_SIL_DOIP_ON") == "1":
@@ -123,8 +122,10 @@ for p, n, pid in listeners:
         or "bridge" in cmd
         or "gf_iox_obs_inject" in cmd
         or "iox_obs_inject" in cmd
+        or "gf_foxglove_ws" in cmd
         or "gf_doip_ota_server" in cmd
         or n.startswith("gf_iox_obs")
+        or n.startswith("gf_foxglove")
         or n.startswith("gf_doip")
     ):
         ours.append((p, n, pid, cmd))
@@ -158,6 +159,12 @@ subprocess.run(
     stderr=subprocess.DEVNULL,
 )
 subprocess.run(
+    ["pkill", "-f", "gf_foxglove_ws"],
+    check=False,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+)
+subprocess.run(
     ["pkill", "-f", "GMT bridge"],
     check=False,
     stdout=subprocess.DEVNULL,
@@ -181,6 +188,54 @@ PY
 }
 
 gf_sil_preflight_ports
+
+# C Foxglove WS (:8765) + tap NDJSON for GMT record. Studio does not go through Python.
+FOX_PID=""
+TAP_LIVE_PID=""
+gf_start_obs_sidechannel() {
+  export GF_OBS_LIVE_SERVICES="${LIVE_SVCS}"
+  export GF_WS_HOST="${HOST}"
+  export GF_WS_PORT="${PORT}"
+  echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
+  echo "${TAG} listen Foxglove bind=0.0.0.0:${PORT}  Studio same-host: ws://127.0.0.1:${PORT}"
+  if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
+    echo "${TAG} Foxglove BEV ← C 400x800 (GF_SYNTH_BEV=0 to disable)"
+  fi
+  if [[ "${GF_CAMERA_PUBLISH:-1}" != "0" ]]; then
+    if [[ -n "${GF_CAMERA_FRAME:-}" ]]; then
+      echo "${TAG} Foxglove driving camera ← ${GF_CAMERA_FRAME} (file bypass)"
+    else
+      echo "${TAG} Foxglove driving camera ← ${GF_CAMERA_SLOT:-gf.channel.front} (GfChannel shm)"
+    fi
+  fi
+  local fox="${FOX:-${RUNTIME}/bin/gf_foxglove_ws}"
+  if [[ ! -x "${fox}" ]]; then
+    fox="${BUILD}/apps/gmt_board/iox_obs_foxglove/gf_foxglove_ws"
+  fi
+  if [[ ! -x "${fox}" ]]; then
+    echo "${TAG} ERROR: gf_foxglove_ws missing (${fox})" >&2
+    return 1
+  fi
+  : >"${LOG_DIR}/foxglove_ws.log"
+  if command -v stdbuf >/dev/null 2>&1; then
+    stdbuf -oL -eL "${fox}" >>"${LOG_DIR}/foxglove_ws.log" 2>&1 &
+  else
+    "${fox}" >>"${LOG_DIR}/foxglove_ws.log" 2>&1 &
+  fi
+  FOX_PID=$!
+  local live_session="${GF_LIVE_SESSION:-$(gf_obs_dir)/session_live.jsonl}"
+  local live_tee="${GF_LIVE_TEE:-1}"
+  if [[ "${live_tee}" == "1" ]]; then
+    mkdir -p "$(dirname "${live_session}")"
+    : > "${live_session}"
+    echo "${TAG} tap NDJSON → ${live_session}"
+    "${TAP}" >>"${live_session}" 2>"${LOG_DIR}/tap.log" &
+  else
+    "${TAP}" >/dev/null 2>"${LOG_DIR}/tap.log" &
+  fi
+  TAP_LIVE_PID=$!
+  echo "${TAG} foxglove_ws pid=${FOX_PID} tap pid=${TAP_LIVE_PID} (Ctrl+C stops all)"
+}
 
 # --- GMT depend (not EM) — DoIP / inject / live Foxglove -----------------------
 # =============================================================================
@@ -351,69 +406,7 @@ if [[ "${INJECT_ON}" == "1" ]]; then
 
   LIVE_FAN_PID=""
   if [[ "${LIVE_ON}" == "1" ]]; then
-    export GF_OBS_LIVE_SERVICES="${LIVE_SVCS}"
-    LIVE_PORT="${GF_LIVE_PORT:-8766}"
-    LIVE_SESSION="${GF_LIVE_SESSION:-$(gf_obs_dir)/session_live.jsonl}"
-    LIVE_TEE="${GF_LIVE_TEE:-1}"
-    HINT_IP="127.0.0.1"
-    if [[ "${HOST}" == "0.0.0.0" || "${HOST}" == "::" ]]; then
-      HINT_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-      HINT_IP="${HINT_IP:-127.0.0.1}"
-    fi
-    echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
-    echo "${TAG} listen Foxglove ws://${HINT_IP}:${PORT}  GMT-Live ws://${HINT_IP}:${LIVE_PORT}"
-    # BEV from EgoMotion/Trajectory only. Scenario JSONL → GMT Open session / Inject
-    # (or GF_INJECT_SESSION for continuous); not attached here.
-    _FOX_BEV=()
-    if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
-      _FOX_BEV=(--synth-bev)
-      echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → /gf/driving/bev/compressed; GF_SYNTH_BEV=0 to disable)"
-    fi
-    _FOX_CAM=()
-    if [[ "${GF_CAMERA_PUBLISH:-1}" != "0" ]]; then
-      if [[ -n "${GF_CAMERA_FRAME:-}" ]]; then
-        _FOX_CAM=(--camera-frame "${GF_CAMERA_FRAME}")
-        echo "${TAG} Foxglove driving camera ← ${GF_CAMERA_FRAME} (file bypass)"
-      else
-        _CAM_SLOT="${GF_CAMERA_SLOT:-gf.channel.front}"
-        _FOX_CAM=(--camera-slot "${_CAM_SLOT}")
-        echo "${TAG} Foxglove driving camera ← ${_CAM_SLOT} (GfChannel shm)"
-      fi
-    fi
-    if [[ "${LIVE_TEE}" == "1" ]]; then
-      mkdir -p "$(dirname "${LIVE_SESSION}")"
-      : > "${LIVE_SESSION}"
-    fi
-    # Same fan isolation as non-inject path: GMT close must not kill Foxglove.
-    _tee_fan() {
-      if tee --help 2>&1 | grep -q -- '--output-error'; then
-        tee --output-error=warn "$@"
-      else
-        tee "$@"
-      fi
-    }
-    _gmt_live_bridge() {
-      while true; do
-        GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}"
-        local ec=$?
-        [[ "${ec}" -eq 0 ]] && break
-        echo "${TAG} WARN: GMT live bridge exited ec=${ec}; restart in 0.3s" >&2
-        sleep 0.3
-      done
-    }
-    (
-      if [[ "${LIVE_TEE}" == "1" ]]; then
-        "${TAP}" 2>"${LOG_DIR}/tap.log" \
-          | tee "${LIVE_SESSION}" \
-          | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_CAM[@]}" --host "${HOST}" --port "${PORT}"
-      else
-        "${TAP}" 2>"${LOG_DIR}/tap.log" \
-          | _tee_fan >( _gmt_live_bridge ) \
-          | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_CAM[@]}" --host "${HOST}" --port "${PORT}"
-      fi
-    ) &
-    LIVE_FAN_PID=$!
+    gf_start_obs_sidechannel
   fi
 
   FRAME_REPLAY_PID=""
@@ -426,8 +419,11 @@ if [[ "${INJECT_ON}" == "1" ]]; then
     wait "${INJ_PID}" || true
     kill "${INJ_TEE_PID}" 2>/dev/null || true
     rm -f "${INJ_FIFO}"
-    if [[ -n "${LIVE_FAN_PID}" ]]; then
-      kill "${LIVE_FAN_PID}" 2>/dev/null || true
+    if [[ -n "${FOX_PID}" ]]; then
+      kill "${FOX_PID}" 2>/dev/null || true
+    fi
+    if [[ -n "${TAP_LIVE_PID}" ]]; then
+      kill "${TAP_LIVE_PID}" 2>/dev/null || true
     fi
     if [[ -n "${FRAME_REPLAY_PID}" ]]; then
       kill "${FRAME_REPLAY_PID}" 2>/dev/null || true
@@ -439,8 +435,11 @@ if [[ "${INJECT_ON}" == "1" ]]; then
   wait "${INJ_PID}" || true
   kill "${INJ_TEE_PID}" 2>/dev/null || true
   rm -f "${INJ_FIFO}"
-  if [[ -n "${LIVE_FAN_PID}" ]]; then
-    kill "${LIVE_FAN_PID}" 2>/dev/null || true
+  if [[ -n "${FOX_PID}" ]]; then
+    kill "${FOX_PID}" 2>/dev/null || true
+  fi
+  if [[ -n "${TAP_LIVE_PID}" ]]; then
+    kill "${TAP_LIVE_PID}" 2>/dev/null || true
   fi
   if [[ -n "${FRAME_REPLAY_PID}" ]]; then
     kill "${FRAME_REPLAY_PID}" 2>/dev/null || true
@@ -557,84 +556,9 @@ if [[ "${LIVE_ON}" != "1" ]]; then
   exit 0
 fi
 
-export GF_OBS_LIVE_SERVICES="${LIVE_SVCS}"
-LIVE_PORT="${GF_LIVE_PORT:-8766}"
-HINT_IP="127.0.0.1"
-if [[ "${HOST}" == "0.0.0.0" || "${HOST}" == "::" ]]; then
-  HINT_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-  HINT_IP="${HINT_IP:-<this-host-LAN-IP>}"
-fi
-echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
-echo "${TAG} listen Foxglove ws://${HINT_IP}:${PORT}  GMT-Live ws://${HINT_IP}:${LIVE_PORT}"
-echo "${TAG} Ctrl+C to stop (yellow=listen green=CONNECTED cyan=DISCONNECTED red=err)"
 if [[ -t 2 ]]; then
   export GF_STATUS_COLOR=1
 fi
-
-LIVE_SESSION="${GF_LIVE_SESSION:-$(gf_obs_dir)/session_live.jsonl}"
-LIVE_TEE="${GF_LIVE_TEE:-1}"
-if [[ "${LIVE_TEE}" == "1" ]]; then
-  mkdir -p "$(dirname "${LIVE_SESSION}")"
-  : > "${LIVE_SESSION}"
-fi
-
-_FOX_BEV=()
-if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
-  _FOX_BEV=(--synth-bev)
-  echo "${TAG} Foxglove --synth-bev (EgoMotion/Trajectory → BEV)"
-fi
-_FOX_CAM=()
-if [[ "${GF_CAMERA_PUBLISH:-1}" != "0" ]]; then
-  if [[ -n "${GF_CAMERA_FRAME:-}" ]]; then
-    _FOX_CAM=(--camera-frame "${GF_CAMERA_FRAME}")
-    echo "${TAG} Foxglove driving camera ← ${GF_CAMERA_FRAME} (file bypass)"
-  else
-    _CAM_SLOT="${GF_CAMERA_SLOT:-gf.channel.front}"
-    _FOX_CAM=(--camera-slot "${_CAM_SLOT}")
-    echo "${TAG} Foxglove driving camera ← ${_CAM_SLOT} (GfChannel shm)"
-  fi
-fi
-
-# GNU tee: if GMT Live process-sub dies, do NOT collapse the pipe to Foxglove.
-_tee_fan() {
-  if tee --help 2>&1 | grep -q -- '--output-error'; then
-    tee --output-error=warn "$@"
-  else
-    tee "$@"
-  fi
-}
-
-# GMT GUI open/close must not kill this side-channel. Restart live bridge on crash;
-# exit 0 after clean stdin EOF (tap ended).
-_gmt_live_bridge() {
-  while true; do
-    GMT bridge live --stdin --host "${HOST}" --port "${LIVE_PORT}"
-    local ec=$?
-    if [[ "${ec}" -eq 0 ]]; then
-      break
-    fi
-    echo "${TAG} WARN: GMT live bridge exited ec=${ec}; restart in 0.3s (Foxglove kept)" >&2
-    sleep 0.3
-  done
-}
-
-_live_fan() {
-  if [[ "${LIVE_TEE}" == "1" ]]; then
-    "${TAP}" 2>"${LOG_DIR}/tap.log" \
-      | tee "${LIVE_SESSION}" \
-      | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_CAM[@]}" --host "${HOST}" --port "${PORT}"
-  else
-    "${TAP}" 2>"${LOG_DIR}/tap.log" \
-      | _tee_fan >( _gmt_live_bridge ) \
-      | GMT bridge foxglove --ws --stdin "${_FOX_BEV[@]}" "${_FOX_CAM[@]}" --host "${HOST}" --port "${PORT}"
-  fi
-}
-
-# Obs fan is side-channel: must NOT be the foreground waiter.
-# Otherwise tap/bridge exit (or pipe break) would tear down the whole SIL via EXIT trap.
-_live_fan &
-LIVE_FAN_PID=$!
-echo "${TAG} live fan pid=${LIVE_FAN_PID} (apps keep running if fan dies; Ctrl+C stops all)"
-echo "${TAG} GMT GUI can open/close anytime; this SIL keeps running"
+gf_start_obs_sidechannel
+echo "${TAG} GMT GUI record uses tap JSONL; Studio same-host → ws://127.0.0.1:${PORT}"
 wait "${EM_PID}" || true

@@ -9,16 +9,18 @@
 
 ```text
 AI_Giraffe-Flow/
-  projects/           # OEM / SKU: wiring, req, platform, interfaces, scripts
+  projects/           # OEM / SKU: wiring, req, platform, interfaces, apps, scripts
   middleware/         # board runtime + third_party/ checkouts
-  apps/               # reference processes (mixed shared + SKU-ish stubs)
-  tools/              # gf-config, gf-codegen, gmt, bridge, …
+  octave_planning/    # planning .m gold (workload, not the product)
+  apps/               # shared demos / adapters (SKU workload apps under projects/)
+  tools/              # gf-config, gf-codegen, gf-octavecoder, gmt, gmt_board, …
   common/             # launch/deploy **templates** (copy into SKU; then fork)
-  carla_scenarios/    # product CARLA Client A (place/IC; not under SKU)
+  carla_scenarios/    # host CARLA Client A (place/IC; not under SKU)
+  devops/             # bench CI → CD last mile (hardware)
   fusa/               # Functional Safety → Safety Case evidence
   schemas/
   dep-manifest/       # dependency pins + bootstrap.sh (checkouts → middleware/third_party/)
-  cmake/ scripts/ devops/ docs/
+  cmake/ scripts/ docs/
   result_pic/         # README assets (Giraffe_Flow/, Giraffe_Modules/, screenshots)
 ```
 
@@ -29,7 +31,7 @@ bash scripts/bootstrap_deps.sh   # → dep-manifest/bootstrap.sh
 → bash common/bootstrap_sku_scripts.sh <sku>   # copy templates if missing
 → projects/<sku>/scripts/compile_sil.sh
 → projects/<sku>/scripts/run_sil.sh       # EM + optional GMT_depend
-→ board: systemd/init → runtime/bin/gf_em_daemon   # product
+→ board: systemd/init → runtime/bin/gf_em_daemon   # board runtime
 → host debug: runtime/bin/giraffe_launch           # optional
 ```
 
@@ -57,6 +59,8 @@ AI_Giraffe-Flow/
 │       ├── unit/                 # per-module (core, com, phm, …)
 │       └── component/            # multi-module in-process
 │
+├── octave_planning/              # planning .m gold (workload); C via gf-octavecoder
+│
 ├── apps/                         # ONLY true platform-common / demos
 │   ├── common/                   # shared demo headers (e.g. uss_zones_topic)
 │   └── README.md                 # what may live here (see §Apps policy)
@@ -68,7 +72,7 @@ AI_Giraffe-Flow/
 │   ├── platform/                 # exec · phm · diag · log · ucm · collector（+ 可裁剪 per/tsync）
 │   ├── interfaces/               # SKU io_types
 │   ├── oem/                      # DBC extract / import policy
-│   ├── apps/                     # SKU stubs (gateway, uss, fcm, planning.*)
+│   ├── apps/                     # SKU workload (gateway, FCM, planning gold, …)
 │   ├── scenarios/
 │   ├── scripts/                  # compile_sil|hil, run_sil|hil
 │   ├── build-sil/ · build-hil/   # default cmake trees (gitignore)
@@ -79,9 +83,9 @@ AI_Giraffe-Flow/
 ├── tools/
 │   ├── gf-config/                # author GUI (was tools/config)
 │   ├── gf-codegen/               # compose/lint/generate (was tools/codegen)
+│   ├── gf-octavecoder/           # .m gold → C 1:1
 │   ├── gmt/                      # observe / inject / OTA sheet (no config write)
-│   ├── debug_bridge/             # iox_obs_tap / iox_obs_inject
-│   ├── bridge/                   # Foxglove etc.
+│   ├── gmt_board/                # tap / inject / gf_foxglove_ws (SIL/board side of GMT)
 │   └── tests/                    # tool unit tests (pytest per package also OK)
 │
 ├── schemas/                      # gf.sor contract + examples
@@ -133,7 +137,7 @@ AI_Giraffe-Flow/
 |-------------|-------------------|
 | `middleware/runtime/` (bring-up lib) | `vehicle_can_gateway`, `sensing.*`, `perception.*`, `planning.*` stubs |
 | Optional: ultra-thin demo_pipeline / feeds | MCU payload↔semantic **mapping** (if today inside gateway) |
-| `tools/debug_bridge/` tap/inject | Allowlists stay in `req` / GMT focus |
+| `tools/gmt_board/` tap/inject/foxglove | Allowlists stay in `req` / GMT focus |
 
 ---
 

@@ -414,9 +414,9 @@ TIP_EN: dict[str, str] = {
         "run_sil skips Foxglove."
     ),
     "Live tap：把画布上的服务镜像到观测工具。"
-    "开启后 compose 会加入 debug_bridge/iox_obs_tap，run_sil 可接 Foxglove WebSocket。": (
+    "开启后 compose 会加入 gmt_board/iox_obs_tap，run_sil 可接 Foxglove WebSocket。": (
         "Live tap: mirror canvas services to observability tools. "
-        "On → compose adds debug_bridge/iox_obs_tap; run_sil can attach Foxglove WS."
+        "On → compose adds gmt_board/iox_obs_tap; run_sil can attach Foxglove WS."
     ),
     "帧摄入（frame_ingest）：CARLA / 文件 / 未来 ISP·摄像头的相机入口。"
     "与 live_tap 白名单不同——这里是行为轨迹，经 compose 冻结为 "

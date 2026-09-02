@@ -11,8 +11,8 @@
 | **`gf-config`** | 唯一作者 GUI（页 1 画布 = 设计期真图） |
 | `GMT architect lineage\|dag` | CI / 导出 |
 | `GMT measure record\|tag\|export\|import-ndjson` | 录制、裁剪、MCAP/**VCD**、tap NDJSON 导入 |
-| `GMT bridge foxglove` | Studio live / JSONL（8765） |
-| `GMT bridge live` | GMT GUI live WebSocket（8766） |
+| `GMT bridge foxglove` | JSONL 回放 / 离线 Studio（SIL 直播是 C `gf_foxglove_ws` :8765） |
+| `GMT bridge live` | GMT GUI live WebSocket（8766；`run_sil` 不再默认拉起） |
 | **`GMT gui`** | Live / Tag / DAG / Graphics / Inject / **OTA/UDS（DoIP）** / 导出 |
 
 ```bash
@@ -52,7 +52,7 @@ GMT gui --project projects/afc/project.yaml
 - GMT **不启动 SIL**  
 
 前提：`gf-config` A 页 `live_tap` 已开 + 已 `compile_sil`。  
-`run_sil` 将 tap fan-out 到 Live（8766）与 Foxglove（8765）（`GMT_depend_launch` 段）。
+`run_sil` / `GMT_depend_launch` 起 C 端 `gf_foxglove_ws`（8765），并把 tap NDJSON tee 给 GMT 录制。Python Foxglove 只做 JSONL 回放 / MCAP 辅助。
 
 板端 / 仅 EM：`runtime/bin/giraffe_launch`，或 `GF_GMT_DEPEND=0 bash …/run_sil.sh`。
 
@@ -68,7 +68,7 @@ GF_INJECT_MODE=playhead \
 
 GMT：打开 session → **回灌** → 连接 `host:8767` → 「跟 playhead 灌」→ scrub。
 
-**continuous**：板端读文件。见 [`iox_obs_inject`](../../tools/debug_bridge/iox_obs_inject/README.md)。
+**continuous**：板端读文件。见 [`iox_obs_inject`](../../tools/gmt_board/iox_obs_inject/README.md)。
 
 ```bash
 GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \

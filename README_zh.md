@@ -1,8 +1,19 @@
 # AI Giraffe Flow
 
-**Lightweight middleware + toolchain for cross-platform SOA systems.**
+**Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop virtual world, Foxglove, and CI/CD — see it, stress it, pass it on the bench; the hardware is the last mile.**
 
-面向跨平台 SOA：桌面先跑通，嵌入式 **ARM Linux** 优先（OSAL 预留 MIPS / RISC-V）。中间件提供可裁剪的 `gf_ara::*` 运行时与传输绑定；工具链一侧用 **gf-config** 把车型契约编进 SOR/代码生成，另一侧用 **GMT** 把联调从「盯日志猜时序」变成可 scrub、可回灌、可对接 Foxglove 的闭环——核心仍是板上/SIL 里真正跑着的 **Giraffe 模块**。
+可裁剪的 `gf_ara::*` 运行时（**ARM Linux** 优先；OSAL 预留 MIPS / RISC-V）以及配置、生成、观测、上车的配套工具。闭环虚拟世界、Foxglove、CI/CD：台上看见、压住、过门；真机是 last mile。本仓里的感知和规划是 **闭环载荷，不是产品**——给中间件和工具一条诚实的 pub/sub 环，用来量这些：
+
+| 要验证的 | 载荷用来干什么 |
+|----------|----------------|
+| **健壮性 / 隔离** | 杀掉或饿死一个进程，其余 **hold-last**，控车不断 |
+| **时延** | overlay-latest vs wait；端到端一拍；FuSa 时延脚本 |
+| **故障定位** | GMT tap + Foxglove：谁在何时发了什么 |
+| **回放** | 同一条链上 playhead 回灌 |
+| **拉起 / CI/CD** | EM 拓扑与 relaunch；compose → generate → SIL；**过了才 CD**——真机是 last mile |
+| **配置保真** | gf-config → SOR；OEM 差异在 gateway/映射，不进业务 App |
+
+OEM 相机/网络权重仍在仓外。
 
 **English:** [README.md](README.md)
 
@@ -13,8 +24,8 @@
 | # | 主线 | 角色 | 深入 |
 |---|------|------|------|
 | **1** | **gf-config** | 工具链 · 配置侧 | [tools/gf-config](tools/gf-config/README_zh.md) · [SOR](docs/zh/architecture/sor-authoring.md) |
-| **2** | **Giraffe 模块** | **产品主体** · 运行时、进程、**FuSa 证据** | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [设计](docs/zh/architecture/DESIGN.md) |
-| **3** | **GMT** | 工具链 · 观测侧 | [tools/gmt](tools/gmt/README_zh.md) · [可观测演示](docs/zh/operations/OBSERVABILITY_DEMO.md) |
+| **2** | **Giraffe 模块** | **产品主体** · SOA 运行时、FuSa 证据 | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [设计](docs/zh/architecture/DESIGN.md) |
+| **3** | **GMT** | 工具链 · 观测 / 回灌 / Foxglove | [tools/gmt](tools/gmt/README_zh.md) · [gmt_board](tools/gmt_board/README.md) · [可观测演示](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
 ![架构：CARLA → Giraffe 模块 → Foxglove · GMT](result_pic/Giraffe_Flow/Giraffe_Flow.gif)
 
@@ -43,7 +54,7 @@ gf-config projects/afc/project.yaml
 
 ### 2. Giraffe 模块（主体）
 
-这里是交付到板端、在 SIL 里真正跑起来的部分。业务算法可外仓替换；本仓提供 **可裁剪平台 + 参考进程**，用同一套 semantic 契约联调。
+这里是板上和 SIL 里真正跑着的 **中间件**。SKU 里的 FCM、Octave 规划 → Trajectory 是 **载荷**：给 GMT、Foxglove、回灌、PHM、CI 一条诚实的 pub/sub 环，用来验证平台，而不是宣称本仓是量产 ADAS。
 
 ![Giraffe Modules：板内中间件如何起来、如何协作](result_pic/Giraffe_Modules/Giraffe_Modules.gif)
 
@@ -55,9 +66,10 @@ gf-config projects/afc/project.yaml
 | **传输插件** | `middleware/bindings/` | iceoryx（机内）、SOME/IP、DDS、cross_domain_ipc（MCU） |
 | **执行与健康** | exec（**EM daemon**）/ phm / sm / collector | 拓扑拉起、relaunch、心跳、FG、事件收集 |
 | **可移植** | `osal/` · `hal/` | 时钟 / 线程 / **进程 Spawn**；主目标 ARM Linux |
-| **参考 App** | `apps/` | gateway、感知/超声/规划 stub、观测工具——**非量产算法** |
-| **集成工程** | `projects/` | OEM 的 DBC / wiring / hpp / SIL·HIL 脚本 |
-| **FuSa 证据** | `fusa/` | cases / metrics / Safety Case 骨架（通向完整 Safety Case，**非证书**） |
+| **载荷 App** | `projects/<sku>/apps/` | Gateway / FCM / 规划 — 用来 **压** 平台（`.m` 金源 → C 1:1） |
+| **上位机场景** | `carla_scenarios/` | CARLA Client A：布景 + 仪表；另一路压力源，不是控制器 |
+| **集成工程** | `projects/` | OEM DBC / wiring / hpp / SIL·HIL / **CI 脚本** |
+| **FuSa 证据** | `fusa/` | cases / metrics / Safety Case 骨架（**非证书**） |
 
 公开约定：**业务只依赖 semantic 服务名**；OEM 差异收在 adapter/gateway。详见 [DESIGN](docs/zh/architecture/DESIGN.md)。
 
@@ -79,9 +91,9 @@ gf-config projects/afc/project.yaml
 
 总览：[middleware/README.md](middleware/README.md)
 
-#### 2.3 参考进程与主链（示例 SKU）
+#### 2.3 闭环载荷（示例 SKU）
 
-以 [projects/afc](projects/afc/)（无 USS）为例：
+以 [projects/afc](projects/afc/)（无 USS）为例。用来 **验证** com / EM / 可观测性，不是交付感知或规划产品。规划金源：[octave_planning/](octave_planning/README.md)。
 
 ```text
 车态源（二选一）
@@ -89,28 +101,31 @@ gf-config projects/afc/project.yaml
         │
         ▼ EgoMotion / Perception_In
         ▼
-   perception.fcm → Perception_Out
+   perception.fcm → Perception_Out     ← 载荷（不是相机网络）
         │
         ▼
-   planning.driving → Trajectory
+   planning.driving → Trajectory       ← 载荷（.m 金源，C 1:1）
         │
         ▼
-   tap → Foxglove / GMT Live
+   gmt_board：tap NDJSON · gf_foxglove_ws :8765
+        │
+        └─ 时延 / 隔离 / 「谁何时发了什么」 / 回灌复现
 ```
 
 | 进程 | 角色 |
 |------|------|
 | `adapter.vehicle_can_gateway` | CAN/仿真 → EgoMotion、Perception_In…（回灌时关闭） |
-| `perception.fcm` | Perception_In → 感知 Out |
-| `planning.driving` | Ego + 感知 → Trajectory |
-| `gf_iox_obs_tap` | 白名单服务 → NDJSON |
+| `perception.fcm` | Perception_In → Out（载荷；不是相机网络） |
+| `planning.driving` | Ego + 感知 → Trajectory（载荷） |
+| `gf_iox_obs_tap` | 白名单服务 → NDJSON（GMT 录制） |
+| `gf_foxglove_ws` | iceoryx → Foxglove Studio + BEV（`tools/gmt_board`） |
 | `gf_iox_obs_inject` | playhead / continuous 回灌 Ego |
 
-量产感知/规控在 **外部仓**；本仓 stub 证明契约与联调路径。见 [apps/](apps/README.md)。
+共享 `apps/` 仍是跨 SKU 演示/adapter。见 [apps/](apps/README.md)。
 
-#### 2.4 产品路径（SIL）
+#### 2.4 拉起路径（SIL → 板）
 
-`projects/afc` 与 `projects/adc` 同一合同：**mtime compose / 按需 cmake configure / 增量 build**；`GF_CTEST=1` 才跑 ctest；stage 出 `runtime/bin/giraffe_launch`；GMT 旁路为 `GMT_depend_launch`（`GF_GMT_DEPEND=0` → 只 EM）。
+`projects/afc` 与 `projects/adc` 同一合同：**mtime compose / 按需 cmake configure / 增量 build**；`GF_CTEST=1` 才跑 ctest；stage 出 `runtime/bin/giraffe_launch`。上位机 CARLA：[carla_scenarios/](carla_scenarios/)。CI：[devops/](devops/README.md)（`smoke.sh` / 工具链 / nightly）。GMT 旁路为 `GMT_depend_launch`（`GF_GMT_DEPEND=0` → 只 EM）。
 
 ```bash
 bash projects/afc/scripts/compile_sil.sh
@@ -154,14 +169,14 @@ bash fusa/scripts/measure_latency.sh   # 可选：延时快照
 
 ### 3. GMT（观测侧工具链）
 
-多进程 SIL 联调时，光看终端往往对不齐「谁在何时发了什么」。GMT 把同一条 tap 流接到本机时间轴与 Foxglove：**scrub / 倍速播放**对齐 DAG 与变量轨，**playhead 回灌**按帧把 Ego 灌进主链（gateway 关闭、无双发），需要时再 **Tag → MCAP**。端口少、和 `run_sil` 一条命令配合，日常「改完再看一眼」成本很低——**不替代模块，但让模块可被反复验证**。
+多进程 SIL 联调时，光看终端往往对不齐「谁在何时发了什么」。GMT 把 tap NDJSON 接到本机时间轴：**scrub / 倍速**、**playhead 回灌**、**Tag → MCAP**。**Foxglove 直播**是 C `gf_foxglove_ws`（**:8765**，`tools/gmt_board`）；Python `GMT bridge foxglove` 只做 JSONL 回放。`run_sil` **不起** GMT Live :8766。
 
 ![GMT — 变量轨 scrub / Live + Inject](result_pic/GMT.png)
 
 | 端口 | 用途 |
 |------|------|
-| **8765** | Foxglove（模块 I/O → 可选合成 BEV） |
-| **8766** | GMT Live（可选旁观） |
+| **8765** | Foxglove Studio（`gf_foxglove_ws`；BEV + 模块 I/O） |
+| **8766** | GMT GUI live（可选；`run_sil` 不启动） |
 | **8767** | playhead 回灌 |
 
 ```bash
@@ -170,7 +185,7 @@ GMT gui --project projects/afc \
   --session projects/afc/scenarios/overtake_acc_aeb.jsonl
 ```
 
-细节：[tools/gmt/README_zh.md](tools/gmt/README_zh.md) · [OBSERVABILITY_DEMO](docs/zh/operations/OBSERVABILITY_DEMO.md)
+细节：[tools/gmt/README_zh.md](tools/gmt/README_zh.md) · [gmt_board](tools/gmt_board/README.md) · [OBSERVABILITY_DEMO](docs/zh/operations/OBSERVABILITY_DEMO.md)
 
 ---
 
@@ -179,12 +194,17 @@ GMT gui --project projects/afc \
 | 目录 | 用途 |
 |------|------|
 | [middleware/](middleware/) | **Giraffe 运行时（主体）** |
-| [apps/](apps/) | 参考 App / adapter / tap·inject |
-| [projects/](projects/) | OEM 集成工程 |
-| [fusa/](fusa/) | FuSa 证据（归属 Giraffe 模块） |
+| [octave_planning/](octave_planning/) | 规划 `.m` 金源（**载荷**，不是产品） |
+| [projects/](projects/) | OEM SKU：apps、wiring、SIL·HIL、CI |
+| [carla_scenarios/](carla_scenarios/) | 上位机 CARLA 布景 + 仪表 |
+| [apps/](apps/) | 跨 SKU 演示 / adapter |
+| [fusa/](fusa/) | FuSa 证据 |
 | [tools/gf-config/](tools/gf-config/) | gf-config |
 | [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |
-| [tools/gmt/](tools/gmt/) | GMT |
+| [tools/gf-octavecoder/](tools/gf-octavecoder/) | `.m` → C 1:1 |
+| [tools/gmt/](tools/gmt/) | GMT 主机 |
+| [tools/gmt_board/](tools/gmt_board/) | tap / inject / `gf_foxglove_ws` |
+| [devops/](devops/) | 台架 CI → CD last mile（真机） |
 | [docs/zh/](docs/zh/README.md) | 文档索引 |
 
 [STRUCTURE.md](STRUCTURE.md) · [ROADMAP](docs/zh/operations/ROADMAP.md)

@@ -1,6 +1,6 @@
-# AFC — 前视 ADAS（无 USS）
+# AFC — 前视 ADAS 载荷 SKU（无 USS）
 
-`Perception_*` + `Trajectory`；帧摄入 / CARLA / Foxglove。SIL：`scripts/compile_sil.sh` → `scripts/run_sil.sh`。
+用 `Perception_*` + `Trajectory` **压** 中间件和工具（时延、隔离、GMT/Foxglove 定位）；不是量产感知/规划交付。帧摄入 / CARLA / `gf_foxglove_ws` :8765。SIL：`scripts/compile_sil.sh` → `scripts/run_sil.sh`。台上过了再 CD：[devops/](../../devops/README.md)。
 
 ## 验收（主路径）
 

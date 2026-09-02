@@ -1,6 +1,6 @@
 // Fallback tap (EgoMotion + Trajectory only). Prefer codegen:
 //   gf-codegen generate → ${GF_GENERATED_DIR}/src/obs_tap_main.cpp
-// Pipe into: GMT bridge foxglove --ws --stdin
+// NDJSON stdout → GMT record. Foxglove live is gf_foxglove_ws, not Python --stdin.
 // Env GF_OBS_LIVE_SERVICES: comma-separated short names.
 
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"

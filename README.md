@@ -1,8 +1,19 @@
 # AI Giraffe Flow
 
-**Lightweight middleware + toolchain for cross-platform SOA systems.**
+**Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop virtual world, Foxglove, and CI/CD — see it, stress it, pass it on the bench; the hardware is the last mile.**
 
-Desktop-first, **ARM Linux** embedded primary (OSAL reserved for MIPS / RISC-V). The middleware is a trimmable `gf_ara::*` runtime with pluggable transports; the toolchain wraps it—**gf-config** turns vehicle contracts into SOR and codegen, **GMT** turns multi-process bring-up from log-chasing into scrub / inject / Foxglove. The product core remains the **Giraffe modules** that actually run on SIL and on the board.
+Trimmable `gf_ara::*` runtime (**ARM Linux** primary; OSAL reserved for MIPS / RISC-V) and the tools that configure, generate, observe, and ship it. Perception and planning in this tree are a **closed-loop workload**, not the product — a real pub/sub loop so we can measure the platform:
+
+| What we prove | What the loop is for |
+|---------------|----------------------|
+| **Robustness / isolation** | Kill or starve one process; others **hold-last**; control stays up |
+| **Latency** | Overlay-latest vs wait; e2e tick; FuSa latency scripts |
+| **Fault localization** | GMT tap + Foxglove: *who published what, when* |
+| **Replay** | Playhead inject on the same chain |
+| **Bring-up / CI/CD** | EM topology + relaunch; compose → generate → SIL; **CD** only what passed — hardware is the last mile |
+| **Config fidelity** | gf-config → SOR; OEM deltas in gateway/mapping, not in apps |
+
+OEM camera/NN stays out of tree.
 
 **中文:** [README_zh.md](README_zh.md)
 
@@ -13,8 +24,8 @@ Desktop-first, **ARM Linux** embedded primary (OSAL reserved for MIPS / RISC-V).
 | # | Pillar | Role | Dig in |
 |---|--------|------|--------|
 | **1** | **gf-config** | Toolchain · configure | [tools/gf-config](tools/gf-config/README.md) · [SOR](docs/en/architecture/sor-authoring.md) |
-| **2** | **Giraffe modules** | **Product core** · runtime, processes, **FuSa evidence** | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [Design](docs/en/architecture/DESIGN.md) |
-| **3** | **GMT** | Toolchain · observe / inject | [tools/gmt](tools/gmt/README.md) · [Observability demo](docs/zh/operations/OBSERVABILITY_DEMO.md) |
+| **2** | **Giraffe modules** | **Product core** · SOA runtime, FuSa evidence | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [Design](docs/en/architecture/DESIGN.md) |
+| **3** | **GMT** | Toolchain · observe / inject / Foxglove | [tools/gmt](tools/gmt/README.md) · [gmt_board](tools/gmt_board/README.md) · [Observability demo](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
 ![Architecture: CARLA → Giraffe modules → Foxglove · GMT](result_pic/Giraffe_Flow/Giraffe_Flow.en.gif)
 
@@ -43,7 +54,7 @@ Details: [tools/gf-config/README.md](tools/gf-config/README.md) · [WORKFLOW](do
 
 ### 2. Giraffe modules (core)
 
-What actually runs on the board and in SIL. Production algorithms may live in **external repos**; this tree ships a **trimmable platform + reference processes** on one semantic contract.
+What actually runs on the board and in SIL is the **middleware**. SKU apps (FCM, Octave planning → Trajectory) are the **exercise load**: a real pub/sub loop so GMT, Foxglove, inject, PHM, and CI have something honest to measure — not a claim that this repo is a production ADAS stack.
 
 ![Giraffe Modules: on-board middleware boot & collaboration](result_pic/Giraffe_Modules/Giraffe_Modules.en.gif)
 
@@ -55,9 +66,10 @@ What actually runs on the board and in SIL. Production algorithms may live in **
 | **Transports** | `middleware/bindings/` | iceoryx, SOME/IP, DDS, cross_domain_ipc (MCU) |
 | **Exec / health** | exec (**EM daemon**) / phm / sm / collector | Topo launch, relaunch, heartbeat, FG, events |
 | **Portability** | `osal/` · `hal/` | Clock / thread / **process Spawn**; ARM Linux first |
-| **Reference apps** | `apps/` | Gateway, sensing/perception/planning stubs, obs tools — **not production algos** |
-| **Integration** | `projects/` | OEM DBC / wiring / hpp / SIL·HIL scripts |
-| **FuSa evidence** | `fusa/` | Cases / metrics / Safety Case drafts toward a full Safety Case (**not** a certificate) |
+| **Workload apps** | `projects/<sku>/apps/` | Gateway / FCM / planning — **load** to exercise the platform (`.m` gold → C 1:1) |
+| **Host scenes** | `carla_scenarios/` | CARLA Client A: layout + instrument; another stress source, not the controller |
+| **Integration** | `projects/` | OEM DBC / wiring / hpp / SIL·HIL / **CI scripts** |
+| **FuSa evidence** | `fusa/` | Cases / metrics / Safety Case drafts (**not** a certificate) |
 
 Rule: **apps depend only on semantic service names**; OEM deltas stay in adapter/gateway. See [DESIGN](docs/en/architecture/DESIGN.md).
 
@@ -79,9 +91,9 @@ Aligned with Giraffe SoC chips in the architecture GIF (`com` · `EM`∈exec · 
 
 Overview: [middleware/README.md](middleware/README.md)
 
-#### 2.3 Reference chain (sample SKU)
+#### 2.3 Closed-loop workload (sample SKU)
 
-[projects/afc](projects/afc/)（无 USS）:
+[projects/afc](projects/afc/) (no USS). Used to **validate** com / EM / observability — not to ship a perception or planner product. Planning gold: [octave_planning/](octave_planning/README.md).
 
 ```text
 Vehicle state (pick one)
@@ -89,28 +101,31 @@ Vehicle state (pick one)
         │
         ▼ EgoMotion / Perception_In
         ▼
-   perception.fcm → Perception_Out
+   perception.fcm → Perception_Out     ← workload (not a camera NN)
         │
         ▼
-   planning.driving → Trajectory
+   planning.driving → Trajectory       ← workload (.m gold, C 1:1)
         │
         ▼
-   tap → Foxglove / GMT Live
+   gmt_board: tap NDJSON · gf_foxglove_ws :8765
+        │
+        └─ latency / isolation / “who published when” / inject replay
 ```
 
 | Process | Role |
 |---------|------|
 | `adapter.vehicle_can_gateway` | CAN/sim → EgoMotion, Perception_In… (off under inject) |
-| `perception.fcm` | Perception_In → perception Out |
-| `planning.driving` | Ego + perc → Trajectory |
-| `gf_iox_obs_tap` | Allowlisted services → NDJSON |
+| `perception.fcm` | Perception_In → Out (workload; not a camera NN) |
+| `planning.driving` | Ego + perc → Trajectory (workload) |
+| `gf_iox_obs_tap` | Allowlisted services → NDJSON (GMT record) |
+| `gf_foxglove_ws` | iceoryx → Foxglove Studio + BEV (`tools/gmt_board`) |
 | `gf_iox_obs_inject` | playhead / continuous Ego inject |
 
-Production perception/planning: **external packages**. See [apps/](apps/README.md).
+Shared `apps/` stays for cross-SKU demos/adapters. See [apps/](apps/README.md).
 
-#### 2.4 Product path (SIL)
+#### 2.4 Bring-up (SIL → board)
 
-Primary SKUs `projects/afc` and `projects/adc` share the same contract: **mtime compose / configure-on-need / incremental build**; `ctest` only with `GF_CTEST=1`; staged `runtime/bin/giraffe_launch`; GMT extras via `GMT_depend_launch` (`GF_GMT_DEPEND=0` → EM only).
+Primary SKUs `projects/afc` and `projects/adc` share the same contract: **mtime compose / configure-on-need / incremental build**; `ctest` only with `GF_CTEST=1`; staged `runtime/bin/giraffe_launch`. Host CARLA: [carla_scenarios/](carla_scenarios/). CI: [devops/](devops/README.md) (`smoke.sh` / toolchain / nightly). GMT extras via `GMT_depend_launch` (`GF_GMT_DEPEND=0` → EM only).
 
 ```bash
 bash projects/afc/scripts/compile_sil.sh
@@ -152,14 +167,14 @@ bash fusa/scripts/measure_latency.sh   # optional timing snapshot
 
 ### 3. GMT (observe toolchain)
 
-In multi-process SIL, terminal logs rarely answer “who published what, when.” GMT attaches the same tap stream to a host timeline and Foxglove: **scrub / speed** align DAG and variables, **playhead inject** drives Ego into the chain frame-by-frame (gateway off, no dual publish), then **Tag → MCAP** when you need a clip. Few ports, one `run_sil` companion—cheap to “change and look again.” It **does not replace modules**; it makes them repeatedly verifiable.
+In multi-process SIL, terminal logs rarely answer “who published what, when.” GMT attaches the tap NDJSON to a host timeline: **scrub / speed**, **playhead inject**, **Tag → MCAP**. **Foxglove live** is C `gf_foxglove_ws` on **:8765** (`tools/gmt_board`); Python `GMT bridge foxglove` is JSONL replay only. `run_sil` does **not** start GMT Live :8766.
 
 ![GMT — Vars scrub / Live + Inject](result_pic/GMT.png)
 
 | Port | Role |
 |------|------|
-| **8765** | Foxglove (module I/O → optional BEV) |
-| **8766** | GMT Live (optional) |
+| **8765** | Foxglove Studio (`gf_foxglove_ws`; BEV + module I/O) |
+| **8766** | GMT GUI live (optional; not started by `run_sil`) |
 | **8767** | playhead inject |
 
 ```bash
@@ -168,7 +183,7 @@ GMT gui --project projects/afc \
   --session projects/afc/scenarios/overtake_acc_aeb.jsonl
 ```
 
-Details: [tools/gmt/README.md](tools/gmt/README.md) · [OBSERVABILITY_DEMO](docs/zh/operations/OBSERVABILITY_DEMO.md)
+Details: [tools/gmt/README.md](tools/gmt/README.md) · [gmt_board](tools/gmt_board/README.md) · [OBSERVABILITY_DEMO](docs/zh/operations/OBSERVABILITY_DEMO.md)
 
 ---
 
@@ -177,12 +192,17 @@ Details: [tools/gmt/README.md](tools/gmt/README.md) · [OBSERVABILITY_DEMO](docs
 | Path | Role |
 |------|------|
 | [middleware/](middleware/) | **Giraffe runtime (core)** |
-| [apps/](apps/) | Reference apps / adapters / tap·inject |
-| [projects/](projects/) | OEM integration |
-| [fusa/](fusa/) | FuSa evidence (under Giraffe modules) |
+| [octave_planning/](octave_planning/) | Planning `.m` gold (**workload**, not the product) |
+| [projects/](projects/) | OEM SKU: apps, wiring, SIL·HIL, CI scripts |
+| [carla_scenarios/](carla_scenarios/) | Host CARLA scenes + instrument |
+| [apps/](apps/) | Shared demos / adapters |
+| [fusa/](fusa/) | FuSa evidence |
 | [tools/gf-config/](tools/gf-config/) | gf-config |
 | [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |
-| [tools/gmt/](tools/gmt/) | GMT |
+| [tools/gf-octavecoder/](tools/gf-octavecoder/) | `.m` → C 1:1 |
+| [tools/gmt/](tools/gmt/) | GMT host |
+| [tools/gmt_board/](tools/gmt_board/) | tap / inject / `gf_foxglove_ws` |
+| [devops/](devops/) | Bench CI → CD last mile (hardware) |
 | [docs/](docs/README.md) | Docs index |
 
 [STRUCTURE.md](STRUCTURE.md) · [ROADMAP](docs/en/operations/ROADMAP.md)

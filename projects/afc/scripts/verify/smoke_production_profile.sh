@@ -64,6 +64,7 @@ cmake = pathlib.Path("${GEN_OUT}/gf_build.cmake").read_text()
 assert 'GF_SKU_PROFILE "production-release"' in cmake
 assert "set(GF_OBS_LIVE_TAP OFF)" in cmake
 assert "iox_obs_tap" not in cmake and "iox_obs_inject" not in cmake
+assert "iox_obs_foxglove" not in cmake
 print("OK observability.json + gf_build.cmake (debug-path closed)")
 PY
 
@@ -81,15 +82,16 @@ GF_BUILD_DIR="${PROD_BUILD}" bash "${PROJECT_DIR}/scripts/compile_sil.sh"
 
 # Prior vehicle-debug builds may leave stale tap/inject binaries; remove then prove
 # production GF_APPS does not recreate them.
-find "${PROD_BUILD}" -type f \( -name 'gf_iox_obs_tap' -o -name 'gf_iox_obs_inject' \) -delete 2>/dev/null || true
-echo "${TAG} rebuild once more (should not recreate tap/inject) ..."
+find "${PROD_BUILD}" -type f \( -name 'gf_iox_obs_tap' -o -name 'gf_iox_obs_inject' -o -name 'gf_foxglove_ws' \) -delete 2>/dev/null || true
+echo "${TAG} rebuild once more (should not recreate tap/inject/foxglove_ws) ..."
 cmake --build "${PROD_BUILD}" -j"$(nproc)" >/dev/null
 
 TAP="$(find "${PROD_BUILD}" -type f -name 'gf_iox_obs_tap' 2>/dev/null | head -n1 || true)"
 INJ="$(find "${PROD_BUILD}" -type f -name 'gf_iox_obs_inject' 2>/dev/null | head -n1 || true)"
-if [[ -n "${TAP}" || -n "${INJ}" ]]; then
+FOX="$(find "${PROD_BUILD}" -type f -name 'gf_foxglove_ws' 2>/dev/null | head -n1 || true)"
+if [[ -n "${TAP}" || -n "${INJ}" || -n "${FOX}" ]]; then
   echo "${TAG} FAIL: debug-path binaries reappeared after production compile" >&2
-  echo "  tap=${TAP:-none} inject=${INJ:-none}" >&2
+  echo "  tap=${TAP:-none} inject=${INJ:-none} fox=${FOX:-none}" >&2
   exit 1
 fi
 # Targets must not exist in the production CMake graph
@@ -101,7 +103,11 @@ if cmake --build "${PROD_BUILD}" --target gf_iox_obs_inject 2>/tmp/gf_t4_inj.err
   echo "${TAG} FAIL: gf_iox_obs_inject target still buildable" >&2
   exit 1
 fi
-echo "${TAG} OK: tap/inject not in production build graph"
+if cmake --build "${PROD_BUILD}" --target gf_foxglove_ws 2>/tmp/gf_t4_fox.err; then
+  echo "${TAG} FAIL: gf_foxglove_ws target still buildable" >&2
+  exit 1
+fi
+echo "${TAG} OK: tap/inject/foxglove_ws not in production build graph"
 
 echo "${TAG} SIL-02 main-chain verify on production build ..."
 GF_BUILD_DIR="${PROD_BUILD}" GF_MP_TRAJ_COUNT=8 \

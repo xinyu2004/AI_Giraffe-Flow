@@ -650,13 +650,15 @@ def test_bev_dash_is_6m_on_9m_gap() -> None:
     assert not dash_lit_m(6.1)
     assert not dash_lit_m(14.9)
     assert dash_lit_m(15.0)
-    assert dash_lit_m(6.0, scroll_m=6.0)
+    # scroll = odom: pattern is world-fixed (flows toward ego, not forward).
+    assert dash_lit_m(0.0, scroll_m=3.0)
+    assert not dash_lit_m(0.0, scroll_m=7.0)
 
 
 def test_bev_cam_near_is_larger_than_far() -> None:
     from gf_gmt.bev_compose import make_bev_cam
 
-    cam = make_bev_cam(480, 360)
+    cam = make_bev_cam(400, 800)
     n0 = cam.project(8.0, -1.8)
     n1 = cam.project(8.0, 1.8)
     f0 = cam.project(80.0, -1.8)
@@ -665,10 +667,16 @@ def test_bev_cam_near_is_larger_than_far() -> None:
     far_w = abs(f1[0] - f0[0])
     assert near_w > far_w * 1.4
     assert cam.project(0.0, 0.0)[1] > cam.project(120.0, 0.0)[1]
+    # ~5 lanes (±9 m) at the bumper stay on the portrait canvas.
+    left = cam.project(1.0, 9.0)[0]
+    right = cam.project(1.0, -9.0)[0]
+    assert 0 <= min(left, right) <= max(left, right) < 400
 
 
 def test_see_host_wash_and_cap_empty_curve() -> None:
     from gf_gmt.bev_compose import (
+        BEV_H,
+        BEV_W,
         _SEE_CAP,
         _SEE_FILL,
         HostLanePoly,
@@ -689,7 +697,8 @@ def test_see_host_wash_and_cap_empty_curve() -> None:
     assert not occupy_notched(130.0, 130.0)
     _segs, tris = d_see_paint_marks((d_opt, -1.75, d_opt, 1.75))
     assert tris == []
-    w, h = 480, 360
+    assert BEV_H > BEV_W
+    w, h = BEV_W, BEV_H
     rgb = _png_to_rgb(render_ego_bev_png(st, width=w, height=h), w, h)
     n_cap = n_fill = 0
     cr, cg, cb = _SEE_CAP
@@ -699,8 +708,9 @@ def test_see_host_wash_and_cap_empty_curve() -> None:
             n_cap += 1
         elif rgb[i] == fr and rgb[i + 1] == fg and rgb[i + 2] == fb:
             n_fill += 1
-    assert n_fill > 400
-    assert n_cap > 80
+    assert n_fill == 0
+    assert n_cap == 0
+    assert len(rgb) == w * h * 3
 
 
 def test_bev_rotated_box_is_solid_not_ticks() -> None:

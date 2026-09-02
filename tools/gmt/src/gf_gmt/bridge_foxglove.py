@@ -1,14 +1,13 @@
-"""Foxglove bridge (P2 F-1 + P2.5 live).
+"""Foxglove bridge (offline).
 
 Modes:
   1) validate/open helper — list topics in MCAP, print Studio steps
   2) --serve — tiny HTTP server that serves the .mcap for download
   3) --ws --jsonl — WebSocket replay of finished JSONL
-  4) --ws --stdin — live NDJSON from stdin (iox_obs_tap | GMT …)
 
-Implements Foxglove WebSocket protocol subset (stdlib only):
-  - JSON: serverInfo, advertise, status
-  - Binary Message Data (opcode 0x01, little-endian) after client subscribe
+SIL/board live is C gf_foxglove_ws (tools/gmt_board/iox_obs_foxglove).
+This module stays for JSONL replay, MCAP helper, Host octave_bridge, and tests
+(backlog: BL-GMT-FOX-PY).
 
 This is NOT the ROS package foxglove_bridge.
 """
@@ -18,19 +17,15 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
-import io
 import json
-import os
 import select
 import socket
 import struct
-import sys
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Iterable, TextIO
+from typing import Any, Iterable
 
-from gf_gmt.conn_log import conn_status
 from gf_gmt.measure_export import list_mcap_topics
 
 # JSON Schema string for free-form object payloads (encoding=json)
@@ -530,413 +525,19 @@ def replay_jsonl_ws(
             pass
 
 
-def live_stdin_ws(
-    host: str,
-    port: int,
-    *,
-    stream: TextIO | None = None,
-    synth_bev: bool = False,
-    bev_script: Path | None = None,
-    camera_frame: Path | None = None,
-    camera_slot: str | None = None,
-) -> None:
-    """Live NDJSON from stdin → Foxglove WS.
-
-    Always drains stdin (so tap never blocks). Studio may connect / reconnect anytime;
-    messages are published only while a client is connected and subscribed.
-    When synth_bev=True, compose /gf/driving/bev/compressed from EgoMotion/Trajectory
-    (+ optional scenario script for three-phase story). /gf/AdasDemo is never advertised.
-    Real camera: prefer camera_slot (GfChannel shm); camera_frame is SIL file bypass only.
-    """
-    from gf_gmt.adas_scenarios import TOPIC_CAM, TOPIC_DRIVING_CAM
-    from gf_gmt.bev_compose import AdasScriptIndex, LiveBevComposer, is_adas_demo_topic
-    from gf_gmt.camera_frame_reader import CameraFramePublisher
-
-    inp = stream if stream is not None else sys.stdin
-    srv = _listen(host, port)
-    script = AdasScriptIndex.load(bev_script) if bev_script else None
-    bev = LiveBevComposer(script=script) if synth_bev else None
-    cam_pub = None
-    if camera_slot or camera_frame is not None:
-        cam_pub = CameraFramePublisher(
-            camera_frame if camera_frame is not None else None,
-            camera_slot=(camera_slot or None),
-        )
-
-    def _status(kind: str, msg: str) -> None:
-        conn_status("Foxglove", kind, msg)
-
-    _status("listen", f"LISTENING ws://{host}:{port}")
-    if synth_bev:
-        if script is not None:
-            _status(
-                "listen",
-                f"synth BEV + scenario script ({len(script.times)} Adas frames → Image only)",
-            )
-        else:
-            _status("listen", "synth BEV from EgoMotion/Trajectory (module I/O)")
-    if cam_pub is not None:
-        if camera_slot:
-            _status(
-                "listen",
-                f"camera CompressedImage ← camera_slot={camera_slot} topic={TOPIC_DRIVING_CAM}",
-            )
-        else:
-            _status(
-                "listen",
-                f"camera CompressedImage ← {camera_frame} topic={TOPIC_DRIVING_CAM}",
-            )
-
-    fd = -1
-    if hasattr(inp, "fileno"):
-        try:
-            fd = inp.fileno()
-        except (OSError, io.UnsupportedOperation):
-            fd = -1
-
-    conn: socket.socket | None = None
-    state: SessionState | None = None
-    peer_label = ""
-    buf = ""
-    TOPIC_BEV = TOPIC_CAM  # /gf/driving/bev/compressed
-    seed: list[str] = []
-    if cam_pub is not None:
-        seed.append(TOPIC_DRIVING_CAM)
-    # Advertise iceoryx topics up front so Studio can subscribe before first sample
-    # (late ensure_channel is easy to miss in the topic picker).
-    seed.extend(
-        [
-            "/gf/EgoMotion",
-            "/gf/Trajectory",
-            "/gf/Perception_MESSAGE_Out_St",
-            "/gf/Perception_In_St",
-        ]
-    )
-    if synth_bev:
-        seed.append(TOPIC_BEV)
-
-    published = 0
-    dropped = 0  # no Studio connection
-    nosub = 0  # Studio connected but topic not subscribed (panel missing)
-    stdin_eof = False
-    cam_logged = False
-    cam_pub_count = 0
-    cam_hb_at = 0.0
-    status_at = 0.0
-    by_topic: dict[str, int] = {}
-    by_topic_nosub: dict[str, int] = {}
-    by_topic_in: dict[str, int] = {}  # rows seen from tap (regardless of Studio)
-
-    def _close_client(*, reason: str = "") -> None:
-        nonlocal conn, state, peer_label
-        if conn is not None:
-            try:
-                conn.close()
-            except OSError:
-                pass
-            who = peer_label or "?"
-            detail = f" ({reason})" if reason else ""
-            _status("bye", f"DISCONNECTED peer={who}{detail}")
-        conn = None
-        state = None
-        peer_label = ""
-
-    def _publish_row(topic: str, t_ns: int, data: Any) -> None:
-        nonlocal published, dropped, nosub, conn, state
-        by_topic_in[topic] = by_topic_in.get(topic, 0) + 1
-        if conn is None or state is None:
-            # Drain quietly so tap never blocks; Studio may connect anytime.
-            dropped += 1
-            return
-        # Bridge receive-time: keeps Ego/Traj/Perc/camera on one Foxglove timeline.
-        send_t = time.time_ns()
-        try:
-            n = state.publish(conn, topic, send_t, data)
-        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-            _close_client(reason=f"client gone: {exc}")
-            dropped += 1
-            return
-        if n <= 0:
-            nosub += 1
-            by_topic_nosub[topic] = by_topic_nosub.get(topic, 0) + 1
-            return
-        published += n
-        by_topic[topic] = by_topic.get(topic, 0) + n
-        if published and published % 50 == 0:
-            cam_n = by_topic.get(TOPIC_DRIVING_CAM, 0)
-            _status(
-                "ok",
-                f"published {published} msgs (camera={cam_n} "
-                f"ego={by_topic.get('/gf/EgoMotion', 0)} "
-                f"traj={by_topic.get('/gf/Trajectory', 0)} "
-                f"perc={by_topic.get('/gf/Perception_MESSAGE_Out_St', 0)} "
-                f"bev={by_topic.get(TOPIC_BEV, 0)} "
-                f"nosub={nosub})",
-            )
-
-    try:
-        # Stay alive across Studio disconnects; only tap stdin EOF ends the bridge.
-        # (GMT Live is a sibling process — its exit must not reach here via pipe break.)
-        while not stdin_eof:
-            rlist: list[Any] = [srv]
-            if fd >= 0 and not stdin_eof:
-                rlist.append(fd)
-            if conn is not None:
-                rlist.append(conn)
-
-            try:
-                ready, _, _ = select.select(rlist, [], [], 0.2)
-            except InterruptedError:
-                continue
-
-            try:
-                # Accept Studio anytime (single client; new accept after disconnect)
-                if conn is None and srv in ready:
-                    try:
-                        new_conn, addr = srv.accept()
-                    except OSError as exc:
-                        # EMFILE often = camera GfChannelReader/CDLL spam or leftover SIL bridges.
-                        errno = getattr(exc, "errno", None)
-                        hint = ""
-                        if errno == 24:  # EMFILE
-                            hint = (
-                                " — Too many open files: stop other run_sil/GMT bridges, "
-                                "or raise ulimit -n; camera open now backoffs ≤1 Hz"
-                            )
-                        _status("err", f"accept error: {exc}{hint}")
-                    else:
-                        who = f"{addr[0]}:{addr[1]}"
-                        new_state = SessionState()
-                        try:
-                            if not _ws_handshake(new_conn):
-                                _status("err", f"HANDSHAKE_FAIL peer={who}")
-                                new_conn.close()
-                            else:
-                                _send_json(new_conn, server_info_payload("gf_gmt-bridge-live"))
-                                new_state.advertise_topics(new_conn, seed)
-                                for t, cid in sorted(
-                                    new_state.topic_to_channel.items(), key=lambda x: x[1]
-                                ):
-                                    _status("listen", f"channel {cid} = {t}")
-                                if cam_pub is not None:
-                                    _status(
-                                        "listen",
-                                        f"Studio Image → {TOPIC_DRIVING_CAM}",
-                                    )
-                                conn = new_conn
-                                state = new_state
-                                peer_label = who
-                                _status("ok", f"CONNECTED peer={who} (listen :{port})")
-                                _status(
-                                    "listen",
-                                    "Studio: Image panel = camera only. "
-                                    "Add Raw Messages (or Plot) and select "
-                                    "/gf/EgoMotion /gf/Trajectory /gf/Perception_MESSAGE_Out_St "
-                                    "— otherwise nosub drops those frames.",
-                                )
-                        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                            _status("err", f"handshake failed peer={who}: {exc}")
-                            try:
-                                new_conn.close()
-                            except OSError:
-                                pass
-
-                # Poll client control frames (subscribe / close)
-                if conn is not None and state is not None:
-                    try:
-                        if not state.poll_client(conn):
-                            _close_client(reason="client closed")
-                        elif cam_pub is not None and TOPIC_DRIVING_CAM in (
-                            state.subscribed_topics_this_poll or []
-                        ):
-                            cam_pub.request_resend()
-                    except (BrokenPipeError, ConnectionResetError, OSError) as exc:
-                        _close_client(reason=f"client gone: {exc}")
-
-                # Always drain stdin so the tap pipe never backs up (prefer over camera).
-                lines: list[str] = []
-                if fd >= 0 and fd in ready:
-                    # Read until EAGAIN / short read so Ego/Perc are not starved by JPEG.
-                    for _ in range(64):
-                        chunk = os_read_chunk(inp, size=65536)
-                        if chunk == "":
-                            if not buf and not lines:
-                                stdin_eof = True
-                                _status("bye", "stdin EOF")
-                            break
-                        buf += chunk
-                        while "\n" in buf:
-                            line, buf = buf.split("\n", 1)
-                            lines.append(line)
-                        if len(chunk) < 65536:
-                            break
-                elif fd < 0 and not stdin_eof:
-                    # Non-selectable stream (tests): blocking readline with short idle
-                    line = inp.readline()
-                    if line == "":
-                        stdin_eof = True
-                    else:
-                        lines.append(line.rstrip("\n"))
-
-                for line in lines:
-                    row = parse_ndjson_row(line)
-                    if row is None:
-                        stripped = line.strip()
-                        if stripped.startswith("{") and len(stripped) > 1:
-                            _status("err", f"bad json (skipped): {stripped[:80]!r}")
-                        continue
-                    topic = str(row.get("topic") or "/gf/stub")
-                    t_ns = int(row.get("t_ns") or 0)
-                    data = row.get("data", row)
-                    # AdasDemo is script-only: feed BEV, never publish to Studio.
-                    if not is_adas_demo_topic(topic):
-                        _publish_row(topic, t_ns, data)
-                    if bev is not None:
-                        cam = bev.update(row)
-                        if cam is not None:
-                            _publish_row(
-                                TOPIC_BEV,
-                                int(cam["t_ns"]),
-                                cam["data"],
-                            )
-
-                # Periodic: prove tap is alive even when Studio only subscribed camera.
-                now_mono = time.monotonic()
-                if now_mono - status_at >= 5.0:
-                    status_at = now_mono
-                    _status(
-                        "ok",
-                        "tap→bridge "
-                        f"ego_in={by_topic_in.get('/gf/EgoMotion', 0)} "
-                        f"traj_in={by_topic_in.get('/gf/Trajectory', 0)} "
-                        f"perc_in={by_topic_in.get('/gf/Perception_MESSAGE_Out_St', 0)} | "
-                        f"studio_fwd ego={by_topic.get('/gf/EgoMotion', 0)} "
-                        f"traj={by_topic.get('/gf/Trajectory', 0)} "
-                        f"perc={by_topic.get('/gf/Perception_MESSAGE_Out_St', 0)} "
-                        f"cam={by_topic.get(TOPIC_DRIVING_CAM, 0)} | "
-                        f"nosub_ego={by_topic_nosub.get('/gf/EgoMotion', 0)} "
-                        f"nosub_perc={by_topic_nosub.get('/gf/Perception_MESSAGE_Out_St', 0)}",
-                    )
-                    # Surface hint inside Studio (Problems / status), not only terminal.
-                    if (
-                        conn is not None
-                        and state is not None
-                        and (
-                            by_topic_nosub.get("/gf/EgoMotion", 0) > 0
-                            or by_topic_nosub.get("/gf/Perception_MESSAGE_Out_St", 0) > 0
-                        )
-                        and by_topic.get("/gf/EgoMotion", 0) == 0
-                        and by_topic.get("/gf/Perception_MESSAGE_Out_St", 0) == 0
-                    ):
-                        try:
-                            _send_json(
-                                conn,
-                                {
-                                    "op": "status",
-                                    "level": 1,
-                                    "id": "gf-nosub-hint",
-                                    "message": (
-                                        "Giraffe: tap is live but Studio has not subscribed. "
-                                        "Add panel → Raw Messages → topic /gf/EgoMotion "
-                                        "(and /gf/Perception_MESSAGE_Out_St). "
-                                        "Image panel alone only gets the camera topic."
-                                    ),
-                                },
-                            )
-                        except OSError:
-                            pass
-
-                # Real front camera on the same pipe (poll even when stdin idle).
-                if cam_pub is not None:
-                    cam_row = cam_pub.poll()
-                    if cam_row is not None:
-                        data = cam_row["data"]
-                        before = by_topic.get(TOPIC_DRIVING_CAM, 0)
-                        _publish_row(TOPIC_DRIVING_CAM, int(cam_row["t_ns"]), data)
-                        if by_topic.get(TOPIC_DRIVING_CAM, 0) > before:
-                            cam_pub_count += 1
-                        if not cam_logged:
-                            cam_logged = True
-                            _status(
-                                "ok",
-                                f"camera frame → {TOPIC_DRIVING_CAM} "
-                                f"{cam_row.get('data', {}).get('format', '?')}",
-                            )
-                        now = time.monotonic()
-                        if cam_pub_count and now - cam_hb_at >= 5.0:
-                            cam_hb_at = now
-                            dig = int(getattr(cam_pub, "last_digest", 0) or 0)
-                            prev = int(getattr(cam_pub, "_hb_prev_digest", dig) or dig)
-                            cam_pub._hb_prev_digest = dig  # type: ignore[attr-defined]
-                            changed = "pixels≈changed" if dig != prev else "pixels≈same"
-                            _status(
-                                "ok",
-                                f"camera live sent={cam_pub_count} "
-                                f"seq≈{getattr(cam_pub, 'last_seq_pub', getattr(cam_pub, '_last_seq', '?'))} "
-                                f"digest=0x{dig:08x} ({changed})",
-                            )
-            except Exception as exc:  # noqa: BLE001 — Studio disconnect must not kill bridge
-                _status("err", f"client cycle error (bridge stays up): {exc}")
-                _close_client(reason=f"error: {exc}")
-    except KeyboardInterrupt:
-        _status("bye", "stopped")
-    finally:
-        _close_client(reason="bridge exit")
-        try:
-            srv.close()
-        except OSError:
-            pass
-        _status("bye", f"exit published={published} dropped={dropped}")
-
-
-def os_read_chunk(stream: TextIO, size: int = 4096) -> str:
-    try:
-        raw = os.read(stream.fileno(), size)
-    except OSError:
-        return ""
-    if not raw:
-        return ""
-    return raw.decode("utf-8", errors="replace")
-
-
 def main_bridge(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="GMT bridge foxglove")
     p.add_argument("--mcap", type=Path, default=None)
     p.add_argument("--jsonl", type=Path, default=None, help="For --ws replay")
     p.add_argument("--serve", action="store_true", help="HTTP-serve MCAP directory")
-    p.add_argument("--ws", action="store_true", help="WebSocket (replay or live)")
-    p.add_argument(
-        "--stdin",
-        action="store_true",
-        help="With --ws: live NDJSON from stdin (iox_obs_tap pipe)",
-    )
+    p.add_argument("--ws", action="store_true", help="WebSocket JSONL replay")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--speed", type=float, default=1.0)
     p.add_argument(
         "--synth-bev",
         action="store_true",
-        help="Compose BEV CompressedImage from EgoMotion/Trajectory (live or jsonl)",
-    )
-    p.add_argument(
-        "--bev-script",
-        type=Path,
-        default=None,
-        help="Scenario JSONL with AdasDemo frames — used only to enrich BEV Image "
-        "(not published as /gf/AdasDemo)",
-    )
-    p.add_argument(
-        "--camera-frame",
-        type=Path,
-        default=None,
-        help="SIL file bypass: poll camera YUV/RGB path for "
-        "/gf/driving/camera/front/compressed (prefer --camera-slot)",
-    )
-    p.add_argument(
-        "--camera-slot",
-        type=str,
-        default=None,
-        help="GfChannel shm slot (e.g. gf.channel.front) for driving camera on same Foxglove WS",
+        help="Compose BEV CompressedImage from EgoMotion/Trajectory in the JSONL",
     )
     args = p.parse_args(argv)
 
@@ -955,25 +556,9 @@ def main_bridge(argv: list[str] | None = None) -> int:
 
     if args.ws:
         try:
-            if args.stdin:
-                live_stdin_ws(
-                    args.host,
-                    args.port,
-                    synth_bev=bool(args.synth_bev),
-                    bev_script=args.bev_script,
-                    camera_frame=args.camera_frame,
-                    camera_slot=args.camera_slot,
-                )
-                return 0
             src = args.jsonl
-            if src is None and args.mcap is not None:
-                print(
-                    "--ws needs --jsonl or --stdin (MCAP live decode not supported)",
-                    flush=True,
-                )
-                return 2
             if src is None or not src.is_file():
-                print("need --jsonl FILE or --stdin with --ws", flush=True)
+                print("need --jsonl FILE with --ws (live stdin is C gf_foxglove_ws)", flush=True)
                 return 2
             replay_jsonl_ws(
                 src,
@@ -991,8 +576,7 @@ def main_bridge(argv: list[str] | None = None) -> int:
             return 1
 
     print(
-        "usage: GMT bridge foxglove --mcap FILE [--serve] "
-        "| --ws --jsonl FILE | --ws --stdin",
+        "usage: GMT bridge foxglove --mcap FILE [--serve] | --ws --jsonl FILE",
         flush=True,
     )
     return 2

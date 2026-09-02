@@ -4,8 +4,8 @@
 > 设计背景：[DESIGN.md](../architecture/DESIGN.md)  
 > 配置规格：[MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md)
 
-本文将平台交付划分为 **P0–P3**。**P0–P2.5 已收口**（桌面 MVP：gf-config · 多进程 SIL · GMT/Foxglove）。  
-**当前阶段：P3（深化与扩大）** — 主航道是配置器/中间件/经得起认证的支持/DoIP·OTA；真板与真 MCU 为冲刺门禁。
+本文将平台交付划分为 **P0–P3**。**P0–P2.5 已收口**（gf-config · 多进程 SIL · GMT/Foxglove）。仓内 FCM + 规划是 **闭环载荷**，用来验证中间件与工具（时延、隔离、故障定位、CI/CD），不是交付感知/规划产品。  
+**当前阶段：P3（深化与扩大）** — 主航道是配置器/中间件/经得起认证的支持/DoIP·OTA；**真机是 last mile**（板 / MCU 冲刺门禁）。台上过了，再 CD。
 
 | 文档 | 用途 |
 |------|------|
@@ -217,7 +217,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 
 ## 下一步
 
-1. **产品 demo：** CARLA → FCM（假感知填金样 Out）→ iceoryx → Foxglove/BEV；planning 硬切吃 Out（file truth 旁路已删）。C2 运行时加深后置。
+1. **闭环载荷（SIL）：** CARLA → FCM（假感知填金样 Out）→ iceoryx → Foxglove/BEV；planning 硬切吃 Out（file truth 旁路已删）。用来压 com / GMT / 时延，不是交付感知或规划。C2 运行时加深后置。
 2. **板端零 Python：** 上板 `runtime/`（含 **frame_ingest** 及一切 GMT/EM 会拉起的板端二进制）**不得依赖 Python** — 见 [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md) `BL-BOARD-NO-PY`。Python 仅宿主机 SIL（`carla_bridge` / scenarios / gf-config / GMT PC 侧）。
 3. 云 CI：L0 + 路径 L0b + nightly/发版（见 [devops/ci/README.md](../../../devops/ci/README.md)）。
 4. **后期（登记，本轮不做）：**
@@ -235,7 +235,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | 配置 freeze → hpp；白名单可运行期 JSON；行为进 constexpr | `BL-CFG-YAML-FALLBACK`（删 yaml 回落） |
 | `camera_slot` / driving·parking topic；产品 tip 词清退 | — |
 | Foxglove 相机主路径 + hero 换场重挂（SIL） | 换场相机空窗压到可接受 |
-| Client A（scenarios）/ B（ingest）职责与相机契约文档 | 假感知→planning demo 再压车道线可视化 |
+| Client A（scenarios）/ B（ingest）职责与相机契约文档 | 载荷可视化（车道线）再压 |
 | **政策：**板端 runtime / GMT 依赖 **零 Python**（含 **整条 frame_ingest**，非仅 ISP） | **实现** `BL-BOARD-NO-PY`（板端 C++ ISP/V4L，SIL py 模块不上板） |
 | **afc：** Out 金样（DYN+LH+LA）→planning lite（ACC/AEB+LH 居中）+ BEV；量程/质量门控/车道锚；归档见 [fcm_gold_and_planning_lite.md](../driving/fcm_gold_and_planning_lite.md) | In 金样（CamCalib）；真检测；视频叠框；全 scenario 质量字段 |
 | — | `BL-STAGE-PY-MTIME`；云 CI；P3z 真板 |

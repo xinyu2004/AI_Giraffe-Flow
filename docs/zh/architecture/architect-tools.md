@@ -9,7 +9,7 @@
 | Lineage | gf-config 页 1 右侧 + `GMT architect lineage` |
 | 录制 / 可编辑 Tag / 主机回放 | **`GMT gui`** + `GMT measure …` |
 | 动画 DAG / 先后竞态 | GMT GUI（同一时间轴） |
-| Foxglove | `GMT bridge foxglove`（live 或 JSONL） |
+| Foxglove | SIL 直播 `gf_foxglove_ws`；离线 `GMT bridge foxglove --ws --jsonl` |
 | DoIP / UDS 操作 | GMT **OTA/UDS**（OTA · DEM-lite · Collector；配置在 gf-config） |
 | 中间件回灌（G3） | **`gf_iox_obs_inject`** + GMT「回灌」页（playhead）；禁止双发布 |
 
@@ -32,7 +32,7 @@ Tag 持久化：`session.tags.json`（可改名/改窗/topics/备注）。
 
 ## 回灌
 
-见 [iox_obs_inject README](../../../tools/debug_bridge/iox_obs_inject/README.md)：
+见 [iox_obs_inject README](../../../tools/gmt_board/iox_obs_inject/README.md)：
 
 - **拓扑 B1/B2**：`run_sil` 决定起哪些进程  
 - **灌法 continuous / playhead**：playhead 时 inject 等 GMT seek（tcp:8767）  

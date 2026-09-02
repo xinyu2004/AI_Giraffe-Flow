@@ -7,8 +7,9 @@ from typing import Any
 PROFILE_DEBUG = "vehicle-debug"
 PROFILE_RELEASE = "production-release"
 VALID_PROFILES = frozenset({PROFILE_DEBUG, PROFILE_RELEASE})
-TAP_APP = "debug_bridge/iox_obs_tap"
-INJECT_APP = "debug_bridge/iox_obs_inject"
+TAP_APP = "gmt_board/iox_obs_tap"
+INJECT_APP = "gmt_board/iox_obs_inject"
+FOX_APP = "gmt_board/iox_obs_foxglove"
 
 # live_tap.mode
 MODE_EXPLICIT = "explicit"  # req whitelist
@@ -115,12 +116,13 @@ def effective_apps(
     *,
     wiring: dict[str, Any] | None = None,
 ) -> list[str]:
-    """Apps list for GF_APPS: strip/add iox_obs_tap; add inject on vehicle-debug."""
+    """Apps list for GF_APPS: strip/add tap+foxglove; add inject on vehicle-debug."""
     apps = [str(x).strip() for x in (req.get("apps") or []) if str(x).strip()]
-    apps = [a for a in apps if a not in {TAP_APP, INJECT_APP}]
+    apps = [a for a in apps if a not in {TAP_APP, INJECT_APP, FOX_APP}]
     enabled, _svcs = live_tap_config(req, wiring=wiring)
     if enabled:
         apps.append(TAP_APP)
+        apps.append(FOX_APP)
     if normalize_profile(req) == PROFILE_DEBUG:
         apps.append(INJECT_APP)
     return apps

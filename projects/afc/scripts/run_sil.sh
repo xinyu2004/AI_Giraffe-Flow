@@ -4,7 +4,7 @@
 #
 # Config truth = gf-config Verify(+Generate) → generated/ + compile binaries.
 # compile/run do NOT compose.
-#   live_tap effective → gf_iox_obs_tap | GMT bridge foxglove --ws
+#   live_tap effective → gf_foxglove_ws :8765 (C) + gf_iox_obs_tap JSONL
 #   else → main chain only until Ctrl+C
 #
 # Usage:
@@ -489,6 +489,7 @@ FCM="${RUNTIME}/bin/gf_perception_fcm"
 USS="${RUNTIME}/bin/gf_sensing_uss"
 PLAN="${RUNTIME}/bin/gf_planning_driving"
 TAP="${RUNTIME}/bin/gf_iox_obs_tap"
+FOX="${RUNTIME}/bin/gf_foxglove_ws"
 INJ="${RUNTIME}/bin/gf_iox_obs_inject"
 DOIP="${RUNTIME}/bin/gf_doip_ota_server"
 DLT_DAEMON="${RUNTIME}/bin/dlt-daemon"
@@ -532,7 +533,7 @@ if [[ "${INJECT_ON}" == "1" ]]; then
   fi
 fi
 if [[ "${LIVE_ON}" == "1" ]]; then
-  NEED_BINS+=("${TAP}")
+  NEED_BINS+=("${TAP}" "${FOX}")
 fi
 if [[ "${DOIP_ON}" == "1" ]]; then
   NEED_BINS+=("${DOIP}")
@@ -544,8 +545,11 @@ for bin in "${NEED_BINS[@]}"; do
     if [[ "${bin}" == "${TAP}" ]]; then
       echo "live_tap is on but tap binary missing — check profile=vehicle-debug + live in gf-config." >&2
     fi
+    if [[ "${bin}" == "${FOX}" ]]; then
+      echo "live_tap is on but gf_foxglove_ws missing — re-run compile_sil (gmt_board/iox_obs_foxglove)." >&2
+    fi
     if [[ "${bin}" == "${INJ}" ]]; then
-      echo "inject binary missing — vehicle-debug compose should add debug_bridge/iox_obs_inject; re-run compile_sil." >&2
+      echo "inject binary missing — vehicle-debug compose should add gmt_board/iox_obs_inject; re-run compile_sil." >&2
     fi
     if [[ "${bin}" == "${DOIP}" ]]; then
       echo "DoIP OTA server missing — rebuild (target gf_doip_ota_server) or set GF_DOIP=0." >&2

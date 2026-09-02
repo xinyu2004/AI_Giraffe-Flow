@@ -125,41 +125,18 @@ def main(argv: list[str] | None = None) -> int:
 
     p_br = sub.add_parser("bridge", help="Visualization bridges")
     br_sub = p_br.add_subparsers(dest="br_cmd", required=True)
-    p_fox = br_sub.add_parser("foxglove", help="Foxglove Studio helper / WS (offline + live)")
+    p_fox = br_sub.add_parser("foxglove", help="Foxglove Studio helper / JSONL replay")
     p_fox.add_argument("--mcap", type=Path, default=None)
     p_fox.add_argument("--jsonl", type=Path, default=None)
     p_fox.add_argument("--serve", action="store_true")
     p_fox.add_argument("--ws", action="store_true")
-    p_fox.add_argument(
-        "--stdin",
-        action="store_true",
-        help="With --ws: live NDJSON from stdin (pipe from gf_iox_obs_tap)",
-    )
     p_fox.add_argument("--host", default="127.0.0.1")
     p_fox.add_argument("--port", type=int, default=8765)
     p_fox.add_argument("--speed", type=float, default=1.0)
     p_fox.add_argument(
         "--synth-bev",
         action="store_true",
-        help="Compose BEV from EgoMotion/Trajectory (live --stdin or --jsonl)",
-    )
-    p_fox.add_argument(
-        "--bev-script",
-        type=Path,
-        default=None,
-        help="Scenario JSONL (AdasDemo) → enrich BEV Image only; not published to Studio",
-    )
-    p_fox.add_argument(
-        "--camera-frame",
-        type=Path,
-        default=None,
-        help="SIL file bypass camera YUV/RGB (prefer --camera-slot GfChannel)",
-    )
-    p_fox.add_argument(
-        "--camera-slot",
-        type=str,
-        default=None,
-        help="GfChannel shm slot for driving camera (e.g. gf.channel.front)",
+        help="Compose BEV from EgoMotion/Trajectory in the JSONL",
     )
 
     p_live = br_sub.add_parser(
@@ -320,16 +297,8 @@ def main(argv: list[str] | None = None) -> int:
             fox_argv.append("--serve")
         if args.ws:
             fox_argv.append("--ws")
-        if getattr(args, "stdin", False):
-            fox_argv.append("--stdin")
         if getattr(args, "synth_bev", False):
             fox_argv.append("--synth-bev")
-        if getattr(args, "bev_script", None) is not None:
-            fox_argv += ["--bev-script", str(args.bev_script)]
-        if getattr(args, "camera_frame", None) is not None:
-            fox_argv += ["--camera-frame", str(args.camera_frame)]
-        if getattr(args, "camera_slot", None):
-            fox_argv += ["--camera-slot", str(args.camera_slot)]
         fox_argv += ["--host", args.host, "--port", str(args.port), "--speed", str(args.speed)]
         return main_bridge(fox_argv)
 

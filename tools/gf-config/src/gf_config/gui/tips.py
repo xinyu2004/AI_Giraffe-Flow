@@ -381,7 +381,7 @@ SKU_PROFILE_ITEMS: dict[str, str] = {
 }
 SKU_LIVE = (
     "Live tap：把画布上的服务镜像到观测工具。"
-    "开启后 compose 会加入 debug_bridge/iox_obs_tap，run_sil 可接 Foxglove WebSocket。"
+    "开启后 compose 会加入 gmt_board/iox_obs_tap，run_sil 可接 Foxglove WebSocket。"
 )
 SKU_LIVE_MODE = (
     "live 服务范围：\n"

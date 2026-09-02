@@ -139,13 +139,12 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/middleware/bindings/gf_channel/CMakeLists.txt")
 endif()
 
 # --- apps from req.apps ---
-# Prefer tools/<path> for debug_bridge/*; then projects/<oem>/<sku>/apps/<path>;
+# Prefer tools/<path> (gmt_board/* …); then projects/<oem>/<sku>/apps/<path>;
 # fall back to shared apps/<path>. Binary dir stays build/apps/<path> for run scripts.
 if(DEFINED GF_APPS)
   foreach(_gf_app IN LISTS GF_APPS)
     set(_gf_apath "")
-    if(_gf_app MATCHES "^debug_bridge/"
-       AND EXISTS "${CMAKE_SOURCE_DIR}/tools/${_gf_app}/CMakeLists.txt")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/tools/${_gf_app}/CMakeLists.txt")
       set(_gf_apath "${CMAKE_SOURCE_DIR}/tools/${_gf_app}")
     endif()
     if(_gf_apath STREQUAL "" AND DEFINED GF_PROJECT_DIR AND NOT GF_PROJECT_DIR STREQUAL "")
@@ -168,8 +167,7 @@ if(DEFINED GF_APPS)
          OR _gf_app STREQUAL "perception/fcm"
          OR _gf_app STREQUAL "sensing/uss"
          OR _gf_app STREQUAL "planning/driving"
-         OR _gf_app STREQUAL "debug_bridge/iox_obs_tap"
-         OR _gf_app STREQUAL "debug_bridge/iox_obs_inject")
+         OR _gf_app MATCHES "^gmt_board/")
         message(STATUS "Giraffe Flow: skip app '${_gf_app}' (needs GF_WITH_ICEORYX)")
         continue()
       endif()
