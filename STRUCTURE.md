@@ -18,7 +18,6 @@ AI_Giraffe-Flow/
   carla_scenarios/    # host CARLA Client A (place/IC; not under SKU)
   devops/             # bench CI → CD last mile (hardware)
   fusa/               # Functional Safety → Safety Case evidence
-  schemas/
   dep-manifest/       # dependency pins + bootstrap.sh (checkouts → middleware/third_party/)
   cmake/ scripts/ docs/
   result_pic/         # README assets (Giraffe_Flow/, Giraffe_Modules/, screenshots)
@@ -82,13 +81,12 @@ AI_Giraffe-Flow/
 │
 ├── tools/
 │   ├── gf-config/                # author GUI (was tools/config)
-│   ├── gf-codegen/               # compose/lint/generate (was tools/codegen)
+│   ├── gf-codegen/               # compose/lint/generate + schemas/ (SOR contract)
 │   ├── gf-octavecoder/           # .m gold → C 1:1
 │   ├── gmt/                      # observe / inject / OTA sheet (no config write)
 │   ├── gmt_board/                # tap / inject / gf_foxglove_ws (SIL/board side of GMT)
 │   └── tests/                    # tool unit tests (pytest per package also OK)
 │
-├── schemas/                      # gf.sor contract + examples
 ├── cmake/                        # profiles, toolchain
 ├── scripts/                      # repo-wide helpers（SKU smoke 在 project 内）
 │   ├── bootstrap_deps.sh         # → dep-manifest/bootstrap.sh

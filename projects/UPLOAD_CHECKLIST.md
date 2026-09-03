@@ -28,7 +28,7 @@
 | `tools/gf-codegen/`、`tools/gf-config/`、`tools/gmt/`、`tools/gmt_board/`、`tools/gf-octavecoder/` | 配置 / 生成 / 观测；板上 Foxglove 在 gmt_board |
 | `projects/` | 集成输入 + 项目脚本；契约在 `req.yaml`；`adc` / `afc` 均可 compose |
 | `apps/` | 参考 App 源码 |
-| `schemas/`、`cmake/`、`scripts/`、`dep-manifest/`、`docs/`、`devops/`、`common/deploy/` | 契约、构建、CI 门禁、板端 unit 样例、文档 |
+| `tools/gf-codegen/schemas/`、`cmake/`、`scripts/`、`dep-manifest/`、`docs/`、`devops/`、`common/deploy/` | SOR 契约、构建、CI 门禁、板端 unit 样例、文档 |
 | 根 `README*`、`STRUCTURE.md`、`.gitignore` | |
 
 ## 他人拿到后怎么跑

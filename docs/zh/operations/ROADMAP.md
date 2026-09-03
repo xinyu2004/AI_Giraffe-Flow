@@ -37,7 +37,7 @@
 
 | # | 交付物 | 路径 / 说明 | 状态 |
 |---|--------|-------------|------|
-| P0-1 | SOR schema **0.2** 字段级冻结（子集） | `schemas/gf.sor.schema.json` | ✅ |
+| P0-1 | SOR schema **0.2** 字段级冻结（子集） | `tools/gf-codegen/schemas/gf.sor.schema.json` | ✅ |
 | P0-2 | `gf-codegen`：compose / lint / generate | `tools/gf-codegen/` | ✅ |
 | P0-3 | `gf_ara::core` Result/ErrorCode | `middleware/core/` | ✅ |
 | P0-4 | `gf_ara::com` Event + iceoryx | `middleware/com/`, `middleware/bindings/iceoryx/` | ✅ |

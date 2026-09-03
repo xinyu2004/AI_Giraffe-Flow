@@ -34,6 +34,7 @@ pytest tools/gf-codegen/tests -q
 | 工作 SOR | `projects/.../gf.sor.json` | 否（gitignore） |
 | lineage | `projects/.../reports/signal_lineage_report.yaml` | 否（gitignore） |
 | generate | `projects/.../generated/include/gf_gen/{types,proxy,skeleton}/` | 否（`**/generated/` ignore） |
+| **SOR schema** | [`schemas/`](schemas/)（`gf.sor.schema.json` + examples） | 是（随工具，不在仓库根） |
 
 **注意：** `pytest tools/gf-codegen/tests` 必须在**仓库根**跑；在 `generated/...` 子目录会报 `file or directory not found`。
 

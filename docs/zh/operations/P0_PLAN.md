@@ -86,7 +86,7 @@ flowchart TD
 | 包布局 | `tools/gf-codegen/`（`pyproject.toml` 或可 `pip install -e`） |
 | 入口 | 控制台脚本 `gf-codegen` |
 | DBC | **cantools**（主机依赖，P0 为 compose/import 提前启用） |
-| YAML/JSON | PyYAML + json；对照 `schemas/gf.sor.schema.json` |
+| YAML/JSON | PyYAML + json；对照 `tools/gf-codegen/schemas/gf.sor.schema.json` |
 | hpp 解析 | P0：**正则/简易 Clang 无关解析**（只抽 `struct` 名与字段类型）；复杂宏/模板不支持 |
 | 不做 | GUI、ARXML、完整 C++ AST、把 codegen 打进板端镜像 |
 

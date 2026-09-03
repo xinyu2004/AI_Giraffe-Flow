@@ -12,6 +12,7 @@ from gf_codegen.emit_idl import write_idl
 from gf_codegen.generate_cmd import generate
 from gf_codegen.lint_cmd import lint_file
 from gf_codegen.paths import find_repo_root
+from gf_codegen.schema_load import default_schema_path
 from gf_codegen.suggest_cmd import suggest_wiring
 
 
@@ -68,8 +69,8 @@ def main(argv: list[str] | None = None) -> int:
             except FileNotFoundError:
                 root = None
         schema = args.schema
-        if schema is None and root is not None:
-            schema = root / "schemas" / "gf.sor.schema.json"
+        if schema is None:
+            schema = default_schema_path(root)
         return lint_file(args.sor, schema_path=schema)
 
     if args.cmd == "suggest":

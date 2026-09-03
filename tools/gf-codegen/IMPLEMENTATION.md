@@ -108,13 +108,13 @@ pytest tools/gf-codegen/tests -q
 用 `argparse` 即可（少依赖）：
 
 ```text
-gf-codegen lint <sor.json> [--schema schemas/gf.sor.schema.json]
+gf-codegen lint <sor.json> [--schema tools/gf-codegen/schemas/gf.sor.schema.json]
 gf-codegen compose --project <project.yaml> [--out PATH] [--repo-root PATH]
 gf-codegen suggest wiring --project <project.yaml> [--write]
 gf-codegen generate <sor.json> --out <dir>
 ```
 
-`--repo-root` 默认：从 `project.yaml` 向上找含 `schemas/` 与 `projects/` 的目录；测试里可显式传入。
+`--repo-root` 默认：从 `project.yaml` 向上找含 `tools/gf-codegen/` 与 `projects/` 的目录；测试里可显式传入。
 
 ---
 
@@ -131,7 +131,7 @@ gf-codegen generate <sor.json> --out <dir>
 **算法：**
 
 1. `json.load` SOR  
-2. 用 `jsonschema` 校验 `schemas/gf.sor.schema.json`（当前 schema 较松，主要抓缺 `schema_version/types/services/deployments`）  
+2. 用 `jsonschema` 校验 `tools/gf-codegen/schemas/gf.sor.schema.json`（当前 schema 较松，主要抓缺 `schema_version/types/services/deployments`）  
 3. **额外硬规则**（schema 未写死的也要查）：  
    - `services[].id` 唯一  
    - `deployments[].process` 唯一  
@@ -141,7 +141,7 @@ gf-codegen generate <sor.json> --out <dir>
 
 ```bash
 gf-codegen lint projects/adc/golden/gf.sor.json
-gf-codegen lint schemas/examples/desktop_ap_only.sor.json
+gf-codegen lint tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json
 # 故意删掉 deployments 应非 0 退出
 ```
 
@@ -201,7 +201,7 @@ P0：按 `types[]` 生成 POD struct 头文件即可；Proxy/Skeleton 可先空�
 | `oem.manifest` | `oem/oem_import.yaml` |
 | `integration.wiring` | `integration/wiring.yaml` |
 | `delivery.req` | `req.yaml` |
-| `base` | 相对 **repo root**：`schemas/examples/desktop_ap_only.sor.json` |
+| `base` | 相对 **repo root**：`tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json` |
 | `out` | 默认写到 project 目录下 `gf.sor.json`（或 `--out`） |
 | `lineage.report` | `reports/signal_lineage_report.yaml` |
 

@@ -178,7 +178,7 @@ OEM 换信号表时，优先改 gateway + 映射，**尽量不改编感知 / 规
 | 层 | 职责 | 仓库 |
 |----|------|------|
 | **适配器** | OEM、传感器 SDK、**mcu.cp_gateway** | 平台 monorepo `apps/adapters/` |
-| **语义契约** | `semantic.*` 服务 | `schemas/` + SOR |
+| **语义契约** | `semantic.*` 服务 | `tools/gf-codegen/schemas/` + 合成后的 SOR |
 | **业务组件** | 感知、规划等 | **外部量产仓**；平台用 `apps/simulators/` |
 
 **组件无感：** 业务只依赖 `gf_ara` semantic 服务；OEM 差异在 adapter/gateway。
@@ -316,10 +316,9 @@ OTA 后端候选：RAUC、OSTree；**不含 SWUpdate**。真刷写 → P3z。
 
 ```text
 AI_Giraffe-Flow/
-  schemas/                 # SOR 契约，semver
   middleware/              # 板端 runtime：core/com/bindings/osal/hal/…
     third_party/           # 上游检出（钉扎后）
-  tools/gf-codegen/        # gf-codegen
+  tools/gf-codegen/        # gf-codegen + schemas/（SOR 契约）
   tools/gf-config/         # author GUI
   tools/gf-octavecoder/    # .m → C
   tools/gmt/               # GMT host

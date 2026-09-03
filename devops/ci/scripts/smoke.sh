@@ -30,7 +30,7 @@ python -m gf_codegen.compose --project projects/adc/project.yaml
 gf-codegen lint projects/adc/gf.sor.json
 
 echo "== lint schema example =="
-gf-codegen lint schemas/examples/desktop_ap_only.sor.json
+gf-codegen lint tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json
 
 echo "== cmake host build (desktop_default) =="
 # Clean CI tree: one configure + build + ctest is expected.

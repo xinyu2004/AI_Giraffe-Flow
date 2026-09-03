@@ -122,7 +122,7 @@ python -m gf_codegen.compose --project projects/afc/project.yaml
 | R7.2 | architect lineage | `GMT architect lineage --project projects/afc/project.yaml` → PASS | □ | □ | □ | |
 | R7.3 | architect dag | `GMT architect dag --project …` 输出 nodes/edges JSON | □ | □ | □ | |
 | R7.4 | measure export | `GMT measure export --in tools/gmt/fixtures/session_stub.jsonl --out /tmp/x.mcap`；文件以 `\x89MCAP0` 开头 | □ | □ | □ | |
-| R7.5 | ARXML import | `gf-codegen import arxml schemas/examples/oem/demo_faracon_subset.arxml` → candidates 含 EgoMotion | □ | □ | □ | |
+| R7.5 | ARXML import | `gf-codegen import arxml tools/gf-codegen/schemas/examples/oem/demo_faracon_subset.arxml` → candidates 含 EgoMotion | □ | □ | □ | |
 | R7.6 | CI 挂钩 | `devops/ci/scripts/smoke.sh` 含 GMT architect + pytest | □ | □ | □ | |
 | R7.7 | 边界 | 无 Foxglove 桥；无内嵌 FARACON；ARXML 仅为子集 | □ | □ | □ | |
 

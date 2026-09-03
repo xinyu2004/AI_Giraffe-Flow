@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from gf_codegen.paths import find_repo_root
 from gf_codegen.schema_load import default_schema_path, load_schema, validate_sor
 
 
@@ -50,7 +49,7 @@ def lint_file(sor_path: Path, schema_path: Path | None = None) -> int:
 
     if schema_path is None:
         try:
-            schema_path = default_schema_path(find_repo_root(sor_path.parent))
+            schema_path = default_schema_path()
         except FileNotFoundError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2

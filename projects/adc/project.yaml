@@ -4,7 +4,7 @@ project_id: adc
 customer_id: oem
 product: ADC
 
-base: schemas/examples/desktop_ap_only.sor.json
+base: tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json
 out: gf.sor.json
 
 oem:

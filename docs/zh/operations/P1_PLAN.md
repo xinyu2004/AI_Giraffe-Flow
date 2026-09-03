@@ -194,7 +194,7 @@ iceoryx 路径：  hpp / fidl 进 SOR types → iceoryx binding（不用 fdepl /
 - [x] GMT `architect lineage|dag` CI 只读（`tools/gmt` · **`GMT` CLI**）  
 - [x] `GMT measure export` JSONL → MCAP 雏形（无 Foxglove 桥）  
 - [x] ARXML 子集 import：`gf-codegen import arxml` + `parse_arxml`（可消费 FARACON 产出）  
-- [x] 样例：`schemas/examples/oem/demo_faracon_subset.arxml`  
+- [x] 样例：`tools/gf-codegen/schemas/examples/oem/demo_faracon_subset.arxml`  
 - [x] GMT architect lineage + pytest；CI `smoke.sh` 已挂（原 `scripts/smoke_ta.sh` 已删）
 
 ### 接口语言配对（§3.0b · 已纳入）

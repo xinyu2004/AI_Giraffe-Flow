@@ -31,8 +31,7 @@ Giraffe Flow 板端与工具链按三层分工，避免「业务改中间件、O
 | [`middleware/bindings/`](../../middleware/bindings/) | 传输插件；P0 为 [`iceoryx/`](../../middleware/bindings/iceoryx/) |
 | [`middleware/osal/`](../../middleware/osal/) | `gf::osal`：单调时钟、sleep |
 | [`cmake/`](../../cmake/)、[`scripts/bootstrap_deps.sh`](../../scripts/bootstrap_deps.sh) | 构建与第三方源码拉取 |
-| [`tools/gf-codegen/`](../../tools/gf-codegen/) | 主机工具本身（Python；**不上板**） |
-| [`schemas/`](../../schemas/) | SOR 契约 / 示例 |
+| [`tools/gf-codegen/`](../../tools/gf-codegen/) | 主机工具 + [`schemas/`](../../tools/gf-codegen/schemas/)（SOR 契约；**不上板**） |
 
 对外命名空间示例：`gf_ara::com::binding::iceoryx::{InitRuntime, EventPublisher, EventSubscriber}`。
 

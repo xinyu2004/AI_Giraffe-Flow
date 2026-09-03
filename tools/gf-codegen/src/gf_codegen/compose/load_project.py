@@ -56,7 +56,7 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
     lineage = data.get("lineage") or {}
     plat = data.get("platform") or {}
 
-    base_rel = data.get("base") or "schemas/examples/desktop_ap_only.sor.json"
+    base_rel = data.get("base") or "tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json"
     base_sor = resolve_path(root, base_rel, repo_root=root)
 
     out_name = data.get("out") or "gf.sor.json"

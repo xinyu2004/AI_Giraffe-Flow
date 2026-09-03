@@ -24,9 +24,8 @@
 
 ```text
 AI_Giraffe-Flow/
-  schemas/
   middleware/
-  tools/
+  tools/              # gf-codegen/schemas/ = SOR 契约
   apps/
   projects/          # 含各车型 req.yaml
   docs/zh/   docs/en/

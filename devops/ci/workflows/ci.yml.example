@@ -37,7 +37,6 @@
 #               - 'tools/gmt/**'
 #               - 'tools/gf-config/**'
 #               - 'tools/gf-codegen/**'
-#               - 'schemas/**'
 #       - name: observability + inject + gmt_vcd
 #         if: steps.filter.outputs.toolchain == 'true'
 #         run: |

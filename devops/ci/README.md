@@ -36,7 +36,7 @@ bash devops/ci/scripts/smoke_release.sh
 |------------------------|--------|:------:|
 | `tools/gmt/**` | `smoke_toolchain.sh`（observability · inject · gmt_vcd） | 是 |
 | `tools/gf-config/**` | 同上 **强制** `smoke_toolchain.sh` | 是 |
-| `tools/gf-codegen/**` · `schemas/**` | 同上 **强制** `smoke_toolchain.sh`（与 config 同套，生成契约影响观测主链） | 是 |
+| `tools/gf-codegen/**`（含 `schemas/`） | 同上 **强制** `smoke_toolchain.sh`（与 config 同套，生成契约影响观测主链） | 是 |
 | `middleware/diag/**` · `middleware/ucm/**` | **不**强制 DoIP → nightly | — |
 | Cyclone / iceoryx / bindings 相关 | **不**强制 L1 → nightly | — |
 
@@ -67,4 +67,4 @@ bash devops/ci/scripts/smoke_release.sh
 
 ## 云 CI
 
-样例：[workflows/ci.yml.example](workflows/ci.yml.example)（复制为 `.github/workflows/ci.yml` 后启用）。已含路径 filter：GMT / gf-config / codegen / schemas → toolchain。
+样例：[workflows/ci.yml.example](workflows/ci.yml.example)（复制为 `.github/workflows/ci.yml` 后启用）。已含路径 filter：GMT / gf-config / codegen（含 schemas）→ toolchain。

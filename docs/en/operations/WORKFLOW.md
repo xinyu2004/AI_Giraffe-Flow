@@ -24,9 +24,8 @@
 
 ```text
 AI_Giraffe-Flow/
-  schemas/
   middleware/
-  tools/
+  tools/              # gf-codegen/schemas/ = SOR contract
   apps/
   projects/          # per-SKU req.yaml
   docs/en/   docs/zh/

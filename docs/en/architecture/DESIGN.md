@@ -257,10 +257,9 @@ Suggested layout:
 
 ```text
 AI_Giraffe-Flow/
-  schemas/                 # SOR contract, semver
   middleware/              # on-board runtime: core/com/bindings/osal/hal/…
     third_party/           # upstream checkouts (after pins)
-  tools/                   # gf-config, gf-codegen, gf-octavecoder, gmt, gmt_board (host)
+  tools/                   # gf-config, gf-codegen (+ schemas/), gf-octavecoder, gmt, gmt_board (host)
   apps/                    # reference processes; customer prod apps in other repos
   projects/                # OEM inputs + per-SKU req.yaml
   dep-manifest/                    # third-party manifests + version lock
@@ -270,7 +269,7 @@ AI_Giraffe-Flow/
 
 Skeleton already in-tree: [STRUCTURE.md](../../../STRUCTURE.md) · [dep-manifest/README.md](../../../dep-manifest/README.md).
 
-Artifact lines may split into `gf-runtime`, `gf-tools`, `gf-schemas`.  
+Artifact lines may split into `gf-runtime`, `gf-tools` (includes SOR schema).  
 Board CI **must not** build GUI tools.  
 `schemas` changes must run golden codegen + at least one multi-process e2e.
 

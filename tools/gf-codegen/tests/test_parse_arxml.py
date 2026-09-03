@@ -6,7 +6,7 @@ from gf_codegen.compose.parse_arxml import parse_arxml_file, to_wiring_fragment
 
 
 def test_parse_demo_arxml(repo_root: Path) -> None:
-    path = repo_root / "schemas/examples/oem/demo_faracon_subset.arxml"
+    path = repo_root / "tools/gf-codegen/schemas/examples/oem/demo_faracon_subset.arxml"
     parsed = parse_arxml_file(path)
     assert "EgoMotion" in parsed["interfaces"]
     assert "UssZones" in parsed["interfaces"]

@@ -4,7 +4,7 @@ project_id: afc
 customer_id: oem
 product: AFC
 
-base: schemas/examples/desktop_ap_only.sor.json
+base: tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json
 out: gf.sor.json
 
 oem:
