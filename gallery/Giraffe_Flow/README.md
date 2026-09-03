@@ -13,7 +13,7 @@
 
 ```bash
 # 需 Pillow + 本机 CJK 字体（Noto / DejaVu）
-python3 result_pic/Giraffe_Flow/scripts/render_gif.py
+python3 gallery/Giraffe_Flow/scripts/render_gif.py
 ```
 
 ## 布局要点

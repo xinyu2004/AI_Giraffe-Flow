@@ -20,7 +20,7 @@ AI_Giraffe-Flow/
   fusa/               # Functional Safety → Safety Case evidence
   dep-manifest/       # dependency pins + bootstrap.sh (checkouts → middleware/third_party/)
   cmake/ scripts/ docs/
-  result_pic/         # README assets (Giraffe_Flow/, Giraffe_Modules/, screenshots)
+  gallery/            # README media (GIF / screenshots / later video)
 ```
 
 Flow today:
@@ -107,7 +107,7 @@ AI_Giraffe-Flow/
 │   ├── runs/                     # local CASE logs (gitignore)
 │   └── packs/                    # SKU packs via projects/.../generate_fusa_artifacts.sh
 │
-├── result_pic/                   # README: Giraffe_Flow/ + Giraffe_Modules/ + screenshots
+├── gallery/                      # README: Giraffe_Flow/ + Giraffe_Modules/ + GIF / later video
 └── STRUCTURE.md                  # this file
 ```
 

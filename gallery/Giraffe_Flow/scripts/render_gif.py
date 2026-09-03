@@ -27,7 +27,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-ROOT = SCRIPT_DIR.parent  # result_pic/Giraffe_Flow
+ROOT = SCRIPT_DIR.parent  # gallery/Giraffe_Flow
 ASSETS = ROOT / "assets"
 W = 1200
 FRAMES = 16

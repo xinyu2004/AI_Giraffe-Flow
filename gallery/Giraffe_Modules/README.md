@@ -157,4 +157,4 @@ App ──服务名──► com ──► bindings ──► iceoryx | SOME/IP 
 | ZH GIF / SVG | `Giraffe_Modules.gif` · `Giraffe_Modules.svg` |
 | EN GIF / SVG | `Giraffe_Modules.en.gif` · `Giraffe_Modules.en.svg` |
 
-再生：`python3 result_pic/Giraffe_Modules/scripts/render_gif.py`（加 `--en` 同时出英文）。
+再生：`python3 gallery/Giraffe_Modules/scripts/render_gif.py`（加 `--en` 同时出英文）。

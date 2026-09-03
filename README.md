@@ -27,7 +27,7 @@ OEM camera/NN stays out of tree.
 | **2** | **Giraffe modules** | **Product core** · SOA runtime, FuSa evidence | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [Design](docs/en/architecture/DESIGN.md) |
 | **3** | **GMT** | Toolchain · observe / inject / Foxglove | [tools/gmt](tools/gmt/README.md) · [gmt_board](tools/gmt_board/README.md) · [Observability demo](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
-![Architecture: CARLA → Giraffe modules → Foxglove · GMT](result_pic/Giraffe_Flow/Giraffe_Flow.en.gif)
+![Architecture: CARLA → Giraffe modules → Foxglove · GMT](gallery/Giraffe_Flow/Giraffe_Flow.en.gif)
 
 ---
 
@@ -42,7 +42,7 @@ Defines **what**, **who talks to whom**, and **which board modules to trim** —
 
 - Verify / Generate → SOR + Proxy/Skeleton + lineage (incl. `platform_em_launch`)
 
-![gf-config — signal graph (tab 1)](result_pic/gf-config.png)
+![gf-config — signal graph (tab 1)](gallery/gf-config.png)
 
 ```bash
 gf-config projects/afc/project.yaml
@@ -56,7 +56,7 @@ Details: [tools/gf-config/README.md](tools/gf-config/README.md) · [WORKFLOW](do
 
 What actually runs on the board and in SIL is the **middleware**. SKU apps (FCM, Octave planning → Trajectory) are the **exercise load**: a real pub/sub loop so GMT, Foxglove, inject, PHM, and CI have something honest to measure — not a claim that this repo is a production ADAS stack.
 
-![Giraffe Modules: on-board middleware boot & collaboration](result_pic/Giraffe_Modules/Giraffe_Modules.en.gif)
+![Giraffe Modules: on-board middleware boot & collaboration](gallery/Giraffe_Modules/Giraffe_Modules.en.gif)
 
 #### 2.1 Layers
 
@@ -169,7 +169,7 @@ bash fusa/scripts/measure_latency.sh   # optional timing snapshot
 
 In multi-process SIL, terminal logs rarely answer “who published what, when.” GMT attaches the tap NDJSON to a host timeline: **scrub / speed**, **playhead inject**, **Tag → MCAP**. **Foxglove live** is C `gf_foxglove_ws` on **:8765** (`tools/gmt_board`); Python `GMT bridge foxglove` is JSONL replay only. `run_sil` does **not** start GMT Live :8766.
 
-![GMT — Vars scrub / Live + Inject](result_pic/GMT.png)
+![GMT — Vars scrub / Live + Inject](gallery/GMT.png)
 
 | Port | Role |
 |------|------|

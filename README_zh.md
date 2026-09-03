@@ -27,7 +27,7 @@ OEM 相机/网络权重仍在仓外。
 | **2** | **Giraffe 模块** | **产品主体** · SOA 运行时、FuSa 证据 | [middleware](middleware/README.md) · [fusa/](fusa/README.md) · [设计](docs/zh/architecture/DESIGN.md) |
 | **3** | **GMT** | 工具链 · 观测 / 回灌 / Foxglove | [tools/gmt](tools/gmt/README_zh.md) · [gmt_board](tools/gmt_board/README.md) · [可观测演示](docs/zh/operations/OBSERVABILITY_DEMO.md) |
 
-![架构：CARLA → Giraffe 模块 → Foxglove · GMT](result_pic/Giraffe_Flow/Giraffe_Flow.gif)
+![架构：CARLA → Giraffe 模块 → Foxglove · GMT](gallery/Giraffe_Flow/Giraffe_Flow.gif)
 
 ---
 
@@ -42,7 +42,7 @@ OEM 相机/网络权重仍在仓外。
 
 - **Verify / Generate** → SOR + Proxy/Skeleton + lineage（含 `platform_em_launch` 等门禁）
 
-![gf-config — 信号图（页 1）](result_pic/gf-config.png)
+![gf-config — 信号图（页 1）](gallery/gf-config.png)
 
 ```bash
 gf-config projects/afc/project.yaml
@@ -56,7 +56,7 @@ gf-config projects/afc/project.yaml
 
 这里是板上和 SIL 里真正跑着的 **中间件**。SKU 里的 FCM、Octave 规划 → Trajectory 是 **载荷**：给 GMT、Foxglove、回灌、PHM、CI 一条诚实的 pub/sub 环，用来验证平台，而不是宣称本仓是量产 ADAS。
 
-![Giraffe Modules：板内中间件如何起来、如何协作](result_pic/Giraffe_Modules/Giraffe_Modules.gif)
+![Giraffe Modules：板内中间件如何起来、如何协作](gallery/Giraffe_Modules/Giraffe_Modules.gif)
 
 #### 2.1 分层
 
@@ -171,7 +171,7 @@ bash fusa/scripts/measure_latency.sh   # 可选：延时快照
 
 多进程 SIL 联调时，光看终端往往对不齐「谁在何时发了什么」。GMT 把 tap NDJSON 接到本机时间轴：**scrub / 倍速**、**playhead 回灌**、**Tag → MCAP**。**Foxglove 直播**是 C `gf_foxglove_ws`（**:8765**，`tools/gmt_board`）；Python `GMT bridge foxglove` 只做 JSONL 回放。`run_sil` **不起** GMT Live :8766。
 
-![GMT — 变量轨 scrub / Live + Inject](result_pic/GMT.png)
+![GMT — 变量轨 scrub / Live + Inject](gallery/GMT.png)
 
 | 端口 | 用途 |
 |------|------|

@@ -49,4 +49,4 @@ Source: [`middleware/README.md`](../../middleware/README.md)
 | **EM** | Entry: spawn platform daemons + SOA apps per config |
 | **daemons (via gf-config)** | dlt / RouDi / SOME/IP / DDS? — enabled via gf-config |
 
-Regen: `python3 result_pic/Giraffe_Modules/scripts/render_gif.py --en`
+Regen: `python3 gallery/Giraffe_Modules/scripts/render_gif.py --en`

@@ -2,7 +2,7 @@
 
 Board-deployable SOA packages (`gf_ara::*`) — the last mile after the bench (virtual world · Foxglove · CI) has passed. SKU perception/planning apps are a **workload** on top of this runtime (robustness, latency, localization of faults) — not the middleware product itself. Trim via SOR / `req.yaml` `runtime_modules[]`.
 
-**与架构 GIF SoC 芯片对齐**（`result_pic/Giraffe_Flow/Giraffe_Flow.gif`）：
+**与架构 GIF SoC 芯片对齐**（`gallery/Giraffe_Flow/Giraffe_Flow.gif`）：
 
 | GIF 芯片 | 本目录包 | 说明 |
 |----------|----------|------|
@@ -20,7 +20,7 @@ Board-deployable SOA packages (`gf_ara::*`) — the last mile after the bench (v
 | per | [per](per/) | 持久化 KV stub（可裁剪） |
 | tsync | [tsync](tsync/) | 时间同步骨架（可裁剪；Modules 环内） |
 
-启动（systemd/init 或 `run_sil`）：只起 **EM** → 可选 daemons（dlt?/RouDi?/…）+ SOA apps。详见 [Giraffe_Modules](../result_pic/Giraffe_Modules/README.md) · [DLT_PLAN](../docs/zh/operations/DLT_PLAN.md)。
+启动（systemd/init 或 `run_sil`）：只起 **EM** → 可选 daemons（dlt?/RouDi?/…）+ SOA apps。详见 [Giraffe_Modules](../gallery/Giraffe_Modules/README.md) · [DLT_PLAN](../docs/zh/operations/DLT_PLAN.md)。
 
 另有： [core](core/) · [bindings/](bindings/) · [hal](hal/) · [trace](trace/)（偏 debug-path）· [third_party/](third_party/)。
 

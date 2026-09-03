@@ -90,7 +90,7 @@ session*.jsonl
 !tools/**/fixtures/session*.jsonl
 
 # Architecture GIF generator (local helper)
-result_pic/_gen_architecture_gif.py
+gallery/_gen_architecture_gif.py
 
 # FuSa local artifacts (do not commit)
 fusa/runs/*

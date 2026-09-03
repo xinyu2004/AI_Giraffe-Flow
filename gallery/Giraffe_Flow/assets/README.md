@@ -9,5 +9,5 @@
 Drop in replacements and re-run:
 
 ```bash
-python3 result_pic/Giraffe_Flow/scripts/render_gif.py
+python3 gallery/Giraffe_Flow/scripts/render_gif.py
 ```
