@@ -161,11 +161,8 @@ if(DEFINED GF_APPS)
     endif()
     # iceoryx demo / main-chain apps
     if(NOT GF_WITH_ICEORYX)
-      if(_gf_app STREQUAL "demo_pipeline"
-         OR _gf_app STREQUAL "simulators/uss_feed"
-         OR _gf_app STREQUAL "adapters/vehicle_can_gateway"
+      if(_gf_app STREQUAL "adapters/vehicle_can_gateway"
          OR _gf_app STREQUAL "perception/fcm"
-         OR _gf_app STREQUAL "sensing/uss"
          OR _gf_app STREQUAL "planning/driving"
          OR _gf_app MATCHES "^gmt_board/")
         message(STATUS "Giraffe Flow: skip app '${_gf_app}' (needs GF_WITH_ICEORYX)")
@@ -174,8 +171,8 @@ if(DEFINED GF_APPS)
     endif()
     # MCU desktop apps need cross_domain_ipc
     if(NOT GF_WITH_CROSS_DOMAIN_IPC)
-      if(_gf_app STREQUAL "adapters/mcu_cp_gateway"
-         OR _gf_app STREQUAL "simulators/cp_ipc_peer")
+      if(_gf_app MATCHES "mcu_cp_gateway"
+         OR _gf_app MATCHES "cp_ipc_peer")
         message(STATUS "Giraffe Flow: skip app '${_gf_app}' (needs GF_WITH_CROSS_DOMAIN_IPC)")
         continue()
       endif()

@@ -14,7 +14,7 @@
 
 | Script | Purpose |
 |--------|---------|
-| [smoke_sil.sh](smoke_sil.sh) | compile + 双进程 `run_iox_demo` |
+| [smoke_sil.sh](smoke_sil.sh) | compile + AFC 主链 `run_mainchain_verify` |
 | [run_mainchain_verify.sh](run_mainchain_verify.sh) | 有限帧主链（verify 壳；可选 caller 注入 PHM） |
 | [smoke_sil_observability.sh](smoke_sil_observability.sh) | main-chain → Tag → MCAP |
 | [smoke_sil_phm_fault.sh](smoke_sil_phm_fault.sh) | PHM miss→recover（自设 fault） |

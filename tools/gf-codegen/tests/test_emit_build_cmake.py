@@ -14,7 +14,7 @@ def test_emit_build_cmake_bindings_and_modules(tmp_path: Path) -> None:
             "variant": "afc_front_camera",
             "runtime_modules": ["core", "com", "log"],
             "bindings": ["iceoryx"],
-            "apps": ["demo_pipeline"],
+            "apps": ["perception/fcm"],
         },
         out,
     )
@@ -25,7 +25,8 @@ def test_emit_build_cmake_bindings_and_modules(tmp_path: Path) -> None:
     assert "GF_WITH_SOMEIP OFF" in text
     assert "GF_WITH_DDS OFF" in text
     assert "set(GF_RUNTIME_MODULES core com log)" in text
-    assert "set(GF_APPS demo_pipeline)" in text
+    assert "perception/fcm" in text
+    assert "set(GF_APPS" in text
 
 
 def test_emit_build_cmake_multi_bindings(tmp_path: Path) -> None:
@@ -35,7 +36,7 @@ def test_emit_build_cmake_multi_bindings(tmp_path: Path) -> None:
             "variant": "full",
             "runtime_modules": ["core", "com", "exec"],
             "bindings": ["iceoryx", "dds", "someip"],
-            "apps": ["demo_pipeline", "simulators/uss_feed"],
+            "apps": ["perception/fcm", "planning/driving"],
         },
         out,
     )
@@ -43,4 +44,4 @@ def test_emit_build_cmake_multi_bindings(tmp_path: Path) -> None:
     assert "GF_WITH_ICEORYX ON" in text
     assert "GF_WITH_DDS ON" in text
     assert "GF_WITH_SOMEIP ON" in text
-    assert "GF_APPS demo_pipeline simulators/uss_feed" in text
+    assert "GF_APPS perception/fcm planning/driving" in text

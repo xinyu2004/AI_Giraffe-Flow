@@ -9,7 +9,7 @@ Host-side / repo-wide helpers. **SKU 产品主路径**在各 `projects/.../scrip
 | Script | Purpose |
 |--------|---------|
 | [bootstrap_deps.sh](bootstrap_deps.sh) | → `dep-manifest/bootstrap.sh`（toolchains；attr/acl → deps-prefix） |
-| [run_iox_demo.sh](run_iox_demo.sh) | 双进程 RouDi demo（中间件冒烟） |
+| iceoryx pub/sub | [middleware/bindings/iceoryx/testcases/run_iox_pubsub.sh](../middleware/bindings/iceoryx/testcases/run_iox_pubsub.sh) |
 | [smoke_bd_cyclone.sh](smoke_bd_cyclone.sh) | CycloneDDS 真收发旁路冒烟 |
 | [cross_link_smoke.sh](cross_link_smoke.sh) | optional aarch64 link |
 | FuSa | [fusa/scripts/run_cases.sh](../fusa/scripts/run_cases.sh)；SKU pack → `projects/.../generate_fusa_artifacts.sh` |

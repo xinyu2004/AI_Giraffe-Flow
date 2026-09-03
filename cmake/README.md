@@ -34,13 +34,13 @@ req.yaml  ──compose──►  projects/<sku>/generated/gf_build.cmake
 
 **无 `-DGF_SKU_CMAKE` 时：** 用 [profiles/desktop_default.cmake](profiles/desktop_default.cmake)。
 
-**MCU 桌面联调（无 iceoryx）：** [profiles/mcu_desktop.cmake](profiles/mcu_desktop.cmake) + `projects/adc/scripts/smoke_mcu_desktop.sh`。
+**MCU IPC（无 iceoryx）：** [profiles/mcu_desktop.cmake](profiles/mcu_desktop.cmake) + `middleware/bindings/cross_domain_ipc/testcases/`。
 
 **E/U stub（exec/phm/ucm/diag）：** [profiles/eu_stub.cmake](profiles/eu_stub.cmake)（历史轨；日常门禁见 devops/ci + SKU verify）。
 
 **B/D Cyclone：** [profiles/bd_cyclone.cmake](profiles/bd_cyclone.cmake) + `scripts/smoke_bd_cyclone.sh`。
 
-**低配示例（afc）：** compose 后仅 iceoryx + `demo_pipeline`；`log`/`exec`/… 无实现则 STATUS 跳过，不失败。
+**低配示例：** `desktop_minimal` = iceoryx + core/com/log，无 SKU apps；缺模块则 STATUS 跳过。
 
 SIL：`compile_sil.sh` 已传 `-DGF_SKU_CMAKE=<proj>/generated/gf_build.cmake`。
 

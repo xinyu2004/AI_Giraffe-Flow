@@ -121,11 +121,11 @@ Vehicle state (pick one)
 | `gf_foxglove_ws` | iceoryx → Foxglove Studio + BEV (`tools/gmt_board`) |
 | `gf_iox_obs_inject` | playhead / continuous Ego inject |
 
-Shared `apps/` stays for cross-SKU demos/adapters. See [apps/](apps/README.md).
+SKU apps live under `projects/<sku>/apps/`. iceoryx smoke: `middleware/bindings/iceoryx/testcases/`.
 
 #### 2.4 Bring-up (SIL → board)
 
-Primary SKUs `projects/afc` and `projects/adc` share the same contract: **mtime compose / configure-on-need / incremental build**; `ctest` only with `GF_CTEST=1`; staged `runtime/bin/giraffe_launch`. Host CARLA: [carla_scenarios/](carla_scenarios/). CI: [devops/](devops/README.md) (`smoke.sh` / toolchain / nightly). GMT extras via `GMT_depend_launch` (`GF_GMT_DEPEND=0` → EM only).
+Primary SKU `projects/afc`: **mtime compose / configure-on-need / incremental build**; `ctest` only with `GF_CTEST=1`; staged `runtime/bin/giraffe_launch`. `projects/adc` is an empty slot (not started). Host CARLA: [carla_scenarios/](carla_scenarios/). CI: [devops/](devops/README.md). GMT extras via `GMT_depend_launch` (`GF_GMT_DEPEND=0` → EM only).
 
 ```bash
 bash projects/afc/scripts/compile_sil.sh
@@ -195,7 +195,7 @@ Details: [tools/gmt/README.md](tools/gmt/README.md) · [gmt_board](tools/gmt_boa
 | [octave_planning/](octave_planning/) | Planning `.m` gold (**workload**, not the product) |
 | [projects/](projects/) | OEM SKU: apps, wiring, SIL·HIL, CI scripts |
 | [carla_scenarios/](carla_scenarios/) | Host CARLA scenes + instrument |
-| [apps/](apps/) | Shared demos / adapters |
+| [projects/afc/apps/](projects/afc/apps/) | AFC workload (gateway / FCM / planning) |
 | [fusa/](fusa/) | FuSa evidence |
 | [tools/gf-config/](tools/gf-config/) | gf-config |
 | [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |

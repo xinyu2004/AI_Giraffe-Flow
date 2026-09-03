@@ -177,9 +177,9 @@ OEM 换信号表时，优先改 gateway + 映射，**尽量不改编感知 / 规
 
 | 层 | 职责 | 仓库 |
 |----|------|------|
-| **适配器** | OEM、传感器 SDK、**mcu.cp_gateway** | 平台 monorepo `apps/adapters/` |
+| **适配器** | OEM、传感器 SDK、gateway | `projects/<sku>/apps/adapters/` |
 | **语义契约** | `semantic.*` 服务 | `tools/gf-codegen/schemas/` + 合成后的 SOR |
-| **业务组件** | 感知、规划等 | **外部量产仓**；平台用 `apps/simulators/` |
+| **业务组件** | 感知、规划等 | **外部量产仓**；仓内用 SKU 载荷（如 AFC FCM） |
 
 **组件无感：** 业务只依赖 `gf_ara` semantic 服务；OEM 差异在 adapter/gateway。
 
@@ -323,7 +323,7 @@ AI_Giraffe-Flow/
   tools/gf-octavecoder/    # .m → C
   tools/gmt/               # GMT host
   tools/gmt_board/         # tap / inject / gf_foxglove_ws
-  apps/adapters|simulators/
+  projects/<sku>/apps/     # SKU 载荷（AFC）；adc 空槽
   projects/                # OEM 集成输入（req.yaml 含契约与部署裁剪）
   dep-manifest/                    # 第三方依赖清单与版本锁
   docs/en/  docs/zh/

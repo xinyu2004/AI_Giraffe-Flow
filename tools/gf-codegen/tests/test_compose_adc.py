@@ -3,12 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import yaml
-
 from gf_codegen.compose.pipeline import compose_project
 
 
-def test_compose_adc(repo_root: Path, tmp_path: Path) -> None:
+def test_compose_adc_empty_slot(repo_root: Path, tmp_path: Path) -> None:
     project = repo_root / "projects/adc/project.yaml"
     out = tmp_path / "gf.sor.json"
     rc = compose_project(project, repo_root=repo_root, out=out)
@@ -16,40 +14,9 @@ def test_compose_adc(repo_root: Path, tmp_path: Path) -> None:
     assert out.is_file()
     sor = json.loads(out.read_text(encoding="utf-8"))
 
-    service_ids = {s["id"] for s in sor["services"]}
-    for svc in (
-        "services.semantic.EgoMotion",
-        "services.semantic.UssZones",
-        "services.semantic.FrontObjectList",
-        "services.semantic.SurroundWorld",
-        "services.semantic.ParkingWorld",
-        "services.semantic.DrivingObjectList",
-        "services.semantic.Trajectory",
-        "services.semantic.ActuatorCommand",
-        "services.semantic.EgoMotionExtended",
-        "services.semantic.VehicleModeStatus",
-    ):
-        assert svc in service_ids
+    service_ids = {s["id"] for s in (sor.get("services") or [])}
+    assert "services.semantic.UssZones" not in service_ids
 
-    procs = {d["process"] for d in sor["deployments"]}
-    assert "adapter.vehicle_can_gateway" in procs
-    assert "adapter.mcu_cp_gateway" in procs
-    assert "sensing.uss" in procs
-    assert "perception.surround" in procs
-    assert "perception.parking" in procs
-    assert "perception.driving.nullmax" in procs
-    assert "planning.driving" in procs
-    assert "planning.parking" in procs
-
-    assert sor.get("topology") == "ap_mcu_cp"
-
-    # No req.publish_policy on ADC: compose must not invent period_ms=50.
-    for svc in sor["services"]:
-        assert svc.get("trigger") == "unspecified"
-        assert "period_ms" not in svc
-        assert "expect_fps" not in svc
-
-    report_path = repo_root / "projects/adc/reports/signal_lineage_report.yaml"
-    assert report_path.is_file()
-    report = yaml.safe_load(report_path.read_text(encoding="utf-8"))
-    assert report["ok"] is True
+    procs = {d["process"] for d in (sor.get("deployments") or [])}
+    assert "sensing.uss" not in procs
+    assert "adapter.mcu_cp_gateway" not in procs

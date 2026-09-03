@@ -26,7 +26,7 @@ bash devops/ci/scripts/smoke_release.sh
 |----|--------|------|
 | **L0** | 每次 PR / push | 主体门禁；中间件/cmake 通用改动到此为止 |
 | **L0b** | 路径命中（见下） | **强制**跑 `smoke_toolchain.sh`；失败与 L0 同等挡合入 |
-| **L1** | nightly 必跑；PR 默认不挡 | `smoke_bd_cyclone.sh` · `run_iox_demo.sh`（DDS/SOME/IP 就绪） |
+| **L1** | nightly 必跑；PR 默认不挡 | `smoke_bd_cyclone.sh` · iceoryx `run_iox_pubsub.sh`（DDS/SOME/IP 就绪） |
 | **L2** | schedule nightly | DoIP 通路 + FuSa SIL；**不**刷写 |
 | **L3** | tag / 发版 checklist | 最谨慎：工具链 SIL **必跑** + L1 + DoIP + T4 + **FuSa evidence pack** |
 

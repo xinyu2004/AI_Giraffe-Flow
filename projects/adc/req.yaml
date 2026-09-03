@@ -1,17 +1,11 @@
-# OEM B — ADC 行泊一体（完整模块）
+# ADC 空槽 — 未开工。apps / USS / MCU 演示均不在此。
 schema_version: "0.1"
 profile: vehicle-debug
-variant: adc_driving_parking
-topology: ap_mcu_cp
+variant: adc_slot
+topology: ap_only
 product: ADC
 
-capabilities:
-  - front_camera
-  - surround_camera
-  - uss
-  - parking
-  - driving
-  - mcu_ipc
+capabilities: []
 
 runtime_modules:
   - core
@@ -20,32 +14,18 @@ runtime_modules:
 
 bindings:
   - iceoryx
-  - cross_domain_ipc
 
 observability:
   live_tap:
     enabled: false
     services: []
   record:
-    mode: sampled
-    services:
-      - services.semantic.EgoMotion
-      - services.semantic.Trajectory
-  remote_log_dump: on
+    mode: off
+    services: []
 
-apps:
-  - adapters/mcu_cp_gateway
-  - simulators/cp_ipc_peer
-  - demo_pipeline
+apps: []
 
 acceptance:
-  description: "ADC 行泊一体 — 前视/环视/USS/泊车/行车 + MCU"
-  lineage_required: true
-  required_services:
-    - services.semantic.EgoMotion
-    - services.semantic.UssZones
-    - services.semantic.FrontObjectList
-    - services.semantic.SurroundWorld
-    - services.semantic.ParkingWorld
-    - services.semantic.DrivingObjectList
-    - services.semantic.Trajectory
+  description: "ADC 空槽（未开工）"
+  lineage_required: false
+  required_services: []

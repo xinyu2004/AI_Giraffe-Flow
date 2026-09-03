@@ -15,7 +15,7 @@
 #   GF_INJECT_SESSION=projects/afc/build-sil/observability/session.jsonl \
 #     bash projects/afc/scripts/run_sil.sh
 #   # B2 single-module (DUT only + inject):
-#   GF_INJECT_MODE=playhead GF_INJECT_DUT=sensing.uss \
+#   GF_INJECT_MODE=playhead GF_INJECT_DUT=perception.fcm \
 #     bash projects/afc/scripts/run_sil.sh
 #
 # Env:
@@ -37,8 +37,8 @@
 #                      all|passthrough = keep full live whitelist (EgoMotion+…) for scenario demo
 #                      0 = force live_tap OFF
 #   GF_INJECT_SERVICES default EgoMotion (or auto from DUT requires ∩ injectable)
-#   GF_INJECT_DUT      B2: SOR process id (e.g. sensing.uss) → only that app + inject
-#   GF_INJECT_APPS     B2 override: comma list uss,fcm,planning (skip SOR lookup)
+#   GF_INJECT_DUT      B2: SOR process id (e.g. perception.fcm) → only that app + inject
+#   GF_INJECT_APPS     B2 override: comma list fcm,planning (skip SOR lookup)
 #   GF_INJECT_MAX_EVENTS  continuous: hard max events (default ~20000); ignore for playhead
 #   GF_INJECT_WINDOW_MAX_EVENTS  playhead: events per A/B window (default 256, clamp 16–4096)
 #   GF_INJECT_LOOP     continuous: 1 = replay from start until signal; playhead uses GMT UI loop
@@ -129,7 +129,7 @@ if [[ -n "${GF_INJECT_FRAMES_DIR:-}" ]]; then
   echo "${TAG} inject frames ← ${GF_INJECT_FRAMES_DIR}"
 fi
 
-# Which consumer apps to start (keys: uss fcm planning). Empty until resolved.
+# Which consumer apps to start (keys: fcm planning). Empty until resolved.
 RUN_APPS=""
 
 if [[ "${GF_SKIP_COMPILE:-0}" != "1" ]]; then
@@ -346,9 +346,6 @@ from pathlib import Path
 
 # process id / aliases → app key used by run_sil
 PROC_TO_APP = {
-    "sensing.uss": "uss",
-    "uss": "uss",
-    "gf_sensing_uss": "uss",
     "perception.fcm": "fcm",
     "fcm": "fcm",
     "gf_perception_fcm": "fcm",
@@ -453,7 +450,6 @@ fi
 ROUDI="${RUNTIME}/bin/iox-roudi"
 GW="${RUNTIME}/bin/gf_vehicle_can_gateway"
 FCM="${RUNTIME}/bin/gf_perception_fcm"
-USS="${RUNTIME}/bin/gf_sensing_uss"
 PLAN="${RUNTIME}/bin/gf_planning_driving"
 TAP="${RUNTIME}/bin/gf_iox_obs_tap"
 FOX="${RUNTIME}/bin/gf_foxglove_ws"
@@ -574,7 +570,7 @@ INJ_PORT="${GF_INJECT_PORT:-8767}"
 
 cleanup() {
   set +e
-  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${FRAME_INGEST_STAT_PID:-}" "${BRIDGE_TAIL_PID:-}" "${CARLA_BRIDGE_PID:-}" "${EM_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${USS_PID:-}" "${ROUDI_PID:-}" "${DLT_PID:-}"; do
+  for pid in "${LIVE_FAN_PID:-}" "${TAP_PID:-}" "${INJ_PID:-}" "${DOIP_PID:-}" "${FRAME_INGEST_STAT_PID:-}" "${BRIDGE_TAIL_PID:-}" "${CARLA_BRIDGE_PID:-}" "${EM_PID:-}" "${GW_PID:-}" "${PLAN_PID:-}" "${FCM_PID:-}" "${ROUDI_PID:-}" "${DLT_PID:-}"; do
     [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null
   done
   # EM children (dlt/RouDi/apps) may outlive the daemon briefly

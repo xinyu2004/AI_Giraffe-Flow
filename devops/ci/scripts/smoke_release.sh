@@ -24,7 +24,7 @@ GF_SKIP_COMPILE=1 GF_CI_INJECT_B2=1 bash "${CI}/smoke_toolchain.sh"
 
 echo "== release: L1 cyclone + iox =="
 bash "${ROOT}/scripts/smoke_bd_cyclone.sh"
-bash "${ROOT}/scripts/run_iox_demo.sh"
+bash "${ROOT}/middleware/bindings/iceoryx/testcases/run_iox_pubsub.sh"
 
 echo "== release: DoIP path (no flash) =="
 bash "${VERIFY}/smoke_doip_ota.sh"

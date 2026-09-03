@@ -41,7 +41,7 @@
 | P0-2 | `gf-codegen`：compose / lint / generate | `tools/gf-codegen/` | ✅ |
 | P0-3 | `gf_ara::core` Result/ErrorCode | `middleware/core/` | ✅ |
 | P0-4 | `gf_ara::com` Event + iceoryx | `middleware/com/`, `middleware/bindings/iceoryx/` | ✅ |
-| P0-5 | 两进程 demo | `apps/simulators/`, `apps/demo_pipeline/` + `smoke_sil.sh` | ✅ |
+| P0-5 | 两进程 demo | iceoryx binding `testcases/run_iox_pubsub.sh` + AFC `smoke_sil.sh` | ✅ |
 | P0-6 | OSAL POSIX | `middleware/osal/` | ✅ |
 | P0-7 | CMake + `req.yaml` | `cmake/`，`projects/**/req.yaml` | ✅ |
 | P0-8 | CI smoke | `devops/ci/scripts/smoke.sh`（+ toolchain/nightly/release 分层，见 [ci/README](../../../devops/ci/README.md)） | ✅ |

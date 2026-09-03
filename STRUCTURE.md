@@ -12,7 +12,7 @@ AI_Giraffe-Flow/
   projects/           # OEM / SKU: wiring, req, platform, interfaces, apps, scripts
   middleware/         # board runtime + third_party/ checkouts
   octave_planning/    # planning .m gold (workload, not the product)
-  apps/               # shared demos / adapters (SKU workload apps under projects/)
+  # SKU apps live under projects/<sku>/apps/（无根 apps/ 演示）
   tools/              # gf-config, gf-codegen, gf-octavecoder, gmt, gmt_board, …
   common/             # launch/deploy **templates** (copy into SKU; then fork)
   carla_scenarios/    # host CARLA Client A (place/IC; not under SKU)
@@ -60,9 +60,7 @@ AI_Giraffe-Flow/
 │
 ├── octave_planning/              # planning .m gold (workload); C via gf-octavecoder
 │
-├── apps/                         # ONLY true platform-common / demos
-│   ├── common/                   # shared demo headers (e.g. uss_zones_topic)
-│   └── README.md                 # what may live here (see §Apps policy)
+├── # SKU workload apps: projects/<sku>/apps/ only
 │
 ├── projects/<sku>/         # one vehicle / trim
 │   ├── project.yaml
@@ -90,7 +88,6 @@ AI_Giraffe-Flow/
 ├── cmake/                        # profiles, toolchain
 ├── scripts/                      # repo-wide helpers（SKU smoke 在 project 内）
 │   ├── bootstrap_deps.sh         # → dep-manifest/bootstrap.sh
-│   ├── run_iox_demo.sh
 │   ├── smoke_bd_cyclone.sh
 │   └── cross_link_smoke.sh
 ├── devops/
@@ -134,7 +131,7 @@ AI_Giraffe-Flow/
 | Keep shared | Move under project |
 |-------------|-------------------|
 | `middleware/runtime/` (bring-up lib) | `vehicle_can_gateway`, `sensing.*`, `perception.*`, `planning.*` stubs |
-| Optional: ultra-thin demo_pipeline / feeds | MCU payload↔semantic **mapping** (if today inside gateway) |
+| iceoryx / IPC smoke in `middleware/bindings/*/testcases/` | MCU mapping inside a future SKU gateway |
 | `tools/gmt_board/` tap/inject/foxglove | Allowlists stay in `req` / GMT focus |
 
 ---

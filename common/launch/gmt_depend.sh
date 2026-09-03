@@ -317,16 +317,6 @@ start_consumers() {
         fi
         FCM_PID=$!
         ;;
-      uss)
-        echo "${TAG} start uss"
-        host_info "start app=uss"
-        if command -v stdbuf >/dev/null 2>&1; then
-          GF_DLT_APP_ID=USS_ stdbuf -oL -eL "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
-        else
-          GF_DLT_APP_ID=USS_ "${USS}" >"${LOG_DIR}/uss.log" 2>&1 &
-        fi
-        USS_PID=$!
-        ;;
       planning)
         echo "${TAG} start planning"
         host_info "start app=planning"

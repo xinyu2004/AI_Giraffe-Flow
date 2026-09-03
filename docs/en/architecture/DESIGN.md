@@ -170,7 +170,7 @@ Right:
 3. Perception / planning / control `require` the same service
 4. Signal Review lists all consumers and QoS
 
-When OEM signal tables change, prefer gateway + mapping edits and **avoid rewriting perception / planning / control**. Generated code goes under `generated/`; hand-written logic stays in `apps/*/src`.
+When OEM signal tables change, prefer gateway + mapping edits and **avoid rewriting perception / planning / control**. Generated code goes under `generated/`; hand-written logic stays in `projects/<sku>/apps/*/src`.
 
 ---
 
@@ -260,7 +260,7 @@ AI_Giraffe-Flow/
   middleware/              # on-board runtime: core/com/bindings/osal/hal/…
     third_party/           # upstream checkouts (after pins)
   tools/                   # gf-config, gf-codegen (+ schemas/), gf-octavecoder, gmt, gmt_board (host)
-  apps/                    # reference processes; customer prod apps in other repos
+  projects/<sku>/apps/     # SKU workload (AFC); adc is an empty slot
   projects/                # OEM inputs + per-SKU req.yaml
   dep-manifest/                    # third-party manifests + version lock
   docs/en/  docs/zh/

@@ -1,4 +1,4 @@
-# compose 入口 — ADC
+# compose 入口 — ADC（空槽，未开工）
 schema_version: "0.1"
 project_id: adc
 customer_id: oem
@@ -19,4 +19,4 @@ delivery:
 
 lineage:
   report: reports/signal_lineage_report.yaml
-  fail_on_error: true
+  fail_on_error: false

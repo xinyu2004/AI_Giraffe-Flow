@@ -121,11 +121,11 @@ gf-config projects/afc/project.yaml
 | `gf_foxglove_ws` | iceoryx → Foxglove Studio + BEV（`tools/gmt_board`） |
 | `gf_iox_obs_inject` | playhead / continuous 回灌 Ego |
 
-共享 `apps/` 仍是跨 SKU 演示/adapter。见 [apps/](apps/README.md)。
+SKU 载荷在 `projects/<sku>/apps/`。iceoryx 烟测：`middleware/bindings/iceoryx/testcases/`。
 
 #### 2.4 拉起路径（SIL → 板）
 
-`projects/afc` 与 `projects/adc` 同一合同：**mtime compose / 按需 cmake configure / 增量 build**；`GF_CTEST=1` 才跑 ctest；stage 出 `runtime/bin/giraffe_launch`。上位机 CARLA：[carla_scenarios/](carla_scenarios/)。CI：[devops/](devops/README.md)（`smoke.sh` / 工具链 / nightly）。GMT 旁路为 `GMT_depend_launch`（`GF_GMT_DEPEND=0` → 只 EM）。
+主 SKU `projects/afc`：**mtime compose / 按需 cmake configure / 增量 build**；`GF_CTEST=1` 才跑 ctest；stage 出 `runtime/bin/giraffe_launch`。`projects/adc` 是空槽（未开工）。上位机 CARLA：[carla_scenarios/](carla_scenarios/)。CI：[devops/](devops/README.md)。GMT 旁路为 `GMT_depend_launch`（`GF_GMT_DEPEND=0` → 只 EM）。
 
 ```bash
 bash projects/afc/scripts/compile_sil.sh
@@ -197,7 +197,7 @@ GMT gui --project projects/afc \
 | [octave_planning/](octave_planning/) | 规划 `.m` 金源（**载荷**，不是产品） |
 | [projects/](projects/) | OEM SKU：apps、wiring、SIL·HIL、CI |
 | [carla_scenarios/](carla_scenarios/) | 上位机 CARLA 布景 + 仪表 |
-| [apps/](apps/) | 跨 SKU 演示 / adapter |
+| [projects/afc/apps/](projects/afc/apps/) | AFC 载荷（gateway / FCM / 规划） |
 | [fusa/](fusa/) | FuSa 证据 |
 | [tools/gf-config/](tools/gf-config/) | gf-config |
 | [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |

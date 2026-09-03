@@ -18,8 +18,8 @@ bash "${CI}/smoke.sh"
 echo "== nightly: L1 cyclone =="
 bash "${ROOT}/scripts/smoke_bd_cyclone.sh"
 
-echo "== nightly: L1 iox demo =="
-bash "${ROOT}/scripts/run_iox_demo.sh"
+echo "== nightly: L1 iox binding =="
+bash "${ROOT}/middleware/bindings/iceoryx/testcases/run_iox_pubsub.sh"
 
 echo "== nightly: DoIP path (no flash) =="
 # smoke.sh already compiled host build; DoIP needs SKU build-sil — compile if missing

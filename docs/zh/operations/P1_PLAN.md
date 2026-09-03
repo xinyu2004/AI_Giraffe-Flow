@@ -156,7 +156,7 @@ iceoryx 路径：  hpp / fidl 进 SOR types → iceoryx binding（不用 fdepl /
 
 - [x] `req.runtime_modules` / `bindings` / `apps` → compose 写出 `generated/gf_build.cmake`  
 - [x] 根 CMake `include(GfModules)` 按 SKU 加 binding/apps；未知模块无 CMakeLists 则跳过  
-- [x] 低配 profile：`cmake/profiles/desktop_minimal.cmake`（仅 demo_pipeline，无 uss_feed）  
+- [x] 低配 profile：`cmake/profiles/desktop_minimal.cmake`（iceoryx + core/com/log，无 SKU apps）
 - [x] `compile_sil/hil` 传 `-DGF_SKU_CMAKE=.../gf_build.cmake`  
 - [x] 文档：SKU 勾选 ↔ CMake 对应表（见下表）  
 

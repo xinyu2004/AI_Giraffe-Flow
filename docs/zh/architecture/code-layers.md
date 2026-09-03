@@ -78,10 +78,8 @@ bash projects/afc/scripts/verify/smoke_sil.sh
 进程里的循环、填数、何时 `Send`/`Take`：**手写**。  
 类型与 Proxy/Skeleton 可来自生成物（`GF_USE_GENERATED=ON`）。
 
-当前平台参考 App（后续可随 project 归属演进）：
-
-- [`apps/simulators/uss_feed/`](../../apps/simulators/uss_feed/) — 发布 `UssZones`
-- [`apps/demo_pipeline/`](../../apps/demo_pipeline/) — 订阅消费
+SKU 载荷在 `projects/<sku>/apps/`（AFC：gateway / FCM / planning）。  
+iceoryx 双进程烟测：[`middleware/bindings/iceoryx/testcases/`](../../middleware/bindings/iceoryx/testcases/)。
 
 项目侧脚本（手写、可上传）：[`projects/afc/scripts/verify/smoke_sil.sh`](../../projects/afc/scripts/verify/smoke_sil.sh)（另有 `compile_sil` / `run_sil` / `compile_hil`）。
 
