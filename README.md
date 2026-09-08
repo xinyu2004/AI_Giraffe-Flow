@@ -17,9 +17,13 @@ OEM camera/NN stays out of tree.
 
 **中文:** [README_zh.md](README_zh.md)
 
-![AFC closed-loop demo (preview)](gallery/videos/afc_preview.gif)
+<p align="center">
+  <img src="gallery/videos/afc_preview.gif" alt="AFC closed-loop demo (preview)" />
+</p>
 
-[Full demo (mp4)](gallery/videos/afc.mp4)
+<p align="center">
+  <a href="gallery/videos/afc.mp4">Full demo (mp4)</a>
+</p>
 
 ---
 
