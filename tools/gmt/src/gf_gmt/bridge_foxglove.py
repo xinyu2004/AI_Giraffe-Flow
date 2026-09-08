@@ -442,24 +442,14 @@ def replay_jsonl_ws(
     port: int,
     *,
     speed: float = 1.0,
-    synth_bev: bool = False,
 ) -> None:
     rows = rows_from_jsonl(jsonl)
-    if synth_bev:
-        from gf_gmt.bev_compose import expand_rows_with_bev
-
-        rows = expand_rows_with_bev(rows, drop_adas_topic=True)
     topics = sorted({str(r.get("topic") or "/gf/stub") for r in rows}) or ["/gf/stub"]
 
     srv = _listen(host, port)
     print(f"Foxglove WS (replay) ws://{host}:{port}", flush=True)
     print(f"  topics: {', '.join(topics)}", flush=True)
-    if synth_bev:
-        print(
-            "  synth BEV: /gf/driving/bev/compressed "
-            "(Ego/Trajectory + scenario story; AdasDemo not advertised)",
-            flush=True,
-        )
+    print("  (ego BEV paint is C gf_foxglove_ws / gf_host_bev_ws — not Python)", flush=True)
     print("  Studio → Open connection → Foxglove WebSocket", flush=True)
 
     try:
@@ -537,9 +527,14 @@ def main_bridge(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--synth-bev",
         action="store_true",
-        help="Compose BEV CompressedImage from EgoMotion/Trajectory in the JSONL",
+        help=argparse.SUPPRESS,  # removed: ego BEV is C-only (gf_foxglove_ws / gf_host_bev_ws)
     )
     args = p.parse_args(argv)
+    if getattr(args, "synth_bev", False):
+        print(
+            "GMT bridge: --synth-bev ignored (ego BEV is C gf_foxglove_ws / gf_host_bev_ws)",
+            flush=True,
+        )
 
     if args.mcap:
         info = describe_mcap(args.mcap)
@@ -565,7 +560,6 @@ def main_bridge(argv: list[str] | None = None) -> int:
                 args.host,
                 args.port,
                 speed=args.speed,
-                synth_bev=bool(args.synth_bev),
             )
             return 0
         except KeyboardInterrupt:

@@ -57,7 +57,7 @@ gateway ──► vehicle_cmd ──► gf_carla_io ──► giraffe_client ─
 
 ## 上位机规划旁路（开发）
 
-`carla_scenarios/octave_bridge`：Host 扮演 `gf_carla_io` 联仿对端；规划 → `vehicle_cmd`；可选 Foxglove WS（默认 `:8765`，topic `/gf/driving/bev/compressed`，画笔=`bev_compose`）。需 `GF_GMT_SRC`。不替代板端 EM。
+`carla_scenarios/octave_bridge`：Host 扮演 `gf_carla_io` 联仿对端；规划 → `vehicle_cmd`；可选 Foxglove WS（默认 `:8765`，topic `/gf/driving/bev/compressed`，画笔=C `gf_host_bev_ws`，`GF_HOST_BEV_BIN`）。不替代板端 EM。
 
 ## 遗留债
 

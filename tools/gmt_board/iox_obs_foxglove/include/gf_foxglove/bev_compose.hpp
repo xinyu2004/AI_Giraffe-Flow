@@ -77,7 +77,7 @@ struct LiveBevState {
   float traj_s_stop_m = 0;   // from Trajectory; ~cap = inactive
   float v_sign_max_mps = 0;  // 0 = none; from Trajectory
   float v_sign_min_mps = 0;
-  // Light HUD: 0=none, 164=yellow, 196=red (DSTSR Relevant). Green = P1.
+  // Light HUD: 0=none, 164=yellow, 196=red, 198=green (DSTSR Relevant).
   int light_sign_name = 0;
   bool allow_lc = false;
   float nearest_cm = -1;  // <0 = none
@@ -109,7 +109,7 @@ float see_opening_m(float host_vr_m, const LiveBevState& st);
 float driving_see_m(const LiveBevState& st, float host_vr_m);
 void advance_odom(LiveBevState& st, std::uint64_t t_ns, float speed_mps);
 
-// Portrait 400×800 PNG. 1:1 with gf_gmt.bev_compose.render_ego_bev_png.
+// Portrait 400×800 PNG. Gold paint for SIL gf_foxglove_ws and Host gf_host_bev_ws.
 std::string render_ego_bev_png(const LiveBevState& st, int width = kBevW, int height = kBevH);
 
 }  // namespace gf_foxglove

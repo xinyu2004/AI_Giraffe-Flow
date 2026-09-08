@@ -369,7 +369,7 @@ def lane_code_from_path(ys: list[float]) -> int:
 
 
 def view_to_bev_out_dict(view: PlanningView) -> dict[str, Any]:
-    """Gold-like Perception_MESSAGE_Out_St dict for LiveBevComposer._apply_perc_out."""
+    """Gold-like Perception_MESSAGE_Out_St dict for C gf_host_bev_ws / apply_ndjson_row."""
     perc = view.perc
     host_items = []
     for ln in perc.host:

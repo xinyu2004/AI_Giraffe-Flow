@@ -1570,7 +1570,6 @@ class GmtMainWindow(QMainWindow):
             "--ws",
             "--jsonl",
             str(self._session_path),
-            "--synth-bev",
             "--host",
             "127.0.0.1",
             "--port",

@@ -23,7 +23,7 @@
 | `GF_GIRAFFE_CAM=0` | 不挂 RGB、不 Python NV12、不 `send_camera` | 规划不吃图时同样关；环视走 C++ ingest |
 | Python NV12 门控 | 合同还在，默认不跑 | **禁止**把 `rgb_to_nv12` 搬上板 |
 | `[perf]` 四钟 | 分清 W / P / V | 板：规划 tick、ingest、gateway；不要拿 BEV 当 MCU 钟 |
-| BEV ≠ 相机 CompressedImage | Host 只发 BEV PNG | 观测归 GMT；控制环不合成图 |
+| BEV ≠ 相机 CompressedImage | Host 经 `gf_host_bev_ws` 发 BEV | 观测归 GMT；控制环不合成图 |
 | `O(traj_n × obj_n_max)` 16×8 | 算法预算钉死 | generate C 后同一上限；加刀先量一拍，超了显式改预算 |
 | 只在 `FAKE_PERC` 上 `plan_tick` | 去掉 state 二次规划 | 感知更新才跑规划 |
 | TCP window=1（等 cmd / 超时重发同一拍） | Host Octave：不抽 perc、不堆 `send_st` | 板 `giraffe_client`：overlay-latest，不等 cmd、不重发同一 perc |

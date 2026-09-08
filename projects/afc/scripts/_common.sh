@@ -193,6 +193,7 @@ gf_sil_sync_runtime() {
     for rel in \
       apps/gmt_board/iox_obs_tap/gf_iox_obs_tap \
       apps/gmt_board/iox_obs_foxglove/gf_foxglove_ws \
+      apps/gmt_board/iox_obs_foxglove/gf_host_bev_ws \
       apps/gmt_board/iox_obs_inject/gf_iox_obs_inject
     do
       src="${build}/${rel}"

@@ -1,16 +1,40 @@
-# Host-side iceoryx → Foxglove WebSocket. Debug only — not for production profile.
-# Prefer codegen (${GF_GENERATED_DIR}/src/obs_foxglove_main.cpp).
-
-if(NOT GF_USE_GENERATED)
-  message(FATAL_ERROR "gf_foxglove_ws requires GF_USE_GENERATED=ON")
-endif()
+# Host/SIL Foxglove BEV. Debug only — not for production profile.
+# Prefer codegen (${GF_GENERATED_DIR}/src/obs_foxglove_main.cpp) for iceoryx path.
 
 find_package(ZLIB REQUIRED)
+find_package(Threads REQUIRED)
 
-add_library(gf_foxglove_core STATIC
+# Paint + WS only (no iceoryx / GfChannel). Gold BEV lives here.
+add_library(gf_foxglove_paint STATIC
   src/png.cpp
   src/ws_hub.cpp
   src/bev_compose.cpp
+  src/bev_ndjson.cpp
+)
+target_include_directories(gf_foxglove_paint PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+target_link_libraries(gf_foxglove_paint PUBLIC ZLIB::ZLIB)
+set_target_properties(gf_foxglove_paint PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Host octave standalone: NDJSON stdin → paint → Foxglove (no RouDi).
+add_executable(gf_host_bev_ws src/host_bev_main.cpp)
+target_link_libraries(gf_host_bev_ws PRIVATE gf_foxglove_paint Threads::Threads)
+target_compile_definitions(gf_host_bev_ws PRIVATE _GNU_SOURCE)
+
+if(GF_BUILD_TESTS)
+  add_executable(gf_foxglove_ndjson_smoke test/test_bev_ndjson.cpp)
+  target_link_libraries(gf_foxglove_ndjson_smoke PRIVATE gf_foxglove_paint)
+  add_test(NAME gf_foxglove_ndjson_smoke COMMAND gf_foxglove_ndjson_smoke)
+endif()
+
+if(NOT GF_USE_GENERATED)
+  message(STATUS "gf_foxglove_ws / gf_foxglove_core: skipped (GF_USE_GENERATED=OFF); gf_host_bev_ws built")
+  return()
+endif()
+
+# Board/SIL extras: POD ingest + camera channel.
+add_library(gf_foxglove_core STATIC
   src/bev_ingest.cpp
   src/camera.cpp
 )
@@ -18,7 +42,7 @@ target_include_directories(gf_foxglove_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${GF_GENERATED_DIR}/include"
 )
-target_link_libraries(gf_foxglove_core PUBLIC ZLIB::ZLIB)
+target_link_libraries(gf_foxglove_core PUBLIC gf_foxglove_paint)
 if(TARGET gf_channel::channel)
   target_link_libraries(gf_foxglove_core PUBLIC gf_channel::channel)
 endif()

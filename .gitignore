@@ -78,6 +78,7 @@ observability/
 **/runtime/logs/
 **/runtime/collector/
 **/runtime/per/
+**/runtime/bin/
 # PER dual-slot leftovers if run from repo root
 *.kv.a
 *.kv.b

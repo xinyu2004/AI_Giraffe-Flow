@@ -73,9 +73,9 @@ GMT bridge foxglove --mcap projects/afc/build-sil/observability/session.mcap
 
 ```bash
 # （场景 jsonl 已在 projects/.../scenarios/；用 GMT 打开 session / 回灌）
-GMT bridge foxglove --ws --synth-bev \
+GMT bridge foxglove --ws \
   --jsonl projects/afc/scenarios/overtake_acc_aeb.jsonl --port 8765
-# Studio → ws://127.0.0.1:8765 · Image + Plot(AdasDemo.*)
+# Studio → ws://127.0.0.1:8765 · Plot(AdasDemo.*)；ego BEV 请用 SIL C gf_foxglove_ws
 
 GMT gui --project projects/afc \
   --session projects/afc/scenarios/overtake_acc_aeb.jsonl
@@ -84,7 +84,7 @@ GMT gui --project projects/afc \
 注入：场景联调推荐  
 `GF_INJECT_MODE=playhead GF_INJECT_LIVE=all bash …/run_sil.sh`  
 → **GMT 打开** `overtake_acc_aeb.jsonl` → 回灌播放  
-（`run_sil` 不自动加载该 JSONL；默认 `GF_SYNTH_BEV=1`，Foxglove 用 **EgoMotion+Trajectory 合成 BEV**）。  
+（`run_sil` 不自动加载该 JSONL；默认 `GF_SYNTH_BEV=1`，Foxglove 用 **C** `gf_foxglove_ws` 从 EgoMotion/Trajectory/Out 合成 BEV）。  
 `AdasDemo` 在 GMT 变量轨对照剧本；主链 BEV 不依赖 JSONL 画图。
 
 ## 3. WebSocket 回放（非 live）

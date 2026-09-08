@@ -29,8 +29,19 @@
 | BL-IOX-SHM-USED | iceoryx SHM 度量改为**实际使用**而非**分配/预留** | deferred | 平台硬化 / 观测 | 今日 `mem_budget` / `iox_shm_report` 多为 RouDi reserve / mempool **allocated** 上界；需区分 used vs allocated（payload 占用、mgmt 实测）并进 Verify/UI |
 | BL-BOARD-NO-PY | **板端 runtime 零 Python**（含 frame_ingest） | deferred | P3z 真板 / 载荷收口 | **政策：**凡会随 `runtime/` / GMT 依赖上板的组件，**不得**依赖 Python 解释器或 `share/**/*.py`。`gf_frame_ingest` 板端路径 = C++ only（Create GfChannel + ISP/V4L 等适配，**禁止** `execlp(python…)`）。帧桥 / replay / colorbar **仅宿主机 SIL**；板端 stage **不得**打进 Python 模块。资源：板端环境复杂且紧，Python 运行时与依赖一律不上板 |
 | BL-STAGE-PY-MTIME | stage 对 SIL 主机侧 frame-bridge / scenario py 做 mtime 增量拷贝 | deferred | SIL 工具链卫生 | 仅影响**宿主机** SIL；与 BL-BOARD-NO-PY 正交。`tools/carla_bridge/` 已移除——对象改为仍会 stage 的主机侧 `.py`（若有）。今日改 py 后 `compile_sil` 常 skip stage → 仍跑旧拷贝 |
-| BL-BEV-PY | 删 Python ego BEV（`gf_gmt.bev_compose`）；Host 改 C `gf_host_bev_ws` | **in progress** | 观测收口 | 金源 = `gf_foxglove_core`/`bev_compose.cpp`；SIL=`gf_foxglove_ws`；Host octave 单机 = `gf_host_bev_ws`（NDJSON→同 paint）。是 `BL-GMT-FOX-PY` 前置切片 |
-| BL-GMT-FOX-PY | Python Foxglove 收口（JSONL 回放 / MCAP 辅助 / Host `octave_bridge/foxglove_ws.py`） | deferred | 观测收口 | SIL 直播已是 C `gf_foxglove_ws`；已删 `--stdin`。`BL-BEV-PY` 后 Host BEV 亦走 C。目标：C 读 JSONL 后再删 `bridge_foxglove.py` |
+| BL-BEV-PY | 删 Python ego BEV（`gf_gmt.bev_compose`）；Host 改 C `gf_host_bev_ws` | **done** | 观测收口 | 金源 = `gf_foxglove_paint`/`bev_compose.cpp`；SIL=`gf_foxglove_ws`；Host=`gf_host_bev_ws`（NDJSON）。`BL-GMT-FOX-PY` 前置切片已完成 |
+| BL-GMT-FOX-PY | Python Foxglove 收口（JSONL 回放 / MCAP 辅助 / Host `octave_bridge/foxglove_ws.py`） | deferred | 观测收口 | SIL 直播已是 C `gf_foxglove_ws`；`BL-BEV-PY` **done**（Host BEV 亦 C）。余量：C 读 JSONL 后再删 `bridge_foxglove.py` / Host `foxglove_ws.py` |
+
+## 本波已延后（AFC 产品债 · 勿当本轮阻塞）
+
+| 项 | 说明 |
+|----|------|
+| see-cone ambient pop-in | 准则已写；`_traffic.py` spawn band 仍可锥内刷 — 下波改 |
+| Gateway 触发可配 / 映射表 | 见 `gateway-trigger-flexibility` 规则与 `gateway_boundary.md` 遗留债 |
+| Truth 非几何质量字段 | `backlog_truth_quality.md` |
+| 加速度手感 / 起点漂移 / 遇不到红灯 | 体验项，先不管 |
+| `bev_paint/` 物理抽出 | Host 入口稳定后再搬目录 |
+| Creep `reg_stop_creep_m` | **不恢复**：近线刹停合同 = 规划 `hold≈1 m` 内 v→0；不以 creep 标定补洞 |
 
 ## 本轮已纳入（对照，非后置）
 

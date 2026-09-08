@@ -79,9 +79,9 @@ GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
 Primary file `overtake_acc_aeb.jsonl` (lane change → ACC → AEB). Load it in **GMT** (Open session → Inject); `run_sil` does not auto-attach it. On SIL, Foxglove BEV is EgoMotion+Trajectory; Studio need not subscribe `/gf/AdasDemo`.
 
 ```bash
-# SIL: run_sil → GMT open jsonl → Inject play
-# Offline (no SIL):
-GMT bridge foxglove --ws --synth-bev \
+# SIL: run_sil → Studio Image /gf/driving/bev/compressed（C gf_foxglove_ws）
+# Offline JSONL replay (no ego BEV paint — use SIL C or pre-baked CompressedImage):
+GMT bridge foxglove --ws \
   --jsonl projects/afc/scenarios/overtake_acc_aeb.jsonl --port 8765
 
 GMT gui --project projects/afc \

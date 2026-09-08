@@ -80,8 +80,9 @@ GF_INJECT_SESSION=…/overtake_acc_aeb.jsonl \
 主文件 `overtake_acc_aeb.jsonl`（变道 → ACC → AEB）。由 **GMT 打开 session / 回灌** 加载；`run_sil` 不会自动挂该文件。SIL 上 Foxglove BEV 来自 EgoMotion+Trajectory；Studio 不再依赖 `/gf/AdasDemo` topic。
 
 ```bash
-# SIL：run_sil → GMT 打开既有 jsonl session → 回灌播放
-GMT bridge foxglove --ws --synth-bev \
+# SIL：run_sil → Studio 订 /gf/driving/bev/compressed（C gf_foxglove_ws）
+# 离线 JSONL 回放（不再 Python 合成 ego BEV）：
+GMT bridge foxglove --ws \
   --jsonl projects/afc/scenarios/overtake_acc_aeb.jsonl --port 8765
 
 GMT gui --project projects/afc \

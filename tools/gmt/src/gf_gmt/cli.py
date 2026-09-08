@@ -136,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     p_fox.add_argument(
         "--synth-bev",
         action="store_true",
-        help="Compose BEV from EgoMotion/Trajectory in the JSONL",
+        help="(ignored) ego BEV is C-only; use gf_foxglove_ws / gf_host_bev_ws",
     )
 
     p_live = br_sub.add_parser(
@@ -298,7 +298,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.ws:
             fox_argv.append("--ws")
         if getattr(args, "synth_bev", False):
-            fox_argv.append("--synth-bev")
+            print(
+                "GMT: --synth-bev ignored (ego BEV is C gf_foxglove_ws / gf_host_bev_ws)",
+                flush=True,
+            )
         fox_argv += ["--host", args.host, "--port", str(args.port), "--speed", str(args.speed)]
         return main_bridge(fox_argv)
 

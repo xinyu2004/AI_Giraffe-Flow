@@ -403,9 +403,13 @@ def test_bev_async_replaces_queued() -> None:
 
     class _Feed:
         n = 0
+        bin_path = type("P", (), {"name": "mock"})()
 
         def update(self, view: object, result: object) -> None:
             self.n += 1
+            return None
+
+        def stop(self) -> None:
             return None
 
     class _Hub:
@@ -424,11 +428,21 @@ def test_bev_async_replaces_queued() -> None:
     assert ba.dropped() >= 0
 
 
-def test_bev_feed_imports() -> None:
-    from octave_bridge.bev_feed import BevFeed
+def test_bev_feed_resolves_or_errors() -> None:
+    from octave_bridge.bev_feed import BevFeed, resolve_host_bev_bin
 
-    feed = BevFeed()
-    assert feed is not None
+    bin_path = resolve_host_bev_bin()
+    if bin_path is None:
+        try:
+            BevFeed()
+            raise AssertionError("expected FileNotFoundError without gf_host_bev_ws")
+        except FileNotFoundError:
+            return
+    feed = BevFeed(foxglove_port=18765)
+    try:
+        assert feed.bin_path == bin_path
+    finally:
+        feed.stop()
 
 
 def test_pack_obj_empty_is_nobj_zero() -> None:

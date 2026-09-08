@@ -17,7 +17,6 @@ if str(_ROOT) not in sys.path:
 
 from _proc_util import kill_matching  # noqa: E402
 from octave_bridge.bev_feed import BevAsync, BevFeed  # noqa: E402
-from octave_bridge.foxglove_ws import FoxgloveBevHub  # noqa: E402
 from octave_bridge.io_server import BridgeState, CosimIoServer  # noqa: E402
 from octave_bridge.runtime import (  # noqa: E402
     close_octave,
@@ -46,7 +45,7 @@ def _on_sig(signum: int, _frame: object) -> None:
 _BEV_ASYNC: BevAsync | None = None
 
 
-def _cleanup(srv: CosimIoServer | None, hub: FoxgloveBevHub | None) -> None:
+def _cleanup(srv: CosimIoServer | None, _hub: object | None = None) -> None:
     global _CLEANED, _BEV_ASYNC
     if _CLEANED:
         return
@@ -57,8 +56,6 @@ def _cleanup(srv: CosimIoServer | None, hub: FoxgloveBevHub | None) -> None:
         ba.stop()
     if srv is not None:
         srv.stop()
-    if hub is not None:
-        hub.stop()
     close_octave()
 
 
@@ -115,19 +112,14 @@ def main(argv: list[str] | None = None) -> int:
 
     want_fg = (not args.no_foxglove) and args.foxglove_port > 0
     bev: BevFeed | None = None
-    hub: FoxgloveBevHub | None = None
     if want_fg:
         try:
-            bev = BevFeed()
-            hub = FoxgloveBevHub(host=args.host, port=args.foxglove_port)
-            hub.start()
-            print(f"[octave_bridge] bev_compose from {bev.gmt_src}", flush=True)
-        except (ModuleNotFoundError, OSError) as exc:
+            # C gf_host_bev_ws owns Foxglove WS; Python hub not used for BEV.
+            bev = BevFeed(foxglove_host=args.host, foxglove_port=args.foxglove_port)
+            print(f"[octave_bridge] bev paint ← {bev.bin_path}", flush=True)
+        except (FileNotFoundError, OSError) as exc:
             print(f"[octave_bridge] WARN Foxglove/BEV disabled: {exc}", flush=True)
             bev = None
-            if hub is not None:
-                hub.stop()
-            hub = None
 
     plan_seq = 0
     perf = PerfAgg("octave")
@@ -137,19 +129,19 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         budget_s = 0.05
     bev_async: BevAsync | None = None
-    if bev is not None and hub is not None:
-        bev_async = BevAsync(bev, hub)
+    if bev is not None:
+        bev_async = BevAsync(bev, None)
         _BEV_ASYNC = bev_async
     try:
         warm_octave()
     except Exception as exc:
         print(f"[octave_bridge] ERROR octave warm: {exc}", flush=True)
-        _cleanup(None, hub)
+        _cleanup(None)
         return 1
     print(
         "[octave_bridge] engine=octave (.m) trigger=FAKE_PERC window=1 pack=numeric "
         f"budget={1000.0 * budget_s:.0f}ms foxglove="
-        f"{'ws://127.0.0.1:' + str(args.foxglove_port) + ' async' if hub else 'off'}",
+        f"{'ws://127.0.0.1:' + str(args.foxglove_port) + ' async(C)' if bev else 'off'}",
         flush=True,
     )
 
@@ -181,12 +173,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd
 
     srv = CosimIoServer(host=args.host, port=args.port, on_tick=on_tick)
-    atexit.register(lambda: _cleanup(srv, hub))
+    atexit.register(lambda: _cleanup(srv))
 
     def _watch_stop() -> None:
         while not STOP:
             time.sleep(0.2)
-        _cleanup(srv, hub)
+        _cleanup(srv)
 
     import threading
 
@@ -200,12 +192,12 @@ def main(argv: list[str] | None = None) -> int:
             "  Re-run with default --kill-stale, or manually end python/octave processes.",
             flush=True,
         )
-        _cleanup(srv, hub)
+        _cleanup(srv)
         return 1
     except KeyboardInterrupt:
         pass
     finally:
-        _cleanup(srv, hub)
+        _cleanup(srv)
     return 0
 
 

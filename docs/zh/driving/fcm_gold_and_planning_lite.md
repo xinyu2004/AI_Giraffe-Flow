@@ -35,7 +35,7 @@ ONNX/`MakeFromDetect` 当前不写 Out；内容由 truth 驱动。SIL（非 colo
 契约头示例：`projects/afc/interfaces/fcm_perception/Perception_Out_messages.h`  
 FCM：`…/apps/perception/fcm/src/main.cpp`  
 Planning：`…/apps/planning/driving/src/main.cpp`  
-BEV：`tools/gmt/src/gf_gmt/bev_compose.py`
+BEV 金源：`tools/gmt_board/iox_obs_foxglove`（`bev_compose.cpp` → `gf_foxglove_paint`）。SIL=`gf_foxglove_ws`；Host octave=`gf_host_bev_ws`。
 
 ---
 

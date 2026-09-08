@@ -1,10 +1,11 @@
-"""Feed shared tools/gmt bev_compose.LiveBevComposer (no second BEV)."""
+"""Drive C gf_host_bev_ws (gold paint). No Python LiveBevComposer."""
 
 from __future__ import annotations
 
-import base64
+import json
 import os
-import sys
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,67 +18,84 @@ from .semantic_map import (
 )
 
 
-def resolve_gmt_src() -> Optional[Path]:
-    """Locate tools/gmt/src (directory that contains package ``gf_gmt``).
+def resolve_host_bev_bin() -> Optional[Path]:
+    """Locate gf_host_bev_ws binary.
 
     Order:
-      1. ``GF_GMT_SRC`` — explicit path (CARLA machine copy / mount)
-      2. Monorepo layout: ``<repo>/tools/gmt/src`` next to ``carla_scenarios``
-      3. Sibling ``gmt/src`` under the same parent as ``carla_scenarios`` (manual copy)
+      1. GF_HOST_BEV_BIN
+      2. PATH
+      3. repo build/stage: …/runtime/bin or …/apps/gmt_board/iox_obs_foxglove/
     """
-    env = (os.environ.get("GF_GMT_SRC") or "").strip()
+    env = (os.environ.get("GF_HOST_BEV_BIN") or "").strip()
     if env:
-        p = Path(env).expanduser().resolve()
-        if (p / "gf_gmt").is_dir():
-            return p
-        # allow pointing at tools/gmt (with src/) or at gf_gmt itself
-        if (p / "src" / "gf_gmt").is_dir():
-            return p / "src"
-        if p.name == "gf_gmt" and p.is_dir():
-            return p.parent
+        p = Path(env).expanduser()
+        if p.is_file():
+            return p.resolve()
         return None
+    which = shutil.which("gf_host_bev_ws")
+    if which:
+        return Path(which).resolve()
 
     here = Path(__file__).resolve()
-    # …/AI_Giraffe-Flow/carla_scenarios/octave_bridge/bev_feed.py → repo/tools/gmt/src
-    cand = here.parents[2] / "tools" / "gmt" / "src"
-    if (cand / "gf_gmt").is_dir():
-        return cand
-    # …/PythonAPI/carla_scenarios + copied …/PythonAPI/gmt/src
-    cand2 = here.parents[1].parent / "gmt" / "src"
-    if (cand2 / "gf_gmt").is_dir():
-        return cand2
+    # …/carla_scenarios/octave_bridge → repo
+    repo = here.parents[2]
+    cands = [
+        repo / "projects" / "afc" / "runtime" / "bin" / "gf_host_bev_ws",
+        repo / "build" / "apps" / "gmt_board" / "iox_obs_foxglove" / "gf_host_bev_ws",
+        repo / "build-sil" / "apps" / "gmt_board" / "iox_obs_foxglove" / "gf_host_bev_ws",
+        # CARLA copy: sibling next to carla_scenarios
+        here.parents[1].parent / "gf_host_bev_ws",
+        here.parents[1].parent / "bin" / "gf_host_bev_ws",
+    ]
+    for c in cands:
+        if c.is_file():
+            return c.resolve()
     return None
 
 
-def ensure_gf_gmt_on_path() -> Optional[Path]:
-    src = resolve_gmt_src()
-    if src is None:
-        return None
-    s = str(src)
-    if s not in sys.path:
-        sys.path.insert(0, s)
-    return src
-
-
 class BevFeed:
-    def __init__(self) -> None:
-        src = ensure_gf_gmt_on_path()
-        if src is None:
-            raise ModuleNotFoundError(
-                "gf_gmt not found. For shared Foxglove/BEV paintbrush either:\n"
-                "  export GF_GMT_SRC=/path/to/AI_Giraffe-Flow/tools/gmt/src\n"
-                "  # or: pip install -e /path/to/AI_Giraffe-Flow/tools/gmt\n"
-                "  # or: --no-bev  (plan/cmd only)\n"
-                f"  (looked at GF_GMT_SRC={os.environ.get('GF_GMT_SRC')!r})"
-            )
-        from gf_gmt.bev_compose import LiveBevComposer  # noqa: WPS433
+    """Spawn gf_host_bev_ws; push Ego/Out/Traj NDJSON on stdin. C owns Foxglove WS."""
 
-        self._comp = LiveBevComposer()
+    def __init__(self, *, foxglove_host: str = "0.0.0.0", foxglove_port: int = 8765) -> None:
+        bin_path = resolve_host_bev_bin()
+        if bin_path is None:
+            raise FileNotFoundError(
+                "gf_host_bev_ws not found. Build/stage it, then either:\n"
+                "  export GF_HOST_BEV_BIN=/path/to/gf_host_bev_ws\n"
+                "  # or put it on PATH / projects/afc/runtime/bin/\n"
+                "  # or: --no-foxglove (plan/cmd only)\n"
+                f"  (looked at GF_HOST_BEV_BIN={os.environ.get('GF_HOST_BEV_BIN')!r})"
+            )
+        self.bin_path = bin_path
         self.last_png_row: Optional[dict[str, Any]] = None
-        self.gmt_src = src
+        cmd = [
+            str(bin_path),
+            "--host",
+            foxglove_host,
+            "--port",
+            str(int(foxglove_port)),
+        ]
+        try:
+            period = float(os.environ.get("GF_BEV_PERIOD_S") or "0.033")
+            period_ms = max(1, int(round(period * 1000.0)))
+        except ValueError:
+            period_ms = 33
+        cmd.extend(["--period-ms", str(period_ms)])
+        self._proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=None,
+            text=True,
+            bufsize=1,
+        )
+        self.gmt_src = bin_path  # log field reuse: show paint binary path
 
     def update(self, view: PlanningView, result: PlanningResult) -> Optional[dict[str, Any]]:
-        """Push Ego + Out + Trajectory shaped rows; return CompressedImage row if any."""
+        """Push Ego + Out + Trajectory NDJSON; C paints asynchronously. Always None."""
+        if self._proc.poll() is not None:
+            raise RuntimeError(f"gf_host_bev_ws exited rc={self._proc.returncode}")
+        assert self._proc.stdin is not None
         t = view.stamp_ns or result.stamp_ns
         rows = [
             {"t_ns": t, "topic": "/gf/EgoMotion", "data": view_to_ego_dict(view)},
@@ -88,37 +106,42 @@ class BevFeed:
             },
             {"t_ns": t, "topic": "/gf/Trajectory", "data": result_to_traj_dict(result)},
         ]
-        cam = None
         for row in rows:
-            cam = self._comp.update(row) or cam
-        self.last_png_row = cam
-        return cam
+            self._proc.stdin.write(json.dumps(row, separators=(",", ":")) + "\n")
+        self._proc.stdin.flush()
+        self.last_png_row = None
+        return None
 
     def png_bytes(self) -> Optional[bytes]:
-        row = self.last_png_row
-        if not row:
-            return None
-        data = row.get("data") or {}
-        raw = data.get("data")
-        if isinstance(raw, (bytes, bytearray)):
-            return bytes(raw)
-        if isinstance(raw, str) and raw:
-            try:
-                return base64.b64decode(raw)
-            except Exception:  # noqa: BLE001
-                return None
         return None
+
+    def stop(self) -> None:
+        if self._proc.poll() is not None:
+            return
+        try:
+            if self._proc.stdin:
+                self._proc.stdin.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self._proc.terminate()
+            self._proc.wait(timeout=2.0)
+        except Exception:  # noqa: BLE001
+            try:
+                self._proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 class BevAsync:
-    """V-clock: compose off the plan path. Rate-limited; may drop. Never drop perc."""
+    """V-clock: feed C painter off the plan path. Rate-limited; may drop."""
 
-    def __init__(self, feed: BevFeed, hub: Any) -> None:
+    def __init__(self, feed: BevFeed, hub: Any = None) -> None:
         import queue
         import threading
 
         self._feed = feed
-        self._hub = hub
+        self._hub = hub  # unused; C owns WS (kept for call-site compat)
         self._q: Any = queue.Queue(maxsize=1)
         self._stop = threading.Event()
         self._dropped = 0
@@ -136,7 +159,7 @@ class BevAsync:
             self._perf = None
         print(
             f"[octave_bridge] BEV V-clock period={self._period:.2f}s "
-            f"(GF_BEV_PERIOD_S, 0=every plan)",
+            f"(GF_BEV_PERIOD_S) → {feed.bin_path.name}",
             flush=True,
         )
         self._th = threading.Thread(target=self._run, name="bev_v", daemon=True)
@@ -166,6 +189,10 @@ class BevAsync:
             self._q.put_nowait(None)
         except Exception:  # noqa: BLE001
             pass
+        try:
+            self._feed.stop()
+        except Exception:  # noqa: BLE001
+            pass
 
     def _run(self) -> None:
         import time
@@ -180,9 +207,7 @@ class BevAsync:
             view, result = item
             t0 = time.perf_counter()
             try:
-                cam = self._feed.update(view, result)
-                if cam is not None:
-                    self._hub.publish_row(cam)
+                self._feed.update(view, result)
             except Exception as exc:  # noqa: BLE001
                 print(f"[octave_bridge] BEV worker: {exc}", flush=True)
             dt = time.perf_counter() - t0
