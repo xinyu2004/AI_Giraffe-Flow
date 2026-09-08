@@ -94,7 +94,7 @@ Planning **不读 LA**（`allow_lc` 仅旗标；变道走廊后挂）。
 
 | 块 | 填什么 | 谁消费 |
 |----|--------|--------|
-| DSTSR | 红灯→`e_stopAhead`(196)；黄灯→`e_trafficSignals`(164)；限速牌→`e_std_*` | planning 把红/黄映射进已有 obj（rel=0）；BEV 可画牌 |
+| DSTSR | 红灯→`e_stopAhead`(196)；黄灯→`e_trafficSignals`(164)；限速牌→`e_std_*` | planning 把红/黄打成 `cls_reg_stop`（停车线，**不**走 occupy）；BEV 可画牌 |
 | STATIC | 护栏/墙等静物 | planning 当静止 obj；墙不进 DYN AEB |
 
 无灯/无静物时计数为 0，结构仍在。`GfFakePercPod` v2 尾带这两类；v1 520 B 仍可读。

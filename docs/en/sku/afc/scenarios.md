@@ -31,6 +31,18 @@ carla_scenarios/
 
 scheme-1: **scenario = place + IC only**; continuous control is Giraffe→bridge. Without SIL, place still runs; verdict is often `no_giraffe_control` (verdict only — not mid-run AEB braking).
 
+## Session / env layering (read before editing)
+
+> **Root cause (2026-03):** ~10s layout stalls when `set_autopilot(False)` omitted the TM port while `GF_TM_PORT≠8000`. Prefer `CarlaSession.ap_off` / `ap_on`. Do not reintroduce layout_pump / always-on layout_prof.
+
+1. Load `carla.env` once via `load_snapshot()` at the edge; pass `CarlaSession` down.
+2. Layouts / spawn / traffic must not re-read `os.environ` or call bare `set_autopilot`.
+3. Case knobs: `_case_params.kwargs_for_case(tag)` at CaseAtom edge.
+
+## Visibility: no pop-in inside the see-cone
+
+Ambient actors and pedestrians must **not** spawn from nothing inside the driver see-cone / windshield band. Spawn outside, then enter view. Keep the host exam tube empty for the case fixture. Threat reseats are exam placement — still avoid destroy+spawn loops in FOV. See zh doc for full criterion.
+
 ## Spawn layering (manifest has no code hooks)
 
 **Rule:** `manifest.yaml` lists product metadata only (id / script / status / keyword / tags / description). It never names layout / spawn / judge / import. Case → code is only via `script:`; the script imports its layout.

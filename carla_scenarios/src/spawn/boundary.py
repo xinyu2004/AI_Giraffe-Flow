@@ -31,7 +31,7 @@ def _speed_xy(vehicle: Any) -> float:
         return 0.0
 
 
-def _hard_stop(vehicle: Any) -> None:
+def _hard_stop(vehicle: Any, *, session: Any = None) -> None:
     """Stop non-driving helpers. On hero: clear const-vel only (Giraffe owns control)."""
     import carla  # type: ignore
 
@@ -44,10 +44,8 @@ def _hard_stop(vehicle: Any) -> None:
         vehicle.disable_constant_velocity()
     except Exception:  # noqa: BLE001
         pass
-    try:
-        vehicle.set_autopilot(False)
-    except Exception:  # noqa: BLE001
-        pass
+    if session is not None:
+        session.ap_off(vehicle)
     if is_hero:
         return
     try:

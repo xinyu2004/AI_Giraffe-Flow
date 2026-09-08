@@ -36,7 +36,7 @@ _EXAM_AHEAD_MIN_M = 70.0
 _EXAM_FIXTURE_PAD_M = 25.0
 _MAX_PER_MAINTAIN = 2
 _MAX_PEDS = 3
-_MAINTAIN_PERIOD_S = 1.0
+_MAINTAIN_PERIOD_S = 2.0
 _SEE_ALONG_LO_M = 8.0
 _SEE_ALONG_HI_M = 80.0
 _SEE_LAT_M = 16.0
@@ -169,13 +169,25 @@ def _pick_ambient_bp(
     return random.choice(buckets[kind])
 
 
-def traffic_number() -> int:
-    """Rolling 5 s see-cone appearances. 0 = ambient off."""
+def traffic_number(snap: Any = None) -> int:
+    """Rolling 5 s see-cone appearance target. Prefer Snapshot.traffic_number."""
+    if snap is not None:
+        return max(0, int(snap.traffic_number))
     raw = (os.environ.get("GF_TRAFFIC_NUMBER") or "18").strip()
     try:
         return max(0, int(raw))
     except ValueError:
         return 18
+
+
+def maintain_period_s(snap: Any = None) -> float:
+    if snap is not None:
+        return max(0.5, float(snap.traffic_maintain_s))
+    raw = (os.environ.get("GF_TRAFFIC_MAINTAIN_S") or str(_MAINTAIN_PERIOD_S)).strip()
+    try:
+        return max(0.5, float(raw))
+    except ValueError:
+        return _MAINTAIN_PERIOD_S
 
 
 def live_stock_cap(number: int) -> int:
@@ -1037,9 +1049,13 @@ def _arm_vehicle(
     density: int,
     kind: str,
     slot: str,
+    session: Any = None,
 ) -> bool:
     try:
-        actor.set_autopilot(True, tm.get_port())
+        if session is not None:
+            session.ap_on(actor)
+        else:
+            actor.set_autopilot(True, tm.get_port())
         _configure_tm(tm, actor, density=density, kind=kind, slot=slot)
         roll_npc(actor, _seed_speed_mps(kind, slot))
         return True
@@ -1060,6 +1076,7 @@ def _spawn_one(
     blocked: list[Any],
     *,
     density: int,
+    session: Any = None,
 ) -> bool:
     if _too_close(tf.location, blocked):
         return False
@@ -1079,7 +1096,9 @@ def _spawn_one(
     actor = world.try_spawn_actor(bp, tf)
     if actor is None:
         return False
-    if not _arm_vehicle(tm, actor, density=density, kind=kind, slot=slot):
+    if not _arm_vehicle(
+        tm, actor, density=density, kind=kind, slot=slot, session=session
+    ):
         return False
     blocked.append(tf.location)
     return True
@@ -1210,6 +1229,7 @@ def _fill_slots(
     tick_after: bool,
     avoid: Optional[list[Any]] = None,
     light: bool = False,
+    session: Any = None,
 ) -> int:
     if max_add <= 0 or target <= 0:
         return 0
@@ -1234,7 +1254,16 @@ def _fill_slots(
                 continue
             if avoid and _too_close(tf.location, avoid, min_m=_EVICT_REPLAY_M):
                 continue
-            if _spawn_one(world, tm, buckets, slot, tf, blocked, density=density):
+            if _spawn_one(
+                world,
+                tm,
+                buckets,
+                slot,
+                tf,
+                blocked,
+                density=density,
+                session=session,
+            ):
                 slots[slot] = slots.get(slot, 0) + 1
                 added += 1
 
@@ -1249,14 +1278,31 @@ def _fill_slots(
     return added
 
 
-def _prep_tm(client: Any) -> Any:
-    tm = client.get_trafficmanager()
+def _prep_tm(client: Any, *, session: Any = None) -> Any:
+    if session is not None:
+        tm = session.tm
+    else:
+        from _carla_env import get_traffic_manager
+
+        tm = get_traffic_manager(client)
     try:
         tm.set_hybrid_physics_mode(True)
         tm.set_hybrid_physics_radius(_BUBBLE_M)
     except Exception:  # noqa: BLE001
         pass
     return tm
+
+
+def _topup_budget(*, seen5: int, number: int, near_n: int, live: int, evicted: int) -> int:
+    """How many ambient to add this maintain/seed pulse."""
+    if number <= 0 or live <= 0:
+        return 0
+    if near_n >= live:
+        return 0
+    room = live - near_n
+    if seen5 < number:
+        return min(_MAX_PER_MAINTAIN, room)
+    return min(_MAX_PER_MAINTAIN, evicted, room)
 
 
 def ensure_ambient_traffic(
@@ -1269,11 +1315,13 @@ def ensure_ambient_traffic(
     log_prefix: str = "[traffic]",
     allow_peds: bool = True,
     fixture: Any | None = None,
+    session: Any = None,
 ) -> int:
     """Seed the local bubble from the *current* ego. rebuild wipes leftover stock."""
     global _maintain_last_s, _seen5_events, _flood_cell, _flood_tfs
 
-    number = traffic_number()
+    snap = getattr(session, "snap", None) if session is not None else None
+    number = traffic_number(snap)
     live = live_stock_cap(number)
     _maintain_last_s = 0.0
     if rebuild:
@@ -1323,7 +1371,7 @@ def ensure_ambient_traffic(
     try:
         if rebuild:
             t_fill = time.time()
-            tm = _prep_tm(client)
+            tm = _prep_tm(client, session=session)
             buckets = _cached_buckets(world)
             print(
                 f"{log_prefix} seed fill light=0 max_add={min(8, number)} "
@@ -1343,6 +1391,7 @@ def ensure_ambient_traffic(
                     tick_after=True,
                     avoid=avoid,
                     light=False,
+                    session=session,
                 )
             print(
                 f"{log_prefix} seed filled +{added} dt={time.time() - t_fill:0.2f}s",
@@ -1405,17 +1454,20 @@ def maintain_ambient_traffic(
     near: Optional[Any] = None,
     fixture: Any | None = None,
     elapsed_s: float = 0.0,
-    period_s: float = _MAINTAIN_PERIOD_S,
+    period_s: float | None = None,
     allow_peds: bool = True,
     log_prefix: str = "[traffic]",
+    session: Any = None,
 ) -> int:
-    """Once per second: cull far/exam-tube only; +2 if seen5 < N. No tick."""
+    """Periodic cull; top-up only if bubble stock below cap (not seen5-starved)."""
     global _maintain_last_s
 
-    number = traffic_number()
+    snap = getattr(session, "snap", None) if session is not None else None
+    number = traffic_number(snap)
     if number <= 0:
         return 0
-    if elapsed_s - _maintain_last_s < period_s:
+    period = float(period_s) if period_s is not None else maintain_period_s(snap)
+    if elapsed_s - _maintain_last_s < period:
         return -1
     _maintain_last_s = elapsed_s
 
@@ -1433,28 +1485,30 @@ def maintain_ambient_traffic(
     exam_end = exam_window_end_m(_fixture_along_m(world, ego_tf, fixture))
     evicted, avoid = _cull_bubble(world, ego_tf, exam_end)
     seen5 = _note_seen5(world, ego_tf)
-    if seen5 < number:
-        max_add = _MAX_PER_MAINTAIN
-    else:
-        max_add = min(_MAX_PER_MAINTAIN, evicted)
-    tm = _prep_tm(client)
-    buckets = _cached_buckets(world)
+    _slots0, near_n = _count_near(world, ego_tf, exam_end)
+    max_add = _topup_budget(
+        seen5=seen5, number=number, near_n=near_n, live=live, evicted=evicted
+    )
     added = 0
-    if any(buckets.values()) and max_add > 0:
-        added = _fill_slots(
-            world,
-            tm,
-            ego_tf,
-            exam_end,
-            buckets,
-            density=0,
-            target=live,
-            max_add=max_add,
-            tick_after=False,
-            avoid=avoid,
-            light=True,
-        )
     ped = 0
+    if max_add > 0:
+        tm = _prep_tm(client, session=session)
+        buckets = _cached_buckets(world)
+        if any(buckets.values()):
+            added = _fill_slots(
+                world,
+                tm,
+                ego_tf,
+                exam_end,
+                buckets,
+                density=0,
+                target=live,
+                max_add=max_add,
+                tick_after=False,
+                avoid=avoid,
+                light=True,
+                session=session,
+            )
     if allow_peds:
         have_ped = _count_peds_near(world, ego_tf)
         ped = _spawn_peds(

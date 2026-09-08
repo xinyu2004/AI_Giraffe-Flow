@@ -2,6 +2,9 @@
 
 ``keep_ego=True`` (batch natural continue): keep hero pose & velocity; only
 reposition lead/props relative to the current ego. Giraffe owns motion.
+
+Autopilot toggles require a ``CarlaSession`` (correct TM port) — never bare
+``set_autopilot(False)`` (defaults to 8000 and hangs on Windows).
 """
 
 from __future__ import annotations
@@ -140,7 +143,6 @@ def spawn_named(
             return tf
 
     attempts: list[Any] = [_snap(transform)]
-    # XY only — no dz (air drop) and no map-wide spawn-point fallback (pop).
     nudges = (
         (0.0, 1.5),
         (0.0, -1.5),
@@ -155,11 +157,15 @@ def spawn_named(
         attempts.append(_snap(offset_transform(transform, forward_m=fwd, right_m=right)))
 
     last_err: Optional[BaseException] = None
-    radius = max(12.0, float(clear_radius_m))
+    radius = max(4.0, float(clear_radius_m))
     protect = {ROLE_EGO, ROLE_LEAD} - {role}
-    for i, bp in enumerate(cands[:6]):
+    # Small radius → fewer blueprints / poses (reseat / adjacent place).
+    light = radius <= 6.0
+    bp_list = cands[:1] if light else cands[:6]
+    tf_list = attempts[:3] if light else attempts
+    for i, bp in enumerate(bp_list):
         set_role(bp, role)
-        for tf in attempts:
+        for tf in tf_list:
             clear_near(world, tf.location, radius_m=radius, protect_roles=protect)
             actor = world.try_spawn_actor(bp, tf)
             if actor is not None:
@@ -171,8 +177,7 @@ def spawn_named(
                     )
                 return actor
             try:
-                actor = world.spawn_actor(bp, tf)
-                return actor
+                return world.spawn_actor(bp, tf)
             except Exception as exc:  # noqa: BLE001
                 last_err = exc
                 continue
@@ -241,10 +246,9 @@ def ego_lead(
             destroy_existing=False,
             clear_radius_m=18.0,
         )
-        keep_ego = False  # cold spawn this call
+        keep_ego = False
     elif not keep_ego:
         _set_transform_at_rest(ego, ego_tf)
-    # else: natural continue — leave ego pose & velocity alone
 
     lead = find_by_role(world, ROLE_LEAD)
     if lead is None:
@@ -260,7 +264,6 @@ def ego_lead(
         _set_transform_at_rest(lead, lead_tf, park=False)
 
     tick_world(world)
-    # Quiet velocities after a cold place. keep_ego: leave both moving.
     try:
         import carla  # type: ignore
 
@@ -273,6 +276,86 @@ def ego_lead(
         pass
     tick_world(world)
     return ego, lead
+
+
+def reseat_lead_relative(
+    world: Any,
+    ego: Any,
+    *,
+    session: Any,
+    forward_m: float,
+    right_m: float = 0.0,
+    lead_filter: str = "vehicle.audi.tt",
+    park: bool = False,
+    yaw_deg: Optional[float] = None,
+    clear_radius_m: float = 6.0,
+) -> Any:
+    """Move or light-spawn lead relative to *current* ego. Ego unchanged."""
+    del clear_radius_m
+    ego_tf = ego.get_transform()
+    if abs(float(right_m)) < 0.05 and yaw_deg is None:
+        lead_tf = pick_lead_ahead_of(world, ego_tf, lead_gap_m=float(forward_m))
+    else:
+        lead_tf = offset_transform(
+            ego_tf, forward_m=float(forward_m), right_m=float(right_m)
+        )
+    if yaw_deg is not None:
+        lead_tf.rotation.yaw = float(yaw_deg)
+
+    lead = find_by_role(world, ROLE_LEAD)
+    how = "move"
+    if lead is not None:
+        session.ap_off(lead)
+        try:
+            lead.disable_constant_velocity()
+        except Exception:  # noqa: BLE001
+            pass
+        _set_transform_at_rest(lead, lead_tf, park=bool(park))
+    else:
+        how = "spawn"
+        clear_near(
+            world,
+            lead_tf.location,
+            radius_m=4.0,
+            protect_roles={ROLE_EGO},
+        )
+        lead = spawn_named(
+            world,
+            role=ROLE_LEAD,
+            transform=lead_tf,
+            bp_filter=lead_filter,
+            destroy_existing=False,
+            clear_radius_m=4.0,
+            keep_yaw=yaw_deg is not None,
+        )
+        if park:
+            session.ap_off(lead)
+            _set_transform_at_rest(lead, lead.get_transform(), park=True)
+
+    try:
+        el, ll = ego.get_location(), lead.get_location()
+        gap = ((ll.x - el.x) ** 2 + (ll.y - el.y) ** 2) ** 0.5
+    except Exception:  # noqa: BLE001
+        gap = float(forward_m)
+    if gap < max(8.0, 0.4 * float(forward_m)):
+        lead_tf2 = pick_lead_ahead_of(
+            world, ego.get_transform(), lead_gap_m=max(float(forward_m), 25.0)
+        )
+        _set_transform_at_rest(lead, lead_tf2, park=bool(park))
+        try:
+            el, ll = ego.get_location(), lead.get_location()
+            gap = ((ll.x - el.x) ** 2 + (ll.y - el.y) ** 2) ** 0.5
+        except Exception:  # noqa: BLE001
+            pass
+        how = how + "+nudge"
+
+    print(
+        f"[place] reseat lead id={lead.id} how={how} gap≈{gap:.0f}m "
+        f"want≈{forward_m:.0f}m lat≈{right_m:.1f}m park={int(park)} "
+        f"(ego id={ego.id} kept)",
+        flush=True,
+    )
+    return lead
 
 
 def spawn_ego_lead(
@@ -296,7 +379,6 @@ def spawn_ego_lead(
                 flush=True,
             )
             return existing, existing_lead
-        # Need a lead but none in world: place far ahead, not in the 80 m FOV.
         gap = max(float(lead_gap_m), 90.0)
         ego_tf = existing.get_transform()
         lead_tf = pick_lead_ahead_of(world, ego_tf, lead_gap_m=gap)

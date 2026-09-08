@@ -1,4 +1,5 @@
-% Track v_plan; a_req wins. Labels are output only. 1:1 lon_exec().
+% Vehicle pedals / pullaway. Swap this file (or gf_plan_cal) when the car changes.
+% Planning never writes throttle/brake except by calling this.
 function ctrl = gf_lon_exec(v, v_plan, a_req)
   p = gf_plan_cal();
   v = max(0.0, v);

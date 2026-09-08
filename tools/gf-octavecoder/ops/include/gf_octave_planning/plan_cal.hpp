@@ -41,11 +41,22 @@ struct PlanCal {
   float occ_w_min{0.40f};
   float cls_truck{2.0f};
   float cls_ped{5.0f};
+  float cls_reg_stop{16.0f};
+  float reg_stop_lat_m{18.0f};
+  float reg_stop_margin_m{3.0f};
+  float reg_stop_hold_m{1.0f};
+  float reg_stop_decel_mps2{1.5f};
+  float reg_stop_late_mps2{3.5f};
+  float reg_stop_behind_m{8.0f};
+  float peer_v_min_mps{1.0f};
+  float peer_lat_max_m{7.0f};
+  float peer_d_max_m{35.0f};
   float t_lc_min_s{6.0f};
   float d_lc_min_m{40.0f};
   float lc_conf_min{0.50f};
   float cutin_head_gain{1.20f};
   float cutin_approach_m{1.50f};
+  float cutin_close_mps{0.5f};
 
   float aeb_decel_mps2{6.0f};
   float aeb_d_min_m{4.5f};
@@ -83,9 +94,12 @@ struct PlanCal {
   float lat_ky_scale_lo{0.50f};
   float lat_c1_sat{0.40f};
   float lat_dsteer_max{0.055f};
-  float lat_ey_invalid_m{3.0f};
+  float lat_ey_invalid_m{1.6f};
   float lat_c1_invalid{0.40f};
   float lat_ey_slow_m{1.0f};
+  float host_width_min_m{2.50f};
+  float host_width_max_m{5.50f};
+  float host_inside_m{0.25f};
 
   float traj_blend_m{14.0f};
   float traj_speed_floor_mps{0.2f};
@@ -105,6 +119,20 @@ inline bool lane_usable(bool lane_valid, float e_y, float c1) {
   const PlanCal& p = plan_cal();
   return lane_valid && std::fabs(e_y) <= p.lat_ey_invalid_m &&
          std::fabs(c1) <= p.lat_c1_invalid;
+}
+
+// 1:1 gf_plan_host_pair_ok.m — +y left. Marks may still be drawn when this is false.
+inline bool plan_host_pair_ok(float lc0, float rc0) {
+  const PlanCal& p = plan_cal();
+  const float w = lc0 - rc0;
+  if (w < p.host_width_min_m || w > p.host_width_max_m) {
+    return false;
+  }
+  const float inside = std::max(p.host_inside_m, 0.05f);
+  if (lc0 < inside || rc0 > -inside) {
+    return false;
+  }
+  return true;
 }
 
 inline float lon_d_stop(float v) {

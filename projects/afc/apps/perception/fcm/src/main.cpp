@@ -130,7 +130,9 @@ struct TruthSnapshot {
   float lane_vr_end_m{130.0f};
   std::uint8_t tsr_n{0};
   std::uint16_t tsr_name[6]{};
+  std::uint8_t tsr_id[6]{};
   std::uint8_t tsr_rel[6]{};
+  std::uint8_t tsr_sup1[6]{};  // DSTSR_Sup1; e_minimum=27
   float tsr_long[6]{};
   float tsr_lat[6]{};
   std::uint8_t stat_n{0};
@@ -210,7 +212,11 @@ TruthSnapshot FromFakePercPod(const GfFakePercPod& p) {
   if (p.version >= 2) {
     t.tsr_n = std::min<std::uint8_t>(p.tsr_n, 6);
     for (int i = 0; i < t.tsr_n; ++i) {
-      t.tsr_name[i] = p.tsr[i].sign_name;
+      // SIL: bit15 = minimum → gold Sup1 e_minimum (27); Sign_Name is e_std_*.
+      const std::uint16_t wire = p.tsr[i].sign_name;
+      t.tsr_name[i] = static_cast<std::uint16_t>(wire & 0x7FFFu);
+      t.tsr_sup1[i] = (wire & 0x8000u) ? 27u : 0u;
+      t.tsr_id[i] = p.tsr[i].id;
       t.tsr_rel[i] = p.tsr[i].relevancy;
       t.tsr_long[i] = p.tsr[i].long_m;
       t.tsr_lat[i] = p.tsr[i].lat_m;
@@ -395,25 +401,8 @@ void FillOutFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
       obj.m_OBJ_Object_Age = 1;
       obj.m_OBJ_Class_Probability = 0.9f;
     }
-  } else if (truth.lead_valid) {
-    dyn.m_OBJ_VD_Count = 1;
-    dyn.m_OBJ_Ped_Count = 0;
-    dyn.m_OBJ_VD_CIPV_ID = 1;
-    auto& obj = dyn.m_Obj_item[0];
-    obj.m_OBJ_ID = 1;
-    obj.m_OBJ_Object_Class = 1;
-    obj.m_OBJ_Long_Distance = truth.lead_distance_m;
-    obj.m_OBJ_Lat_Distance = truth.lead_lat_m;
-    obj.m_OBJ_Relative_Long_Velocity = truth.lead_rel_speed_mps;
-    obj.m_OBJ_Relative_Lat_Velocity = 0.0f;
-    obj.m_OBJ_Lane_Assignment = truth.lead_lane_assignment;
-    obj.m_OBJ_Heading = truth.lead_heading_rad;
-    obj.m_OBJ_Width = 1.8f;
-    obj.m_OBJ_Length = 4.5f;
-    obj.m_OBJ_Height = 1.5f;
-    obj.m_OBJ_Existence_Probability = 0.95f;
-    obj.m_OBJ_Object_Age = 1;
   }
+  // No lead-only hatch: dyn empty → empty. Do not invent Obj[0] from lead_*.
 
   auto& tsr = out.Perception_DSTSR_Out;
   tsr.m_frame_id = frame_id;
@@ -421,7 +410,9 @@ void FillOutFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
   tsr.m_tsr_num = std::min<std::uint8_t>(truth.tsr_n, 6);
   for (std::uint8_t i = 0; i < tsr.m_tsr_num; ++i) {
     auto& it = tsr.m_TSR_Item[i];
-    it.m_DSTSR_ID = static_cast<std::uint8_t>(i + 1);
+    const std::uint8_t tid = truth.tsr_id[i] ? truth.tsr_id[i]
+                                             : static_cast<std::uint8_t>(i + 1);
+    it.m_DSTSR_ID = tid;
     it.m_DSTSR_Sign_Name = static_cast<decltype(it.m_DSTSR_Sign_Name)>(truth.tsr_name[i]);
     it.m_DSTSR_Sign_Long_Distance = truth.tsr_long[i];
     it.m_DSTSR_Sign_Lat_Distance = truth.tsr_lat[i];
@@ -430,6 +421,9 @@ void FillOutFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
     it.m_DSTSR_Relevancy = static_cast<decltype(it.m_DSTSR_Relevancy)>(truth.tsr_rel[i]);
     it.m_DSTSR_Confidence = 0.9f;
     it.m_DSTSR_Relevancy_Confidence = 0.85f;
+    it.m_DSTSR_Sup1_SignName =
+        static_cast<decltype(it.m_DSTSR_Sup1_SignName)>(truth.tsr_sup1[i]);
+    it.m_DSTSR_Sup1_Confidence = truth.tsr_sup1[i] ? 0.85f : 0.0f;
   }
 
   auto& st = out.Perception_STATIC_OBJ_Out;

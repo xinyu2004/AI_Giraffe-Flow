@@ -40,6 +40,13 @@ class PerfAgg:
     def count(self, key: str, n: int = 1) -> None:
         self._counts[key] = self._counts.get(key, 0) + int(n)
 
+    def reset(self) -> None:
+        """Start a fresh window (call at case READY so inter-case gaps are not counted)."""
+        self._n = 0
+        self._sums.clear()
+        self._counts.clear()
+        self._last = time.perf_counter()
+
     def tick(self, extra: Optional[dict[str, Any]] = None) -> None:
         if not perf_enabled():
             return
@@ -72,9 +79,11 @@ def dump_ue_settings(world: Any, *, log_prefix: str = "[perf][ue]") -> None:
         n_veh = len(world.get_actors().filter("vehicle.*"))
         n_cam = len(world.get_actors().filter("sensor.camera.*"))
         snap = world.get_snapshot()
+        fd = getattr(s, "fixed_delta_seconds", None)
+        fd_s = f"{float(fd):.4f}" if fd is not None else "async"
         print(
             f"{log_prefix} sync={int(bool(s.synchronous_mode))} "
-            f"fixed_dt={float(s.fixed_delta_seconds):.4f} "
+            f"fixed_dt={fd_s} "
             f"no_render={int(bool(s.no_rendering_mode))} "
             f"veh={n_veh} cams={n_cam} frame={int(snap.frame)}",
             flush=True,

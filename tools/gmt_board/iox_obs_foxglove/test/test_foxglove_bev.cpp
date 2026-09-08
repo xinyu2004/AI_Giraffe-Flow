@@ -59,6 +59,19 @@ int main() {
   CHECK(static_cast<unsigned char>(png[0]) == 0x89);
   CHECK(png.compare(1, 3, "PNG") == 0);
 
+  gf_foxglove::LiveBevState lim = st;
+  lim.v_sign_max_mps = 50.0f / 3.6f;
+  lim.v_sign_min_mps = 30.0f / 3.6f;
+  lim.traj_s_stop_m = 32.0f;
+  lim.light_sign_name = 196;
+  lim.lon_accel_mps2 = -1.2f;
+  const std::string png_lim = gf_foxglove::render_ego_bev_png(lim);
+  CHECK(png_lim.size() > 8);
+  CHECK(png != png_lim);
+
+  // Driving see prefers Trajectory D_see when set.
+  CHECK(std::fabs(gf_foxglove::driving_see_m(st, 120.0f) - 80.0f) < 0.1f);
+
   gf_foxglove::LiveBevState stop = st;
   stop.traj_v[0] = stop.traj_v[1] = stop.traj_v[2] = 0;
   stop.traj_d_see_m = 20;

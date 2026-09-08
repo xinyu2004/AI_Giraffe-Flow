@@ -46,7 +46,7 @@ struct HostLaneGeom {
   float c1{0.0f};
   float c2{0.0f};
   float c3{0.0f};
-  float x_end{60.0f};
+  float x_end{0.0f};
   float width_m{3.5f};
   float e_y{0.0f};
   float conf{1.0f};
@@ -63,6 +63,12 @@ struct PercView {
   int nobj{0};
   int dyn_raw{0};
   int lh_n{0};
+  // Live / process curves — semantic, not slot index.
+  float cipv_long_m{0.0f};
+  float cipv_rel_v{0.0f};
+  // Relevant DSTSR e_std_* (mps). 0 = none. Not plan_v_cap_vis.
+  float v_sign_max_mps{0.0f};
+  float v_sign_min_mps{0.0f};
 };
 
 HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
@@ -73,8 +79,8 @@ HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
   }
   bool have_l = false;
   bool have_r = false;
-  float lc0 = 0.0f, lc1 = 0.0f, lc2 = 0.0f, lc3 = 0.0f, lx1 = 60.0f;
-  float rc0 = 0.0f, rc1 = 0.0f, rc2 = 0.0f, rc3 = 0.0f, rx1 = 60.0f;
+  float lc0 = 0.0f, lc1 = 0.0f, lc2 = 0.0f, lc3 = 0.0f, lx1 = 0.0f;
+  float rc0 = 0.0f, rc1 = 0.0f, rc2 = 0.0f, rc3 = 0.0f, rx1 = 0.0f;
   float conf = 0.0f;
   const std::uint8_t n = std::min<std::uint8_t>(lh.m_hostline_num, 4);
   for (std::uint8_t i = 0; i < n; ++i) {
@@ -82,9 +88,12 @@ HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
     if (line.m_LH_Confidence < 0.1f && line.m_LH_Availability_State == 0) {
       continue;
     }
+    // Published VR only — do not invent 60 m.
+    const float x1 = line.m_LH_First_VR_End;
+    if (x1 <= 0.5f) {
+      continue;
+    }
     conf = std::max(conf, line.m_LH_Confidence);
-    // Same as Host _fcm_style_perc: use published VR, else 60. Do not invent 20 m.
-    const float x1 = (line.m_LH_First_VR_End > 0.5f) ? line.m_LH_First_VR_End : 60.0f;
     if (line.m_LH_Side == 1) {
       have_l = true;
       lc0 = line.m_LH_Line_First_C0;
@@ -102,30 +111,40 @@ HostLaneGeom HostLaneFromPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
     }
   }
   if (have_l && have_r) {
-    g.valid = true;
-    g.c0 = 0.5f * (lc0 + rc0);
-    g.c1 = 0.5f * (lc1 + rc1);
-    g.c2 = 0.5f * (lc2 + rc2);
-    g.c3 = 0.5f * (lc3 + rc3);
-    g.x_end = std::min(lx1, rx1);
-    g.width_m = std::max(2.5f, std::fabs(lc0 - rc0));
-  } else if (have_l || have_r) {
-    g.valid = true;
-    const float half = 1.75f;
-    if (have_l) {
-      g.c0 = lc0 - half;
-      g.c1 = lc1;
-      g.c2 = lc2;
-      g.c3 = lc3;
-      g.x_end = lx1;
-    } else {
-      g.c0 = rc0 + half;
-      g.c1 = rc1;
-      g.c2 = rc2;
-      g.c3 = rc3;
-      g.x_end = rx1;
+    if (gf_octave_planning::plan_host_pair_ok(lc0, rc0)) {
+      g.valid = true;
+      g.c0 = 0.5f * (lc0 + rc0);
+      g.c1 = 0.5f * (lc1 + rc1);
+      g.c2 = 0.5f * (lc2 + rc2);
+      g.c3 = 0.5f * (lc3 + rc3);
+      g.x_end = std::min(lx1, rx1);
+      g.width_m = std::max(2.5f, std::fabs(lc0 - rc0));
     }
-    g.width_m = 3.5f;
+  } else if (have_l || have_r) {
+    const float half = 1.75f;
+    float use_l = lc0;
+    float use_r = rc0;
+    if (have_l) {
+      use_r = lc0 - 2.0f * half;
+    } else {
+      use_l = rc0 + 2.0f * half;
+    }
+    if (gf_octave_planning::plan_host_pair_ok(use_l, use_r)) {
+      g.valid = true;
+      g.c0 = 0.5f * (use_l + use_r);
+      if (have_l) {
+        g.c1 = lc1;
+        g.c2 = lc2;
+        g.c3 = lc3;
+        g.x_end = lx1;
+      } else {
+        g.c1 = rc1;
+        g.c2 = rc2;
+        g.c3 = rc3;
+        g.x_end = rx1;
+      }
+      g.width_m = 3.5f;
+    }
   }
   if (lh.m_LH_Estimated_Width > 0.5f) {
     g.width_m = lh.m_LH_Estimated_Width;
@@ -173,6 +192,49 @@ void TryPushObj(PercView& v, const ObjT& o) {
   v.obj[v.nobj++] = row;
 }
 
+// Gold e_std_* / e_lgt_* → km/h. Returns <0 if not a numeric speed Sign_Name.
+float StdSignNameToKph(int name) {
+  if (name >= 0 && name <= 13) {
+    return static_cast<float>((name + 1) * 10);
+  }
+  if (name == 100) {
+    return 5.0f;
+  }
+  if (name >= 101 && name <= 114) {
+    return static_cast<float>(5 + (name - 100) * 10);
+  }
+  if (name == 85) {
+    return 150.0f;
+  }
+  if (name == 86) {
+    return 160.0f;
+  }
+  if (name >= 28 && name <= 41) {
+    return static_cast<float>((name - 27) * 10);
+  }
+  if (name >= 115 && name <= 127) {
+    return static_cast<float>(5 + (name - 115) * 10);
+  }
+  return -1.0f;
+}
+
+bool PreferSignCandidate(float d_new, float d_cur, bool have) {
+  if (!have) {
+    return true;
+  }
+  // Nearest ahead (d>=0); else most recently passed in behind window.
+  if (d_new >= 0.0f && d_cur >= 0.0f) {
+    return d_new < d_cur;
+  }
+  if (d_new >= 0.0f) {
+    return true;
+  }
+  if (d_cur >= 0.0f) {
+    return false;
+  }
+  return d_new > d_cur;
+}
+
 // One walk of dyn[] + one walk of hostlines. Empty → nobj=0 (Host _pack_obj []).
 // CIPV first, then the rest. Do not LeadFromPerc then pack again.
 PercView ExtractPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
@@ -186,6 +248,8 @@ PercView ExtractPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
     for (int i = 0; i < n_src; ++i) {
       if (dyn.m_Obj_item[i].m_OBJ_ID == dyn.m_OBJ_VD_CIPV_ID) {
         TryPushObj(v, dyn.m_Obj_item[i]);
+        v.cipv_long_m = dyn.m_Obj_item[i].m_OBJ_Long_Distance;
+        v.cipv_rel_v = dyn.m_Obj_item[i].m_OBJ_Relative_Long_Velocity;
         break;
       }
     }
@@ -219,30 +283,62 @@ PercView ExtractPerc(const gf_gen::Perception_MESSAGE_Out_St& perc) {
   }
   const auto& tsr = perc.Perception_DSTSR_Out;
   const int n_tsr = std::min(6, static_cast<int>(tsr.m_tsr_num));
+  float max_d = 0.0f;
+  float min_d = 0.0f;
+  bool have_max = false;
+  bool have_min = false;
   for (int i = 0; i < n_tsr; ++i) {
     const auto& it = tsr.m_TSR_Item[i];
     const int name = static_cast<int>(it.m_DSTSR_Sign_Name);
-    // e_trafficSignals=164, e_stopAhead=196 — phantom stop, no new .m I/O.
-    if (name != 164 && name != 196) {
+    // e_trafficSignals=164, e_stopAhead=196 → cls_reg_stop (not a car / not occupy).
+    if (name == 164 || name == 196) {
+      // ME: host stop only from Relevant (0); other-lane / far ignored.
+      if (static_cast<int>(it.m_DSTSR_Relevancy) != 0) {
+        continue;
+      }
+      const float d = it.m_DSTSR_Sign_Long_Distance;
+      const float lat = it.m_DSTSR_Sign_Lat_Distance;
+      if (d < -gf_octave_planning::plan_cal().reg_stop_behind_m || d > kObjDMaxM) {
+        continue;
+      }
+      if (ObjAlreadyPacked(v.obj, v.nobj, d, lat) || v.nobj >= oct_gen::kObjNMax) {
+        continue;
+      }
+      oct_gen::PlanObj row{};
+      row.d = d;
+      row.rel = 0.0f;
+      row.lat = lat;
+      row.len_m = 1.0f;
+      row.cls = gf_octave_planning::plan_cal().cls_reg_stop;
+      row.heading = 0.0f;
+      row.is_ped = 0.0f;
+      v.obj[v.nobj++] = row;
+      continue;
+    }
+    const float kph = StdSignNameToKph(name);
+    if (kph < 0.0f) {
+      continue;
+    }
+    if (static_cast<int>(it.m_DSTSR_Relevancy) != 0) {
       continue;
     }
     const float d = it.m_DSTSR_Sign_Long_Distance;
-    const float lat = it.m_DSTSR_Sign_Lat_Distance;
-    if (d < 0.0f || d > kObjDMaxM) {
+    if (d < -gf_octave_planning::plan_cal().reg_stop_behind_m || d > kObjDMaxM) {
       continue;
     }
-    if (ObjAlreadyPacked(v.obj, v.nobj, d, lat) || v.nobj >= oct_gen::kObjNMax) {
-      continue;
+    const float mps = kph / 3.6f;
+    const bool is_min = static_cast<int>(it.m_DSTSR_Sup1_SignName) == 27;
+    if (is_min) {
+      if (PreferSignCandidate(d, min_d, have_min)) {
+        have_min = true;
+        min_d = d;
+        v.v_sign_min_mps = mps;
+      }
+    } else if (PreferSignCandidate(d, max_d, have_max)) {
+      have_max = true;
+      max_d = d;
+      v.v_sign_max_mps = mps;
     }
-    oct_gen::PlanObj row{};
-    row.d = d;
-    row.rel = 0.0f;
-    row.lat = lat;
-    row.len_m = 1.0f;
-    row.cls = 1.0f;
-    row.heading = 0.0f;
-    row.is_ped = 0.0f;
-    v.obj[v.nobj++] = row;
   }
   return v;
 }
@@ -271,7 +367,7 @@ std::uint64_t now_ns() {
 }
 
 void ApplyTick(const oct_gen::PlanTickOut& tick, const gf_gen::EgoMotion& ego,
-               gf_gen::Trajectory& traj) {
+               const PercView& view, gf_gen::Trajectory& traj) {
   traj.point_count = static_cast<std::uint8_t>(oct_gen::kLatTrajPoints);
   traj.gear_shift_first = ego.gear;
   traj.gear_shift_second = 0;
@@ -285,6 +381,12 @@ void ApplyTick(const oct_gen::PlanTickOut& tick, const gf_gen::EgoMotion& ego,
   traj.steer = tick.steer;
   traj.target_speed_mps = tick.target_speed_mps;
   traj.ctrl_mode = CtrlModeId(tick.mode);
+  traj.D_see_m = tick.D_see;
+  traj.s_stop_m = tick.s_stop;
+  traj.cipv_long_m = view.cipv_long_m;
+  traj.cipv_rel_v = view.cipv_rel_v;
+  traj.v_sign_max_mps = view.v_sign_max_mps;
+  traj.v_sign_min_mps = view.v_sign_min_mps;
 }
 
 }  // namespace
@@ -368,15 +470,19 @@ int main() {
     const auto t0 = std::chrono::steady_clock::now();
     const PercView view = ExtractPerc(*last_perc);
     last_perc.reset();
+    const float v_sign_max =
+        view.v_sign_max_mps > 0.5f ? view.v_sign_max_mps : 1.0e6f;
+    const float v_sign_min = view.v_sign_min_mps;
     const auto tick = oct_gen::m_plan_tick(
         ego.speed_mps, ego.steer_angle_deg, view.lane.valid, view.lane.e_y, view.lane.c0,
         view.lane.c1, view.lane.c2, view.lane.c3, view.lane.x_end, view.lane.conf,
-        view.lane.lane_count, view.nobj ? view.obj : nullptr, view.nobj, D_see_prev, T_plan_prev);
+        view.lane.lane_count, view.nobj ? view.obj : nullptr, view.nobj, D_see_prev, T_plan_prev,
+        v_sign_max, v_sign_min);
     D_see_prev = tick.D_see;
     T_plan_prev = tick.T_plan;
 
     gf_gen::Trajectory traj{};
-    ApplyTick(tick, ego, traj);
+    ApplyTick(tick, ego, view, traj);
     traj.timestamp_ns = now_ns();
     const auto tick_ms = std::chrono::duration<double, std::milli>(
                              std::chrono::steady_clock::now() - t0)

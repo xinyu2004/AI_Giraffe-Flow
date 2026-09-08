@@ -65,6 +65,16 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
     st.throttle_cmd = s.throttle;
     st.brake_cmd = s.brake;
     st.traj_v_plan_mps = s.target_speed_mps;
+    st.traj_d_see_m = s.D_see_m;
+    st.traj_s_stop_m = s.s_stop_m;
+    st.v_sign_max_mps = s.v_sign_max_mps;
+    st.v_sign_min_mps = s.v_sign_min_mps;
+    // Prefer Trajectory CIPV long when set (semantic), not Obj[0].
+    if (s.cipv_long_m > 0.5f) {
+      st.has_perc_lead = true;
+      st.lead_dist_m = s.cipv_long_m;
+      st.cipo_x_m = s.cipv_long_m;
+    }
     if (s.timestamp_ns) st.t_ns = s.timestamp_ns;
     return;
   }
@@ -150,26 +160,44 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
       o.heading_rad = it.m_OBJ_Heading;
       st.perc_objects[st.n_obj++] = o;
     }
-    if (st.n_obj <= 0) {
-      st.has_perc_lead = false;
-      st.lead_dist_m = 0;
-      return;
-    }
-    int lead_i = 0;
-    for (int i = 0; i < st.n_obj; ++i) {
-      if (st.perc_objects[i].is_cipv) {
-        lead_i = i;
-        break;
+    // ME: CIPV only by ID. Never promote Obj[0].
+    st.has_perc_lead = false;
+    st.lead_dist_m = 0;
+    st.cipo_x_m = 0;
+    st.cipo_y_m = 0;
+    if (cipv != 0) {
+      for (int i = 0; i < st.n_obj; ++i) {
+        if (st.perc_objects[i].is_cipv) {
+          st.has_perc_lead = true;
+          st.lead_dist_m = st.perc_objects[i].x_m;
+          st.cipo_x_m = st.perc_objects[i].x_m;
+          st.cipo_y_m = st.perc_objects[i].y_m;
+          break;
+        }
       }
     }
-    if (!st.perc_objects[lead_i].is_cipv) {
-      st.perc_objects[lead_i].is_cipv = true;
-      st.cipv_id = st.perc_objects[lead_i].obj_id;
+
+    // Prefer Relevant stop (196/164) over green (198) for HUD.
+    const auto& tsr = s.Perception_DSTSR_Out;
+    const int n_tsr = std::min(6, static_cast<int>(tsr.m_tsr_num));
+    float best_d = 1.0e9f;
+    int best_name = 0;
+    int best_rank = 9;
+    for (int i = 0; i < n_tsr; ++i) {
+      const auto& it = tsr.m_TSR_Item[i];
+      const int name = static_cast<int>(it.m_DSTSR_Sign_Name);
+      if (name != 164 && name != 196 && name != 198) continue;
+      if (static_cast<int>(it.m_DSTSR_Relevancy) != 0) continue;
+      const float d = it.m_DSTSR_Sign_Long_Distance;
+      if (d < -8.0f || d > kDBevM) continue;
+      const int rank = (name == 198) ? 1 : 0;
+      if (rank > best_rank) continue;
+      if (rank == best_rank && d >= best_d) continue;
+      best_d = d;
+      best_name = name;
+      best_rank = rank;
     }
-    st.has_perc_lead = true;
-    st.lead_dist_m = st.perc_objects[lead_i].x_m;
-    st.cipo_x_m = st.perc_objects[lead_i].x_m;
-    st.cipo_y_m = st.perc_objects[lead_i].y_m;
+    st.light_sign_name = best_name;
     return;
   }
 #endif

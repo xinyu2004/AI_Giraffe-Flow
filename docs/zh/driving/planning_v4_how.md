@@ -262,7 +262,7 @@ CCRU / 横穿：目标在走廊或将进入走廊，速度段按相对运动收�
 | **2 视野尺子** | 两把尺：`VR_End`＝标线；`D_see=min(D_vr,D_occ,D_fov,D_wx)+slew`＝驾驶。`D_fov`＝光学方位楔，不是航向 `D_bend`。`allow_lc` 仅旗标 |
 | **3 多目标权重** | ≤`obj_n_max` 个目标取严；邻道通过 vs 朝里插入连续权重；行人抬权 |
 | **4 走廊搜索** | 现只本车道 + `allow_lc` 旗标；第二走廊等认完刀 2/3 再加，且不得变成每拍网格搜 |
-| **5 场景后挂** | 灯/墙走 DSTSR·STATIC；环视后向走 `VR_Start` 与负 d，不改 host `VR_End` |
+| **5 场景后挂** | 红/黄灯 `cls_reg_stop` 改速度段（不进 `D_occ`）；墙走 STATIC occupy；环视后向走 `VR_Start` 与负 d，不改 host `VR_End` |
 
 **BEV：** 场景只读 FCM（灰线到各线 `VR_End`）。青区是本车道可见路面（铺到视线尽头，尽头实心青横杠），不画 FOV 虚线。斜三角只在本车道有挡且邻线超过开口时画。不要把 `D_see` 做成 FCM 新通道。
 

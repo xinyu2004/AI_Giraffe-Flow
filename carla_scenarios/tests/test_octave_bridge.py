@@ -23,6 +23,8 @@ from octave_bridge.protocol import (  # noqa: E402
 )
 from octave_bridge.semantic_map import (  # noqa: E402
     PlanningResult,
+    _fcm_style_perc,
+    _host_pair_ok,
     build_view,
     result_to_cmd_blob,
     view_to_bev_out_dict,
@@ -148,6 +150,27 @@ def test_build_view_and_plan() -> None:
     assert out["Perception_LH_Out"]["m_hostline_num"] == 2
 
 
+def test_host_pair_off_ego_not_for_control() -> None:
+    """Foxglove wall case: both host C0 on one side — draw marks, do not LKA."""
+    assert _host_pair_ok(1.75, -1.75)
+    assert not _host_pair_ok(4.12, 0.59)
+    perc = _fcm_style_perc(
+        {
+            "lane_count": 2,
+            "lane_avail": 2,
+            "lane_conf": 0.95,
+            "lane_vr_end_m": 60.0,
+            "lane_width_m": 3.5,
+            "host_left_c0": 4.12,
+            "host_right_c0": 0.59,
+            "host_c1": 0.16,
+            "host_c2": 0.0,
+        }
+    )
+    assert len(perc.host) == 2
+    assert perc.lane_valid is False
+
+
 def test_plan_only_on_fake_perc() -> None:
     """State caches only; one on_tick per FAKE_PERC (P clock 1:1, no double plan)."""
     import struct
@@ -235,7 +258,7 @@ def test_unpack_plan_vec_layout() -> None:
     hdr = [
         0.3, 0.0, 0.05, 12.0,
         40.0, 8.0, 120.0, 0.1,
-        25.0, 1.0, 0.0, 0.017,
+        25.0, 0.0, 0.0, 0.017,
         16.0, 0.0,
     ]
     xs = [float(i) for i in range(16)]
@@ -246,7 +269,7 @@ def test_unpack_plan_vec_layout() -> None:
     assert got["mode"] == "cruise"
     assert got["t_m_s"] == 0.017
     assert got["x_m"] == xs
-    assert got["allow_lc"] == 1.0
+    assert got["allow_lc"] == 0.0
     assert len(got["v_mps"]) == 16
 
 
@@ -414,8 +437,10 @@ def test_pack_obj_empty_is_nobj_zero() -> None:
 
     assert _pack_obj(PercView()) == []
     vec = _pack_in(PlanningView())
-    assert vec[13] == 0.0
-    assert vec[14] == 0.0
+    assert vec[13] == 0.0  # nobj
+    # Trailing v_sign_max / v_sign_min (no signs → open max, zero min).
+    assert vec[14] == pytest.approx(1.0e6)
+    assert vec[15] == 0.0
 
 
 def test_pack_obj_cipv_first_then_rest() -> None:
@@ -467,7 +492,8 @@ def test_pack_obj_ped_class5_sets_is_ped() -> None:
     assert rows[0][5] == pytest.approx(0.2)
 
 
-def test_pack_obj_lead_only_keeps_heading() -> None:
+def test_pack_obj_lead_only_no_hatch() -> None:
+    """Lead-only hatch removed — empty dyn stays empty (parity with FCM)."""
     from octave_bridge.runtime import _pack_obj
     from octave_bridge.semantic_map import PercView
 
@@ -478,10 +504,45 @@ def test_pack_obj_lead_only_keeps_heading() -> None:
         lead_lat_m=0.2,
         lead_heading_rad=0.08,
     )
+    assert _pack_obj(perc) == []
+
+
+def test_pack_obj_tsr_behind_still_reg_stop() -> None:
+    from octave_bridge.runtime import _CLS_REG_STOP, _pack_obj
+    from octave_bridge.semantic_map import PercView, TsrItem
+
+    perc = PercView(tsr=[TsrItem(name=196, long_m=-3.0, lat_m=1.0, relevancy=0)])
     rows = _pack_obj(perc)
     assert len(rows) == 1
-    assert rows[0][0] == pytest.approx(30.0)
-    assert rows[0][5] == pytest.approx(0.08)
+    assert rows[0][0] == pytest.approx(-3.0)
+    assert rows[0][4] == pytest.approx(_CLS_REG_STOP)
+    far = PercView(tsr=[TsrItem(name=196, long_m=-9.0, lat_m=1.0, relevancy=0)])
+    assert _pack_obj(far) == []
+
+
+def test_pack_obj_tsr_red_is_reg_stop_not_car() -> None:
+    from octave_bridge.runtime import _CLS_REG_STOP, _pack_obj
+    from octave_bridge.semantic_map import PercView, TsrItem
+
+    perc = PercView(
+        tsr=[TsrItem(name=196, long_m=35.0, lat_m=1.2, relevancy=0)],
+    )
+    rows = _pack_obj(perc)
+    assert len(rows) == 1
+    assert rows[0][0] == pytest.approx(35.0)
+    assert rows[0][2] == pytest.approx(1.2)
+    assert rows[0][4] == pytest.approx(_CLS_REG_STOP)
+    assert rows[0][4] != pytest.approx(1.0)
+
+
+def test_pack_obj_tsr_other_lane_relevancy_skipped() -> None:
+    from octave_bridge.runtime import _pack_obj
+    from octave_bridge.semantic_map import PercView, TsrItem
+
+    other = PercView(tsr=[TsrItem(name=196, long_m=35.0, lat_m=6.0, relevancy=2)])
+    assert _pack_obj(other) == []
+    far = PercView(tsr=[TsrItem(name=196, long_m=35.0, lat_m=9.0, relevancy=5)])
+    assert _pack_obj(far) == []
 
 
 def test_pack_in_lane_count_matches_extractperc() -> None:

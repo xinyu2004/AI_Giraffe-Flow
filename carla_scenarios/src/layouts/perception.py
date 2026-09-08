@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any, Optional, Tuple
 
 from spawn.pick import offset_transform, pick_follow_transforms
@@ -11,18 +10,18 @@ from _verdict import CmdProbe, release_ego
 
 
 def layout_tsr_speed_limit(
-    carla_mod: Any,
-    client: Any,
-    world: Any,
+    session: Any,
     *,
     keep_ego: bool = False,
+    limit_kph: float = 60.0,
+    ego_mps: float = 12.0,
 ) -> Tuple[Any, Optional[Any], dict[str, Any]]:
-    """Place ego on straight; optional static prop as speed-sign stand-in."""
-    del client
+    world = session.world
+    carla_mod = session.carla
     ego_tf, ahead = pick_follow_transforms(world, lead_gap_m=35.0, require_straight=True)
     ego = spawn_ego_only(world, ego_tf=ego_tf, keep_ego=keep_ego)
-    release_ego(carla_mod, ego)
-    limit = float(os.environ.get("GF_TSR_LIMIT_KPH") or "60")
+    release_ego(carla_mod, ego, session=session)
+    limit = float(limit_kph)
     prop = None
     try:
         lib = world.get_blueprint_library()
@@ -33,7 +32,7 @@ def layout_tsr_speed_limit(
             prop = world.try_spawn_actor(bp, sign_tf)
     except Exception:  # noqa: BLE001
         prop = None
-    mps = float(os.environ.get("GF_TSR_EGO_MPS") or "12")
+    mps = float(ego_mps)
     print(
         f"[layout] TSR_SPEED_LIMIT ego={ego.id} limit_kph={limit} "
         f"prop={getattr(prop, 'id', None)} (Giraffe drives)",

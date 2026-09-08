@@ -1,18 +1,19 @@
-"""VRU (pedestrian / bicycle) AEB layouts.
-
-Ego may use AEB-only closing seed (``aeb_ego_seed``); then Giraffe takes over.
-Walker motion is refreshed every tick via ``tick_vru_handoff``.
-"""
+"""VRU (pedestrian / bicycle) AEB layouts."""
 
 from __future__ import annotations
 
 import math
-import os
 from typing import Any, Optional, Tuple
 
 from spawn.ic import aeb_ego_seed, closing_along_heading
 from spawn.pick import offset_transform
-from spawn.place import spawn_ego_lead, spawn_named, spawn_walker_at
+from spawn.place import (
+    reseat_lead_relative,
+    spawn_ego_lead,
+    spawn_ego_only,
+    spawn_named,
+    spawn_walker_at,
+)
 from spawn.roles import ROLE_LEAD, destroy_role, safe_destroy, tick_world
 from _verdict import CmdProbe, release_ego
 
@@ -33,56 +34,30 @@ def _apply_walker_cross(carla_mod: Any, walker: Any, meta: dict[str, Any]) -> No
         pass
 
 
-def layout_aeb_pedestrian(
-    carla_mod: Any,
-    client: Any,
-    world: Any,
+def _spawn_ped_target(
+    session: Any,
+    ego: Any,
     *,
-    keep_ego: bool = False,
-) -> Tuple[Any, Any, dict[str, Any]]:
-    """Ego straight; pedestrian starts on the right and walks into the lane."""
-    del client
-    gap_m = float(os.environ.get("GF_AEB_PED_GAP_M") or "28")
-    ego_mps = float(os.environ.get("GF_AEB_PED_EGO_MPS") or "8")
-    lat_m = float(os.environ.get("GF_AEB_PED_LAT_M") or "5")
-    ped_speed = float(os.environ.get("GF_AEB_PED_MPS") or "1.4")
-
-    if keep_ego:
-        ego, lead = spawn_ego_lead(
-            world,
-            lead_gap_m=gap_m,
-            reset=True,
-            require_straight=True,
-            keep_ego=True,
-        )
-        release_ego(carla_mod, ego)
-        print("[layout] AEB_PED keep_ego: no VRU pop in FOV", flush=True)
-        return ego, lead, {
-            "layout": "aeb_pedestrian",
-            "gap_m": gap_m,
-            "ego_mps": ego_mps,
-            "keep_ego": True,
-            "const_vel": False,
-            "ic": "giraffe_only",
-            "vru_kind": "continue",
-        }
-
-    ego, lead_dummy = spawn_ego_lead(
-        world,
-        lead_gap_m=gap_m,
-        reset=True,
-        require_straight=True,
-        keep_ego=False,
-    )
-    safe_destroy(lead_dummy)
-    destroy_role(world, ROLE_LEAD)
-    release_ego(carla_mod, ego)
-
+    gap_m: float,
+    lat_m: float,
+    ped_speed: float,
+) -> tuple[Any, dict[str, Any]]:
+    world = session.world
+    carla_mod = session.carla
     ego_tf = ego.get_transform()
     ped_tf = offset_transform(ego_tf, forward_m=gap_m * 0.7, right_m=lat_m)
     right = ego_tf.get_right_vector()
     into_road_x, into_road_y = -float(right.x), -float(right.y)
     ped_tf.rotation.yaw = math.degrees(math.atan2(into_road_y, into_road_x))
+
+    destroy_role(world, ROLE_LEAD)
+    try:
+        for w in world.get_actors().filter("walker.*"):
+            if (w.attributes.get("role_name") or "") == "vru":
+                safe_destroy(w)
+    except Exception:  # noqa: BLE001
+        pass
+    tick_world(world)
 
     is_walker = True
     try:
@@ -97,33 +72,93 @@ def layout_aeb_pedestrian(
         )
 
     meta: dict[str, Any] = {
-        "layout": "aeb_pedestrian",
-        "gap_m": gap_m,
-        "ego_mps": ego_mps,
-        "ic": "aeb_ego_seed",
         "vru_kind": "walker" if is_walker else "bike_fallback",
         "vru_dir_x": into_road_x,
         "vru_dir_y": into_road_y,
         "vru_speed": ped_speed,
     }
-
     if is_walker:
         _apply_walker_cross(carla_mod, target, meta)
     else:
-        try:
-            target.set_transform(ped_tf)
-        except Exception:  # noqa: BLE001
-            pass
-        closing_along_heading(carla_mod, target, max(ped_speed, 1.2))
+        closing_along_heading(
+            carla_mod, target, max(ped_speed, 1.2), session=session
+        )
+    return target, meta
+
+
+def layout_aeb_pedestrian(
+    session: Any,
+    *,
+    keep_ego: bool = False,
+    gap_m: float = 28.0,
+    ego_mps: float = 8.0,
+    lat_m: float = 5.0,
+    ped_speed: float = 1.4,
+) -> Tuple[Any, Any, dict[str, Any]]:
+    world = session.world
+    carla_mod = session.carla
+    gap_m = float(gap_m)
+    ego_mps = float(ego_mps)
+    lat_m = float(lat_m)
+    ped_speed = float(ped_speed)
+
+    if keep_ego:
+        ego = spawn_ego_only(world, keep_ego=True, reset_others=False)
+        release_ego(carla_mod, ego, session=session)
+        target, vru_meta = _spawn_ped_target(
+            session, ego, gap_m=gap_m, lat_m=lat_m, ped_speed=ped_speed
+        )
+        meta = {
+            "layout": "aeb_pedestrian",
+            "gap_m": gap_m,
+            "ego_mps": ego_mps,
+            "keep_ego": True,
+            "const_vel": False,
+            "ic": "giraffe_only",
+            **vru_meta,
+        }
+        tick_world(world)
+        if vru_meta["vru_kind"] == "walker":
+            _apply_walker_cross(carla_mod, target, meta)
+        print(
+            f"[layout] PED_CROSS keep_ego: reseat VRU gap≈{gap_m} lat≈{lat_m} "
+            f"ego={ego.id} vru={target.id} kind={meta['vru_kind']}",
+            flush=True,
+        )
+        return ego, target, meta
+
+    ego, lead_dummy = spawn_ego_lead(
+        world,
+        lead_gap_m=gap_m,
+        reset=True,
+        require_straight=True,
+        keep_ego=False,
+    )
+    safe_destroy(lead_dummy)
+    destroy_role(world, ROLE_LEAD)
+    release_ego(carla_mod, ego, session=session)
+
+    target, vru_meta = _spawn_ped_target(
+        session, ego, gap_m=gap_m, lat_m=lat_m, ped_speed=ped_speed
+    )
+    meta = {
+        "layout": "aeb_pedestrian",
+        "gap_m": gap_m,
+        "ego_mps": ego_mps,
+        "ic": "aeb_ego_seed",
+        **vru_meta,
+    }
 
     aeb_ego_seed(True)
     try:
-        const_on = closing_along_heading(carla_mod, ego, ego_mps)
+        const_on = closing_along_heading(
+            carla_mod, ego, ego_mps, session=session
+        )
     finally:
         aeb_ego_seed(False)
     meta["const_vel"] = const_on
     tick_world(world)
-    if is_walker:
+    if vru_meta["vru_kind"] == "walker":
         _apply_walker_cross(carla_mod, target, meta)
 
     print(
@@ -136,36 +171,46 @@ def layout_aeb_pedestrian(
 
 
 def layout_aeb_bicycle(
-    carla_mod: Any,
-    client: Any,
-    world: Any,
+    session: Any,
     *,
     keep_ego: bool = False,
+    gap_m: float = 30.0,
+    ego_mps: float = 10.0,
+    bike_mps: float = 4.0,
 ) -> Tuple[Any, Any, dict[str, Any]]:
-    """Ego straight; bicycle ahead on-path (slow same-direction)."""
-    del client
-    gap_m = float(os.environ.get("GF_AEB_BIKE_GAP_M") or "30")
-    ego_mps = float(os.environ.get("GF_AEB_BIKE_EGO_MPS") or "10")
-    bike_mps = float(os.environ.get("GF_AEB_BIKE_MPS") or "4")
+    world = session.world
+    carla_mod = session.carla
+    gap_m = float(gap_m)
+    ego_mps = float(ego_mps)
+    bike_mps = float(bike_mps)
 
     if keep_ego:
-        ego, lead = spawn_ego_lead(
+        ego = spawn_ego_only(world, keep_ego=True, reset_others=False)
+        release_ego(carla_mod, ego, session=session)
+        bike = reseat_lead_relative(
             world,
-            lead_gap_m=gap_m,
-            reset=True,
-            require_straight=True,
-            keep_ego=True,
+            ego,
+            session=session,
+            forward_m=gap_m,
+            right_m=0.8,
+            lead_filter="vehicle.bh.crossbike",
+            park=False,
         )
-        release_ego(carla_mod, ego)
-        print("[layout] BICYCLE keep_ego: no bike pop in FOV", flush=True)
-        return ego, lead, {
+        closing_along_heading(carla_mod, bike, bike_mps, session=session)
+        print(
+            f"[layout] BICYCLE keep_ego: reseat bike gap≈{gap_m} "
+            f"ego={ego.id} bike={bike.id}",
+            flush=True,
+        )
+        return ego, bike, {
             "layout": "aeb_bicycle",
             "gap_m": gap_m,
             "ego_mps": ego_mps,
+            "bike_mps": bike_mps,
             "keep_ego": True,
             "const_vel": False,
             "ic": "giraffe_only",
-            "vru_kind": "continue",
+            "vru_kind": "bicycle",
         }
 
     ego, _ = spawn_ego_lead(
@@ -176,7 +221,7 @@ def layout_aeb_bicycle(
         keep_ego=False,
     )
     destroy_role(world, ROLE_LEAD)
-    release_ego(carla_mod, ego)
+    release_ego(carla_mod, ego, session=session)
 
     ego_tf = ego.get_transform()
     bike_tf = offset_transform(ego_tf, forward_m=gap_m, right_m=0.8)
@@ -187,15 +232,14 @@ def layout_aeb_bicycle(
         transform=bike_tf,
         bp_filter="vehicle.bh.crossbike",
     )
-    try:
-        bike.set_autopilot(False)
-    except Exception:  # noqa: BLE001
-        pass
+    session.ap_off(bike)
 
-    closing_along_heading(carla_mod, bike, bike_mps)
+    closing_along_heading(carla_mod, bike, bike_mps, session=session)
     aeb_ego_seed(True)
     try:
-        const_on = closing_along_heading(carla_mod, ego, ego_mps)
+        const_on = closing_along_heading(
+            carla_mod, ego, ego_mps, session=session
+        )
     finally:
         aeb_ego_seed(False)
 
@@ -222,7 +266,6 @@ def tick_vru_handoff(
     meta: dict[str, Any],
     cmd: CmdProbe,
 ) -> None:
-    """Keep VRU moving; release AEB ego seed once Giraffe commands."""
     import carla as _c  # type: ignore
 
     kind = str(meta.get("vru_kind") or "")
@@ -238,4 +281,7 @@ def tick_vru_handoff(
         ego.disable_constant_velocity()
     except Exception:  # noqa: BLE001
         pass
-    print(f"[layout] VRU Giraffe cmd at t={elapsed:.2f}s → release AEB ego seed", flush=True)
+    print(
+        f"[layout] VRU Giraffe cmd at t={elapsed:.2f}s → release AEB ego seed",
+        flush=True,
+    )

@@ -14,7 +14,10 @@ CAL = {
     "lat_ky_scale_lo": 0.50,
     "lat_c1_sat": 0.40,
     "lat_dsteer_max": 0.055,
-    "lat_ey_invalid_m": 3.0,
+    "lat_ey_invalid_m": 1.6,
+    "host_width_min_m": 2.50,
+    "host_width_max_m": 5.50,
+    "host_inside_m": 0.25,
     "lat_c1_invalid": 0.40,
     "traj_n": 16,
     "traj_blend_m": 14.0,
@@ -47,6 +50,16 @@ def lat_steer_from_lane(e_y: float, c1: float) -> float:
 def lat_steer_from_ego(steer_angle_deg: float) -> float:
     del steer_angle_deg
     return 0.0
+
+
+def plan_host_pair_ok(lc0: float, rc0: float) -> bool:
+    w = lc0 - rc0
+    if w < CAL["host_width_min_m"] or w > CAL["host_width_max_m"]:
+        return False
+    inside = max(CAL["host_inside_m"], 0.05)
+    if lc0 < inside or rc0 > -inside:
+        return False
+    return True
 
 
 def gf_lane_usable(lane_valid: bool, e_y: float, c1: float) -> bool:
@@ -107,6 +120,14 @@ def m_lat_traj(
         else:
             ys.append(0.0)
     return xs, ys, horizon
+
+
+def test_host_pair_straddles_ego() -> None:
+    assert plan_host_pair_ok(1.75, -1.75)
+    assert plan_host_pair_ok(2.2, -1.3)
+    # Foxglove wall case: both lines left of ego (right C0 still +).
+    assert not plan_host_pair_ok(4.12, 0.59)
+    assert not plan_host_pair_ok(-2.88, -5.87)
 
 
 def test_lka_lane_left_error_steers_left() -> None:

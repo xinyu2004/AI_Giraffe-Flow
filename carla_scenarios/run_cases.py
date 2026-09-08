@@ -41,11 +41,9 @@ for _p in (_HERE, _SRC, _LIB):
 from _proc_util import kill_matching, kill_proc_tree  # noqa: E402
 
 from _carla_env import (  # noqa: E402
-    carla_host,
-    carla_port,
-    connect_world,
+    connect_session,
     duration_s_for_case,
-    load_local_env,
+    load_snapshot,
     wait_budget_s,
 )
 from _manifest import resolve_targets  # noqa: E402
@@ -127,8 +125,10 @@ def _ensure_view(
     *,
     no_window: bool,
     title: str,
+    session: Any = None,
 ) -> Optional[ScenarioView]:
-    if no_window or not scenario_view_wanted():
+    snap = getattr(session, "snap", None) if session is not None else None
+    if no_window or not scenario_view_wanted(snap):
         if view is not None:
             try:
                 view.destroy()
@@ -153,14 +153,18 @@ def _ensure_view(
             except Exception:  # noqa: BLE001
                 pass
     mount = load_camera_mount()
+    vw = int(snap.view_w) if snap is not None else int(os.environ.get("GF_SCENARIO_VIEW_W") or "960")
+    vh = int(snap.view_h) if snap is not None else int(os.environ.get("GF_SCENARIO_VIEW_H") or "540")
+    chase = snap.chase_cam if snap is not None else None
     try:
         v = ScenarioView(
             world,
             ego,
-            width=int(os.environ.get("GF_SCENARIO_VIEW_W") or "960"),
-            height=int(os.environ.get("GF_SCENARIO_VIEW_H") or "540"),
+            width=vw,
+            height=vh,
             title=title,
             camera_mount=mount,
+            chase_cam=chase,
         )
         print("[run_cases] pygame window open (reused across cases)", flush=True)
         return v
@@ -225,7 +229,7 @@ def _write_results(
 
 
 def main(argv: list[str] | None = None) -> int:
-    load_local_env()
+    snap = load_snapshot()
     p = argparse.ArgumentParser(
         description="AFC run_cases — long-lived Client A (not systemd)"
     )
@@ -237,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--duration-s",
         type=float,
-        default=float(os.environ.get("GF_SCENARIO_DURATION_S") or "8"),
+        default=float(snap.duration_s),
         help="Per-case duration (default GF_SCENARIO_DURATION_S in carla.env)",
     )
     p.add_argument("--period-s", type=float, default=0.05)
@@ -298,15 +302,17 @@ def main(argv: list[str] | None = None) -> int:
         run_dir.mkdir(parents=True, exist_ok=True)
 
     print(
-        f"[run_cases] Client A long-lived host={carla_host()}:{carla_port()} "
+        f"[run_cases] Client A long-lived host={snap.host}:{snap.port} "
+        f"tm={snap.tm_port} "
         f"cases={len(runnable)} planned_skipped={planned_skip} "
         f"stop_on_fail={int(stop_on_fail)} write_results={int(write_results)} "
         f"(scheme-1: natural continue; Giraffe drives; one window)",
         flush=True,
     )
-    carla, client, world = connect_world(
-        wait_s=wait_budget_s(args.wait_s), log_prefix="[run_cases]"
+    session = connect_session(
+        wait_s=wait_budget_s(args.wait_s), log_prefix="[run_cases]", snap=snap
     )
+    carla, client, world = session.carla, session.client, session.world
     _start_giraffe_client()
     # Always wipe leftover hero/lead from a prior crash/session — otherwise the
     # first case "continues" from the guardrail instead of a real cold start.
@@ -322,9 +328,8 @@ def main(argv: list[str] | None = None) -> int:
             if STOP:
                 skipped_rest.extend(c for c, _, _ in runnable[idx:])
                 break
-            # Only suite_start is a cold wipe. Mid-suite: keep the same hero (and
-            # pygame window) even if yaw is ugly — wrong heading is a verdict
-            # issue, not a reason to respawn / reopen the window.
+            # Natural continue: keep hero mid-suite. Threat layouts reseat lead/VRU
+            # relative to current ego (no forced cold wipe).
             hero = find_by_role(world, ROLE_EGO)
             if idx == 0:
                 keep_ego = False
@@ -387,7 +392,9 @@ def main(argv: list[str] | None = None) -> int:
             # Tunnel/ISP need longer windows; other cases follow suite --duration-s.
             cid_l = cid.lower()
             if cid_l.startswith("env_tunnel") or "isp" in cid_l:
-                case_dur = duration_s_for_case(cid, fallback=float(args.duration_s))
+                case_dur = duration_s_for_case(
+                    cid, fallback=float(args.duration_s), snap=snap
+                )
             else:
                 case_dur = max(1.0, float(args.duration_s))
             set_natural_continue(keep_ego)
@@ -404,6 +411,7 @@ def main(argv: list[str] | None = None) -> int:
                     preserve_ego=True,
                     stop_flag=lambda: STOP,
                     ensure_view=_ensure_view,
+                    session=session,
                 )
             except Exception as exc:  # noqa: BLE001
                 elapsed = time.time() - t0
@@ -481,8 +489,8 @@ def main(argv: list[str] | None = None) -> int:
                     runnable_n=len(runnable),
                     stop_on_fail=stop_on_fail,
                     duration_s=float(args.duration_s),
-                    host=carla_host(),
-                    port=int(carla_port()),
+                    host=snap.host,
+                    port=int(snap.port),
                 )
             except Exception as exc:  # noqa: BLE001
                 print(f"[run_cases] WARN: results write failed: {exc}", flush=True)

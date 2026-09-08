@@ -6,6 +6,8 @@
 
 **同一 service 永不双发布。** 回灌时不要同时跑 `vehicle_can_gateway` 的 EgoMotion 仿真。
 
+**Ego ⊂ Perception_In：** MVP 只灌 Ego 时 In 边空。AFC SIL 默认保留 gateway：`vehicle_state` → `ProjectEgo` + `ProjectPercIn` 同源。纯 B1 inject 灌 In 为 backlog（勿默认 StubTick 冒充车态）。
+
 ## 拓扑：B1 / B2（谁在听）
 
 | 模式 | 怎么开 | 跑什么 |

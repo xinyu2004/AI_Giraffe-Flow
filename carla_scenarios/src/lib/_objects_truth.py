@@ -425,16 +425,11 @@ def collect_dyn_objects(
             ped_n += 1
         else:
             vd_n += 1
-        if it["is_lead"] and cipv_id == 0:
+        if it["is_lead"] and it["assign"] == 3 and cipv_id == 0:
             cipv_id = oid
     if cipv_id == 0:
         for it in items:
             if not it["is_walker"] and it["assign"] == 3 and it["long_m"] > 0.5:
-                cipv_id = int(it["id"])
-                break
-    if cipv_id == 0 and items:
-        for it in items:
-            if not it["is_walker"]:
                 cipv_id = int(it["id"])
                 break
 

@@ -37,6 +37,7 @@ from spawn.place import (
     roll_npc,
     spawn_ego_lead,
     spawn_ego_only,
+    reseat_lead_relative,
     spawn_named,
     spawn_walker_at,
 )
@@ -85,6 +86,7 @@ __all__ = [
     "roll_npc",
     "spawn_ego_lead",
     "spawn_ego_only",
+    "reseat_lead_relative",
     "spawn_named",
     "spawn_walker_at",
     "tick_world",

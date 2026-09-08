@@ -11,6 +11,9 @@ function D_occ = gf_plan_occlusion(obj, c0)
     return;
   end
   for k = 1:n
+    if gf_plan_is_reg_stop(cls(k)) > 0.5
+      continue;
+    end
     occupy = gf_plan_lane_occupy(c0, lat(k), len_m(k), cls(k), hdg(k), ped(k));
     if occupy < p.occ_overlap_min_m
       continue;

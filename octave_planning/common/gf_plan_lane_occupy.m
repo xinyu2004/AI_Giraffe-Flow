@@ -5,6 +5,10 @@ function occupy = gf_plan_lane_occupy(c0, lat, len_m, cls, heading, is_ped)
   if nargin < 6
     is_ped = 0.0;
   end
+  if gf_plan_is_reg_stop(cls) > 0.5
+    occupy = 0.0;
+    return;
+  end
   W = p.lane_width_m;
   wo = gf_plan_obj_width(cls, is_ped);
   half = 0.5 * (wo * abs(cos(heading)) + max(len_m, 0.5) * abs(sin(heading)));

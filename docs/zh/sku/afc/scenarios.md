@@ -30,6 +30,52 @@ carla_scenarios/
 
 scheme-1：**scenario 只布景+IC**；连续控车应是 Giraffe→bridge。无 SIL 时仍可跑通布景，判定多为 `no_giraffe_control`（只影响结案，不代替 AEB 刹车）。
 
+## Session / env 分层策略（改代码前必读）
+
+> **依据（2026-03）**：`layout_s` 曾出现整十秒台阶（ACC≈14s、AEB keep_ego≈30s）。根因是 `GF_TM_PORT≠8000` 时仍调用无端口的 `set_autopilot(False)` → 默认打 8000 → Windows 上约 **10s RPC 超时**。曾误加 layout_prof / layout_pump 等堆料；定位后已删。
+
+### 原则
+
+1. **边界读一次**：`load_snapshot()`（经 `load_local_env`）只在入口（`run_cases` / `CaseAtom.main` / `connect_session`）调用；打成不可变 **`CarlaSnapshot`**。
+2. **层层传递**：深层用 **`CarlaSession`**（`snap` + `client`/`world` + `tm` + **`ap_off`/`ap_on`**）。禁止 layout / place / ic / traffic 再 `os.environ` / `load_local_env` / 无端口 `set_autopilot`。
+3. **增减不打乱结构**：新 case = 薄 script + layout + `kwargs_for_case`；换 TM 端口只改 `carla.env` / Snapshot；诊断可插拔，默认不焊进 spawn。
+4. **Case 旋钮另边缘**：`GF_AEB_*` / `GF_CUTIN_*` 等走 `_case_params.kwargs_for_case(tag)`，由 CaseAtom 下传；layout 只收显式 kwargs。
+
+### 依赖方向
+
+```text
+Edge (run_cases / CaseAtom.main)
+  → Snapshot + Session
+    → layouts(session, **CaseParams)
+      → spawn place / ic（session.ap_*）
+    → traffic / view（吃 Session.snap，不重读 env）
+```
+
+### 禁止再犯
+
+| 禁止 | 原因 |
+|------|------|
+| 裸 `vehicle.set_autopilot(False)` | 默认 8000，与 `GF_TM_PORT` 错位 → ~10s 卡死 |
+| layout 内 `get_traffic_manager` / `os.environ` | 破坏「读一次、下传」 |
+| 为未知卡顿加 pump / 常驻 prof | 治标；根因修好后应删 |
+| 把 occupy/光学写进 FCM `VR_End` | 见两把尺子规则（与本场景机正交） |
+
+验收：`release_only` / reseat 的 `ap_off` ≪0.1s；suite 内 TM attach 只一次。
+
+---
+
+## 可见性准则：禁止考场/视线内「突然刷出」
+
+**产品要求（曾多次强调，写入准则）：**
+
+- **环境车 / 行人 / 非本案道具**：不得在驾驶员 **可见锥（see-cone / 前视窗）内** 从无到有地 `spawn`。应在锥外生成，再驶入或随气泡维护进入视野。
+- **本案威胁（lead / VRU / 横穿）**：允许相对 ego 落位，但应视为 **考场布景**；`keep_ego` 续跑时用 `reseat` 挪已有 actor，避免「凭空多一辆」的观感仍需收敛（另开改动，勿在可见锥内反复 destroy+spawn）。
+- **本车道考场窗**（exam tube）：保持空净，只留给 fixture；ambient **不得**填进 host exam 窗。
+
+实现触点：`src/lib/_traffic.py`（`in_see_cone` / `spawn_band_ok` / maintain top-up）、`reseat_lead_relative`、各 threat layout。改 ambient/place 前先对照本节。
+
+---
+
 ## 布景分层（manifest 零代码关联）
 
 **原则**：`manifest.yaml` 只登记产品信息（id / script / status / keyword / tags / description），**永不**写 layout / spawn / judge / import。Case → 代码唯一入口是 `script:`；脚本内部自己引用 layout。
@@ -190,7 +236,8 @@ python3 cases/longitudinal/acc.py
 ## 待办摘要
 
 - 域收敛（眩光类 → `isp_env`）；按 **case 覆盖度** 取景，不绑「村庄↔日照」之类假关联  
-- 场景干净 = 少杂物、布景服务 case；环境车是正常的（非 FPS）  
+- 场景干净 = 少杂物、布景服务 case；环境车是正常的（非 FPS）——但 **不得在 see-cone 内突然 spawn**（见上文「可见性准则」）
+- Session / `ap_off` 端口策略：见上文「Session / env 分层策略」；改 gateway/spawn 前先读
 - FPS / 时间片：已记 [host_fps_sil_hil.md](../../../driving/host_fps_sil_hil.md)；P 与 perc 1:1，不抽帧换 Hz  
 - planning 真 SET；横向 lat-offset / HLB 真 beam 决策  
 - results 写入更完整的 VERDICT 字段（reason 等）

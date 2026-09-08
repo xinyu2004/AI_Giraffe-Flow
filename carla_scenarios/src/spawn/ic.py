@@ -151,14 +151,11 @@ def _snap_road_yaw(vehicle: Any) -> Tuple[float, float]:
     return _xy_forward(vehicle)
 
 
-def release_only(carla_mod: Any, ego: Any) -> None:
+def release_only(carla_mod: Any, ego: Any, *, session: Any) -> None:
     """Clear TM/autopilot/const-vel on hero so Giraffe alone drives. No park/brake."""
     del carla_mod
     print("[ic] release_only on hero (Giraffe-only ego)", flush=True)
-    try:
-        ego.set_autopilot(False)
-    except Exception:  # noqa: BLE001
-        pass
+    session.ap_off(ego)
     reset_vehicle_motion(ego)
 
 
@@ -170,6 +167,7 @@ def _enable_along(
     fy: float,
     *,
     profile: str,
+    session: Any,
 ) -> bool:
     """Drive +body-forward. CARLA ``enable_constant_velocity`` is **local** space.
 
@@ -182,7 +180,7 @@ def _enable_along(
     speed = abs(float(speed_mps))
     world = vehicle.get_world()
     try:
-        vehicle.set_autopilot(False)
+        session.ap_off(vehicle)
         vehicle.apply_control(
             carla_mod.VehicleControl(
                 throttle=0.0,
@@ -229,26 +227,38 @@ def _enable_along(
 
 
 def closing_along_heading(
-    carla_mod: Any, vehicle: Any, speed_mps: float
+    carla_mod: Any, vehicle: Any, speed_mps: float, *, session: Any
 ) -> bool:
     """IC along map road forward."""
     if _skip_hero_motion_ic(vehicle, profile="closing_along_heading"):
         return False
     fx, fy = _snap_road_yaw(vehicle)
     return _enable_along(
-        carla_mod, vehicle, speed_mps, fx, fy, profile="closing_along_heading"
+        carla_mod,
+        vehicle,
+        speed_mps,
+        fx,
+        fy,
+        profile="closing_along_heading",
+        session=session,
     )
 
 
 def closing_along_pose(
-    carla_mod: Any, vehicle: Any, speed_mps: float
+    carla_mod: Any, vehicle: Any, speed_mps: float, *, session: Any
 ) -> bool:
     """IC along current actor yaw (cross-traffic). No road snap."""
     if _skip_hero_motion_ic(vehicle, profile="closing_along_pose"):
         return False
     fx, fy = _xy_forward(vehicle)
     return _enable_along(
-        carla_mod, vehicle, speed_mps, fx, fy, profile="closing_along_pose"
+        carla_mod,
+        vehicle,
+        speed_mps,
+        fx,
+        fy,
+        profile="closing_along_pose",
+        session=session,
     )
 
 
@@ -257,6 +267,8 @@ def closing_toward_lead(
     vehicle: Any,
     speed_mps: float,
     lead: Any,
+    *,
+    session: Any,
 ) -> bool:
     """IC toward lead if mostly along-road; else road forward."""
     if _skip_hero_motion_ic(vehicle, profile="closing_toward_lead"):
@@ -278,13 +290,21 @@ def closing_toward_lead(
             pass
         fx, fy = _xy_forward(vehicle)
     return _enable_along(
-        carla_mod, vehicle, speed_mps, fx, fy, profile="closing_toward_lead"
+        carla_mod,
+        vehicle,
+        speed_mps,
+        fx,
+        fy,
+        profile="closing_toward_lead",
+        session=session,
     )
 
 
-def seed_speed(carla_mod: Any, vehicle: Any, speed_mps: float) -> bool:
+def seed_speed(
+    carla_mod: Any, vehicle: Any, speed_mps: float, *, session: Any
+) -> bool:
     """Lateral / env light road-forward IC."""
-    return closing_along_heading(carla_mod, vehicle, speed_mps)
+    return closing_along_heading(carla_mod, vehicle, speed_mps, session=session)
 
 
 def set_forward_speed(carla_mod: Any, vehicle: Any, speed_mps: float) -> None:

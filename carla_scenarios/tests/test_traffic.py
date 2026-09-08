@@ -170,3 +170,20 @@ def test_hud_light_label() -> None:
     assert hud_light_label("Green") == "GRN"
     assert hud_light_label("Off") is None
     assert hud_light_label(SimpleNamespace(name="Red")) == "RED"
+
+
+def test_topup_budget_stops_when_near_full() -> None:
+    from _traffic import _topup_budget
+
+    # near already at live stock → no add even if seen5 starved
+    assert (
+        _topup_budget(seen5=0, number=18, near_n=9, live=9, evicted=2) == 0
+    )
+    # room + starved seen5 → up to 2
+    assert (
+        _topup_budget(seen5=0, number=18, near_n=5, live=9, evicted=0) == 2
+    )
+    # seen5 ok → only replace evicted
+    assert (
+        _topup_budget(seen5=18, number=18, near_n=5, live=9, evicted=1) == 1
+    )

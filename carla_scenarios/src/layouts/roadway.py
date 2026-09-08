@@ -1,11 +1,7 @@
-"""Lane split / merge roadway stress layouts (best-effort on Town maps).
-
-Ego motion is Giraffe-only.
-"""
+"""Lane split / merge roadway stress layouts (best-effort on Town maps)."""
 
 from __future__ import annotations
 
-import os
 from typing import Any, Optional, Tuple
 
 from spawn.pick import pick_follow_transforms
@@ -59,17 +55,17 @@ def _pick_multi_lane(world: Any, *, prefer_more: bool) -> Any:
 
 
 def layout_lane_split(
-    carla_mod: Any,
-    client: Any,
-    world: Any,
+    session: Any,
     *,
     keep_ego: bool = False,
+    ego_mps: float = 10.0,
 ) -> Tuple[Any, Optional[Any], dict[str, Any]]:
-    del client
+    world = session.world
+    carla_mod = session.carla
     tf = _pick_multi_lane(world, prefer_more=True)
     ego = spawn_ego_only(world, ego_tf=tf, keep_ego=keep_ego)
-    release_ego(carla_mod, ego)
-    mps = float(os.environ.get("GF_ROAD_EGO_MPS") or "10")
+    release_ego(carla_mod, ego, session=session)
+    mps = float(ego_mps)
     print(f"[layout] LANE_SPLIT ego={ego.id} (Giraffe drives)", flush=True)
     return ego, None, {
         "layout": "env_lane_split",
@@ -80,17 +76,17 @@ def layout_lane_split(
 
 
 def layout_lane_merge(
-    carla_mod: Any,
-    client: Any,
-    world: Any,
+    session: Any,
     *,
     keep_ego: bool = False,
+    ego_mps: float = 10.0,
 ) -> Tuple[Any, Optional[Any], dict[str, Any]]:
-    del client
+    world = session.world
+    carla_mod = session.carla
     tf = _pick_multi_lane(world, prefer_more=False)
     ego = spawn_ego_only(world, ego_tf=tf, keep_ego=keep_ego)
-    release_ego(carla_mod, ego)
-    mps = float(os.environ.get("GF_ROAD_EGO_MPS") or "10")
+    release_ego(carla_mod, ego, session=session)
+    mps = float(ego_mps)
     print(f"[layout] LANE_MERGE ego={ego.id} (Giraffe drives)", flush=True)
     return ego, None, {
         "layout": "env_lane_merge",

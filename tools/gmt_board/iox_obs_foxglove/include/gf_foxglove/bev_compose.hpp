@@ -74,6 +74,11 @@ struct LiveBevState {
   float traj_t_plan_s = 0;
   float traj_v_plan_mps = 0;
   float traj_horizon_m = 0;
+  float traj_s_stop_m = 0;   // from Trajectory; ~cap = inactive
+  float v_sign_max_mps = 0;  // 0 = none; from Trajectory
+  float v_sign_min_mps = 0;
+  // Light HUD: 0=none, 164=yellow, 196=red (DSTSR Relevant). Green = P1.
+  int light_sign_name = 0;
   bool allow_lc = false;
   float nearest_cm = -1;  // <0 = none
   float odom_m = 0;

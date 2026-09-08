@@ -46,11 +46,32 @@ function p = gf_plan_cal()
   p.occ_w_min = 0.40;
   p.cls_truck = 2.0;
   p.cls_ped = 5.0;
+  % Planning-internal (not FCM OBJ_Object_Class). Red/yellow DSTSR pack this.
+  p.cls_reg_stop = 16.0;
+  % Approach corridor for a sign/light — not occupy. Match SIL pack |lat|≤18.
+  p.reg_stop_lat_m = 18.0;
+  % Stop this far before the pole (where the line is). Scene cal, not pedals.
+  p.reg_stop_margin_m = 3.0;
+  % Comfort standstill cushion at the line (kinematics / past-line hold).
+  p.reg_stop_hold_m = 1.0;
+  % Plan comfort decel to the line (not pedal gain; occupy a_req still uses aeb_decel).
+  p.reg_stop_decel_mps2 = 1.5;
+  % Late to the line: raise plan decel + a_req (still below occupy AEB 6).
+  p.reg_stop_late_mps2 = 3.5;
+  % Pack / accept a red/yellow this far behind ego (SIL xf; hold until gone).
+  p.reg_stop_behind_m = 8.0;
+  % Adjacent moving flow (not occupy). Skip parked.
+  % Only near peers — a turtle 50 m over does not set cruise (Foxglove t≈57).
+  p.peer_v_min_mps = 1.0;
+  p.peer_lat_max_m = 7.0;
+  p.peer_d_max_m = 35.0;
   p.t_lc_min_s = 6.0;
   p.d_lc_min_m = 40.0;
   p.lc_conf_min = 0.50;
   p.cutin_head_gain = 1.20;
   p.cutin_approach_m = 1.50;
+  % Cut-in only while closing (rel < -this). Pulling away is peer flow.
+  p.cutin_close_mps = 0.5;
 
   %% Kinematics (constraint scale, not a mode switch)
   p.aeb_decel_mps2 = 6.0;
@@ -91,9 +112,15 @@ function p = gf_plan_cal()
   p.lat_ky_scale_lo = 0.50;
   p.lat_c1_sat = 0.40;
   p.lat_dsteer_max = 0.055;
-  p.lat_ey_invalid_m = 3.0;
+  % LKA only while ego is still inside a typical lane. 3 m let us chase a
+  % neighbour / barrier pair (Foxglove: left C0≈4.1, right C0≈0.6).
+  p.lat_ey_invalid_m = 1.6;
   p.lat_c1_invalid = 0.40;
   p.lat_ey_slow_m = 1.0;
+  % Host pair in ego frame (+y left): must straddle the vehicle.
+  p.host_width_min_m = 2.50;
+  p.host_width_max_m = 5.50;
+  p.host_inside_m = 0.25;
 
   %% Path samples (BEV)
   p.traj_blend_m = 14.0;

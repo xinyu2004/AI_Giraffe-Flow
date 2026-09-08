@@ -231,7 +231,13 @@ _SCALAR_PRINTF: dict[str, tuple[str, str]] = {
 # the live NDJSON pipe — that stalls tap→Foxglove (camera still works via shm).
 _OBS_TAP_FIELD_ALLOW: dict[str, frozenset[str]] = {
     "Perception_MESSAGE_Out_St": frozenset(
-        {"Perception_DYN_OBJ_Out", "Perception_LH_Out", "Perception_LA_Out"}
+        {
+            "Perception_DYN_OBJ_Out",
+            "Perception_LH_Out",
+            "Perception_LA_Out",
+            "Perception_DSTSR_Out",
+            "Perception_STATIC_OBJ_Out",
+        }
     ),
     "Perception_Dyn_OBJ_Out_St": frozenset(
         {
@@ -300,6 +306,49 @@ _OBS_TAP_FIELD_ALLOW: dict[str, frozenset[str]] = {
             "m_LA_Line_C2",
             "m_LA_Line_C3",
             "m_LA_Lanemark_Type",
+        }
+    ),
+    # Slim TSR + static for Live plots (red-light / stop-line vs turtle speed).
+    # LRE still omitted. Full gold Out stays on iceoryx.
+    # ME: plot by m_DSTSR_ID / Relevancy / Sign_Name scan — never Sign_Name[0] alone.
+    # Process curves prefer Trajectory.D_see_m / s_stop_m / cipv_* / v_sign_*.
+    # cipv_long_m / cipv_rel_v (semantic scalars), not Obj[0].
+    "Perception_DSTSR_Out_St": frozenset(
+        {
+            "m_frame_id",
+            "m_time_stamp",
+            "m_tsr_num",
+            "m_TSR_Item",
+        }
+    ),
+    "TSR_Item_St": frozenset(
+        {
+            "m_DSTSR_ID",
+            "m_DSTSR_Sign_Name",
+            "m_DSTSR_Sign_Long_Distance",
+            "m_DSTSR_Sign_Lat_Distance",
+            "m_DSTSR_Relevancy",
+            "m_DSTSR_Confidence",
+        }
+    ),
+    "Perception_Static_Obj_Out_St": frozenset(
+        {
+            "m_frame_id",
+            "m_time_stamp",
+            "m_Static_OBJ_Count",
+            "STAT_OBJ_Static_CIPV_ID",
+            "m_Obj_item",
+        }
+    ),
+    "Static_OBJ_Item_St": frozenset(
+        {
+            "m_OBJ_ID",
+            "m_OBJ_Object_Class",
+            "m_OBJ_Long_Distance",
+            "m_OBJ_Lat_Distance",
+            "m_OBJ_Length",
+            "m_OBJ_Heading",
+            "m_OBJ_Lane_Assignment",
         }
     ),
 }
@@ -379,6 +428,8 @@ def _emit_fields_printf(
                 nmax = min(int(asize), 4)
             elif nested_leaf == "HostLine_St":
                 nmax = min(int(asize), 2)
+            elif nested_leaf in ("TSR_Item_St", "Static_OBJ_Item_St"):
+                nmax = min(int(asize), 6)
             else:
                 nmax = min(int(asize), 2)
             lines.append("  {")
@@ -395,6 +446,18 @@ def _emit_fields_printf(
                 lines.append(
                     f"    const int n = std::min({nmax}, "
                     f"static_cast<int>({parent}.m_adj_line_num));"
+                )
+            elif nested_leaf == "TSR_Item_St":
+                parent = expr.rsplit(".", 1)[0]
+                lines.append(
+                    f"    const int n = std::min({nmax}, "
+                    f"static_cast<int>({parent}.m_tsr_num));"
+                )
+            elif nested_leaf == "Static_OBJ_Item_St":
+                parent = expr.rsplit(".", 1)[0]
+                lines.append(
+                    f"    const int n = std::min({nmax}, "
+                    f"static_cast<int>({parent}.m_Static_OBJ_Count));"
                 )
             else:
                 lines.append(f"    const int n = {nmax};")

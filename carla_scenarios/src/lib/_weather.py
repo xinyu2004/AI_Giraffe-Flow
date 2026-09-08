@@ -158,14 +158,10 @@ def _i(key: str, default: int) -> int:
     return int(round(_f(key, float(default))))
 
 
-def load_weather(preset: Optional[str] = None) -> WeatherConfig:
-    try:
-        from _carla_env import load_local_env
-
-        load_local_env()
-    except Exception:  # noqa: BLE001
-        pass
-
+def load_weather(
+    preset: Optional[str] = None, *, snap: Any = None
+) -> WeatherConfig:
+    del snap  # weather overrides stay case/process-level; snap reserved for future
     name = (preset or os.environ.get("GF_WEATHER_PRESET") or "clear").strip().lower()
     base = dict(_PRESETS.get(name) or _PRESETS["clear"])
     if name not in _PRESETS:

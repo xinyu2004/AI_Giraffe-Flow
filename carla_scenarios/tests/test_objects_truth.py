@@ -152,6 +152,16 @@ def test_collect_dyn_walker_and_no_snapshot() -> None:
     assert dyn["obj0_long"] == pytest.approx(10.0, abs=0.05)
 
 
+def test_collect_dyn_neighbor_is_not_cipv() -> None:
+    ego = _Actor(1, "vehicle.tesla.model3", 0.0, 0.0)
+    side = _Actor(51, "vehicle.audi.tt", 24.0, 3.7)
+    world = _World([ego, side])
+    dyn = collect_dyn_objects(ego, world)
+    assert dyn["dyn_n"] == 1
+    assert dyn["obj0_assign"] != 3
+    assert dyn["cipv_id"] == 0
+
+
 def test_collect_dyn_prefers_lead_id() -> None:
     ego = _Actor(1, "vehicle.tesla.model3", 0.0, 0.0)
     marked = _Actor(9, "vehicle.nissan.patrol", 12.0, 0.0)

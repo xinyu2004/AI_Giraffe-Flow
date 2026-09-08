@@ -589,7 +589,8 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     }
     const Rgb fallback_c = traj_color_for_lon(st);
     const int fallback_th = traj_thickness_for_lon(st);
-    const float x_hi = occupy_open > 0.5f ? occupy_open : x_draw;
+    // Path only inside driving see (Trajectory D_see when ingested).
+    const float x_hi = opening > 0.5f ? opening : (occupy_open > 0.5f ? occupy_open : x_draw);
     for (int i = 0; i < nseg; ++i) {
       float x0 = st.traj_x[i], y0 = st.traj_y[i];
       float x1 = st.traj_x[i + 1], y1 = st.traj_y[i + 1];
@@ -669,20 +670,67 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
 
   paint_box(0.0f, 0.0f, 4.5f, 1.8f, 0.0f, ego_c, nullptr, 1.5f);
 
-  const int bar_w = std::min(120, std::max(8, static_cast<int>(st.speed_mps * 6)));
-  fill_rect(buf, width, height, 8, 6, 8 + bar_w, 14, {80, 180, 90});
-  float v_plan = st.traj_v_plan_mps;
-  if (v_plan <= 0.0f && st.n_traj_v > 0) v_plan = st.traj_v[0];
-  const int plan_w = std::min(120, std::max(4, static_cast<int>(v_plan * 6)));
-  fill_rect(buf, width, height, 8, 15, 8 + plan_w, 22, {80, 190, 210});
-  const int spark = 8 + static_cast<int>(st.odom_m * 10) % std::max(1, width - 16);
-  fill_rect(buf, width, height, spark, 6, spark + 3, 22, {240, 240, 80});
+  // Solid see-cap bar across host lane at driving D (cyan). Not a FOV cone.
+  if (opening > 1.0f && st.n_host >= 1) {
+    const float yl = host_y_ego(opening, 'l');
+    const float yr = host_y_ego(opening, 'r');
+    const auto pl = e2p_ego(opening, yl);
+    const auto pr = e2p_ego(opening, yr);
+    draw_line(buf, width, height, pl.first, pl.second, pr.first, pr.second, {60, 200, 210}, 4);
+  }
 
-  char hud[80];
-  std::snprintf(hud, sizeof(hud), "V%4.1f D%3.0f T%3.1f%s", static_cast<double>(v_plan),
-                static_cast<double>(opening), static_cast<double>(st.traj_t_plan_s),
-                st.allow_lc ? " LC" : "");
-  blit_text(buf, width, height, 140, 7, hud, {220, 224, 230}, 1);
+  // Stop line only with Relevant red/yellow (196/164). No bar for green/-- .
+  const float s_stop = st.traj_s_stop_m;
+  const bool stop_active = s_stop > 0.5f && s_stop < (kDWorkM - 0.5f);
+  const bool stop_light =
+      (st.light_sign_name == 164 || st.light_sign_name == 196);
+  if (stop_active && stop_light && st.n_host >= 1) {
+    Rgb stop_c = (st.light_sign_name == 164) ? Rgb{230, 200, 60} : Rgb{220, 50, 50};
+    const float yl = host_y_ego(s_stop, 'l');
+    const float yr = host_y_ego(s_stop, 'r');
+    const auto pl = e2p_ego(s_stop, yl);
+    const auto pr = e2p_ego(s_stop, yr);
+    draw_line(buf, width, height, pl.first, pl.second, pr.first, pr.second, stop_c, 5);
+  }
+
+  // HUD: left light, right limit + a (number). No green/cyan bars / VDT / spark.
+  const char* light = "--";
+  Rgb light_c{180, 180, 180};
+  if (st.light_sign_name == 196) {
+    light = "RED";
+    light_c = {230, 70, 70};
+  } else if (st.light_sign_name == 164) {
+    light = "YEL";
+    light_c = {230, 200, 60};
+  } else if (st.light_sign_name == 198) {
+    light = "GRN";
+    light_c = {70, 200, 90};
+  }
+  blit_text(buf, width, height, 8, 7, light, light_c, 1);
+
+  char right[64];
+  int lim_hi = -1;
+  int lim_lo = -1;
+  if (st.v_sign_max_mps > 0.5f) {
+    lim_hi = static_cast<int>(std::lround(st.v_sign_max_mps * 3.6f));
+  }
+  if (st.v_sign_min_mps > 0.5f) {
+    lim_lo = static_cast<int>(std::lround(st.v_sign_min_mps * 3.6f));
+  }
+  if (lim_hi >= 0 && lim_lo >= 0) {
+    std::snprintf(right, sizeof(right), "%d/%d a%+.1f", lim_hi, lim_lo,
+                  static_cast<double>(st.lon_accel_mps2));
+  } else if (lim_hi >= 0) {
+    std::snprintf(right, sizeof(right), "%d a%+.1f", lim_hi,
+                  static_cast<double>(st.lon_accel_mps2));
+  } else if (lim_lo >= 0) {
+    std::snprintf(right, sizeof(right), "min%d a%+.1f", lim_lo,
+                  static_cast<double>(st.lon_accel_mps2));
+  } else {
+    std::snprintf(right, sizeof(right), "a%+.1f", static_cast<double>(st.lon_accel_mps2));
+  }
+  const int rx = width - 8 - static_cast<int>(std::strlen(right)) * 8;
+  blit_text(buf, width, height, std::max(8, rx), 7, right, {240, 220, 120}, 1);
 
   return png_rgb(width, height, buf.data());
 }

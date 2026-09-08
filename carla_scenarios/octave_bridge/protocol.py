@@ -57,7 +57,10 @@ _FP_HEAD = struct.Struct(
 assert _FP_HEAD.size == 156
 FP_V1_SIZE = _FP_HEAD.size + _MAX_OBJ * _OBJ.size
 assert FP_V1_SIZE == 520
-_TSR = struct.Struct("<HBx2f")
+_TSR = struct.Struct("<HBB2f")  # name, relevancy, id, long, lat
+# SIL: bit15 of name = minimum → Sup1 e_minimum (27)
+_NAME_MIN_FLAG = 0x8000
+E_MINIMUM_SUP1 = 27
 _STAT = struct.Struct("<BBBB5f")
 _TAIL_HEAD = struct.Struct("<BB2x")
 _MAX_TSR = 6
@@ -284,11 +287,14 @@ def unpack_fake_perc(blob: bytes) -> Optional[dict]:
         tsr_off = FP_V1_SIZE + _TAIL_HEAD.size
         tsrs = []
         for i in range(tsr_n):
-            name, rel, lon, lat = _TSR.unpack_from(blob, tsr_off + i * _TSR.size)
+            name, rel, tid, lon, lat = _TSR.unpack_from(blob, tsr_off + i * _TSR.size)
+            wire = int(name)
             tsrs.append(
                 {
-                    "name": int(name),
+                    "name": int(wire & 0x7FFF),
+                    "sup1": E_MINIMUM_SUP1 if (wire & _NAME_MIN_FLAG) else 0,
                     "rel": int(rel),
+                    "id": int(tid),
                     "long_m": float(lon),
                     "lat_m": float(lat),
                 }

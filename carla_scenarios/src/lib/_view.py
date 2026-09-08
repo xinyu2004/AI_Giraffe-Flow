@@ -19,21 +19,17 @@ MODE_SCENE = "2"
 MODE_WINDSHIELD = "1"
 
 
-def scenario_view_wanted() -> bool:
-    """GF_SCENARIO_VIEW=0 skips pygame (iGPU bench). Default on."""
+def scenario_view_wanted(snap: Any = None) -> bool:
+    """Prefer Snapshot.view; fallback for CLI tools that have not loaded snap."""
+    if snap is not None:
+        return bool(snap.view)
     v = (os.environ.get("GF_SCENARIO_VIEW") or "1").strip().lower()
     return v not in ("0", "off", "false", "no")
 
 
 def resolve_chase_cam_mode(raw: Optional[str] = None) -> str:
-    """ChaseCam from carla.env: 1=windshield (default), 2=scene."""
+    """ChaseCam: 1=windshield (default), 2=scene. Pass raw from Snapshot."""
     if raw is None:
-        try:
-            from _carla_env import load_local_env
-
-            load_local_env()
-        except Exception:  # noqa: BLE001
-            pass
         raw = os.environ.get("ChaseCam") or "1"
     v = str(raw).strip().lower()
     if v in ("1", "mobileye_windshield", "windshield", MODE_WINDSHIELD):
@@ -57,6 +53,7 @@ class ScenarioView:
         follow_spectator: bool = True,
         camera_mount: Optional[CameraMount] = None,
         initial_mode: Optional[str] = None,
+        chase_cam: Optional[str] = None,
     ) -> None:
         import carla  # type: ignore
         import pygame
@@ -67,11 +64,8 @@ class ScenarioView:
         self._vehicle = vehicle
         self._follow_spectator = follow_spectator
         self._mount = camera_mount or load_camera_mount()
-        mode = (
-            resolve_chase_cam_mode(initial_mode)
-            if initial_mode is not None
-            else resolve_chase_cam_mode()
-        )
+        mode_src = initial_mode if initial_mode is not None else chase_cam
+        mode = resolve_chase_cam_mode(mode_src)
         self._mode = mode
         self._surfaces: dict[str, Any] = {MODE_SCENE: None, MODE_WINDSHIELD: None}
         self._hud_lines: list[str] = []
@@ -135,19 +129,28 @@ class ScenarioView:
         cam = self._world.spawn_actor(bp, transform, attach_to=self._vehicle)
 
         def _on_image(image: Any, m: str = mode) -> None:
+            # CARLA gives BGRA; pygame 2 can ingest it without a Python pixel loop.
             raw = bytes(image.raw_data)
-            w, h = image.width, image.height
-            rgb = bytearray(w * h * 3)
-            for i in range(w * h):
-                rgb[i * 3 + 0] = raw[i * 4 + 2]
-                rgb[i * 3 + 1] = raw[i * 4 + 1]
-                rgb[i * 3 + 2] = raw[i * 4 + 0]
-            self._surfaces[m] = self._pygame.image.frombuffer(
-                bytes(rgb), (w, h), "RGB"
-            )
+            w, h = int(image.width), int(image.height)
+            try:
+                surf = self._pygame.image.frombuffer(raw, (w, h), "BGRA")
+                self._surfaces[m] = surf.convert()
+            except Exception:  # noqa: BLE001
+                rgb = bytearray(w * h * 3)
+                for i in range(w * h):
+                    rgb[i * 3 + 0] = raw[i * 4 + 2]
+                    rgb[i * 3 + 1] = raw[i * 4 + 1]
+                    rgb[i * 3 + 2] = raw[i * 4 + 0]
+                self._surfaces[m] = self._pygame.image.frombuffer(
+                    bytes(rgb), (w, h), "RGB"
+                )
 
         cam.listen(_on_image)
         return cam
+
+    def reset_perf(self) -> None:
+        """Call at case READY so [perf][pygame] does not fold in inter-case gaps."""
+        self._perf.reset()
 
     def retarget_vehicle(self, vehicle: Any) -> None:
         """Move chase cams onto a new hero without closing the pygame window."""

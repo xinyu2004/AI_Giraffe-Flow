@@ -72,6 +72,12 @@ struct Trajectory {
   float steer;
   float target_speed_mps;
   uint8_t ctrl_mode;  // 0=cruise 1=acc 2=aeb 3=pullaway
+  float D_see_m;
+  float s_stop_m;
+  float cipv_long_m;
+  float cipv_rel_v;
+  float v_sign_max_mps;
+  float v_sign_min_mps;
 };
 
 }  // namespace gf::demo::vehicle_gateway

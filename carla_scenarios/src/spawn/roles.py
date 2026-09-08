@@ -48,14 +48,28 @@ def destroy_role(world: Any, role: str) -> None:
             continue
 
 
-def tick_world(world: Any) -> None:
+def tick_world(world: Any, *, wait_s: float = 0.05) -> None:
+    """Advance world without long stalls.
+
+    Sync mode: ``world.tick()``. Async (typical dual-client SIL): short
+    ``wait_for_tick`` — never a 1.0s default that freezes the UI thread.
+    """
+    try:
+        settings = world.get_settings()
+        if bool(getattr(settings, "synchronous_mode", False)):
+            world.tick()
+            return
+    except Exception:  # noqa: BLE001
+        pass
     try:
         world.tick()
+        return
     except Exception:  # noqa: BLE001
-        try:
-            world.wait_for_tick(1.0)
-        except Exception:  # noqa: BLE001
-            pass
+        pass
+    try:
+        world.wait_for_tick(max(0.01, float(wait_s)))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def clear_near(
@@ -67,22 +81,19 @@ def clear_near(
 ) -> int:
     """Destroy non-protected vehicles near a spawn pose (ambient TM leftovers)."""
     protect = protect_roles or {ROLE_EGO, ROLE_LEAD}
-    r2 = float(radius_m) ** 2
     n = 0
+    r2 = float(radius_m) ** 2
     for v in list(world.get_actors().filter("vehicle.*")):
         try:
             role = str(v.attributes.get("role_name") or "")
             if role in protect:
                 continue
             loc = v.get_location()
-            dx = loc.x - location.x
-            dy = loc.y - location.y
-            dz = loc.z - location.z
-            if dx * dx + dy * dy + dz * dz <= r2:
+            dx = float(loc.x) - float(location.x)
+            dy = float(loc.y) - float(location.y)
+            if dx * dx + dy * dy <= r2:
                 safe_destroy(v)
                 n += 1
         except Exception:  # noqa: BLE001
             continue
-    if n:
-        tick_world(world)
     return n

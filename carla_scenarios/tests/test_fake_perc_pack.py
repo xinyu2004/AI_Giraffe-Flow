@@ -110,6 +110,7 @@ def test_pack_tsr_static_tail() -> None:
     tsr = {
         "tsr_n": 1,
         "tsr0_name": 196,
+        "tsr0_id": 17,
         "tsr0_long": 32.0,
         "tsr0_lat": 1.2,
         "tsr0_rel": 0,
@@ -127,9 +128,35 @@ def test_pack_tsr_static_tail() -> None:
     assert len(blob) == _FP_SIZE
     tsr_n, stat_n = _TAIL_HEAD.unpack_from(blob, _FP_V1_SIZE)
     assert tsr_n == 1 and stat_n == 1
-    name, _rel, lon, _lat = _TSR.unpack_from(blob, _FP_V1_SIZE + _TAIL_HEAD.size)
-    assert name == 196 and abs(lon - 32.0) < 1e-3
+    name, _rel, tid, lon, _lat = _TSR.unpack_from(blob, _FP_V1_SIZE + _TAIL_HEAD.size)
+    assert name == 196 and tid == 17 and abs(lon - 32.0) < 1e-3
     sid, _cls, _assign, _p, slon, _slat, _h, _ln, _wd = _STAT.unpack_from(
         blob, _FP_V1_SIZE + _TAIL_HEAD.size + 6 * _TSR.size
     )
     assert sid == 7 and abs(slon - 18.0) < 1e-3
+
+
+def test_pack_tsr_min_speed_flag() -> None:
+    from _fake_perc_pack import _FP_V1_SIZE, _TAIL_HEAD, _TSR, E_MINIMUM_SUP1, _NAME_MIN_FLAG
+
+    tsr = {
+        "tsr_n": 2,
+        "tsr0_name": 5,  # e_std_60
+        "tsr0_id": 3,
+        "tsr0_long": 40.0,
+        "tsr0_lat": 0.5,
+        "tsr0_rel": 0,
+        "tsr0_sup1": 0,
+        "tsr1_name": 2,  # e_std_30
+        "tsr1_id": 4,
+        "tsr1_long": 25.0,
+        "tsr1_lat": 0.4,
+        "tsr1_rel": 0,
+        "tsr1_sup1": E_MINIMUM_SUP1,
+    }
+    blob = pack_fake_perc_pod(lane={"lane_count": 1, "adj_n": 0}, dyn={"dyn_n": 0}, tsr=tsr)
+    off = _FP_V1_SIZE + _TAIL_HEAD.size
+    name0, _, _, _, _ = _TSR.unpack_from(blob, off)
+    name1, _, _, _, _ = _TSR.unpack_from(blob, off + _TSR.size)
+    assert name0 == 5 and (name0 & _NAME_MIN_FLAG) == 0
+    assert (name1 & 0x7FFF) == 2 and (name1 & _NAME_MIN_FLAG) == _NAME_MIN_FLAG

@@ -62,20 +62,17 @@ def actors_colliding(ego: Any, lead: Any, gap_crash_m: float = 3.5) -> bool:
         return False
 
 
-def release_ego(carla_mod: Any, ego: Any) -> None:
+def release_ego(carla_mod: Any, ego: Any, *, session: Any) -> None:
     """Drop TM/autopilot/const-vel; do not apply sustained VehicleControl (Giraffe owns ego)."""
     del carla_mod
-    try:
-        ego.set_autopilot(False)
-    except Exception:  # noqa: BLE001
-        pass
+    session.ap_off(ego)
     try:
         ego.disable_constant_velocity()
     except Exception:  # noqa: BLE001
         pass
 
 
-def freeze_actors(*actors: Any, carla_mod: Any = None) -> None:
+def freeze_actors(*actors: Any, carla_mod: Any = None, session: Any = None) -> None:
     """Freeze non-ego actors on collision early-exit. Ego stays under Giraffe."""
     mod = carla_mod
     if mod is None:
@@ -98,10 +95,8 @@ def freeze_actors(*actors: Any, carla_mod: Any = None) -> None:
             actor.set_target_velocity(mod.Vector3D(0.0, 0.0, 0.0))
         except Exception:  # noqa: BLE001
             pass
-        try:
-            actor.set_autopilot(False)
-        except Exception:  # noqa: BLE001
-            pass
+        if session is not None:
+            session.ap_off(actor)
         try:
             actor.apply_control(
                 mod.VehicleControl(
@@ -189,6 +184,10 @@ def verdict_aeb(
 
     if collided:
         return False, "collision_lead", meta
+
+    # Stationary ego after prior case — not a closing AEB exam.
+    if samples and samples[0].ego_mps < 0.5:
+        return False, "ego_already_stopped", meta
 
     scored = [s for s in samples if s.t >= settle_s]
     if len(scored) < 3:

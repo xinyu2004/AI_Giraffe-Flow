@@ -19,6 +19,14 @@ struct Trajectory {
   float steer;
   float target_speed_mps;
   uint8_t ctrl_mode;  // 0=cruise 1=acc 2=aeb (label only; v4 not a state machine)
+  // Process curves (ME semantics) — Live plots these, not Sign_Name[0] / Obj[0].
+  float D_see_m;
+  float s_stop_m;
+  float cipv_long_m;
+  float cipv_rel_v;
+  // Active Relevant DSTSR speed limits (mps). 0 = none. Not vis v_cap.
+  float v_sign_max_mps;
+  float v_sign_min_mps;
 };
 
 }  // namespace gf::demo::planning_driving

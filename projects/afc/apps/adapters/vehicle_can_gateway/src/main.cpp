@@ -365,7 +365,8 @@ int main(int argc, char** argv) {
         last_ingest_wall = now;
         rx_state.Observe(0, state.timestamp_ns, false, true);
       }
-    } else if (ego_src == "gateway" || ego_src == "stub") {
+    } else if (ego_src == "stub") {
+      // Explicit stub only — never invent Ego under ego_source=gateway.
       const std::uint32_t stub_ms = ego_period_ms ? ego_period_ms : in_period_ms;
       if (stub_ms != 0 &&
           (last_stub_ns == 0 || now - last_stub_ns >=

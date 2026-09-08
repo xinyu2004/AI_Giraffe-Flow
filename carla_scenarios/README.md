@@ -2,10 +2,11 @@
 
 CARLA Client A — AFC 场景套件（布景 + IC；连续控车应走 Giraffe→bridge）。主机侧压力源，不是控制器。
 
-**文档（架构 / 分层 / 门禁 / 已知问题）：**
+**文档（架构 / 分层 / Session策略 / 可见性准则 / 门禁 / 已知问题）：**
 
-- 中文：[docs/zh/sku/afc/scenarios.md](../docs/zh/sku/afc/scenarios.md)
+- 中文：[docs/zh/sku/afc/scenarios.md](../docs/zh/sku/afc/scenarios.md)（含 **Session/env 分层** 与 **禁止 see-cone 内突然刷出**）
 - English：[docs/en/sku/afc/scenarios.md](../docs/en/sku/afc/scenarios.md)
+- Cursor 规则：`.cursor/rules/carla-scenarios.mdc`（改本树前先读）
 
 ```bash
 cd carla_scenarios

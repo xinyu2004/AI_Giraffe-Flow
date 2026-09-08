@@ -13,15 +13,27 @@ for _p in (_AFC, _SRC, _LIB, Path(__file__).resolve().parent):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+from _carla_env import load_snapshot  # noqa: E402
 from _case_atom import AtomCase, bind_run_session  # noqa: E402
 from layouts.follow_straight import layout_acc_follow  # noqa: E402
 from judges.acc_headway import judge_acc  # noqa: E402
 
 
+def _judge(samples, seen, meta):
+    del meta
+    snap = load_snapshot()
+    return judge_acc(
+        samples,
+        seen_control=seen,
+        th_lo=float(snap.acc_th_lo),
+        th_hi=float(snap.acc_th_hi),
+    )
+
+
 CASE = AtomCase(
     tag="acc",
     layout=layout_acc_follow,
-    judge=lambda samples, seen, meta: judge_acc(samples, seen_control=seen),
+    judge=_judge,
     weather_preset=None,
     early_exit_on_collision=False,
     on_tick=None,

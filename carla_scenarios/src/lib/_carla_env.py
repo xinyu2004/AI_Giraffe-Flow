@@ -7,12 +7,17 @@ Load order for CARLA_HOST / PORT / GF_CARLA_CONNECT_TIMEOUT_S:
   1) already-set process environment (highest)
   2) local file ``carla.env`` next to these scripts (auto-loaded once)
   3) built-in defaults (127.0.0.1:2000, timeout 10s)
+
+**Layering:** call ``load_snapshot()`` once at the process edge, then
+``connect_session(snap)``. Deep code (layouts / spawn / traffic) must take a
+``CarlaSession`` — do not re-read ``os.environ`` / ``carla.env`` there.
 """
 
 from __future__ import annotations
 
 import os
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -84,19 +89,187 @@ def env_source(key: str) -> str:
 
 
 def carla_host() -> str:
-    load_local_env()
-    return (os.environ.get("CARLA_HOST") or "127.0.0.1").strip()
+    return load_snapshot().host
 
 
 def carla_port() -> int:
-    load_local_env()
-    return int(os.environ.get("CARLA_PORT") or "2000")
+    return load_snapshot().port
+
+
+def traffic_manager_port() -> int:
+    """Edge helper: prefer ``load_snapshot().tm_port`` and pass it down."""
+    return load_snapshot().tm_port
+
+
+_TM_BY_PORT: dict[int, Any] = {}
+_TM_LOGGED: set[int] = set()
+
+
+def _attach_tm(client: Any, port: int) -> Any:
+    """Bind TM once per port (suite-long). Used only by Session / get_traffic_manager."""
+    cached = _TM_BY_PORT.get(port)
+    if cached is not None:
+        return cached
+    try:
+        tm = client.get_trafficmanager(port)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            f"Traffic Manager bind failed on port {port} "
+            f"(GF_TM_PORT from {env_source('GF_TM_PORT')}). "
+            "On Windows with empty netstat: check "
+            "`netsh interface ipv4 show excludedportrange protocol=tcp` "
+            "and set GF_TM_PORT to a free port outside those ranges."
+        ) from exc
+    _TM_BY_PORT[port] = tm
+    if port not in _TM_LOGGED:
+        _TM_LOGGED.add(port)
+        print(
+            f"[tm] attach port={port} (GF_TM_PORT from {env_source('GF_TM_PORT')})",
+            flush=True,
+        )
+    return tm
+
+
+def get_traffic_manager(client: Any, *, port: Optional[int] = None) -> Any:
+    """Attach TM. Prefer ``session.tm``; pass ``port`` from Snapshot when used."""
+    return _attach_tm(client, int(port) if port is not None else traffic_manager_port())
+
+
+def _env_bool(key: str, default: bool = True) -> bool:
+    raw = (os.environ.get(key) or ("1" if default else "0")).strip().lower()
+    return raw not in ("0", "off", "false", "no")
+
+
+def _env_int(key: str, default: int) -> int:
+    raw = (os.environ.get(key) or str(default)).strip()
+    try:
+        return int(raw)
+    except ValueError:
+        return int(default)
+
+
+def _env_float(key: str, default: float) -> float:
+    raw = (os.environ.get(key) or str(default)).strip()
+    try:
+        return float(raw)
+    except ValueError:
+        return float(default)
+
+
+@dataclass(frozen=True)
+class CarlaSnapshot:
+    """Immutable deployment config — built once after ``load_local_env()``."""
+
+    host: str
+    port: int
+    connect_timeout_s: float
+    tm_port: int
+    town: str
+    view: bool
+    view_w: int
+    view_h: int
+    chase_cam: str
+    traffic_number: int
+    traffic_maintain_s: float
+    duration_s: float
+    duration_isp_s: float
+    acc_th_lo: float
+    acc_th_hi: float
+
+
+_SNAPSHOT: Optional[CarlaSnapshot] = None
+
+
+def load_snapshot(*, force: bool = False) -> CarlaSnapshot:
+    """Read carla.env / process env once; return frozen Snapshot (cached)."""
+    global _SNAPSHOT
+    if _SNAPSHOT is not None and not force:
+        return _SNAPSHOT
+    load_local_env(force=force)
+    raw_tm = (os.environ.get("GF_TM_PORT") or "8000").strip()
+    try:
+        tm_port = max(1, int(raw_tm))
+    except ValueError:
+        tm_port = 8000
+    _SNAPSHOT = CarlaSnapshot(
+        host=(os.environ.get("CARLA_HOST") or "127.0.0.1").strip(),
+        port=int(os.environ.get("CARLA_PORT") or "2000"),
+        connect_timeout_s=float(os.environ.get("GF_CARLA_CONNECT_TIMEOUT_S") or "10"),
+        tm_port=tm_port,
+        town=(os.environ.get("GF_CARLA_TOWN") or "").strip(),
+        view=_env_bool("GF_SCENARIO_VIEW", True),
+        view_w=max(160, _env_int("GF_SCENARIO_VIEW_W", 960)),
+        view_h=max(120, _env_int("GF_SCENARIO_VIEW_H", 540)),
+        chase_cam=(os.environ.get("ChaseCam") or "1").strip() or "1",
+        traffic_number=max(0, _env_int("GF_TRAFFIC_NUMBER", 18)),
+        traffic_maintain_s=max(0.5, _env_float("GF_TRAFFIC_MAINTAIN_S", 2.0)),
+        duration_s=max(1.0, _env_float("GF_SCENARIO_DURATION_S", 8.0)),
+        duration_isp_s=max(1.0, _env_float("GF_SCENARIO_DURATION_ISP_S", 25.0)),
+        acc_th_lo=_env_float("GF_ACC_TH_LO", 1.0),
+        acc_th_hi=_env_float("GF_ACC_TH_HI", 2.5),
+    )
+    return _SNAPSHOT
+
+
+@dataclass
+class CarlaSession:
+    """One connected CARLA client + Snapshot. Sole owner of set_autopilot port."""
+
+    snap: CarlaSnapshot
+    carla: Any
+    client: Any
+    world: Any
+    _tm: Any = None
+
+    @property
+    def tm_port(self) -> int:
+        return int(self.snap.tm_port)
+
+    @property
+    def tm(self) -> Any:
+        if self._tm is None:
+            self._tm = _attach_tm(self.client, self.tm_port)
+        return self._tm
+
+    def ap_off(self, actor: Any) -> None:
+        """Disable TM autopilot on *this* TM port (never default 8000)."""
+        if actor is None:
+            return
+        try:
+            actor.set_autopilot(False, self.tm_port)
+        except Exception:  # noqa: BLE001
+            try:
+                actor.set_autopilot(False)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def ap_on(self, actor: Any) -> None:
+        if actor is None:
+            return
+        try:
+            actor.set_autopilot(True, self.tm_port)
+        except Exception:  # noqa: BLE001
+            pass
+
+    @classmethod
+    def bind(
+        cls,
+        carla_mod: Any,
+        client: Any,
+        world: Any,
+        snap: Optional[CarlaSnapshot] = None,
+    ) -> "CarlaSession":
+        return cls(
+            snap=snap if snap is not None else load_snapshot(),
+            carla=carla_mod,
+            client=client,
+            world=world,
+        )
 
 
 def connect_timeout_s() -> float:
     """Single RPC timeout knob (seconds). Default 10."""
-    load_local_env()
-    return float(os.environ.get("GF_CARLA_CONNECT_TIMEOUT_S") or "10")
+    return load_snapshot().connect_timeout_s
 
 
 def wait_budget_s(cli_wait: Optional[float] = None) -> float:
@@ -107,12 +280,13 @@ def wait_budget_s(cli_wait: Optional[float] = None) -> float:
 
 
 def describe_endpoint() -> str:
-    load_local_env()
+    snap = load_snapshot()
     return (
-        f"CARLA_HOST={carla_host()} (from {env_source('CARLA_HOST')}) "
-        f"CARLA_PORT={carla_port()} (from {env_source('CARLA_PORT')}) "
-        f"GF_CARLA_CONNECT_TIMEOUT_S={connect_timeout_s()} "
-        f"(from {env_source('GF_CARLA_CONNECT_TIMEOUT_S')})"
+        f"CARLA_HOST={snap.host} (from {env_source('CARLA_HOST')}) "
+        f"CARLA_PORT={snap.port} (from {env_source('CARLA_PORT')}) "
+        f"GF_CARLA_CONNECT_TIMEOUT_S={snap.connect_timeout_s} "
+        f"(from {env_source('GF_CARLA_CONNECT_TIMEOUT_S')}) "
+        f"GF_TM_PORT={snap.tm_port} (from {env_source('GF_TM_PORT')})"
     )
 
 
@@ -140,16 +314,15 @@ def ensure_town(
     client: Any,
     world: Any,
     *,
+    town: str = "",
     log_prefix: str = "[carla]",
     timeout_s: Optional[float] = None,
 ) -> Any:
-    """Optionally load GF_CARLA_TOWN (e.g. Town04). Empty = keep current map.
+    """Optionally load town (e.g. Town04). Empty = keep current map.
 
-    Uses the same GF_CARLA_CONNECT_TIMEOUT_S as other RPCs; failures are tagged
-    as load_world / wait_for_tick so they are not confused with connect.
+    Pass ``town`` from Snapshot; do not re-read env here.
     """
-    load_local_env()
-    want = (os.environ.get("GF_CARLA_TOWN") or "").strip()
+    want = (town or "").strip()
     if not want:
         return world
     cur = ""
@@ -174,20 +347,14 @@ def ensure_town(
     return world
 
 
-def duration_s_for_case(case_id: str, *, fallback: float = 8.0) -> float:
-    """Per-case duration: ISP/tunnel uses GF_SCENARIO_DURATION_ISP_S (default 25)."""
-    load_local_env()
+def duration_s_for_case(case_id: str, *, fallback: float = 8.0, snap: Optional[CarlaSnapshot] = None) -> float:
+    """Per-case duration from Snapshot (ISP/tunnel uses duration_isp_s)."""
+    s = snap if snap is not None else load_snapshot()
     cid = (case_id or "").strip().lower()
     isp = cid.startswith("env_tunnel") or "isp" in cid
     if isp:
-        return max(
-            1.0,
-            float(os.environ.get("GF_SCENARIO_DURATION_ISP_S") or "25"),
-        )
-    return max(
-        1.0,
-        float(os.environ.get("GF_SCENARIO_DURATION_S") or str(fallback)),
-    )
+        return max(1.0, float(s.duration_isp_s))
+    return max(1.0, float(s.duration_s if s.duration_s else fallback))
 
 
 def connect_world(
@@ -197,17 +364,13 @@ def connect_world(
     timeout_s: Optional[float] = None,
     wait_s: float = 0.0,
     log_prefix: str = "[carla]",
+    snap: Optional[CarlaSnapshot] = None,
 ) -> Tuple[Any, Any, Any]:
     """Connect to CARLA UE. Raises on failure (never falls back to dry-run).
 
-    One timeout knob: ``GF_CARLA_CONNECT_TIMEOUT_S`` (per RPC). Optional
-    ``wait_s`` / ``--wait-s`` only retries within that window — not a second
-    env timeout. Errors name the failing stage (get_server_version, get_world,
-    load_world, …).
-
-    Returns (carla_module, client, world).
+    Returns (carla_module, client, world). Prefer ``connect_session``.
     """
-    load_local_env()
+    s = snap if snap is not None else load_snapshot()
     try:
         import carla  # type: ignore
     except ImportError as exc:
@@ -216,9 +379,9 @@ def connect_world(
             "Use the UE-matching egg/wheel, or pass --dry-run explicitly for camera-less dry-run."
         ) from exc
 
-    h = host if host is not None else carla_host()
-    p = port if port is not None else carla_port()
-    to = timeout_s if timeout_s is not None else connect_timeout_s()
+    h = host if host is not None else s.host
+    p = port if port is not None else s.port
+    to = timeout_s if timeout_s is not None else s.connect_timeout_s
     deadline = time.time() + max(0.0, wait_s)
     attempt = 0
     last_err: Optional[BaseException] = None
@@ -256,7 +419,11 @@ def connect_world(
                 raise _stage_error(stage, exc, timeout_s=to) from exc
             stage = "ensure_town/load_world"
             world = ensure_town(
-                client, world, log_prefix=log_prefix, timeout_s=to
+                client,
+                world,
+                town=s.town,
+                log_prefix=log_prefix,
+                timeout_s=to,
             )
             print(
                 f"{log_prefix} connected {h}:{p} map={world.get_map().name} "
@@ -289,6 +456,23 @@ def connect_world(
     )
 
 
+def connect_session(
+    *,
+    wait_s: float = 0.0,
+    log_prefix: str = "[carla]",
+    snap: Optional[CarlaSnapshot] = None,
+) -> CarlaSession:
+    """Connect + bind Snapshot + attach TM once. Edge entry for suite/case."""
+    s = snap if snap is not None else load_snapshot()
+    carla_mod, client, world = connect_world(
+        wait_s=wait_s, log_prefix=log_prefix, snap=s
+    )
+    session = CarlaSession.bind(carla_mod, client, world, s)
+    # Warm TM once so layout ap_off does not race first attach.
+    _ = session.tm
+    return session
+
+
 def probe(
     *,
     host: Optional[str] = None,
@@ -297,12 +481,12 @@ def probe(
     wait_s: float = 0.0,
 ) -> dict[str, Any]:
     """Return connectivity dict for CI preflight."""
-    load_local_env()
-    h = host if host is not None else carla_host()
-    p = port if port is not None else carla_port()
+    s = load_snapshot()
+    h = host if host is not None else s.host
+    p = port if port is not None else s.port
     try:
         _carla, client, world = connect_world(
-            host=h, port=p, timeout_s=timeout_s, wait_s=wait_s, log_prefix="[preflight]"
+            host=h, port=p, timeout_s=timeout_s, wait_s=wait_s, log_prefix="[preflight]", snap=s
         )
         return {
             "ok": True,
@@ -312,6 +496,7 @@ def probe(
             "map": world.get_map().name,
             "client_version": str(client.get_client_version()),
             "server_version": str(client.get_server_version()),
+            "tm_port": s.tm_port,
         }
     except Exception as exc:  # noqa: BLE001
         return {

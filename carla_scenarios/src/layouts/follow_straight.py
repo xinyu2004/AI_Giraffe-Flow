@@ -1,8 +1,4 @@
-"""Straight-road follow layout for ACC (and similar longitudinal cases).
-
-Compose: pick+place via spawn.place.spawn_ego_lead, then ic.release_only.
-Batch keep_ego: place keeps hero pose; IC skips hero via set_natural_continue.
-"""
+"""Straight-road follow layout for ACC (and similar longitudinal cases)."""
 
 from __future__ import annotations
 
@@ -14,15 +10,15 @@ from spawn.roles import ROLE_EGO, ROLE_LEAD
 
 
 def layout_acc_follow(
-    carla_mod: Any,
-    client: Any,
-    world: Any,
+    session: Any,
     *,
-    lead_gap_m: float = 32.0,
-    lead_speed_diff_pct: float = 25.0,
+    lead_gap_m: float = 20.0,
+    lead_speed_diff_pct: float = 15.0,
     keep_ego: bool = False,
 ) -> Tuple[Any, Any, dict[str, Any]]:
     """Spawn/place ego+lead on straight; release_only IC; lead TM cruise slower."""
+    world = session.world
+    carla_mod = session.carla
     ego, lead = spawn_ego_lead(
         world,
         lead_gap_m=lead_gap_m,
@@ -30,10 +26,10 @@ def layout_acc_follow(
         require_straight=True,
         keep_ego=keep_ego,
     )
-    release_only(carla_mod, ego)
+    release_only(carla_mod, ego, session=session)
 
-    tm = client.get_trafficmanager()
-    lead.set_autopilot(True, tm.get_port())
+    tm = session.tm
+    session.ap_on(lead)
     try:
         tm.vehicle_percentage_speed_difference(lead, float(lead_speed_diff_pct))
         tm.ignore_lights_percentage(lead, 100)
@@ -46,7 +42,7 @@ def layout_acc_follow(
     print(
         f"[layout] STRAIGHT_FOLLOW gap≈{lead_gap_m}m "
         f"ego={ROLE_EGO} id={ego.id} lead={ROLE_LEAD} id={lead.id} "
-        f"(ic=release_only)",
+        f"(ic=release_only lead_diff={lead_speed_diff_pct:g}%)",
         flush=True,
     )
     return ego, lead, {

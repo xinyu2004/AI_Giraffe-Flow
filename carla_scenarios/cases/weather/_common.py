@@ -19,10 +19,9 @@ for _p in (_AFC, _SRC, _LIB):
         sys.path.insert(0, str(_p))
 
 from _carla_env import (  # noqa: E402
-    carla_host,
-    carla_port,
-    connect_world,
-    load_local_env,
+    CarlaSession,
+    connect_session,
+    load_snapshot,
     wait_budget_s,
 )
 from _instrument import (  # noqa: E402
@@ -84,15 +83,18 @@ def run_session(
     preserve_ego: bool = False,
     stop_flag: Optional[Callable[[], bool]] = None,
     ensure_view: Optional[Callable[..., Optional[ScenarioView]]] = None,
+    session: Optional[CarlaSession] = None,
 ) -> Tuple[int, Optional[ScenarioView]]:
     """Scheme-1 session on an existing world (daemon or CLI)."""
-    del preserve_ego  # batch flag; weather session never destroys hero
+    del preserve_ego
     stop = stop_flag or (lambda: STOP)
-    load_local_env()
-    cfg = load_weather(preset)
+    if session is None:
+        session = CarlaSession.bind(carla, client, world, load_snapshot())
+    snap = session.snap
+    cfg = load_weather(preset, snap=snap)
     apply_weather(world, carla, cfg)
     ego, lead, _meta = layout_acc_follow(
-        carla, client, world, lead_gap_m=32.0, keep_ego=keep_ego
+        session, lead_gap_m=20.0, keep_ego=keep_ego
     )
     apply_wiper(ego, cfg.wiper_speed)
     peds_ok = allow_ambient_peds(tag, keep_ego=keep_ego)
@@ -105,10 +107,11 @@ def run_session(
         log_prefix=f"[{tag}]",
         allow_peds=peds_ok,
         fixture=lead,
+        session=session,
     )
 
     print(
-        f"[{tag}] READY host={carla_host()}:{carla_port()} "
+        f"[{tag}] READY host={snap.host}:{snap.port} "
         f"ego={ego.id} lead={lead.id} duration_s={duration_s} "
         f"weather={cfg.describe()} keep_ego={int(keep_ego)}",
         flush=True,
@@ -116,18 +119,24 @@ def run_session(
 
     if ensure_view is not None:
         view = ensure_view(
-            world, ego, view, no_window=no_window, title=f"AFC {tag} — weather"
+            world,
+            ego,
+            view,
+            no_window=no_window,
+            title=f"AFC {tag} — weather",
+            session=session,
         )
-    elif view is None and not no_window and scenario_view_wanted():
+    elif view is None and not no_window and scenario_view_wanted(snap):
         try:
             mount = load_camera_mount()
             view = ScenarioView(
                 world,
                 ego,
-                width=int(os.environ.get("GF_SCENARIO_VIEW_W") or "960"),
-                height=int(os.environ.get("GF_SCENARIO_VIEW_H") or "540"),
+                width=snap.view_w,
+                height=snap.view_h,
                 title=f"AFC {tag} — weather follow",
                 camera_mount=mount,
+                chase_cam=snap.chase_cam,
             )
         except Exception as exc:  # noqa: BLE001
             print(f"[{tag}] pygame unavailable: {type(exc).__name__}: {exc}", flush=True)
@@ -137,8 +146,8 @@ def run_session(
     cmd = CmdProbe()
     ctrl = CtrlProbe()
     seq = {"n": 0}
-    th_lo = float(os.environ.get("GF_ACC_TH_LO") or "1.0")
-    th_hi = float(os.environ.get("GF_ACC_TH_HI") or "2.5")
+    th_lo = float(snap.acc_th_lo)
+    th_hi = float(snap.acc_th_hi)
 
     def tick(elapsed: float) -> None:
         seq["n"] += 1
@@ -153,6 +162,7 @@ def run_session(
             elapsed_s=elapsed,
             allow_peds=peds_ok,
             log_prefix=f"[{tag}]",
+            session=session,
         )
         gap, es, ls, rel = gap_speed(ego, lead)
         th = time_headway_s(gap, es)
@@ -191,7 +201,7 @@ def run_session(
                     th_hi=th_hi,
                     ctrl_ok=cmd.seen_control,
                     tgt_kph=tgt,
-                    mode=mode if cmd.seen_control else "",
+                    mode=mode,
                     ttc_s=ttc,
                     yaw_rate_degps=ego_yaw_rate_degps(ego),
                     sig=signs.get("sig"),
@@ -200,45 +210,40 @@ def run_session(
                     ped_m=signs.get("ped_m"),
                     limit_kph=signs.get("limit_kph"),
                     meta={"weather": cfg.preset},
+                    alert="HIT" if collided else "",
                 )
             )
 
-    try:
-        if view is not None:
-            t0 = time.time()
+    if view is not None:
+        t0 = time.time()
 
-            def _tick() -> None:
-                tick(time.time() - t0)
+        def _tick() -> None:
+            tick(time.time() - t0)
 
-            run_loop(
-                stop_flag=lambda: stop() or (time.time() - t0) >= duration_s,
-                tick=_tick,
-                view=view,
-                period_s=period_s,
-            )
-        else:
-            from _verdict import run_duration_loop
-
-            run_duration_loop(
-                duration_s=duration_s,
-                period_s=period_s,
-                stop_flag=stop,
-                on_tick=tick,
-            )
-    except Exception:
-        raise
+        run_loop(
+            stop_flag=lambda: stop() or (time.time() - t0) >= duration_s,
+            tick=_tick,
+            view=view,
+            period_s=period_s,
+        )
+    else:
+        t0 = time.time()
+        while not stop() and (time.time() - t0) < duration_s:
+            tick(time.time() - t0)
+            time.sleep(period_s)
 
     ok, reason, extra = judge_acc(
         samples, seen_control=cmd.seen_control, th_lo=th_lo, th_hi=th_hi
     )
-    extra = {
+    print_verdict(
+        tag,
+        ok,
+        reason,
+        cmd_fresh=cmd.fresh_count,
+        n=len(samples),
+        weather=cfg.preset,
         **extra,
-        "cmd_fresh": cmd.fresh_count,
-        "n": len(samples),
-        "weather": cfg.preset,
-        "wiper": cfg.wiper_speed,
-    }
-    print_verdict(tag, ok, reason, **extra)
+    )
     return (0 if ok else 1), view
 
 
@@ -251,19 +256,23 @@ def run_carla(
     duration_s: float,
     preset: str,
 ) -> int:
-    carla, client, world = connect_world(wait_s=wait_s, log_prefix=f"[{tag}]")
-    print(f"[{tag}] host={carla_host()}:{carla_port()}", flush=True)
+    session = connect_session(wait_s=wait_s, log_prefix=f"[{tag}]")
+    print(
+        f"[{tag}] host={session.snap.host}:{session.snap.port} tm={session.tm_port}",
+        flush=True,
+    )
     code, view = run_session(
         tag,
         period_s,
-        carla=carla,
-        client=client,
-        world=world,
+        carla=session.carla,
+        client=session.client,
+        world=session.world,
         view=None,
         no_window=no_window,
         duration_s=duration_s,
         preset=preset,
         keep_ego=False,
+        session=session,
     )
     if view is not None:
         view.destroy()
@@ -271,6 +280,7 @@ def run_carla(
 
 
 def main(tag: str, preset: str, argv: list[str] | None = None) -> int:
+    snap = load_snapshot()
     p = argparse.ArgumentParser(description=f"AFC weather case {tag}")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--no-window", action="store_true")
@@ -279,7 +289,7 @@ def main(tag: str, preset: str, argv: list[str] | None = None) -> int:
     p.add_argument(
         "--duration-s",
         type=float,
-        default=float(os.environ.get("GF_SCENARIO_DURATION_S") or "10"),
+        default=float(snap.duration_s),
     )
     args = p.parse_args(argv)
     signal.signal(signal.SIGINT, _on_sig)

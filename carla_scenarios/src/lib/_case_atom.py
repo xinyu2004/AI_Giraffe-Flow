@@ -12,13 +12,13 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Tuple
 
 from _carla_env import (
-    carla_host,
-    carla_port,
-    connect_world,
+    CarlaSession,
+    connect_session,
     duration_s_for_case,
-    load_local_env,
+    load_snapshot,
     wait_budget_s,
 )
+from _case_params import kwargs_for_case
 from _instrument import (
     CtrlProbe,
     ego_yaw_rate_degps,
@@ -38,7 +38,7 @@ from _verdict import (
     run_duration_loop,
     time_headway_s,
 )
-from _view import ScenarioView, gap_speed, run_loop, scenario_view_wanted
+from _view import ScenarioView, gap_speed, run_loop
 from _weather import apply_weather, apply_wiper, load_weather
 
 STOP = False
@@ -95,35 +95,41 @@ class AtomCase:
         preserve_ego: bool = False,
         stop_flag: Optional[Callable[[], bool]] = None,
         ensure_view: Optional[Callable[..., Optional[ScenarioView]]] = None,
+        session: Optional[CarlaSession] = None,
     ) -> Tuple[int, Optional[ScenarioView]]:
         stop = stop_flag or (lambda: STOP)
-        load_local_env()
+        if session is None:
+            session = CarlaSession.bind(carla, client, world, load_snapshot())
+        snap = session.snap
         meta: dict[str, Any] = {
             "keep_ego": keep_ego,
             "preserve_ego": preserve_ego,
         }
         weather_cfg = None
         if self.weather_preset is not None:
-            weather_cfg = load_weather(self.weather_preset)
+            weather_cfg = load_weather(self.weather_preset, snap=snap)
             apply_weather(world, carla, weather_cfg)
             meta["weather"] = weather_cfg.preset
 
-        # keep_ego = continue pose (skip hero IC). preserve_ego = don't destroy at end.
         from spawn.ic import set_natural_continue
 
         set_natural_continue(keep_ego)
+        t_layout = time.time()
+        layout_kw = kwargs_for_case(self.tag)
         try:
             ego, target, layout_meta = self.layout(
-                carla, client, world, keep_ego=keep_ego
+                session, keep_ego=keep_ego, **layout_kw
             )
         finally:
             set_natural_continue(False)
+        dt_layout = time.time() - t_layout
         meta.update(layout_meta or {})
         if keep_ego:
             meta["natural_continue"] = True
         if weather_cfg is not None:
             apply_wiper(ego, weather_cfg.wiper_speed)
         peds_ok = allow_ambient_peds(self.tag, meta, keep_ego=keep_ego)
+        t_seed = time.time()
         ensure_ambient_traffic(
             carla,
             client,
@@ -133,31 +139,40 @@ class AtomCase:
             log_prefix=f"[{self.tag}]",
             allow_peds=peds_ok,
             fixture=target,
+            session=session,
         )
+        dt_seed = time.time() - t_seed
 
         title = self.title or f"AFC {self.tag}"
         print(
-            f"[{self.tag}] READY host={carla_host()}:{carla_port()} "
+            f"[{self.tag}] READY host={snap.host}:{snap.port} "
             f"ego={ego.id} target={getattr(target, 'id', None)} "
             f"duration_s={duration_s} "
-            f"keep_ego={int(keep_ego)} preserve_ego={int(preserve_ego)}",
+            f"keep_ego={int(keep_ego)} preserve_ego={int(preserve_ego)} "
+            f"layout_s={dt_layout:0.2f} seed_s={dt_seed:0.2f}",
             flush=True,
         )
 
         if ensure_view is not None:
             view = ensure_view(
-                world, ego, view, no_window=no_window, title=title
+                world,
+                ego,
+                view,
+                no_window=no_window,
+                title=title,
+                session=session,
             )
-        elif view is None and not no_window and scenario_view_wanted():
+        elif view is None and not no_window and snap.view:
             try:
                 mount = load_camera_mount()
                 view = ScenarioView(
                     world,
                     ego,
-                    width=int(os.environ.get("GF_SCENARIO_VIEW_W") or "960"),
-                    height=int(os.environ.get("GF_SCENARIO_VIEW_H") or "540"),
+                    width=snap.view_w,
+                    height=snap.view_h,
                     title=title,
                     camera_mount=mount,
+                    chase_cam=snap.chase_cam,
                 )
             except Exception as exc:  # noqa: BLE001
                 print(
@@ -166,20 +181,21 @@ class AtomCase:
                     flush=True,
                 )
                 view = None
+        if view is not None and hasattr(view, "reset_perf"):
+            view.reset_perf()
 
         samples: list[Sample] = []
         cmd = CmdProbe()
         ctrl = CtrlProbe()
         seq = {"n": 0}
         done = {"hit": False}
-        th_lo = float(os.environ.get("GF_ACC_TH_LO") or "1.0")
-        th_hi = float(os.environ.get("GF_ACC_TH_HI") or "2.5")
+        th_lo = float(snap.acc_th_lo)
+        th_hi = float(snap.acc_th_hi)
 
         def tick(elapsed: float) -> None:
-            # Giraffe may keep sending throttle after a hit — re-assert freeze every frame.
             if done["hit"]:
                 try:
-                    freeze_actors(ego, target, carla_mod=carla)
+                    freeze_actors(ego, target, carla_mod=carla, session=session)
                 except Exception:  # noqa: BLE001
                     pass
                 return
@@ -197,6 +213,7 @@ class AtomCase:
                 elapsed_s=elapsed,
                 allow_peds=peds_ok,
                 log_prefix=f"[{self.tag}]",
+                session=session,
             )
 
             if target is not None:
@@ -258,7 +275,7 @@ class AtomCase:
             if self.early_exit_on_collision and collided:
                 done["hit"] = True
                 try:
-                    freeze_actors(ego, target, carla_mod=carla)
+                    freeze_actors(ego, target, carla_mod=carla, session=session)
                 except Exception:  # noqa: BLE001
                     pass
                 print(
@@ -294,7 +311,7 @@ class AtomCase:
 
         if done["hit"]:
             try:
-                freeze_actors(ego, target, carla_mod=carla)
+                freeze_actors(ego, target, carla_mod=carla, session=session)
             except Exception:  # noqa: BLE001
                 pass
 
@@ -306,8 +323,6 @@ class AtomCase:
             **{k: v for k, v in meta.items() if isinstance(v, (int, float, str, bool))},
         }
         print_verdict(self.tag, ok, reason, **extra)
-        # Batch passes preserve_ego=True so the next case can continue the same hero.
-        # Single-run leaves UE clean for the next standalone script / bridge remount.
         if not preserve_ego:
             try:
                 from spawn.roles import ROLE_EGO, ROLE_LEAD, destroy_role
@@ -334,24 +349,28 @@ class AtomCase:
         wait_s: float,
         duration_s: float,
     ) -> int:
-        carla, client, world = connect_world(
-            wait_s=wait_s, log_prefix=f"[{self.tag}]"
+        session = connect_session(wait_s=wait_s, log_prefix=f"[{self.tag}]")
+        print(
+            f"[{self.tag}] host={session.snap.host}:{session.snap.port} "
+            f"tm={session.tm_port}",
+            flush=True,
         )
-        print(f"[{self.tag}] host={carla_host()}:{carla_port()}", flush=True)
         code, view = self.run_session(
-            carla,
-            client,
-            world,
+            session.carla,
+            session.client,
+            session.world,
             period_s=period_s,
             no_window=no_window,
             duration_s=duration_s,
             keep_ego=False,
+            session=session,
         )
         if view is not None:
             view.destroy()
         return code
 
     def main(self, argv: list[str] | None = None) -> int:
+        snap = load_snapshot()
         p = argparse.ArgumentParser(description=f"AFC case {self.tag}")
         p.add_argument("--dry-run", action="store_true")
         p.add_argument("--no-window", action="store_true")
@@ -361,7 +380,7 @@ class AtomCase:
             "--duration-s",
             type=float,
             default=duration_s_for_case(
-                self.tag, fallback=float(self.default_duration_s)
+                self.tag, fallback=float(self.default_duration_s), snap=snap
             ),
         )
         args = p.parse_args(argv)
@@ -400,6 +419,7 @@ def bind_run_session(case: AtomCase) -> Callable[..., Tuple[int, Optional[Scenar
         preserve_ego: bool = False,
         stop_flag: Optional[Callable[[], bool]] = None,
         ensure_view: Optional[Callable[..., Optional[ScenarioView]]] = None,
+        session: Optional[CarlaSession] = None,
     ) -> Tuple[int, Optional[ScenarioView]]:
         return case.run_session(
             carla,
@@ -413,6 +433,7 @@ def bind_run_session(case: AtomCase) -> Callable[..., Tuple[int, Optional[Scenar
             preserve_ego=preserve_ego,
             stop_flag=stop_flag,
             ensure_view=ensure_view,
+            session=session,
         )
 
     return run_session

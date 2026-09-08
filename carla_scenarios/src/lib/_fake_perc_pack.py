@@ -38,8 +38,12 @@ _FP_HEAD = struct.Struct(
 assert _FP_HEAD.size == 156
 _FP_V1_SIZE = _FP_HEAD.size + _MAX_OBJ * _OBJ.size
 assert _FP_V1_SIZE == 520
-_TSR = struct.Struct("<HBx2f")
+# name u16, relevancy u8, id u8, long/lat f32 — lockstep GfFakePercTsr
+# SIL: bit15 of name = minimum (Sup1 e_minimum=27); clear before Sign_Name.
+_TSR = struct.Struct("<HBB2f")
 assert _TSR.size == 12
+_NAME_MIN_FLAG = 0x8000
+E_MINIMUM_SUP1 = 27
 _STAT = struct.Struct("<BBBB5f")
 assert _STAT.size == 24
 _TAIL_HEAD = struct.Struct("<BB2x")
@@ -200,9 +204,13 @@ def pack_fake_perc_pod(
     buf[tail_off : tail_off + _TAIL_HEAD.size] = _TAIL_HEAD.pack(tsr_n, stat_n)
     tsr_off = tail_off + _TAIL_HEAD.size
     for i in range(tsr_n):
+        name = int(extra.get(f"tsr{i}_name") or 0) & 0x7FFF
+        if int(extra.get(f"tsr{i}_sup1") or 0) == E_MINIMUM_SUP1:
+            name |= _NAME_MIN_FLAG
         rec = _TSR.pack(
-            int(extra.get(f"tsr{i}_name") or 0) & 0xFFFF,
+            name & 0xFFFF,
             _u8(extra.get(f"tsr{i}_rel"), 0),
+            _u8(extra.get(f"tsr{i}_id"), i + 1) or (i + 1),
             _f(extra.get(f"tsr{i}_long"), 0.0),
             _f(extra.get(f"tsr{i}_lat"), 0.0),
         )

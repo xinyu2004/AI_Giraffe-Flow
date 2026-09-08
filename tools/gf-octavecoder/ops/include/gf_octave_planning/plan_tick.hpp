@@ -9,6 +9,9 @@
 #include <cmath>
 
 // 1:1 octave_planning/afc/m_plan_tick.m — one call per perc tick.
+// Scene: D_see + s_stop(TSR). Plan: path in D_see;
+// v(s)=min(vis, sign max, line, peers, follow) + optional sign-min floor.
+// Exec: lon_exec tracks v_plan(0); a_req occupy + late/at-line light.
 
 namespace gf_octave_planning {
 
@@ -24,13 +27,15 @@ struct PlanTickOut {
   float a_req{0.0f};
   float horizon_m{25.0f};
   float allow_lc{0.0f};
+  float s_stop{120.0f};
   LatTraj path{};
 };
 
 inline PlanTickOut m_plan_tick(float v, float steer_deg, bool lane_valid, float e_y, float c0,
                                float c1, float c2, float c3, float x_end, float lane_conf,
                                float lane_count, const PlanObj* obj, int nobj, float D_see_prev,
-                               float T_plan_prev) {
+                               float T_plan_prev, float v_sign_max = 1.0e6f,
+                               float v_sign_min = 0.0f) {
   const PlanCal& p = plan_cal();
   PlanTickOut out{};
   v = std::max(0.0f, v);
@@ -53,12 +58,19 @@ inline PlanTickOut m_plan_tick(float v, float steer_deg, bool lane_valid, float 
 
   out.path = m_lat_traj(v, out.D_see, out.T_plan, lane_valid, c0, c1, c2, c3, x_end);
   const int npts = std::min(kLatTrajPoints, std::max(2, p.traj_n));
-  plan_speed_profile(out.path.x_m, npts, v, obj, nobj, out.D_see, lane_ok, out.path.v_mps, c0);
+  const float s_stop = plan_reg_stop(obj, nobj, c0);
+  out.s_stop = s_stop;
+  plan_speed_profile(out.path.x_m, npts, v, obj, nobj, out.D_see, lane_ok, out.path.v_mps, c0,
+                     s_stop, v_sign_max, v_sign_min);
   const float v_plan = out.path.v_mps[0];
   float a_req = lon_a_req_n(v, obj, nobj, c0);
   if (out.D_see < p.d_vis_tight_m) {
     const float a_max = std::max(p.aeb_decel_mps2, 0.5f);
     a_req = std::min(a_max, a_req * p.a_req_vis_gain);
+  }
+  const float a_reg = lon_a_req_stop(v, s_stop);
+  if (a_reg > a_req) {
+    a_req = a_reg;
   }
   if (!lane_ok) {
     for (int i = 0; i < npts; ++i) {
@@ -75,10 +87,7 @@ inline PlanTickOut m_plan_tick(float v, float steer_deg, bool lane_valid, float 
   out.steer = m_lat_lka(lane_valid, e_y, c1, steer_deg);
 
   out.allow_lc = 0.0f;
-  if (lane_ok && lane_count >= 2.0f && out.T_plan >= p.t_lc_min_s && out.D_see >= p.d_lc_min_m &&
-      lane_conf >= p.lc_conf_min) {
-    out.allow_lc = 1.0f;
-  }
+  // Demoted: adj count ≠ real LC corridor.
   return out;
 }
 

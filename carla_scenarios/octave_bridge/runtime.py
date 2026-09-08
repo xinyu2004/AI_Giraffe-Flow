@@ -35,7 +35,8 @@ _LAST_PLAN_FFI_S = 0.0
 _IN_HDR = 14
 _OBJ_N_MAX = 8
 _OBJ_W = 7
-_IN_N = _IN_HDR + _OBJ_N_MAX * _OBJ_W
+_IN_SIGN = 2  # trailing v_sign_max, v_sign_min (mps)
+_IN_N = _IN_HDR + _OBJ_N_MAX * _OBJ_W + _IN_SIGN
 _OUT_HDR = 14
 _TRAJ_N = 16
 _OUT_N = _OUT_HDR + _TRAJ_N * 3
@@ -1035,6 +1036,78 @@ def _lane_ok(perc: Any) -> bool:
 
 # Same drop band as planning/driving ExtractPerc (kObjDMaxM).
 _OBJ_D_MAX_M = 130.0
+# Planning-internal; 1:1 gf_plan_cal.cls_reg_stop (not FCM OBJ class).
+_CLS_REG_STOP = 16.0
+# 1:1 gf_plan_cal.reg_stop_behind_m — keep a red/yellow this far behind ego.
+_REG_STOP_BEHIND_M = 8.0
+# Gold DSTSR_Sup1 e_minimum
+_E_MINIMUM = 27
+
+
+def _std_sign_name_to_kph(name: int) -> float | None:
+    """Gold e_std_* / e_lgt_* → km/h. None if not a numeric speed Sign_Name."""
+    n = int(name) & 0x7FFF
+    if 0 <= n <= 13:
+        return float((n + 1) * 10)
+    if n == 100:
+        return 5.0
+    if 101 <= n <= 114:
+        return float(5 + (n - 100) * 10)
+    if n == 85:
+        return 150.0
+    if n == 86:
+        return 160.0
+    if 28 <= n <= 41:
+        return float((n - 27) * 10)
+    if 115 <= n <= 127:
+        return float(5 + (n - 115) * 10)
+    return None
+
+
+def _prefer_sign(d_new: float, d_cur: float, have: bool) -> bool:
+    if not have:
+        return True
+    if d_new >= 0.0 and d_cur >= 0.0:
+        return d_new < d_cur
+    if d_new >= 0.0:
+        return True
+    if d_cur >= 0.0:
+        return False
+    return d_new > d_cur
+
+
+def _extract_sign_limits(perc: Any) -> tuple[float, float]:
+    """Nearest Relevant max/min speed (mps). 0 = none. Same as ExtractPerc."""
+    max_d = 0.0
+    min_d = 0.0
+    have_max = False
+    have_min = False
+    v_max = 0.0
+    v_min = 0.0
+    for t in list(getattr(perc, "tsr", None) or []):
+        name = int(getattr(t, "name", 0) or 0)
+        if name in (164, 196):
+            continue
+        kph = _std_sign_name_to_kph(name)
+        if kph is None:
+            continue
+        if int(getattr(t, "relevancy", 0) or 0) != 0:
+            continue
+        d = float(getattr(t, "long_m", 0.0) or 0.0)
+        if d < -_REG_STOP_BEHIND_M or d > _OBJ_D_MAX_M:
+            continue
+        mps = kph / 3.6
+        is_min = int(getattr(t, "sup1", 0) or 0) == _E_MINIMUM
+        if is_min:
+            if _prefer_sign(d, min_d, have_min):
+                have_min = True
+                min_d = d
+                v_min = mps
+        elif _prefer_sign(d, max_d, have_max):
+            have_max = True
+            max_d = d
+            v_max = mps
+    return v_max, v_min
 
 
 def _obj_row(o: Any) -> Optional[list[float]]:
@@ -1078,20 +1151,7 @@ def _pack_obj(perc: Any) -> list[list[float]]:
                 if rec is not None:
                     rows.append(rec)
                 break
-    elif perc.lead_valid and not objs:
-        d = float(perc.lead_distance_m)
-        if 0.0 <= d <= _OBJ_D_MAX_M:
-            rows.append(
-                [
-                    d,
-                    float(perc.lead_rel_speed_mps),
-                    float(perc.lead_lat_m),
-                    4.5,
-                    1.0,
-                    float(getattr(perc, "lead_heading_rad", 0.0) or 0.0),
-                    0.0,
-                ]
-            )
+    # No lead-only hatch — empty dyn stays empty (parity with FCM).
     for o in objs:
         rec = _obj_row(o)
         if rec is None or _obj_already(rows, rec[0], rec[2]):
@@ -1111,13 +1171,16 @@ def _pack_obj(perc: Any) -> list[list[float]]:
         name = int(getattr(t, "name", 0) or 0)
         if name not in (164, 196):
             continue
+        # ME: only Relevant (0) drives host stop; other-lane/far ignored.
+        if int(getattr(t, "relevancy", 0) or 0) != 0:
+            continue
         d = float(getattr(t, "long_m", 0.0) or 0.0)
         lat = float(getattr(t, "lat_m", 0.0) or 0.0)
-        if d < 0.0 or d > _OBJ_D_MAX_M or _obj_already(rows, d, lat):
+        if d < -_REG_STOP_BEHIND_M or d > _OBJ_D_MAX_M or _obj_already(rows, d, lat):
             continue
         if len(rows) >= n_max:
             break
-        rows.append([d, 0.0, lat, 1.0, 1.0, 0.0, 0.0])
+        rows.append([d, 0.0, lat, 1.0, _CLS_REG_STOP, 0.0, 0.0])
     return rows[:n_max]
 
 
@@ -1150,6 +1213,10 @@ def _pack_in(view: PlanningView) -> list[float]:
         b = _IN_HDR + i * _OBJ_W
         for j in range(min(_OBJ_W, len(rec))):
             vec[b + j] = float(rec[j])
+    v_max, v_min = _extract_sign_limits(perc)
+    need = _IN_HDR + n * _OBJ_W
+    vec[need] = v_max if v_max > 0.5 else 1.0e6
+    vec[need + 1] = v_min
     return vec
 
 
@@ -1180,6 +1247,7 @@ def unpack_plan_vec(raw: Any) -> dict[str, Any]:
         "allow_lc": vals[9],
         "mode": mode,
         "t_m_s": vals[11],
+        "s_stop": vals[13],
         "x_m": xs,
         "y_m": ys,
         "v_mps": vs,
@@ -1227,8 +1295,32 @@ def plan_tick(view: PlanningView, *, seq: int = 0) -> PlanningResult:
     vs = list(unpacked["v_mps"])
     a_req = float(unpacked["a_req"])
     D_occ = float(unpacked["D_occ"])
-    allow_lc = int(unpacked["allow_lc"])
+    allow_lc = int(unpacked["allow_lc"])  # demoted; always publish 0
     horizon_m = float(unpacked["horizon_m"])
+    s_stop = float(unpacked.get("s_stop") or 0.0)
+
+    # ME semantic scalars from perc (same rules as ExtractPerc / _pack_obj).
+    cipv_long = 0.0
+    cipv_rel = 0.0
+    if perc.cipv_id:
+        for o in perc.objects or []:
+            if int(o.obj_id) == int(perc.cipv_id):
+                cipv_long = float(o.long_m)
+                cipv_rel = float(o.rel_v_mps)
+                break
+    reg_long = -1.0
+    for t in perc.tsr or []:
+        name = int(getattr(t, "name", 0) or 0)
+        if name not in (164, 196):
+            continue
+        if int(getattr(t, "relevancy", 0) or 0) != 0:
+            continue
+        d = float(getattr(t, "long_m", 0.0) or 0.0)
+        if d < -_REG_STOP_BEHIND_M or d > _OBJ_D_MAX_M:
+            continue
+        if reg_long < 0.0 or d < reg_long:
+            reg_long = d
+    v_sign_max, v_sign_min = _extract_sign_limits(perc)
 
     now = time.monotonic()
     if plan_log_enabled() and (now - _LAST_PLAN_LOG) >= 0.5:
@@ -1237,10 +1329,11 @@ def plan_tick(view: PlanningView, *, seq: int = 0) -> PlanningResult:
             f"[octave_bridge] .m {mode} thr={thr:.2f} brk={brk:.2f} "
             f"v_plan={tgt:.1f} a_req={a_req:.2f} "
             f"Dsee={D_see:.0f} T={T_plan:.1f} Docc={D_occ:.0f} "
-            f"lc={allow_lc} steer={steer:.2f} "
+            f"s_stop={s_stop:.1f} reg={reg_long:.1f} "
+            f"steer={steer:.2f} "
             f"v={ego.speed_mps:.1f} ey={perc.e_y:.2f} "
             f"lane={int(perc.lane_valid)} use={int(_lane_ok(perc))} "
-            f"nobj={len(perc.objects)} lead={int(perc.lead_valid)} "
+            f"nobj={len(perc.objects)} "
             f"d={perc.lead_distance_m:.1f} lat={perc.lead_lat_m:.1f}",
             flush=True,
         )
@@ -1259,6 +1352,11 @@ def plan_tick(view: PlanningView, *, seq: int = 0) -> PlanningResult:
         horizon_m=horizon_m,
         D_see_m=D_see,
         T_plan_s=T_plan,
-        allow_lc=allow_lc,
+        s_stop_m=s_stop,
+        cipv_long_m=cipv_long,
+        cipv_rel_v=cipv_rel,
+        v_sign_max_mps=v_sign_max,
+        v_sign_min_mps=v_sign_min,
+        allow_lc=0,
         lane_code=lane_code_from_path(ys),
     )

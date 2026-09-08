@@ -1,11 +1,7 @@
-"""Tunnel entry/exit — approximate ISP exposure transitions via weather.
-
-Ego motion is Giraffe-only.
-"""
+"""Tunnel entry/exit — approximate ISP exposure transitions via weather."""
 
 from __future__ import annotations
 
-import os
 from typing import Any, Optional, Tuple
 
 from spawn.pick import pick_follow_transforms
@@ -47,57 +43,55 @@ def _cfg_dark() -> WeatherConfig:
 
 
 def layout_tunnel_entry(
-    carla_mod: Any,
-    client: Any,
-    world: Any,
+    session: Any,
     *,
     keep_ego: bool = False,
+    ego_mps: float = 10.0,
+    switch_s: float = 3.0,
 ) -> Tuple[Any, Optional[Any], dict[str, Any]]:
-    del client
+    world = session.world
+    carla_mod = session.carla
     apply_weather(world, carla_mod, _cfg_bright())
     ego_tf, _ = pick_follow_transforms(world, lead_gap_m=25.0)
     ego = spawn_ego_only(world, ego_tf=ego_tf, keep_ego=keep_ego)
-    release_ego(carla_mod, ego)
-    mps = float(os.environ.get("GF_TUNNEL_EGO_MPS") or "10")
-    switch_s = float(os.environ.get("GF_TUNNEL_SWITCH_S") or "3.0")
+    release_ego(carla_mod, ego, session=session)
     print(
         f"[layout] TUNNEL_ENTRY ego={ego.id} switch_s={switch_s} (Giraffe drives)",
         flush=True,
     )
     return ego, None, {
         "layout": "env_tunnel_entry",
-        "ego_mps": mps,
+        "ego_mps": float(ego_mps),
         "const_vel": False,
         "ic": "giraffe_only",
-        "switch_s": switch_s,
+        "switch_s": float(switch_s),
         "to_dark": True,
     }
 
 
 def layout_tunnel_exit(
-    carla_mod: Any,
-    client: Any,
-    world: Any,
+    session: Any,
     *,
     keep_ego: bool = False,
+    ego_mps: float = 10.0,
+    switch_s: float = 3.0,
 ) -> Tuple[Any, Optional[Any], dict[str, Any]]:
-    del client
+    world = session.world
+    carla_mod = session.carla
     apply_weather(world, carla_mod, _cfg_dark())
     ego_tf, _ = pick_follow_transforms(world, lead_gap_m=25.0)
     ego = spawn_ego_only(world, ego_tf=ego_tf, keep_ego=keep_ego)
-    release_ego(carla_mod, ego)
-    mps = float(os.environ.get("GF_TUNNEL_EGO_MPS") or "10")
-    switch_s = float(os.environ.get("GF_TUNNEL_SWITCH_S") or "3.0")
+    release_ego(carla_mod, ego, session=session)
     print(
         f"[layout] TUNNEL_EXIT ego={ego.id} switch_s={switch_s} (Giraffe drives)",
         flush=True,
     )
     return ego, None, {
         "layout": "env_tunnel_exit",
-        "ego_mps": mps,
+        "ego_mps": float(ego_mps),
         "const_vel": False,
         "ic": "giraffe_only",
-        "switch_s": switch_s,
+        "switch_s": float(switch_s),
         "to_dark": False,
     }
 

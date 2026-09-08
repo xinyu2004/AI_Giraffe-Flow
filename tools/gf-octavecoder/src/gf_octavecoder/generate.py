@@ -101,10 +101,11 @@ using gf_octave_planning::plan_occlusion;
 inline PlanTickOut m_plan_tick(float v, float steer_deg, bool lane_valid, float e_y, float c0,
                                float c1, float c2, float c3, float x_end, float lane_conf,
                                float lane_count, const PlanObj* obj, int nobj, float D_see_prev,
-                               float T_plan_prev) {
+                               float T_plan_prev, float v_sign_max = 1.0e6f,
+                               float v_sign_min = 0.0f) {
   return gf_octave_planning::m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end,
                                          lane_conf, lane_count, obj, nobj, D_see_prev,
-                                         T_plan_prev);
+                                         T_plan_prev, v_sign_max, v_sign_min);
 }
 
 }  // namespace oct_gen

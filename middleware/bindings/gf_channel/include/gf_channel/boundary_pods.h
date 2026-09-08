@@ -63,9 +63,9 @@ typedef struct GfFakePercObj {
 } GfFakePercObj;
 
 typedef struct GfFakePercTsr {
-  uint16_t sign_name; /* DSTSR_Sign_Name */
+  uint16_t sign_name; /* DSTSR_Sign_Name; SIL bit15=min → FCM Sup1 e_minimum */
   uint8_t relevancy;  /* DSTSR_Relevancy */
-  uint8_t pad;
+  uint8_t id;        /* m_DSTSR_ID 1–127; was pad */
   float long_m;
   float lat_m;
 } GfFakePercTsr;

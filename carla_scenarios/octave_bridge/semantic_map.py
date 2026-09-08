@@ -23,6 +23,16 @@ def _keep_adj(side: int) -> bool:
     return side != 0
 
 
+def _host_pair_ok(lc0: float, rc0: float) -> bool:
+    """1:1 gf_plan_host_pair_ok.m — control only; BEV may still draw the marks."""
+    w = float(lc0) - float(rc0)
+    if w < 2.50 or w > 5.50:
+        return False
+    if float(lc0) < 0.25 or float(rc0) > -0.25:
+        return False
+    return True
+
+
 @dataclass
 class EgoView:
     speed_mps: float = 0.0
@@ -65,6 +75,8 @@ class TsrItem:
     long_m: float = 0.0
     lat_m: float = 0.0
     relevancy: int = 0
+    tsr_id: int = 0
+    sup1: int = 0  # DSTSR_Sup1; e_minimum=27
 
 
 @dataclass
@@ -92,7 +104,7 @@ class PercView:
     c0: float = 0.0
     c2: float = 0.0
     c3: float = 0.0
-    x_end: float = 60.0
+    x_end: float = 0.0
     lane_conf: float = 0.0
     lane_count: int = 0
 
@@ -121,6 +133,11 @@ class PlanningResult:
     horizon_m: float = 25.0
     D_see_m: float = 0.0
     T_plan_s: float = 0.0
+    s_stop_m: float = 0.0
+    cipv_long_m: float = 0.0
+    cipv_rel_v: float = 0.0
+    v_sign_max_mps: float = 0.0
+    v_sign_min_mps: float = 0.0
     allow_lc: int = 0
     lane_code: int = 0
 
@@ -226,18 +243,22 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
                 lanemark_type=right_type,
             ),
         ]
-        # Same as planning/driving HostLaneFromPerc (lite lane-keep).
-        perc.lane_valid = True
-        perc.c0 = 0.5 * (left_c0 + right_c0)
-        perc.c1 = 0.5 * (left_c1 + right_c1)
-        perc.c2 = 0.5 * (left_c2 + right_c2)
-        perc.c3 = 0.0
-        perc.e_y = perc.c0  # y_center(0)
-        if width > 0.5:
-            perc.lane_width_m = width
-        else:
-            perc.lane_width_m = max(2.5, abs(left_c0 - right_c0))
-        perc.x_end = vr_end if vr_end > 0.5 else 60.0
+        # Same as planning/driving HostLaneFromPerc. Lines stay on BEV;
+        # control only if the pair straddles ego (1:1 gf_plan_host_pair_ok).
+        if _host_pair_ok(left_c0, right_c0):
+            perc.lane_valid = True
+            perc.c0 = 0.5 * (left_c0 + right_c0)
+            perc.c1 = 0.5 * (left_c1 + right_c1)
+            perc.c2 = 0.5 * (left_c2 + right_c2)
+            perc.c3 = 0.0
+            perc.e_y = perc.c0  # y_center(0)
+            if width > 0.5:
+                perc.lane_width_m = width
+            else:
+                perc.lane_width_m = max(2.5, abs(left_c0 - right_c0))
+            perc.x_end = vr_end if vr_end > 0.5 else 0.0
+            if perc.x_end <= 0.5:
+                perc.lane_valid = False
 
     adj_n = int(fp.get("adj_n") or 0) if avail == 2 else 0
     adj_n = min(4, max(0, adj_n))
@@ -266,6 +287,8 @@ def _fcm_style_perc(fp: dict[str, Any]) -> PercView:
                 long_m=float(o.get("long_m") or 0.0),
                 lat_m=float(o.get("lat_m") or 0.0),
                 relevancy=int(o.get("rel") or 0),
+                tsr_id=int(o.get("id") or 0),
+                sup1=int(o.get("sup1") or 0),
             )
         )
     perc.vd_count = int(fp.get("vd_count") or 0)
@@ -436,6 +459,11 @@ def result_to_traj_dict(result: PlanningResult) -> dict[str, Any]:
         "horizon_m": float(result.horizon_m),
         "D_see_m": float(result.D_see_m),
         "T_plan_s": float(result.T_plan_s),
+        "s_stop_m": float(result.s_stop_m),
+        "cipv_long_m": float(result.cipv_long_m),
+        "cipv_rel_v": float(result.cipv_rel_v),
+        "v_sign_max_mps": float(result.v_sign_max_mps),
+        "v_sign_min_mps": float(result.v_sign_min_mps),
         "allow_lc": int(result.allow_lc),
         "ctrl_mode": CTRL_MODE_IDS.get(result.ctrl_mode, 0),
     }
