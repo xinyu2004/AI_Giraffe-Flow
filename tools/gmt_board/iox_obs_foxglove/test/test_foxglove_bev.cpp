@@ -69,6 +69,12 @@ int main() {
   CHECK(png_lim.size() > 8);
   CHECK(png != png_lim);
 
+  // s_stop alone must NOT paint a stop bar — need Relevant red/yellow.
+  gf_foxglove::LiveBevState ghost = st;
+  ghost.traj_s_stop_m = 32.0f;
+  ghost.light_sign_name = 0;
+  CHECK(gf_foxglove::render_ego_bev_png(ghost) == png);
+
   // Driving see prefers Trajectory D_see when set.
   CHECK(std::fabs(gf_foxglove::driving_see_m(st, 120.0f) - 80.0f) < 0.1f);
 

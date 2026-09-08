@@ -272,7 +272,7 @@ def collect_tsr_static(ego: Any, world: Any) -> dict[str, Any]:
                 wd = max(0.4, float(bb.y) * 2.0)
             except Exception:  # noqa: BLE001
                 ln, wd = 2.0, 0.6
-            heading = _wrap_pi(math.radians(float(tf.rotation.yaw)) - yaw)
+            heading = _wrap_pi(yaw - math.radians(float(tf.rotation.yaw)))
             stat.append(
                 {
                     "id": int(getattr(actor, "id", 0) or 0) % 120 + 1,

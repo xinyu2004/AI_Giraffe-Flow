@@ -333,7 +333,11 @@ def collect_dyn_objects(
                 return
             cls = map_carla_class(typ, is_walker=is_walker)
             try:
-                heading = _wrap_pi(math.radians(float(tf.rotation.yaw)) - yaw)
+                # Ego +x forward, +y left. CARLA yaw delta alone was opposite lane
+                # poly (C2<0 right bend needed negative heading). Negate once here.
+                heading = _wrap_pi(
+                    yaw - math.radians(float(tf.rotation.yaw))
+                )
             except Exception:  # noqa: BLE001
                 heading = 0.0
             rel_v = 0.0

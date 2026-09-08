@@ -211,7 +211,7 @@ int traj_seg_thickness(float v0, float v1) {
   return 3;
 }
 
-// 5×7 column bitmaps (LSB = top).
+// 5×7 column bitmaps (MSB = top, bit0 = bottom). HUD: RED/YEL/GRN + digits / ±.
 const std::uint8_t* font5(char ch) {
   static const std::uint8_t z[5] = {0x3E, 0x45, 0x49, 0x51, 0x3E};
   static const std::uint8_t c1[5] = {0x00, 0x21, 0x7F, 0x01, 0x00};
@@ -230,6 +230,17 @@ const std::uint8_t* font5(char ch) {
   static const std::uint8_t T[5] = {0x40, 0x40, 0x7F, 0x40, 0x40};
   static const std::uint8_t L[5] = {0x7F, 0x01, 0x01, 0x01, 0x01};
   static const std::uint8_t C[5] = {0x3E, 0x41, 0x41, 0x41, 0x22};
+  static const std::uint8_t A[5] = {0x3F, 0x48, 0x48, 0x48, 0x3F};
+  static const std::uint8_t E[5] = {0x7F, 0x49, 0x49, 0x49, 0x41};
+  static const std::uint8_t G[5] = {0x3E, 0x41, 0x49, 0x49, 0x2E};
+  static const std::uint8_t I[5] = {0x00, 0x41, 0x7F, 0x41, 0x00};
+  static const std::uint8_t M[5] = {0x7F, 0x20, 0x18, 0x20, 0x7F};
+  static const std::uint8_t N[5] = {0x7F, 0x10, 0x08, 0x04, 0x7F};
+  static const std::uint8_t R[5] = {0x7F, 0x48, 0x4C, 0x4A, 0x31};
+  static const std::uint8_t Y[5] = {0x60, 0x10, 0x0F, 0x10, 0x60};
+  static const std::uint8_t plus[5] = {0x08, 0x08, 0x3E, 0x08, 0x08};
+  static const std::uint8_t minus[5] = {0x08, 0x08, 0x08, 0x08, 0x08};
+  static const std::uint8_t slash[5] = {0x02, 0x04, 0x08, 0x10, 0x20};
   switch (ch) {
     case '0':
       return z;
@@ -263,8 +274,44 @@ const std::uint8_t* font5(char ch) {
       return L;
     case 'C':
       return C;
+    case 'A':
+      return A;
+    case 'E':
+      return E;
+    case 'G':
+      return G;
+    case 'I':
+      return I;
+    case 'M':
+      return M;
+    case 'N':
+      return N;
+    case 'R':
+      return R;
+    case 'Y':
+      return Y;
+    case '+':
+      return plus;
+    case '-':
+      return minus;
+    case '/':
+      return slash;
     default:
       return sp;
+  }
+}
+
+void fill_circle(Buf& buf, int w, int h, int cx, int cy, int r, Rgb rgb, bool filled) {
+  const int r2 = r * r;
+  const int rin = std::max(1, r - 2);
+  const int rin2 = rin * rin;
+  for (int y = -r; y <= r; ++y) {
+    for (int x = -r; x <= r; ++x) {
+      const int d2 = x * x + y * y;
+      if (d2 > r2) continue;
+      if (!filled && d2 < rin2) continue;
+      set_pixel(buf, w, h, cx + x, cy + y, rgb);
+    }
   }
 }
 
@@ -277,7 +324,8 @@ void blit_text(Buf& buf, int w, int h, int x, int y, const char* text, Rgb rgb, 
     const std::uint8_t* cols = font5(ch);
     for (int ci = 0; ci < 5; ++ci) {
       for (int row = 0; row < 7; ++row) {
-        if (cols[ci] & (1 << row)) {
+        // Glyph tables are authored MSB=top; screen y grows downward.
+        if (cols[ci] & (1 << (6 - row))) {
           fill_rect(buf, w, h, cx + ci * sc, y + row * sc, cx + ci * sc + sc, y + row * sc + sc,
                     rgb);
         }
@@ -369,7 +417,8 @@ void advance_odom(LiveBevState& st, std::uint64_t t_ns, float speed_mps) {
     if (dt >= 0.02) {
       float raw_a = (speed_mps - st.last_speed_mps) / static_cast<float>(dt);
       raw_a = std::max(-6.0f, std::min(6.0f, raw_a));
-      st.lon_accel_mps2 = 0.65f * st.lon_accel_mps2 + 0.35f * raw_a;
+      // Light EMA so HUD a tracks closer to EgoMotion (~30 Hz BEV).
+      st.lon_accel_mps2 = 0.40f * st.lon_accel_mps2 + 0.60f * raw_a;
     }
   } else if (st.last_t_ns == 0) {
     st.odom_m += std::max(0.0f, speed_mps) * 0.05f;
@@ -396,7 +445,9 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     buf[i + 1] = bg.g;
     buf[i + 2] = bg.b;
   }
-  fill_rect(buf, width, height, 0, 0, width, 28, text_bar);
+  constexpr int kHudH = 36;
+  constexpr int kHudScale = 2;
+  fill_rect(buf, width, height, 0, 0, width, kHudH, text_bar);
 
   const BevCam cam = make_bev_cam(width, height);
   const float lane_w = st.lane_width_m > 0.5f ? st.lane_width_m : 3.5f;
@@ -644,12 +695,12 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     const Rgb shade{static_cast<std::uint8_t>(fill.r * 0.55f),
                     static_cast<std::uint8_t>(fill.g * 0.55f),
                     static_cast<std::uint8_t>(fill.b * 0.55f)};
-    fill_convex_poly(buf, width, height, bot, shade, nullptr, 28);
+    fill_convex_poly(buf, width, height, bot, shade, nullptr, kHudH);
     for (int i = 0; i < 4; ++i) {
       std::vector<std::pair<int, int>> side = {bot[i], bot[(i + 1) % 4], top[(i + 1) % 4], top[i]};
-      fill_convex_poly(buf, width, height, side, fill, nullptr, 28);
+      fill_convex_poly(buf, width, height, side, fill, nullptr, kHudH);
     }
-    fill_convex_poly(buf, width, height, top, fill, outline, 28);
+    fill_convex_poly(buf, width, height, top, fill, outline, kHudH);
   };
 
   const int n_paint = st.n_obj;
@@ -679,12 +730,14 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     draw_line(buf, width, height, pl.first, pl.second, pr.first, pr.second, {60, 200, 210}, 4);
   }
 
-  // Stop line only with Relevant red/yellow (196/164). No bar for green/-- .
+  // Stop line ONLY for Relevant red/yellow (196/164). Never for green / none /
+  // s_stop-alone (cap or phantom). Cyan see-cap above is D_see, not this bar.
   const float s_stop = st.traj_s_stop_m;
-  const bool stop_active = s_stop > 0.5f && s_stop < (kDWorkM - 0.5f);
   const bool stop_light =
       (st.light_sign_name == 164 || st.light_sign_name == 196);
-  if (stop_active && stop_light && st.n_host >= 1) {
+  const bool stop_active =
+      stop_light && s_stop > 0.5f && s_stop < (kDWorkM - 0.5f) && st.n_host >= 1;
+  if (stop_active) {
     Rgb stop_c = (st.light_sign_name == 164) ? Rgb{230, 200, 60} : Rgb{220, 50, 50};
     const float yl = host_y_ego(s_stop, 'l');
     const float yr = host_y_ego(s_stop, 'r');
@@ -693,20 +746,32 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     draw_line(buf, width, height, pl.first, pl.second, pr.first, pr.second, stop_c, 5);
   }
 
-  // HUD: left light, right limit + a (number). No green/cyan bars / VDT / spark.
+  // HUD: left light orb + label; right limit + a. Scale≥2 so glyphs stay readable.
   const char* light = "--";
-  Rgb light_c{180, 180, 180};
+  Rgb light_c{160, 160, 168};
+  bool light_on = false;
   if (st.light_sign_name == 196) {
     light = "RED";
     light_c = {230, 70, 70};
+    light_on = true;
   } else if (st.light_sign_name == 164) {
     light = "YEL";
     light_c = {230, 200, 60};
+    light_on = true;
   } else if (st.light_sign_name == 198) {
     light = "GRN";
     light_c = {70, 200, 90};
+    light_on = true;
   }
-  blit_text(buf, width, height, 8, 7, light, light_c, 1);
+  const int lamp_r = 7;
+  const int lamp_cx = 10 + lamp_r;
+  const int lamp_cy = kHudH / 2;
+  if (light_on) {
+    fill_circle(buf, width, height, lamp_cx, lamp_cy, lamp_r, light_c, true);
+  } else {
+    fill_circle(buf, width, height, lamp_cx, lamp_cy, lamp_r, light_c, false);
+  }
+  blit_text(buf, width, height, lamp_cx + lamp_r + 6, 10, light, light_c, kHudScale);
 
   char right[64];
   int lim_hi = -1;
@@ -717,20 +782,28 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   if (st.v_sign_min_mps > 0.5f) {
     lim_lo = static_cast<int>(std::lround(st.v_sign_min_mps * 3.6f));
   }
+  // Accel numeral only (no leading 'a'); color: +green / −red / ~0 gray. No yellow.
   if (lim_hi >= 0 && lim_lo >= 0) {
-    std::snprintf(right, sizeof(right), "%d/%d a%+.1f", lim_hi, lim_lo,
+    std::snprintf(right, sizeof(right), "%d/%d %+.1f", lim_hi, lim_lo,
                   static_cast<double>(st.lon_accel_mps2));
   } else if (lim_hi >= 0) {
-    std::snprintf(right, sizeof(right), "%d a%+.1f", lim_hi,
+    std::snprintf(right, sizeof(right), "%d %+.1f", lim_hi,
                   static_cast<double>(st.lon_accel_mps2));
   } else if (lim_lo >= 0) {
-    std::snprintf(right, sizeof(right), "min%d a%+.1f", lim_lo,
+    std::snprintf(right, sizeof(right), "min%d %+.1f", lim_lo,
                   static_cast<double>(st.lon_accel_mps2));
   } else {
-    std::snprintf(right, sizeof(right), "a%+.1f", static_cast<double>(st.lon_accel_mps2));
+    std::snprintf(right, sizeof(right), "%+.1f", static_cast<double>(st.lon_accel_mps2));
   }
-  const int rx = width - 8 - static_cast<int>(std::strlen(right)) * 8;
-  blit_text(buf, width, height, std::max(8, rx), 7, right, {240, 220, 120}, 1);
+  Rgb accel_c{200, 200, 208};
+  if (st.lon_accel_mps2 > 0.08f) {
+    accel_c = {70, 210, 110};
+  } else if (st.lon_accel_mps2 < -0.08f) {
+    accel_c = {230, 80, 80};
+  }
+  const int glyph_w = (5 + 1) * kHudScale;
+  const int rx = width - 8 - static_cast<int>(std::strlen(right)) * glyph_w;
+  blit_text(buf, width, height, std::max(8, rx), 10, right, accel_c, kHudScale);
 
   return png_rgb(width, height, buf.data());
 }

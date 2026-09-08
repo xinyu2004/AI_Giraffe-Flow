@@ -609,7 +609,8 @@ def lead_ego_frame(ego: Any, lead: Any) -> tuple[float, float, int, float]:
         assign = 1 if y > 0 else 5
     try:
         lead_yaw = math.radians(float(lead.get_transform().rotation.yaw))
-        heading = _wrap_pi(lead_yaw - _ego_yaw_rad(ego))
+        # Same sign as _objects_truth: negate CARLA yaw delta vs ego (left+).
+        heading = _wrap_pi(_ego_yaw_rad(ego) - lead_yaw)
     except Exception:  # noqa: BLE001
         heading = 0.0
     return max(0.0, x), y, assign, heading

@@ -99,7 +99,7 @@ int main() {
       hub.publish_json("/gf/Trajectory", t, js);
     }
     const auto now = std::chrono::steady_clock::now();
-    if (synth_bev && now - last_bev >= std::chrono::milliseconds(100)) {
+    if (synth_bev && now - last_bev >= std::chrono::milliseconds(33)) {
       last_bev = now;
       const auto png = gf_foxglove::render_ego_bev_png(bev);
       const std::uint64_t t = bev.t_ns ? bev.t_ns : now_ns();

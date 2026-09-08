@@ -17,6 +17,8 @@ OEM 相机/网络权重仍在仓外。
 
 **English:** [README.md](README.md)
 
+<video src="gallery/videos/afc.mp4" controls width="100%"></video>
+
 ---
 
 ## 总览

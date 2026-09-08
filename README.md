@@ -17,6 +17,8 @@ OEM camera/NN stays out of tree.
 
 **中文:** [README_zh.md](README_zh.md)
 
+<video src="gallery/videos/afc.mp4" controls width="100%"></video>
+
 ---
 
 ## Overview

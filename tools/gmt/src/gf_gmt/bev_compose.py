@@ -671,7 +671,7 @@ def traj_seg_thickness(v0: float, v1: float) -> int:
     return 3
 
 
-# 5×7 column bitmaps (LSB = top). Digits + a few HUD letters.
+# 5×7 column bitmaps (MSB = top, bit0 = bottom). Digits + a few HUD letters.
 _FONT5: dict[str, tuple[int, ...]] = {
     "0": (0x3E, 0x45, 0x49, 0x51, 0x3E),
     "1": (0x00, 0x21, 0x7F, 0x01, 0x00),
@@ -710,7 +710,8 @@ def _blit_text(
         cols = _FONT5.get(ch, _FONT5[" "])
         for ci, bits in enumerate(cols):
             for row in range(7):
-                if bits & (1 << row):
+                # Glyph tables are authored MSB=top; screen y grows downward.
+                if bits & (1 << (6 - row)):
                     px = cx + ci * sc
                     py = y + row * sc
                     _fill_rect(buf, width, height, px, py, px + sc, py + sc, rgb)
@@ -1039,7 +1040,7 @@ def render_ego_bev_png(st: LiveBevState, *, width: int = BEV_W, height: int = BE
     hud = f"V{v_plan:4.1f} D{opening:3.0f} T{float(st.traj_t_plan_s):3.1f}"
     if st.allow_lc:
         hud += " LC"
-    _blit_text(buf, width, height, 140, 7, hud, (220, 224, 230), scale=1)
+    _blit_text(buf, width, height, 140, 6, hud, (220, 224, 230), scale=2)
 
     return _png_rgb(width, height, bytes(buf))
 
@@ -1287,7 +1288,8 @@ class LiveBevComposer:
             if dt >= 0.02:
                 raw_a = (speed_mps - self.state._last_speed_mps) / dt
                 raw_a = max(-6.0, min(6.0, raw_a))
-                self.state.lon_accel_mps2 = 0.65 * self.state.lon_accel_mps2 + 0.35 * raw_a
+                # Match board BEV: lighter EMA for snappier HUD a.
+                self.state.lon_accel_mps2 = 0.40 * self.state.lon_accel_mps2 + 0.60 * raw_a
         elif self.state._last_t_ns == 0:
             # first sample: nudge so first frames still differ after start
             self.state.odom_m += max(0.0, speed_mps) * 0.05
