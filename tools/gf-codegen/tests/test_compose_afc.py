@@ -9,7 +9,7 @@ from gf_codegen.compose.pipeline import compose_project
 
 
 def test_compose_afc(repo_root: Path, tmp_path: Path) -> None:
-    project = repo_root / "projects/afc/project.yaml"
+    project = repo_root / "projects/afc/giraffe.yaml"
     out = tmp_path / "gf.sor.json"
     rc = compose_project(project, repo_root=repo_root, out=out)
     assert rc == 0
@@ -63,7 +63,7 @@ def test_compose_afc(repo_root: Path, tmp_path: Path) -> None:
     assert "on_camera" not in hpp_txt
     assert "Perception_MESSAGE_Out_St" in hpp_txt
 
-    pm = sor.get("platform_manifest")
+    pm = sor.get("gf_ara_cfg_manifest")
     assert isinstance(pm, dict)
     assert "exec" in pm and "phm" in pm
 

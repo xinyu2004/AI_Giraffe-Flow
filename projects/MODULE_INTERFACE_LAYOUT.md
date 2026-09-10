@@ -3,13 +3,15 @@
 **已取消**顶层共享 + project 定制双轨。DBC 与 hpp **一律跟交付项目走**。
 
 ```text
-projects/<oem>/<product>/
-  oem/                 # DBC / manifest（车型相关，必不同）
-  interfaces/          # 本项目实际使用的 io_types.hpp（外仓常只交这个）
-  integration/         # wiring.yaml
-  req.yaml
-  project.yaml
-  golden/              # 可选：本项目 compose 对照（主示范在 adc）
+projects/<sku>/
+  giraffe.yaml         # 入口索引
+  cfg/
+    req.yaml
+    wiring.yaml
+    gf_ara_cfg/        # exec · em_launch · phm · …
+  oem/                 # DBC / manifest
+  interfaces/          # io_types.hpp
+  golden/              # 可选：compose 对照
   reports/
 ```
 

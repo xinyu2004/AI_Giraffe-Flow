@@ -1,0 +1,35 @@
+# Giraffe 工程入口索引（原 project.yaml）— 不含业务细节
+# 作者源在 cfg/：req · wiring · gf_ara_cfg/*
+schema_version: "0.1"
+project_id: adc
+customer_id: oem
+product: ADC
+
+base: tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json
+out: gf.sor.json
+
+oem:
+  dbc: oem/oem_import.dbc
+  manifest: oem/oem_import.yaml
+
+delivery:
+  req: cfg/req.yaml
+
+integration:
+  wiring: cfg/wiring.yaml
+
+# 中间件运行时作者树（gf-config 页 2）→ Verify 冻成 hpp；≠ 全部 gf-config 输出
+gf_ara_cfg:
+  exec: cfg/gf_ara_cfg/exec.yaml
+  em_launch: cfg/gf_ara_cfg/em_launch.yaml
+  phm: cfg/gf_ara_cfg/phm.yaml
+  diag: cfg/gf_ara_cfg/diag.yaml
+  log: cfg/gf_ara_cfg/log.yaml
+  ucm: cfg/gf_ara_cfg/ucm.yaml
+  collector: cfg/gf_ara_cfg/collector.yaml
+  tsync: cfg/gf_ara_cfg/tsync.yaml
+  bounds: cfg/gf_ara_cfg/bounds.yaml
+
+lineage:
+  report: reports/signal_lineage_report.yaml
+  fail_on_error: false

@@ -1,0 +1,134 @@
+schema_version: '0.1'
+project_id: afc
+variant: afc_front_camera
+topology: ap_only
+modules:
+- id: adapter.vehicle_can_gateway
+  hpp: projects/afc/interfaces/vehicle_gateway/io_types.hpp
+- id: perception.fcm
+  hpp:
+  - projects/afc/interfaces/fcm_perception/io_ports.hpp
+  - projects/afc/interfaces/fcm_perception/Perception_Out_messages.h
+  package: customer/fcm-perception
+- id: planning.driving
+  hpp: projects/afc/interfaces/planning_driving/io_types.hpp
+  package: customer/planning-driving
+deployments:
+- process: external.vehicle_mcu
+  compute_domain: external
+  provides:
+  - services.semantic.VehicleBus
+  requires:
+  - services.semantic.Trajectory
+- process: adapter.vehicle_can_gateway
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.Perception_In_St
+  - services.semantic.EgoMotion
+  - services.semantic.Trajectory
+  requires:
+  - services.semantic.VehicleBus
+  - services.semantic.Trajectory
+- process: perception.fcm
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.Perception_MESSAGE_Out_St
+  requires:
+  - services.semantic.Perception_In_St
+- process: planning.driving
+  compute_domain: ap_linux
+  package: customer/planning-driving
+  provides:
+  - services.semantic.Trajectory
+  requires:
+  - services.semantic.Perception_MESSAGE_Out_St
+  - services.semantic.EgoMotion
+bindings:
+- module: adapter.vehicle_can_gateway
+  inputs:
+  - service: semantic.VehicleBus
+    type: VehicleBus
+  - service: semantic.Trajectory
+    type: Trajectory
+  outputs:
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  - service: semantic.Perception_In_St
+    type: Perception_In_St
+  - service: semantic.Trajectory
+    type: Trajectory
+- module: perception.fcm
+  inputs:
+  - service: semantic.Perception_In_St
+    type: Perception_In_St
+  outputs:
+  - service: semantic.Perception_MESSAGE_Out_St
+    type: Perception_MESSAGE_Out_St
+- module: planning.driving
+  inputs:
+  - service: semantic.Perception_MESSAGE_Out_St
+    type: Perception_MESSAGE_Out_St
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  outputs:
+  - service: semantic.Trajectory
+    type: Trajectory
+dataflows:
+- from: external.vehicle_mcu
+  service: services.semantic.VehicleBus
+  to: adapter.vehicle_can_gateway
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.Perception_In_St
+  to: perception.fcm
+- from: perception.fcm
+  service: services.semantic.Perception_MESSAGE_Out_St
+  to: planning.driving
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: planning.driving
+- from: planning.driving
+  service: services.semantic.Trajectory
+  to: adapter.vehicle_can_gateway
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.Trajectory
+  to: external.vehicle_mcu
+channel_flows:
+- from: host.frame_ingest
+  to: perception.fcm
+  kind: gf_channel
+  slot: gf.channel.front
+canvas:
+  nodes:
+    host.frame_ingest:
+      kind: frame_ingest
+      label: frame_ingest
+      out_side: right
+      in_side: left
+      x: 11453.8
+      y: -385.5
+    external.vehicle_mcu:
+      kind: external
+      label: MCU
+      out_side: right
+      in_side: top
+      x: -200
+      y: -180
+    adapter.vehicle_can_gateway:
+      out_side: right
+      in_side: bottom
+      x: 11709.8
+      y: -21.1
+      port_sides:
+        out:Perception_In_St: right
+    perception.fcm:
+      out_side: right
+      in_side: left
+      x: 12039.9
+      y: -486.7
+      port_sides:
+        in:Perception_In_St: left
+    planning.driving:
+      out_side: bottom
+      in_side: left
+      x: 12496.7
+      y: -6.6

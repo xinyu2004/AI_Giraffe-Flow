@@ -92,11 +92,11 @@ AI_Giraffe-Flow/
 ### 3.2 集成（主路径）
 
 ```bash
-# GUI：打开 projects/.../project.yaml → Save（自动 compose）
+# GUI：打开 projects/.../giraffe.yaml → Save（自动 compose）
 # 无 GUI / CI：
-python -m gf_codegen.compose --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 # Proxy/Skeleton：
-gf-codegen generate --project projects/afc/project.yaml
+gf-codegen generate --project projects/afc/giraffe.yaml
 ```
 
 其它示例：`projects/afc`、`projects/adc`。
@@ -176,7 +176,7 @@ CI 在合入 / 发版前执行 compose + lint + golden diff；**不**把 codegen
 
 1. gf-config 页 2 · 诊断：开 14229+13400，选下载 SID（默认 **0x38**），保存 `diag.yaml`  
 2. `run_sil`（开 DoIP 时自动起 `gf_doip_ota_server`）  
-3. GMT → 加载 `project.yaml` → **OTA/UDS** → Host:Port「连接」  
+3. GMT → 加载 `giraffe.yaml` → **OTA/UDS** → Host:Port「连接」  
    - **OTA**：Start OTA（UDS 日志在按钮下方）  
    - **DEM**：读/清 DTC（0x19 / 0x14）  
    - **Collector**：本机 NDJSON 或板端环缓（0x31 F201）  

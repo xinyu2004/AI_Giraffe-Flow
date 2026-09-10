@@ -63,10 +63,12 @@ AI_Giraffe-Flow/
 ├── # SKU workload apps: projects/<sku>/apps/ only
 │
 ├── projects/<sku>/         # one vehicle / trim
-│   ├── project.yaml
-│   ├── req.yaml
-│   ├── integration/wiring.yaml
-│   ├── platform/                 # exec · phm · diag · log · ucm · collector（+ 可裁剪 per/tsync）
+│   ├── giraffe.yaml              # 唯一入口索引（原 project.yaml）
+│   ├── cfg/
+│   │   ├── req.yaml              # SKU / SOR 交付分解
+│   │   ├── wiring.yaml           # 集成连线 + canvas
+│   │   └── gf_ara_cfg/           # 中间件运行时作者树（原 platform/）
+│   │       # exec · em_launch · phm · diag · log · ucm · collector · tsync · bounds
 │   ├── interfaces/               # SKU io_types
 │   ├── oem/                      # DBC extract / import policy
 │   ├── apps/                     # SKU workload (gateway, FCM, planning gold, …)

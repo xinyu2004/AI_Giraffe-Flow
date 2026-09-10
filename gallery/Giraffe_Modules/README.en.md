@@ -48,5 +48,6 @@ Source: [`middleware/README.md`](../../middleware/README.md)
 | **systemd/init** | OS protection; single unit starts EM only |
 | **EM** | Entry: spawn platform daemons + SOA apps per config |
 | **daemons (via gf-config)** | dlt / RouDi / SOME/IP / DDS? — enabled via gf-config |
+| **sm** | FG **Off / Running / Updating** (library; **not** before EM) | bring-up EnsureGroup; PHM NotifyHealthFault; UCM → Updating |
 
-Regen: `python3 gallery/Giraffe_Modules/scripts/render_gif.py --en`
+Drive/park product mode is a future Mode Manager App (`VehicleMode`), launched by EM — not drawn as a middleware chip here.

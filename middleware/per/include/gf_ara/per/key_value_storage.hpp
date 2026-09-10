@@ -10,7 +10,7 @@
 
 namespace gf_ara::per {
 
-/// File-backed KV (gf_ara::per lite). Dual-slot under GF_PER_DIR (default: .).
+/// File-backed KV (gf_ara::per lite). Dual-slot under **required** GF_PER_DIR.
 /// Not SQLite. Format: `#gen=N` then `key=value` lines.
 class KeyValueStorage {
  public:

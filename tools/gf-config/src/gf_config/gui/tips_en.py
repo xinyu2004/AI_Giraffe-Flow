@@ -59,9 +59,9 @@ TIP_EN: dict[str, str] = {
         "Persistency lite (dual-slot file KV, no SQLite). "
         "Auto-checked when collector/ucm need cross-reboot DTC or version."
     ),
-    "时间同步 lite：platform/tsync.yaml；SIL 用 osal mock，"
+    "时间同步 lite：cfg/gf_ara_cfg/tsync.yaml；SIL 用 osal mock，"
     "板上配 linuxptp/ptp4l，本模块用 pmc 读状态。": (
-        "Time-sync lite: platform/tsync.yaml; SIL uses osal mock; "
+        "Time-sync lite: cfg/gf_ara_cfg/tsync.yaml; SIL uses osal mock; "
         "on-target use linuxptp/ptp4l, this module reads status via pmc."
     ),
     "时序/trace 导出到 VCD / GMT，偏调试路径；"
@@ -126,6 +126,11 @@ TIP_EN: dict[str, str] = {
         "No client reports; EM uses liveness/exit code only (minimal stubs)."
     ),
     # EM
+    "要由 OS EM（gf_em_daemon）Spawn 的进程，须与 exec/wiring 中的名字一致。\n"
+    "host.* 由能力勾选同步插入（置顶锁定），禁止在本表删除。": (
+        "Process Spawned by OS EM (gf_em_daemon); name must match exec/wiring.\n"
+        "host.* are inserted by capability checkboxes (pinned, locked); do not delete here."
+    ),
     "要由 OS EM（gf_em_daemon）Spawn 的进程，须与 exec/wiring 中的名字一致。": (
         "Process Spawned by OS EM (gf_em_daemon); name must match exec/wiring."
     ),
@@ -556,16 +561,14 @@ TIP_EN: dict[str, str] = {
         "Services that must appear (required_services); "
         "compose/lineage checks the canvas covers them."
     ),
-    "每话题如何发布：周期 / 变化时。写入 req.publish_policy，"
-    "compose 进 SOR 与 generated/publish_policy.hpp。"
-    "周期口填 period_ms（车态默认 10）。变化时填 expect_fps（期望/告警带，不发冻帧）。"
-    "expect_fps 须 ≤ 相机 fps。这不是 PHM 喂狗，也不是 FCM 自己设帧率。": (
-        "How each topic publishes: period / on-change. "
-        "Written to req.publish_policy; compose → SOR and "
-        "generated/publish_policy.hpp. Period topics need period_ms "
-        "(vehicle default 10). on-change uses expect_fps as a budget/"
-        "warn band, not a send clock (no freeze). expect_fps must be "
-        "≤ camera fps. Not PHM alive, not an FCM-chosen frame rate."
+    "语义话题：画布双击模块 → Out 表改触发。"
+    "通道话题：双击 frame_ingest 改触发。"
+    "写入 req.publish_policy；compose → SOR / publish_policy.hpp。"
+    "一发多收共享同一话题策略。Signals 页不编辑发布表。": (
+        "Semantic topics: canvas double-click module → Out table for trigger. "
+        "Channel topics: double-click frame_ingest. "
+        "Written to req.publish_policy; compose → SOR / publish_policy.hpp. "
+        "Fan-out shares one topic policy. Signals page no longer edits the table."
     ),
     "period=按点发；on_change=有新样本才发（无冻帧）。": (
         "period=cyclic; on_change=send only when a new sample exists (no freeze)."
@@ -582,22 +585,101 @@ TIP_EN: dict[str, str] = {
     "删除当前选中的配置行（不可撤销，保存前可重开项目恢复）。": (
         "Delete the selected config row (no undo; reopen project before save to restore)."
     ),
-    "新增进程行；进程名从 wiring 选择，避免手打错名。": (
-        "Add a process row; pick the name from wiring to avoid typos."
+    "删除选中的 SOA 进程行。host.* 不可删——"
+    "取消对应能力勾选（DLT / iceoryx / frame_ingest）才会移除。": (
+        "Delete selected SOA process rows. host.* cannot be deleted here — "
+        "uncheck the capability (DLT / iceoryx / frame_ingest) to remove them."
     ),
-    "按页 1 wiring 的进程列表重建本表；"
-    "已填的 FG / depends_on / execution_client 会尽量按进程名保留。": (
-        "Rebuild this table from tab-1 wiring processes; "
-        "keep FG / depends_on / execution_client by process name when possible."
+    "删除选中的 EM 启动行。host.* 禁止删除——"
+    "与能力勾选强绑定：勾选即加、取消勾选即删。": (
+        "Delete selected EM launch rows. host.* cannot be deleted — "
+        "bound to capability checkboxes: check to add, uncheck to remove."
     ),
-    "新增一条 EM 启动项（选进程、填 binary/args/重启次数）。": (
-        "Add an EM launch row (pick process; fill binary/args/restart count)."
+    "新增一行空白成员；在 name 列从 wiring 下拉选进程，再配 FG / depends_on / active_in。"
+    "host.* 勿手加，勾选能力即可。": (
+        "Add a blank membership row; pick a wiring process, then FG / depends_on / active_in. "
+        "Do not add host.* by hand — toggle the capability instead."
     ),
-    "按 exec 进程表重建 EM 启动表；已有 binary/args/max_restarts 按进程名保留。": (
-        "Rebuild EM launch from exec processes; keep binary/args/max_restarts by name."
+    "新增一条空白 EM 启动项；先选进程，再填 binary/args/重启次数。host.* 由能力勾选同步。": (
+        "Add a blank EM launch row; pick process, then binary/args/restarts. "
+        "host.* sync from capability checkboxes."
+    ),
+    "仅补齐缺失的 SOA 进程（不碰 host.*）。"
+    "已有 binary/args/max_restarts 按进程名保留；host 由能力勾选强同步。": (
+        "Append missing SOA processes only (never host.*). "
+        "Keep existing binary/args/max_restarts by name; hosts sync from capability checkboxes."
+    ),
+    "file sink 单文件软上限（字节）；轮转保留 path + path.1，"
+    "计入有界内存 DISK 预估 ×2。在「日志」页编辑，不在有界内存页重复。": (
+        "File-sink soft rotate cap (bytes); keeps path + path.1; "
+        "DISK estimate ×2. Edit on the Log page — not duplicated on Memory bounds."
+    ),
+    "本地最多保留多少条事件；超出按策略丢弃最旧条目。"
+    "计入有界内存 RAM（collector_ring）；在「事件收集」页编辑。": (
+        "Max local event records; oldest dropped when full. "
+        "Counted in memory-bound RAM (collector_ring); edit on Event collector."
+    ),
+    "防抖 map 最大键数；RAM ≈ keys × C_DEBOUNCE_ENTRY。"
+    "在「事件收集」页编辑，有界内存预估会自动计入。": (
+        "Debounce map max keys; RAM ≈ keys × C_DEBOUNCE_ENTRY. "
+        "Edit on Event collector; memory-bound estimate picks it up."
+    ),
+    "共享 NDJSON 文件软上限；保留 ×2，计入 DISK 预估。"
+    "在「事件收集」页编辑。": (
+        "Shared NDJSON soft cap; ×2 retained; DISK estimate. Edit on Event collector."
+    ),
+    "不可删除 host.dlt_daemon。\n"
+    "它由 Log → sinks 勾选 dlt 产生；请取消勾选 dlt，行会自动从 exec/EM 移除。": (
+        "Cannot delete host.dlt_daemon.\n"
+        "It comes from Log→sinks checking dlt; uncheck dlt and the row is removed from exec/EM."
+    ),
+    "不可删除 host.iox_roudi。\n"
+    "它由 SKU bindings 勾选 iceoryx 产生；请取消勾选 iceoryx，行会自动移除。": (
+        "Cannot delete host.iox_roudi.\n"
+        "It comes from SKU bindings checking iceoryx; uncheck iceoryx and the row is removed."
+    ),
+    "不可删除 host.frame_ingest。\n"
+    "它由页 1 frame_ingest 开启产生；请关闭 frame_ingest，行会自动移除。": (
+        "Cannot delete host.frame_ingest.\n"
+        "It comes from enabling tab-1 frame_ingest; disable frame_ingest and the row is removed."
+    ),
+    "不可删除该 platform daemon（host.*）。\n"
+    "请取消对应能力勾选以移除；禁止在本表删除。": (
+        "Cannot delete this platform daemon (host.*).\n"
+        "Uncheck its capability to remove it; do not delete the row here."
     ),
     "新增一条健康监督实体，绑定某个 wiring 进程。": (
         "Add a health supervision entity bound to a wiring process."
+    ),
+    "host.dlt_daemon：由 Log → sinks 勾选 dlt 产生（置顶锁定）。\n"
+    "取消勾选 dlt 即从 exec/EM 删除；禁止在本表点删除。": (
+        "host.dlt_daemon: created when Log→sinks checks dlt (pinned/locked).\n"
+        "Uncheck dlt to remove from exec/EM; do not delete the row here."
+    ),
+    "host.iox_roudi：由 SKU bindings 勾选 iceoryx 产生（置顶锁定）。\n"
+    "取消勾选 iceoryx 即删除；禁止在本表点删除。\n"
+    "运行时 RouDi 异常退出 → EM 记日志并有序析构整栈。": (
+        "host.iox_roudi: created when SKU bindings checks iceoryx (pinned/locked).\n"
+        "Uncheck iceoryx to remove; do not delete the row here.\n"
+        "At runtime, abnormal RouDi exit → EM logs and orderly tears down the stack."
+    ),
+    "host.frame_ingest：由页 1 frame_ingest 开启产生（置顶锁定）。\n"
+    "关闭 frame_ingest 即删除；禁止在本表点删除。": (
+        "host.frame_ingest: created when tab-1 frame_ingest is enabled (pinned/locked).\n"
+        "Disable frame_ingest to remove; do not delete the row here."
+    ),
+    "platform daemon（host.*）：由对应能力勾选产生；取消勾选即删，禁止在本表删除。": (
+        "platform daemon (host.*): created by its capability checkbox; "
+        "uncheck to remove; do not delete the row here."
+    ),
+    "进程名真源在页 1 wiring（画布上的模块）。\n"
+    "本列从 wiring 下拉选择；空白行表示尚未选定。\n"
+    "不要在此手发明新进程名——应先在 wiring 添加模块。\n"
+    "host.* 不在此下拉：由能力勾选自动插入（置顶、灰底锁定）。": (
+        "Process name truth is tab-1 wiring.\n"
+        "Pick from the wiring dropdown; blank means not chosen yet.\n"
+        "Do not invent names here — add the module on the wiring canvas first.\n"
+        "host.* are not in this dropdown: capability checkboxes insert them (pinned, locked)."
     ),
     "新增一个诊断 DID 定义。": "Add a diagnostic DID definition.",
     "新增一个日志 context 覆盖项。": "Add a log-context level override.",
@@ -627,22 +709,6 @@ TIP_EN: dict[str, str] = {
     ),
     "可选门禁：预估 total_disk 超过此值则 Verify 警告；0=不检查。": (
         "Optional gate: Verify warns if estimated total_disk exceeds this; 0=off."
-    ),
-    "写回 log.file_max_bytes：file sink 单文件软上限；"
-    "预估 DISK 按 path + path.1 计 ×2（仅当启用 file sink）。": (
-        "Writes log.file_max_bytes: file-sink soft cap; "
-        "DISK estimate counts path + path.1 (×2) when file sink is on."
-    ),
-    "写回 collector.local.max_entries：本地事件环最大条数。": (
-        "Writes collector.local.max_entries: max local event-ring entries."
-    ),
-    "写回 collector.local.debounce_max_keys：防抖 map 最大键数。": (
-        "Writes collector.local.debounce_max_keys: max debounce-map keys."
-    ),
-    "写回 collector.local.store_max_bytes：共享 NDJSON 软上限；"
-    "预估 DISK 按双文件计 ×2。": (
-        "Writes collector.local.store_max_bytes: shared NDJSON soft cap; "
-        "DISK estimate ×2 for the dual files."
     ),
     "两类配置、两套生效方式：\n"
     "• mgmt.*（IOX_MAX_*）：决定 iceoryx_mgmt 端口表大小，必须 "
@@ -717,4 +783,59 @@ TIP_EN: dict[str, str] = {
         "How many chunks of this tier may be allocated at once (in-flight samples)."
     ),
     "新增一档 mempool（size/count）。": "Add a mempool tier (size/count).",
+    # ModeDeclaration FG / active_in
+    '功能组类型：\n• machine：固定 Off|Running|Updating（平台/OTA）\n• mode：ModeDeclaration，态名任意（行泊/底盘/EMB 等产品词只写在 App）': 'FG kind:\n• machine: fixed Off|Running|Updating (platform/OTA)\n• mode: ModeDeclaration; arbitrary state names (product words stay in Apps)',
+    'MachineFG 三态；bring-up EnsureGroup(Running)；不可写 active_in。': 'Machine three-state; bring-up EnsureGroup(Running); no active_in.',
+    '任意态名；EM 按进程 active_in 做 set-diff；Mode App 调 RequestTransitionNamed。': 'Arbitrary states; EM set-diff via process active_in; Mode App uses RequestTransitionNamed.',
+    '开机后该功能组进入的状态。\n• machine：仅 Off / Running / Updating\n• mode：任意字符串，须属于 states[]\n禁止把 DrivingActive 等 mode 态塞进 machine 的 Off/Running/Updating。': 'Initial FG state after boot.\n• machine: only Off / Running / Updating\n• mode: any string that is in states[]\nDo not put DrivingActive into machine Off/Running/Updating.',
+    'ModeDeclaration 的初始态名（须出现在 states）。': 'ModeDeclaration initial state (must be in states).',
+    'mode FG 的合法态名列表，逗号分隔。\n进程 active_in 只能从这里选；machine FG 留空。': 'Legal mode FG state names, comma-separated.\nProcess active_in is chosen from this list; leave empty for machine FG.',
+    'machine FG 无自由 states（固定 Off|Running|Updating）。': 'machine FG has no free-form states (fixed Off|Running|Updating).',
+    '该进程隶属的功能组。\nmachine：常驻（Running 语义）；mode：仅当当前 FG 态 ∈ active_in 时由 EM 拉起。': 'Process membership FG.\nmachine: always-on (Running); mode: EM runs only when FgState ∈ active_in.',
+    'ModeDeclaration 成员态：当前 FgState ∈ 勾选集合时进程应运行。\n差集成员 = active_in，不是进程名硬编码。': 'ModeDeclaration membership: process should run when current FgState is in the set.\nSet-diff members = active_in, not hardcoded process names.',
+    'machine FG 进程不写 active_in（常驻）。': 'machine FG processes omit active_in (always-on).',
+
+    # Current FG / active_in / SKU tips (exact tips.py keys)
+    "ModeDeclaration 的初始态：只能从上方 states 列表里选，先编辑 states。": (
+        "ModeDeclaration initial: pick only from the states list above; edit states first."
+    ),
+    "请先在 states 列弹出对话框添加至少一个态名，再选 initial。": (
+        "Add at least one state via the states-cell dialog before choosing initial."
+    ),
+    "ModeDeclaration 合法态名列表。点击单元格弹出编辑器逐项添加/删除/改名。\n"
+    "不要用逗号手写；initial 与进程 active_in 都从这里选。": (
+        "Legal ModeDeclaration state names. Click the cell to add/remove/rename one by one.\n"
+        "Do not type commas; initial and process active_in are chosen from this list."
+    ),
+    "machine FG 无自由 states（固定 Off|Running|Updating）；本列灰显不可编辑。": (
+        "machine FG has no free-form states (fixed Off|Running|Updating); this column is locked."
+    ),
+    "该进程隶属的功能组。\n"
+    "machine：常驻（Running 语义）；mode：仅当当前 FG 态 = active_in 时由 EM 拉起。": (
+        "Owning function group.\n"
+        "machine: always-on (Running); mode: EM runs only when current FG state equals active_in."
+    ),
+    "ModeDeclaration 成员态（单选）：该进程只在所选态下运行。\n"
+    "差集场景通常一行一态（如 driving→DrivingActive）；勿多选。": (
+        "ModeDeclaration membership (single-select): process runs only in that state.\n"
+        "Set-diff rows are usually one state each (e.g. driving→DrivingActive); do not multi-select."
+    ),
+    "machine FG：无 active_in（常驻），本列灰显不可编辑。": (
+        "machine FG: no active_in (always-on); this column is locked."
+    ),
+    "可选视频契约：B 页添加/双击 host.frame_ingest。"
+    "每路 = GfChannel Out（含该路 pixel）；无外参/内参/ego/感知后端。"
+    "compose → hpp + camera_contract.json。": (
+        "Optional video contract: tab-1 add/double-click host.frame_ingest. "
+        "Each lane = GfChannel Out (with that lane's pixel); no extrinsics/intrinsics/ego/backend. "
+        "compose → hpp + camera_contract.json."
+    ),
+    "仅 replay/file 旁路帧路径（可选）；联仿主链走 GfChannel，无 front.yuv / carla_*.json。": (
+        "Optional replay/file bypass frame path; cosim main path is GfChannel "
+        "(no front.yuv / carla_*.json)."
+    ),
+    "已删除：控车不走 JSON。SIL egress = GfChannel vehicle_cmd → cosim → giraffe_client。": (
+        "Removed: vehicle control is not JSON. SIL egress = "
+        "GfChannel vehicle_cmd → cosim → giraffe_client."
+    ),
 }

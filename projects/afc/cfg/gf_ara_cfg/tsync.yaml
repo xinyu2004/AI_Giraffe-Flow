@@ -1,0 +1,4 @@
+# gf_ara::tsync — gPTP lite（板上配合 linuxptp/ptp4l；SIL 用 osal mock）
+schema_version: "0.1"
+backend: osal_monotonic  # osal_monotonic | linuxptp
+pretend_synchronized: true

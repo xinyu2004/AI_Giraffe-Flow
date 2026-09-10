@@ -16,8 +16,8 @@ _EN: dict[str, str] = {
     '正在切换语言并重启应用…': 'Switching language and restarting…',
     'GMT — 选项目 → Live / 回灌 / Tag / 回放': 'GMT — project → Live / Inject / Tag / Replay',
     '加载项目…': 'Load project…',
-    '选择 project.yaml（与 gf-config / codegen 同一入口；SOR 在同目录）': (
-        'Pick project.yaml (same entry as gf-config / codegen; SOR alongside)'
+    '选择 giraffe.yaml（与 gf-config / codegen 同一入口；SOR 在同目录）': (
+        'Pick giraffe.yaml (same entry as gf-config / codegen; SOR alongside)'
     ),
     'SIL / 观测机地址（本机 127.0.0.1；远端填局域网 IP）\nLive 与回灌共用此 Host': (
         'SIL / observer host (127.0.0.1 local; LAN IP remote)\nShared by Live and Inject'
@@ -115,8 +115,8 @@ _EN: dict[str, str] = {
     '需加载项目': 'Need project',
     '文件': 'File',
     '加载项目目录…': 'Load project folder…',
-    '备选：直接选 SKU 目录（等价于该目录下的 project.yaml）': (
-        "Alt: pick SKU folder (same as that folder's project.yaml)"
+    '备选：直接选 SKU 目录（等价于该目录下的 giraffe.yaml）': (
+        "Alt: pick SKU folder (same as that folder's giraffe.yaml)"
     ),
     '打开 session JSONL…': 'Open session JSONL…',
     '从 SIL 日志录制…': 'Record from SIL logs…',
@@ -145,11 +145,11 @@ _EN: dict[str, str] = {
     '片段 from ← playhead': 'Range from ← playhead',
     '片段 to ← playhead 并保存': 'Range to ← playhead & save',
     '视图': 'View',
-    '⚠ 请先「加载项目…」选择 project.yaml（回灌已禁用；Live 仍可旁观）': (
-        '⚠ Load project… (project.yaml) first — Inject disabled; Live still works'
+    '⚠ 请先「加载项目…」选择 giraffe.yaml（回灌已禁用；Live 仍可旁观）': (
+        '⚠ Load project… (giraffe.yaml) first — Inject disabled; Live still works'
     ),
-    '⚠ 请先「加载项目…」选择 project.yaml（回灌 / OTA 已禁用；Live 仍可旁观）': (
-        '⚠ Load project… (project.yaml) first — Inject / OTA disabled; Live still works'
+    '⚠ 请先「加载项目…」选择 giraffe.yaml（回灌 / OTA 已禁用；Live 仍可旁观）': (
+        '⚠ Load project… (giraffe.yaml) first — Inject / OTA disabled; Live still works'
     ),
     '项目': 'Project',
     'Wall': 'Wall',
@@ -245,8 +245,8 @@ _EN: dict[str, str] = {
         'Inject connected + follow playhead → Live follow off'
     ),
     '回灌错误': 'Inject error',
-    '回灌需要先加载 project.yaml（SOR / 事件对齐）。\n是否现在打开？': (
-        'Inject needs project.yaml first.\nOpen now?'
+    '回灌需要先加载 giraffe.yaml（SOR / 事件对齐）。\n是否现在打开？': (
+        'Inject needs giraffe.yaml first.\nOpen now?'
     ),
     '在 playhead 打一个标记点（热键 M）': 'Drop a marker at playhead (M)',
     '填窗失败': 'Window fill failed',
@@ -263,8 +263,8 @@ _EN: dict[str, str] = {
     '将 Live 流落盘；已有 gmt_record.jsonl 时可新建或覆盖': (
         'Write Live stream to disk; new or overwrite if exists'
     ),
-    '尚未加载项目（SOR / 动画 DAG / 变量轨对齐）。\n是否现在打开 project.yaml？\n\n选「否」仍可旁观连接（无 DAG）。': (
-        'No project loaded.\nOpen project.yaml now?\n\nNo = observe without DAG.'
+    '尚未加载项目（SOR / 动画 DAG / 变量轨对齐）。\n是否现在打开 giraffe.yaml？\n\n选「否」仍可旁观连接（无 DAG）。': (
+        'No project loaded.\nOpen giraffe.yaml now?\n\nNo = observe without DAG.'
     ),
     '已写入': 'Wrote',
     '已到 session 结尾。是否从开头继续循环？': 'End of session. Loop from start?',
@@ -282,7 +282,7 @@ _EN: dict[str, str] = {
     '录制失败': 'Record failed',
     '循环（到结尾确认）': 'Loop at end',
     '循环播放': 'Loop at end',
-    '打开 project.yaml': 'Open project.yaml',
+    '打开 giraffe.yaml': 'Open giraffe.yaml',
     '打开 session JSONL': 'Open session JSONL',
     '打开 session？': 'Open session?',
     '打开失败': 'Open failed',
@@ -314,13 +314,13 @@ _EN: dict[str, str] = {
     '逗号分隔 topic，可选': 'comma-separated topics (optional)',
     '跟 playhead 灌（使用下方播放/单步/滑块）': 'Follow playhead',
     '请先加载 SOR / 项目': 'Load SOR / project first',
-    '请先加载 project.yaml 后再连接回灌': 'Load project.yaml before Inject',
+    '请先加载 giraffe.yaml 后再连接回灌': 'Load giraffe.yaml before Inject',
     '请先打开 session': 'Open a session first',
     '请先打开 session JSONL（GMT 为权威源）。\nstream 模式下板端不必再设 GF_INJECT_SESSION。': (
         'Open session JSONL first (GMT is authority).'
     ),
     '请确认 GF_INJECT_SESSION 与 GUI 同一文件': 'Ensure GF_INJECT_SESSION matches GUI file',
-    '请选 SKU 目录或其 project.yaml（与 gf-config 同一入口）。': 'Pick SKU folder or its project.yaml.',
+    '请选 SKU 目录或其 giraffe.yaml（与 gf-config 同一入口）。': 'Pick SKU folder or its giraffe.yaml.',
     '跟随 live': 'Following live',
     '跟随 live session JSONL': 'Follow live session JSONL',
     '跟随文件 OFF': 'Follow file OFF',
@@ -530,11 +530,11 @@ _EN: dict[str, str] = {
     '超出 session（{err}）': 'past session end ({err})',
     '超出 inject session（{err}）— ': 'past inject session ({err}) — ',
     '跳过 #{index} {topic}（MVP 仅 EgoMotion）': 'skip #{index} {topic} (MVP EgoMotion only)',
-    '{dir}\n下未找到 project.yaml\n请选 SKU 目录或其 project.yaml（与 gf-config 同一入口）。': (
-        '{dir}\nproject.yaml not found\nPick SKU folder or its project.yaml.'
+    '{dir}\n下未找到 giraffe.yaml\n请选 SKU 目录或其 giraffe.yaml（与 gf-config 同一入口）。': (
+        '{dir}\ngiraffe.yaml not found\nPick SKU folder or its giraffe.yaml.'
     ),
-    '请选择 project.yaml，而不是：\n{name}': (
-        'Select project.yaml, not:\n{name}'
+    '请选择 giraffe.yaml，而不是：\n{name}': (
+        'Select giraffe.yaml, not:\n{name}'
     ),
     '未找到 {sor}\n请先在 gf-config Verify / Compose。': (
         'Missing {sor}\nRun gf-config Verify / Compose first.'

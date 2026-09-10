@@ -65,10 +65,14 @@ Notes
 
 Checks
 ------
-- error: len(log.contexts) > dlt.max_contexts
+- error: len(log.contexts) > dlt.max_contexts (only when log ∈ runtime_modules)
 - warn:  total_ram > budget.ram_bytes (if budget > 0)
 - warn:  total_disk > budget.disk_bytes (if budget > 0)
 - warn:  total_shm > iceoryx.budget_shm_bytes (if > 0 and mgmt measured or payload alone)
+
+When ``req`` is provided, only count sections for selected runtime_modules
+(com/log/per/diag/collector/ucm) and iceoryx SHM when bindings include iceoryx.
+``req is None`` keeps legacy “count everything” for unit tests.
 """
 
 from __future__ import annotations
@@ -237,8 +241,35 @@ def load_iox_shm_report(path: Path | None) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def mem_section_gates(req: dict[str, Any] | None) -> dict[str, bool]:
+    """Which BL-MEM sections are active for estimate / UI.
+
+    When ``req`` is None (legacy tests), all sections are on.
+    """
+    if req is None:
+        return {
+            "com": True,
+            "log": True,
+            "per": True,
+            "diag": True,
+            "collector": True,
+            "ucm": True,
+            "iceoryx": True,
+        }
+    mods = {str(x).strip() for x in (req.get("runtime_modules") or []) if str(x).strip()}
+    return {
+        "com": "com" in mods,
+        "log": "log" in mods,
+        "per": "per" in mods,
+        "diag": "diag" in mods,
+        "collector": "collector" in mods,
+        "ucm": "ucm" in mods,
+        "iceoryx": iceoryx_enabled(req),
+    }
+
+
 def extract_caps(platform: dict[str, Any]) -> dict[str, int]:
-    """Flatten caps from platform_manifest / loaded yaml map."""
+    """Flatten caps from gf_ara_cfg_manifest / loaded yaml map."""
     log = platform.get("log") or {}
     col = platform.get("collector") or {}
     local = col.get("local") if isinstance(col.get("local"), dict) else {}
@@ -300,6 +331,7 @@ def estimate_mem_budget(
 ) -> dict[str, Any]:
     """Return estimate dict with lines, totals, formulas, errors, warnings."""
     c = extract_caps(platform)
+    g = mem_section_gates(req)
     lines: list[dict[str, Any]] = []
 
     def add(name: str, formula: str, value: int, *, kind: str) -> None:
@@ -312,90 +344,95 @@ def estimate_mem_budget(
             }
         )
 
-    ring = c["max_entries"] * C_EVENT_RECORD
-    add(
-        "collector_ring",
-        f"max_entries({c['max_entries']}) × C_EVENT_RECORD({C_EVENT_RECORD})",
-        ring,
-        kind="ram",
-    )
-    deb = c["debounce_max_keys"] * C_DEBOUNCE_ENTRY
-    add(
-        "collector_debounce",
-        f"debounce_max_keys({c['debounce_max_keys']}) × C_DEBOUNCE_ENTRY({C_DEBOUNCE_ENTRY})",
-        deb,
-        kind="ram",
-    )
-    com = c["com_max_topic_keys"] * c["com_queue_depth"] * c["com_avg_payload_bytes"]
-    add(
-        "com_loopback",
-        f"max_topic_keys({c['com_max_topic_keys']}) × queue_depth({c['com_queue_depth']}) "
-        f"× avg_payload_bytes({c['com_avg_payload_bytes']})",
-        com,
-        kind="ram",
-    )
-    add(
-        "diag_rx",
-        f"rx_max_bytes({c['diag_rx_max_bytes']})",
-        c["diag_rx_max_bytes"],
-        kind="ram",
-    )
-    dids = c["dids_max_entries"] * c["dids_max_payload"]
-    add(
-        "diag_dids",
-        f"dids.max_entries({c['dids_max_entries']}) × dids.max_payload({c['dids_max_payload']})",
-        dids,
-        kind="ram",
-    )
-    add(
-        "diag_ota_block",
-        f"ota_transfer.max_block_length({c['ota_max_block_length']})",
-        c["ota_max_block_length"],
-        kind="ram",
-    )
-    per = c["per_max_keys"] * (C_PER_KEY_OH + c["per_max_value_bytes"])
-    add(
-        "per_kv",
-        f"max_keys({c['per_max_keys']}) × (C_PER_KEY_OH({C_PER_KEY_OH}) "
-        f"+ max_value_bytes({c['per_max_value_bytes']}))",
-        per,
-        kind="ram",
-    )
-    dlt = c["dlt_max_contexts"] * C_DLT_CTX
-    add(
-        "dlt_contexts",
-        f"dlt.max_contexts({c['dlt_max_contexts']}) × C_DLT_CTX({C_DLT_CTX})",
-        dlt,
-        kind="ram",
-    )
-
-    log_disk = (c["file_max_bytes"] * 2) if c["file_sink"] else 0
-    add(
-        "log_files",
-        f"file_sink={bool(c['file_sink'])}: file_max_bytes({c['file_max_bytes']}) × 2",
-        log_disk,
-        kind="disk",
-    )
-    store_disk = (c["store_max_bytes"] * 2) if c["local_enabled"] else 0
-    add(
-        "collector_store",
-        f"local.enabled={bool(c['local_enabled'])}: store_max_bytes({c['store_max_bytes']}) × 2",
-        store_disk,
-        kind="disk",
-    )
+    if g["collector"]:
+        ring = c["max_entries"] * C_EVENT_RECORD
+        add(
+            "collector_ring",
+            f"max_entries({c['max_entries']}) × C_EVENT_RECORD({C_EVENT_RECORD})",
+            ring,
+            kind="ram",
+        )
+        deb = c["debounce_max_keys"] * C_DEBOUNCE_ENTRY
+        add(
+            "collector_debounce",
+            f"debounce_max_keys({c['debounce_max_keys']}) × C_DEBOUNCE_ENTRY({C_DEBOUNCE_ENTRY})",
+            deb,
+            kind="ram",
+        )
+    if g["com"]:
+        com = c["com_max_topic_keys"] * c["com_queue_depth"] * c["com_avg_payload_bytes"]
+        add(
+            "com_loopback",
+            f"max_topic_keys({c['com_max_topic_keys']}) × queue_depth({c['com_queue_depth']}) "
+            f"× avg_payload_bytes({c['com_avg_payload_bytes']})",
+            com,
+            kind="ram",
+        )
+    if g["diag"]:
+        add(
+            "diag_rx",
+            f"rx_max_bytes({c['diag_rx_max_bytes']})",
+            c["diag_rx_max_bytes"],
+            kind="ram",
+        )
+        dids = c["dids_max_entries"] * c["dids_max_payload"]
+        add(
+            "diag_dids",
+            f"dids.max_entries({c['dids_max_entries']}) × dids.max_payload({c['dids_max_payload']})",
+            dids,
+            kind="ram",
+        )
+    if g["diag"] or g["ucm"]:
+        add(
+            "diag_ota_block",
+            f"ota_transfer.max_block_length({c['ota_max_block_length']})",
+            c["ota_max_block_length"],
+            kind="ram",
+        )
+    if g["per"]:
+        per = c["per_max_keys"] * (C_PER_KEY_OH + c["per_max_value_bytes"])
+        add(
+            "per_kv",
+            f"max_keys({c['per_max_keys']}) × (C_PER_KEY_OH({C_PER_KEY_OH}) "
+            f"+ max_value_bytes({c['per_max_value_bytes']}))",
+            per,
+            kind="ram",
+        )
+    if g["log"]:
+        dlt = c["dlt_max_contexts"] * C_DLT_CTX
+        add(
+            "dlt_contexts",
+            f"dlt.max_contexts({c['dlt_max_contexts']}) × C_DLT_CTX({C_DLT_CTX})",
+            dlt,
+            kind="ram",
+        )
+        log_disk = (c["file_max_bytes"] * 2) if c["file_sink"] else 0
+        add(
+            "log_files",
+            f"file_sink={bool(c['file_sink'])}: file_max_bytes({c['file_max_bytes']}) × 2",
+            log_disk,
+            kind="disk",
+        )
+    if g["collector"]:
+        store_disk = (c["store_max_bytes"] * 2) if c["local_enabled"] else 0
+        add(
+            "collector_store",
+            f"local.enabled={bool(c['local_enabled'])}: store_max_bytes({c['store_max_bytes']}) × 2",
+            store_disk,
+            kind="disk",
+        )
 
     iox_mgmt: dict[str, int] = dict(DEFAULT_MGMT)
     iox_pools: list[dict[str, int]] = [dict(x) for x in DEFAULT_MEMPOOLS]
     budget_shm = 0
-    iox_on = iceoryx_enabled(req) if req is not None else bool(
-        isinstance((platform.get("bounds") or {}).get("iceoryx"), dict)
-    )
-    # When req omitted but bounds.iceoryx present (gf-config live estimate), still show SHM
     bounds = platform.get("bounds") if isinstance(platform.get("bounds"), dict) else {}
+    if req is not None:
+        iox_on = bool(g["iceoryx"])
+    else:
+        # Legacy: no req → SHM when bounds.iceoryx present.
+        iox_on = isinstance(bounds.get("iceoryx"), dict)
     if isinstance(bounds.get("iceoryx"), dict):
         iox_mgmt, iox_pools, budget_shm = extract_iox(bounds)
-        if req is None:
-            iox_on = True
     elif iox_on:
         iox_mgmt, iox_pools, budget_shm = extract_iox(bounds)
 
@@ -461,7 +498,7 @@ def estimate_mem_budget(
 
     errors: list[str] = []
     warnings: list[str] = []
-    if c["log_contexts"] > c["dlt_max_contexts"]:
+    if g["log"] and c["log_contexts"] > c["dlt_max_contexts"]:
         errors.append(
             f"log.contexts count ({c['log_contexts']}) > bounds.dlt.max_contexts "
             f"({c['dlt_max_contexts']})"

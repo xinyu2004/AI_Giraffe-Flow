@@ -1,6 +1,6 @@
 # gf-codegen
 
-主机侧 Python 工具（**≥3.10**）：从 `project.yaml` 合成 SOR，并做 lint / suggest / 最小 generate。
+主机侧 Python 工具（**≥3.10**）：从 `giraffe.yaml` 合成 SOR，并做 lint / suggest / 最小 generate。
 
 > 规格：[IMPLEMENTATION.md](IMPLEMENTATION.md) · 总计划：[P0_PLAN.md](../../docs/zh/operations/P0_PLAN.md) · 走查：[afc](../../projects/afc/README.md)
 >
@@ -23,7 +23,7 @@ pip install -e "tools/gf-codegen[dev]"
 bash scripts/bootstrap_deps.sh
 
 # CI / 无 GUI：compose
-python -m gf_codegen.compose --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 gf-codegen generate projects/afc/gf.sor.json --out projects/afc/generated/
 bash projects/afc/scripts/verify/smoke_sil.sh
 pytest tools/gf-codegen/tests -q
@@ -42,9 +42,9 @@ pytest tools/gf-codegen/tests -q
 
 ```bash
 gf-codegen --help
-python -m gf_codegen.compose --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 gf-codegen lint projects/afc/gf.sor.json   # gitignored 工作产出
-gf-codegen suggest wiring --project projects/afc/project.yaml
+gf-codegen suggest wiring --project projects/afc/giraffe.yaml
 gf-codegen generate projects/afc/gf.sor.json --out generated/
 # optional: gf-codegen emit-idl …（Cyclone 旁路）
 ```

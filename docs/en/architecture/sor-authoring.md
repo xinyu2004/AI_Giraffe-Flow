@@ -16,14 +16,14 @@
 |-------|-------|
 | `io_types.hpp` | Module engineer |
 | `oem/oem_import.dbc` | Integrator |
-| `integration/wiring.yaml` | Integrator |
+| `cfg/wiring.yaml` | Integrator |
 | `req.yaml` | Integrator + DevOps |
-| `project.yaml` | **Index only** — paths + compose output |
+| `giraffe.yaml` | **Index only** — paths + compose output |
 
 ## One command
 
 ```bash
-gf-codegen compose --project projects/afc/project.yaml
+gf-codegen compose --project projects/afc/giraffe.yaml
 ```
 
 Tool internally: parse hpp + import oem + apply wiring + merge req → `gf.sor.json` + lineage report.

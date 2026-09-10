@@ -11,6 +11,8 @@ enum {
   GF_CH_VEHICLE_STATE_MAGIC = 0x47565354u, /* 'GVST' */
   GF_CH_VEHICLE_CMD_MAGIC = 0x4756434du,   /* 'GVCM' */
   GF_CH_FAKE_PERC_MAGIC = 0x47465043u,     /* 'GFPC' */
+  GF_CH_SURROUND_MAGIC = 0x47535744u,     /* 'GSWD' surround world */
+  GF_CH_MODE_HINT_MAGIC = 0x474d4854u,    /* 'GMHT' host APA arm/confirm */
   GF_CH_POD_VERSION = 1u,                 /* vehicle_state / cmd */
   GF_CH_FAKE_PERC_VERSION = 2u,           /* v1=520 B head; v2=+TSR/STATIC tail */
   GF_CH_FAKE_PERC_V1_SIZE = 520u,
@@ -18,6 +20,10 @@ enum {
   GF_CH_FAKE_PERC_MAX_ADJ = 4u,
   GF_CH_FAKE_PERC_MAX_TSR = 6u,
   GF_CH_FAKE_PERC_MAX_STAT = 6u,
+  GF_CH_SURROUND_VERSION = 1u,
+  GF_CH_SURROUND_MAX_OBJ = 16u,
+  GF_CH_SURROUND_MAX_SLOT = 8u,
+  GF_CH_MODE_HINT_VERSION = 1u,
 };
 
 #pragma pack(push, 1)
@@ -130,6 +136,50 @@ typedef struct GfFakePercPod {
   GfFakePercTsr tsr[GF_CH_FAKE_PERC_MAX_TSR];
   GfFakePercStat stat[GF_CH_FAKE_PERC_MAX_STAT];
 } GfFakePercPod;
+
+typedef struct GfSurroundObjPod {
+  uint8_t object_id;
+  uint8_t object_class;
+  uint8_t pad[2];
+  float long_dist_m;
+  float lat_dist_m;
+  float rel_vel_long_mps;
+} GfSurroundObjPod;
+
+typedef struct GfSurroundSlotPod {
+  uint8_t slot_id;
+  uint8_t free;
+  uint8_t pad[2];
+  float center_x_m;
+  float center_y_m;
+  float yaw_rad;
+  float length_m;
+  float width_m;
+} GfSurroundSlotPod;
+
+typedef struct GfSurroundWorldPod {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t reserved;
+  uint64_t timestamp_ns;
+  uint64_t seq;
+  uint8_t valid;
+  uint8_t n_obj;
+  uint8_t n_slot;
+  uint8_t pad0;
+  GfSurroundObjPod objects[GF_CH_SURROUND_MAX_OBJ];
+  GfSurroundSlotPod slots[GF_CH_SURROUND_MAX_SLOT];
+} GfSurroundWorldPod;
+
+/* Host/case → Mode Manager (cosim). Prefer over process env when valid. */
+typedef struct GfModeHintPod {
+  uint32_t magic;
+  uint16_t version;
+  uint8_t apa_armed;
+  uint8_t slot_confirmed;
+  uint64_t timestamp_ns;
+  uint64_t seq;
+} GfModeHintPod;
 #pragma pack(pop)
 
 #ifdef __cplusplus

@@ -1,10 +1,10 @@
 #pragma once
 
 // Process bring-up (SIL/HIL shared): Offer→Running + SM FG + PHM Alive/Logical + Collector/Log.
-// Product: compose → gf_gen/platform_tables.hpp + collector/bounds configs.
-// Smoke: optional GF_PLATFORM_DIR → authoring platform/*.yaml when freeze headers absent.
+// Product: compose → gf_gen/ara_cfg_tables.hpp + collector/bounds configs.
+// Smoke: optional GF_ARA_CFG_DIR → authoring cfg/gf_ara_cfg/*.yaml when freeze headers absent.
 // Env (host debug / smoke):
-//   GF_PLATFORM_DIR     optional YAML fallback when freeze headers not compiled in
+//   GF_ARA_CFG_DIR     optional YAML fallback when freeze headers not compiled in
 //   GF_PHM_FAULT_MS     skip ReportAlive for N ms after first Alive (0=off)
 //   GF_PHM_FAULT_INJECT_MS  alias of GF_PHM_FAULT_MS
 //   GF_SM_ENTER_UPDATING_ON_FAULT  if 1, health_fault enters Updating (+ pause PHM)
@@ -30,6 +30,8 @@ struct ExecProcessConfig {
   bool found{false};
   bool execution_client{true};
   std::string function_group;
+  /// true = ModeDeclaration FG (arbitrary named states); false = Machine Off|Running|Updating.
+  bool fg_is_mode{false};
 };
 
 struct PhmEntityConfig {
@@ -40,12 +42,12 @@ struct PhmEntityConfig {
   std::string on_failure{"log"};  // log | notify_sm | restart
 };
 
-[[nodiscard]] std::string PlatformDir();
+[[nodiscard]] std::string AraCfgDir();
 
 [[nodiscard]] ExecProcessConfig LoadExecProcess(std::string_view process_name);
 [[nodiscard]] PhmEntityConfig LoadPhmEntity(std::string_view process_name);
 void LoadCollectorConfig();
-/// BL-MEM-BOUND: prefer gf_gen/bounds_config.hpp; else GF_PLATFORM_DIR/bounds.yaml.
+/// BL-MEM-BOUND: prefer gf_gen/bounds_config.hpp; else GF_ARA_CFG_DIR/bounds.yaml.
 void LoadMemoryBounds();
 
 /// Offer + Running + SM Ensure; SupervisedEntity when phm.yaml lists process.
@@ -71,6 +73,7 @@ class ProcessSupervisor {
 
   std::string process_;
   std::string function_group_{"MachineFG"};
+  bool fg_is_mode_{false};
   std::string on_failure_{"log"};
   std::optional<gf_ara::phm::SupervisedEntity> entity_;
   std::uint32_t alive_period_ms_{100};

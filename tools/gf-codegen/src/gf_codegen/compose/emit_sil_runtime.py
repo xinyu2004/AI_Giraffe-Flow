@@ -18,10 +18,14 @@ def emit_sil_runtime(
     gen_dir: Path,
     *,
     wiring: dict[str, Any] | None = None,
-    platform_dir: Path | None = None,
+    ara_cfg_dir: Path | None = None,
 ) -> dict[str, str]:
     """Legacy entry: writes deploy_config.hpp (+ human YAML). No .env."""
-    plat = platform_dir if platform_dir is not None else gen_dir.parent / "platform"
+    plat = (
+        ara_cfg_dir
+        if ara_cfg_dir is not None
+        else gen_dir.parent / "cfg" / "gf_ara_cfg"
+    )
     meta = emit_deploy_config(req, platform, plat, gen_dir, wiring=wiring)
     return {"hpp": meta["hpp"], "env": ""}
 

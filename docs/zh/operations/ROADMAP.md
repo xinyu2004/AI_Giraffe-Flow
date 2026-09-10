@@ -114,7 +114,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 | C1b | **端口交互**：裸拖 Out/In=连线；**Ctrl+拖拽**=改端口边 | ✅ |
 | C1c | 观测：`wiring_all` 天花板 + **codegen tap** + GMT 焦点过滤 | ✅ 合同+codegen；GMT 焦点既有 |
 | C2 | 页 2 做实：exec / phm / sm / diag / log / ucm / Collector | ◐ 编辑器齐（含日志行选中 UX / 重复 context Verify / 撤销跳页）；运行时加深另见 P3-2 |
-| C3 | Event Collector 配置表（`platform/collector.yaml`） | ✅ 最小编辑 |
+| C3 | Event Collector 配置表（`cfg/gf_ara_cfg/collector.yaml`） | ✅ 最小编辑 |
 | C4 | 对齐 [MIDDLEWARE_CONFIG_PLAN.md](MIDDLEWARE_CONFIG_PLAN.md) · [STRUCTURE.md](../../../STRUCTURE.md) | ✅ |
 
 工作流：打开 project → **先画节点/信号** → 再勾模块并填平台表 → Verify / Generate。  
@@ -221,7 +221,7 @@ SOME/IP、DDS、GMT GUI、OTA/DoIP 实装、MCU 真机、MIPS/RISC-V 实板。`r
 2. **板端零 Python：** 上板 `runtime/`（含 **frame_ingest** 及一切 GMT/EM 会拉起的板端二进制）**不得依赖 Python** — 见 [AP_LITE_BACKLOG.md](AP_LITE_BACKLOG.md) `BL-BOARD-NO-PY`。Python 仅宿主机 SIL（`carla_bridge` / scenarios / gf-config / GMT PC 侧）。
 3. 云 CI：L0 + 路径 L0b + nightly/发版（见 [devops/ci/README.md](../../../devops/ci/README.md)）。
 4. **后期（登记，本轮不做）：**
-   - [BL-CFG-YAML-FALLBACK](AP_LITE_BACKLOG.md)：删 bringup/DoIP 的 `GF_PLATFORM_DIR`→yaml 回落（强制 hpp 齐全）
+   - [BL-CFG-YAML-FALLBACK](AP_LITE_BACKLOG.md)：删 bringup/DoIP 的 `GF_ARA_CFG_DIR`→yaml 回落（强制 hpp 齐全）
    - [BL-IOX-SHM-USED](AP_LITE_BACKLOG.md)：iceoryx SHM 度量从 **allocated/reserve** 进到 **used**
    - [BL-STAGE-PY-MTIME](AP_LITE_BACKLOG.md)：SIL stage 对主机侧 carla_bridge py 做 mtime 拷贝（不上板）
 5. **P3z / wave E**：AM62 / 真板 / vsomeip / RAUC / soak。

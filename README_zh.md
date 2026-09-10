@@ -46,14 +46,14 @@ OEM 相机/网络权重仍在仓外。
 | 页 | 写什么 | 产物 |
 |----|--------|------|
 | **1 · 信号与应用** | 薄 SKU（`req.yaml`）+ 信号图画布（`wiring.yaml`） | deployments / dataflows / live_tap |
-| **2 · 平台运行时** | `runtime_modules` + `platform/*`（exec · **EM 启动表** · PHM · Collector · diag · log · ucm；**per/tsync** 可勾选裁剪） | `platform_manifest` → CMake 裁剪 / EM 拓扑 |
+| **2 · 平台运行时** | `runtime_modules` + `cfg/gf_ara_cfg/*`（exec · **EM 启动表** · PHM · Collector · diag · log · ucm；**per/tsync** 可勾选裁剪） | `gf_ara_cfg_manifest` → CMake 裁剪 / EM 拓扑 |
 
 - **Verify / Generate** → SOR + Proxy/Skeleton + lineage（含 `platform_em_launch` 等门禁）
 
 ![gf-config — 信号图（页 1）](gallery/gf-config.png)
 
 ```bash
-gf-config projects/afc/project.yaml
+gf-config projects/afc/giraffe.yaml
 ```
 
 细节：[tools/gf-config/README_zh.md](tools/gf-config/README_zh.md) · [WORKFLOW](docs/zh/operations/WORKFLOW.md)

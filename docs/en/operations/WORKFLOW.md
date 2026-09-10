@@ -66,10 +66,10 @@ Module engineers deliver **`io_types.hpp` only** (no JSON).
 System integrator maintains `projects/<oem>/<vehicle>/` and runs:
 
 ```bash
-# GUI: open project.yaml → Save (auto-compose) → optional Generate (Ctrl+G)
+# GUI: open giraffe.yaml → Save (auto-compose) → optional Generate (Ctrl+G)
 # Headless / CI:
-python -m gf_codegen.compose --project projects/afc/project.yaml
-gf-codegen generate --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
+gf-codegen generate --project projects/afc/giraffe.yaml
 ```
 
 Contract: [sor-authoring.md](../architecture/sor-authoring.md) · [projects/afc/](../../../projects/afc/)

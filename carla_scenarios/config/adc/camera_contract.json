@@ -1,0 +1,104 @@
+{
+  "schema": "camera_contract/v1",
+  "product": "adc",
+  "active_source": "isp",
+  "ego_source": "carla",
+  "camera_transport": "shm",
+  "slots": [
+    {
+      "id": "front",
+      "slot_name": "gf.channel.front",
+      "w": 640,
+      "h": 480,
+      "pixel_format": "nv12",
+      "buffers": 2,
+      "fps": 30,
+      "mount": {
+        "id": "1",
+        "x": 0.55,
+        "y": 0.0,
+        "z": 1.35,
+        "pitch": -5.0,
+        "yaw": 0.0,
+        "roll": 0.0,
+        "fov": 100.0
+      }
+    },
+    {
+      "id": "fl",
+      "slot_name": "gf.channel.fl",
+      "w": 640,
+      "h": 480,
+      "pixel_format": "nv12",
+      "buffers": 2,
+      "fps": 30,
+      "mount": {
+        "id": "1",
+        "x": 0.55,
+        "y": 0.0,
+        "z": 1.35,
+        "pitch": -5.0,
+        "yaw": 0.0,
+        "roll": 0.0,
+        "fov": 100.0
+      }
+    },
+    {
+      "id": "fr",
+      "slot_name": "gf.channel.fr",
+      "w": 640,
+      "h": 480,
+      "pixel_format": "nv12",
+      "buffers": 2,
+      "fps": 30,
+      "mount": {
+        "id": "1",
+        "x": 0.55,
+        "y": 0.0,
+        "z": 1.35,
+        "pitch": -5.0,
+        "yaw": 0.0,
+        "roll": 0.0,
+        "fov": 100.0
+      }
+    },
+    {
+      "id": "rl",
+      "slot_name": "gf.channel.rl",
+      "w": 640,
+      "h": 480,
+      "pixel_format": "nv12",
+      "buffers": 2,
+      "fps": 30,
+      "mount": {
+        "id": "1",
+        "x": 0.55,
+        "y": 0.0,
+        "z": 1.35,
+        "pitch": -5.0,
+        "yaw": 0.0,
+        "roll": 0.0,
+        "fov": 100.0
+      }
+    },
+    {
+      "id": "rr",
+      "slot_name": "gf.channel.rr",
+      "w": 640,
+      "h": 480,
+      "pixel_format": "nv12",
+      "buffers": 2,
+      "fps": 30,
+      "mount": {
+        "id": "1",
+        "x": 0.55,
+        "y": 0.0,
+        "z": 1.35,
+        "pitch": -5.0,
+        "yaw": 0.0,
+        "roll": 0.0,
+        "fov": 100.0
+      }
+    }
+  ]
+}

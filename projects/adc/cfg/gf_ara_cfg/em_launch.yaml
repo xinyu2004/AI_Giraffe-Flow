@@ -1,0 +1,39 @@
+# OS EM launch map — ADC skeleton (stage A)
+schema_version: "0.1"
+processes:
+  - name: host.dlt_daemon
+    binary: bin/dlt-daemon
+    args: []
+    max_restarts: 3
+  - name: host.iox_roudi
+    binary: bin/iox-roudi
+    args: ["-c", "$GF_IOX_TOML"]
+    max_restarts: 3
+  - name: host.frame_ingest
+    binary: bin/gf_frame_ingest
+    args: []
+    max_restarts: 3
+  - name: adapter.vehicle_can_gateway
+    binary: bin/gf_vehicle_can_gateway
+    args: ["0"]
+    max_restarts: 3
+  - name: perception.fcm
+    binary: bin/gf_perception_fcm
+    args: ["0"]
+    max_restarts: 3
+  - name: perception.surround
+    binary: bin/gf_perception_surround
+    args: ["0"]
+    max_restarts: 3
+  - name: mode.drive_park
+    binary: bin/gf_mode_drive_park
+    args: ["0"]
+    max_restarts: 3
+  - name: planning.driving
+    binary: bin/gf_planning_driving
+    args: ["0"]
+    max_restarts: 2
+  - name: planning.parking
+    binary: bin/gf_planning_parking
+    args: ["0"]
+    max_restarts: 2

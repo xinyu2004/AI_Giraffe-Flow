@@ -21,7 +21,7 @@ pip install -e 'tools/gmt[gui]'
 
 GMT gui
 GMT gui --project projects/afc
-GMT gui --project projects/afc/project.yaml
+GMT gui --project projects/afc/giraffe.yaml
 ```
 
 **主路径：** 填 **Host** → 顶栏两通道可同时连：
@@ -41,7 +41,7 @@ GMT gui --project projects/afc/project.yaml
   - **Collector**：本机 NDJSON 或 UDS `0x31 01 F201` 读板端环缓
 - 「图形」Tab（对齐 CANoe Graphics）：按信号一行；滚轮 / ± 缩放时窗；拖左边线改名称列宽；橙线 playhead  
 - 墙钟：session 一条 `session_meta` 锚点 + `(t_ns - t0_ns)`  
-- 未加载 `project.yaml`：**回灌禁用**；Live 仍可旁观  
+- 未加载 `giraffe.yaml`：**回灌禁用**；Live 仍可旁观  
 
 `GF_INJECT_LIVE=0` 可强制回灌时关掉 live_tap。
 

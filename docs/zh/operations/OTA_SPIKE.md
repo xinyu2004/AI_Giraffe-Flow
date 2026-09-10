@@ -7,7 +7,7 @@
 
 | 项 | 选型（仍有效） |
 |----|----------------|
-| 更新编排入口 | **UCM**（`ara::ucm` 语义状态机；`platform/ucm.yaml`） |
+| 更新编排入口 | **UCM**（`ara::ucm` 语义状态机；`cfg/gf_ara_cfg/ucm.yaml`） |
 | 后端候选 | **RAUC**（优先写入 `dep-manifest/versions.lock.md`）；SWUpdate 不作为主路径 |
 | PHM 配合 | 更新窗 **`SetPaused(true)`**；结束 Unpause + 立刻 Alive → [PHM_OTA_PAUSE.md](PHM_OTA_PAUSE.md) |
 | 桌面路径（P3-4） | DoIP + UDS（默认 **0x38**）→ UCM stub Activate；见 [DOIP_OTA.md](DOIP_OTA.md) |

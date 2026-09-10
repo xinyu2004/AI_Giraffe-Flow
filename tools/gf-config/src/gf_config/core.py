@@ -1,4 +1,8 @@
-"""Load/save project inputs and run compose."""
+"""ProjectSession: load/save, mutate YAML via APIs, validate, compose.
+
+GUI must not write ``req`` / ``wiring`` / ``dirty_*`` directly — call methods here.
+Naming helpers live in ``gf_config.names`` (re-exported below for compat).
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,31 @@ from gf_codegen.compose.parse_fidl import parse_fidl_file
 from gf_codegen.compose.parse_hpp import parse_hpp_file
 from gf_codegen.compose.pipeline import compose_project
 from gf_codegen.paths import resolve_path
+from gf_config.names import (
+    CHANNEL_POLICY_DEFAULTS,
+    DEFAULT_CHANNEL_NAMES,
+    LEGACY_FLAT_CHANNEL_KEYS,
+    canon_service,
+    default_publish_spec,
+    is_channel_svc,
+    normalize_channel_slot,
+    short_service,
+)
+from gf_config.validate import ValidationResult, validate_project
+
+# Re-export naming API (tests / GUI historically import from core).
+__all__ = [
+    "CHANNEL_POLICY_DEFAULTS",
+    "DEFAULT_CHANNEL_NAMES",
+    "LEGACY_FLAT_CHANNEL_KEYS",
+    "ProjectSession",
+    "canon_service",
+    "default_publish_spec",
+    "is_channel_svc",
+    "load_yaml",
+    "normalize_channel_slot",
+    "short_service",
+]
 
 
 def _dump_yaml(path: Path, data: dict[str, Any]) -> None:
@@ -30,75 +59,43 @@ def load_yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
-def normalize_channel_slot(s: str) -> str | None:
-    """Return canonical gf.channel.* or None if not a GfChannel slot name."""
-    raw = (s or "").strip()
-    if not raw:
-        return None
-    if raw.startswith("gf.channel."):
-        return raw
-    # Polluted SOA form: services.semantic.gf.channel.front
-    marker = "gf.channel."
-    idx = raw.find(marker)
-    if idx >= 0:
-        return raw[idx:]
-    return None
-
-
-def is_channel_svc(s: str) -> bool:
-    return normalize_channel_slot(s) is not None
-
-
-def canon_service(s: str) -> str:
-    s = (s or "").strip()
-    if not s:
-        return ""
-    ch = normalize_channel_slot(s)
-    if ch:
-        return ch
-    if s.startswith("services."):
-        return s
-    if s.startswith("semantic."):
-        return f"services.{s}"
-    return f"services.semantic.{s}"
-
-
-def short_service(svc: str) -> str:
-    ch = normalize_channel_slot(svc or "")
-    if ch:
-        return ch
-    return (svc or "").split(".")[-1] if svc else ""
-
-
 @dataclass
 class ProjectSession:
     paths: ProjectPaths
     req: dict[str, Any]
     wiring: dict[str, Any]
-    platform: dict[str, dict[str, Any]]
+    ara_cfg: dict[str, dict[str, Any]]
     dirty_req: bool = False
     dirty_wiring: bool = False
-    dirty_platform: set[str] | None = None
+    dirty_ara_cfg: set[str] | None = None
 
     def __post_init__(self) -> None:
-        if self.dirty_platform is None:
-            self.dirty_platform = set()
+        if self.dirty_ara_cfg is None:
+            self.dirty_ara_cfg = set()
 
     @classmethod
     def open(cls, project_file: Path) -> ProjectSession:
         paths = load_project(project_file)
-        platform: dict[str, dict[str, Any]] = {}
-        for key, p in (paths.platform or {}).items():
+        ara_cfg: dict[str, dict[str, Any]] = {}
+        for key, p in (paths.gf_ara_cfg or {}).items():
             if p.is_file():
-                platform[key] = load_yaml(p)
+                ara_cfg[key] = load_yaml(p)
             else:
-                platform[key] = {"schema_version": "0.1"}
-        return cls(
+                ara_cfg[key] = {"schema_version": "0.1"}
+        sess = cls(
             paths=paths,
             req=load_yaml(paths.req),
             wiring=load_yaml(paths.wiring),
-            platform=platform,
+            ara_cfg=ara_cfg,
         )
+        sess.normalize_after_open()
+        return sess
+
+    def mark_req_dirty(self) -> None:
+        self.dirty_req = True
+
+    def mark_wiring_dirty(self) -> None:
+        self.dirty_wiring = True
 
     def save_req(self) -> None:
         _dump_yaml(self.paths.req, self.req)
@@ -108,33 +105,144 @@ class ProjectSession:
         _dump_yaml(self.paths.wiring, self.wiring)
         self.dirty_wiring = False
 
-    def save_platform(self, key: str | None = None) -> None:
-        assert self.dirty_platform is not None
-        keys = [key] if key else list(self.dirty_platform)
+    def save_ara_cfg(self, key: str | None = None) -> None:
+        assert self.dirty_ara_cfg is not None
+        keys = [key] if key else list(self.dirty_ara_cfg)
         for k in keys:
-            path = self.paths.platform.get(k)
-            data = self.platform.get(k)
+            path = self.paths.gf_ara_cfg.get(k)
+            data = self.ara_cfg.get(k)
             if path is None or data is None:
                 continue
             _dump_yaml(path, data)
-            self.dirty_platform.discard(k)
+            self.dirty_ara_cfg.discard(k)
 
-    def mark_platform_dirty(self, key: str) -> None:
-        assert self.dirty_platform is not None
-        self.dirty_platform.add(key)
+    def mark_ara_cfg_dirty(self, key: str) -> None:
+        assert self.dirty_ara_cfg is not None
+        self.dirty_ara_cfg.add(key)
+
+    def get_ara_doc(self, key: str) -> dict[str, Any]:
+        """Read-only copy of one gf_ara_cfg document."""
+        doc = self.ara_cfg.get(key)
+        return dict(doc) if isinstance(doc, dict) else {}
+
+    def update_ara_doc(self, key: str, **fields: Any) -> None:
+        """Merge top-level fields into ara_cfg[key] and mark that slice dirty.
+
+        ``None`` values remove the key. Ensures ``schema_version`` exists.
+        """
+        doc = self.ara_cfg.get(key)
+        if not isinstance(doc, dict):
+            doc = {"schema_version": "0.1"}
+            self.ara_cfg[key] = doc
+        if not doc.get("schema_version"):
+            doc["schema_version"] = "0.1"
+        changed = False
+        for k, v in fields.items():
+            if v is None:
+                if k in doc:
+                    doc.pop(k, None)
+                    changed = True
+            elif doc.get(k) != v:
+                doc[k] = v
+                changed = True
+        if changed:
+            self.mark_ara_cfg_dirty(key)
 
     def is_dirty(self) -> bool:
-        assert self.dirty_platform is not None
-        return bool(self.dirty_req or self.dirty_wiring or self.dirty_platform)
+        assert self.dirty_ara_cfg is not None
+        return bool(self.dirty_req or self.dirty_wiring or self.dirty_ara_cfg)
 
-    def save_all(self) -> None:
+    def topology(self) -> str:
+        """SKU topology — single source: req.topology (compose reads req only)."""
+        return str(self.req.get("topology") or "ap_only").strip() or "ap_only"
+
+    def set_topology(self, topo: str) -> None:
+        topo_n = str(topo or "ap_only").strip() or "ap_only"
+        if self.req.get("topology") != topo_n:
+            self.req["topology"] = topo_n
+            self.mark_req_dirty()
+        # Drop legacy dual-write key (silent if already absent).
+        if "topology" in self.wiring:
+            del self.wiring["topology"]
+            self.mark_wiring_dirty()
+
+    def normalize_after_open(self) -> None:
+        """One-shot load migrations. Call from open() only — never from rebuild/paint."""
+        wir_t = self.wiring.pop("topology", None)
+        if wir_t and not self.req.get("topology"):
+            self.req["topology"] = str(wir_t)
+            self.mark_req_dirty()
+        self.migrate_legacy_camera_channel_flows()
+
+    def apply_sku_update(
+        self,
+        *,
+        profile: str,
+        variant: str,
+        topology: str,
+        product: str,
+        bindings: list[str],
+        observability: dict[str, Any],
+        acceptance: dict[str, Any],
+        apps: list[Any] | None = None,
+    ) -> None:
+        """SKU tab (req_editor) — sole writer for these req fields."""
+        self.req["profile"] = profile
+        self.req["variant"] = variant
+        self.req["product"] = product
+        self.set_topology(topology)
+        self.req["bindings"] = list(bindings)
+        self.req["observability"] = dict(observability)
+        self.req["acceptance"] = dict(acceptance)
+        if apps is not None:
+            self.req["apps"] = apps
+        self.mark_req_dirty()
+
+    def set_runtime_modules(self, modules: list[str]) -> None:
+        """Platform tab — sole writer for req.runtime_modules."""
+        cleaned = [str(m).strip() for m in modules if str(m).strip()]
+        if self.req.get("runtime_modules") != cleaned:
+            self.req["runtime_modules"] = cleaned
+            self.mark_req_dirty()
+
+    def set_flow_route(
+        self, flow: dict[str, Any], route: dict[str, Any] | None
+    ) -> None:
+        """Persist or clear an edge route bend (dataflow / channel_flow dict in wiring)."""
+        if route is None:
+            if "route" in flow:
+                flow.pop("route", None)
+                self.mark_wiring_dirty()
+        else:
+            if flow.get("route") != route:
+                flow["route"] = dict(route)
+                self.mark_wiring_dirty()
+
+    def validate(self) -> ValidationResult:
+        """In-memory gate (open / save). Does not write disk."""
+        return validate_project(
+            self.req,
+            self.wiring,
+            self.ara_cfg,
+            project_dir=self.paths.project_dir,
+        )
+
+    def save_all(self, *, require_valid: bool = True) -> ValidationResult:
+        """Persist dirty slices only when validation passes (default).
+
+        When require_valid is False, writes unconditionally (tests / recovery only).
+        """
+        result = self.validate()
+        if require_valid and not result.ok:
+            return result
         if self.dirty_req:
             self.save_req()
         if self.dirty_wiring:
             self.save_wiring()
-        assert self.dirty_platform is not None
-        if self.dirty_platform:
-            self.save_platform()
+        assert self.dirty_ara_cfg is not None
+        if self.dirty_ara_cfg:
+            self.save_ara_cfg()
+        return result
 
     def wiring_service_names(self) -> list[str]:
         """Canonical service names from deployments + dataflows (SKU pickers)."""
@@ -167,27 +275,30 @@ class ProjectSession:
                 names.append(name)
         return names
 
-    def compose(self) -> tuple[int, str]:
-        self.save_all()
+    def compose(self) -> tuple[int, str, ValidationResult]:
+        """Validate → persist → compose_project. Disk unchanged if validation fails."""
+        result = self.save_all(require_valid=True)
+        if not result.ok:
+            return 1, result.format_errors(), result
         rc = compose_project(self.paths.project_file, repo_root=self.paths.repo_root)
         report = ""
         if self.paths.lineage_report.is_file():
             report = self.paths.lineage_report.read_text(encoding="utf-8")
-        return rc, report
+        return rc, report, result
 
-    def generate(self, out_dir: Path | None = None) -> tuple[int, str]:
-        """Compose if needed, then generate Proxy/Skeleton under project generated/."""
+    def generate(self, out_dir: Path | None = None) -> tuple[int, str, ValidationResult]:
+        """Validate+persist+compose, then generate Proxy/Skeleton under generated/."""
         from gf_codegen.generate_cmd import generate as generate_cmd
 
-        rc, report = self.compose()
+        rc, report, result = self.compose()
         if rc != 0:
-            return rc, report
+            return rc, report, result
         sor = self.paths.out_sor
         if not sor.is_file():
-            return 1, report
+            return 1, report, result
         out = out_dir or (self.paths.project_dir / "generated")
         gen_rc = generate_cmd(sor, out)
-        return gen_rc, report
+        return gen_rc, report, result
 
     def dataflows(self) -> list[dict[str, Any]]:
         return list(self.wiring.get("dataflows") or [])
@@ -195,12 +306,134 @@ class ProjectSession:
     def deployments(self) -> list[dict[str, Any]]:
         return list(self.wiring.get("deployments") or [])
 
+    def provided_service_shorts(self) -> list[str]:
+        """SOA Out short names across deployments (channel slots excluded). Order = first seen."""
+        out: list[str] = []
+        seen: set[str] = set()
+        for d in self.deployments():
+            for p in d.get("provides") or []:
+                if is_channel_svc(str(p)):
+                    continue
+                s = short_service(canon_service(str(p)))
+                if s and s not in seen:
+                    seen.add(s)
+                    out.append(s)
+        return out
+
+    def channel_policy_names(self) -> list[str]:
+        """GfChannel logical names for publish_policy.channels (from frame_ingest + existing)."""
+        names: list[str] = []
+        seen: set[str] = set()
+        fi = self.req.get("frame_ingest") if isinstance(self.req.get("frame_ingest"), dict) else {}
+        ch = fi.get("channels") if isinstance(fi.get("channels"), dict) else {}
+        for k in ch:
+            n = str(k).strip()
+            if n and n not in seen:
+                seen.add(n)
+                names.append(n)
+        raw = self.req.get("publish_policy")
+        if isinstance(raw, dict):
+            nested = raw.get("channels")
+            if isinstance(nested, dict):
+                for k in nested:
+                    n = str(k).strip()
+                    if n and n not in seen:
+                        seen.add(n)
+                        names.append(n)
+        return names
+
+    def publish_policy_services(self) -> dict[str, dict[str, Any]]:
+        raw = self.req.get("publish_policy")
+        if not isinstance(raw, dict):
+            return {}
+        nested = raw.get("services")
+        out: dict[str, dict[str, Any]] = {}
+        if isinstance(nested, dict):
+            for k, v in nested.items():
+                if isinstance(v, dict):
+                    out[short_service(str(k))] = dict(v)
+            return out
+        for k, v in raw.items():
+            if k in ("services", "channels") or not isinstance(v, dict):
+                continue
+            ks = str(k).strip()
+            if ks.startswith("services.") or ks.startswith("semantic.") or "." not in ks:
+                # Heuristic: channel-like keys stay out; treat bare semantic shorts as services
+                if ks in LEGACY_FLAT_CHANNEL_KEYS:
+                    continue
+                out[short_service(ks)] = dict(v)
+        return out
+
+    def publish_policy_channels(self) -> dict[str, dict[str, Any]]:
+        raw = self.req.get("publish_policy")
+        if not isinstance(raw, dict):
+            return {}
+        nested = raw.get("channels")
+        out: dict[str, dict[str, Any]] = {}
+        if isinstance(nested, dict):
+            for k, v in nested.items():
+                if isinstance(v, dict):
+                    out[str(k).strip()] = dict(v)
+        return out
+
+    def service_publish_spec(self, short: str) -> dict[str, Any]:
+        s = short_service(short)
+        return dict(self.publish_policy_services().get(s) or default_publish_spec())
+
+    def apply_out_publish_policies(self, policies: dict[str, dict[str, Any]]) -> None:
+        """Merge per-Out publish specs (keyed by short name). Shared across providers."""
+        pp = self.req.get("publish_policy")
+        if not isinstance(pp, dict):
+            pp = {}
+            self.req["publish_policy"] = pp
+        services = pp.get("services")
+        if not isinstance(services, dict):
+            services = {}
+            pp["services"] = services
+        for short, spec in policies.items():
+            s = short_service(short)
+            if not s or not isinstance(spec, dict):
+                continue
+            services[s] = dict(spec)
+        self.mark_req_dirty()
+
+    def apply_channel_publish_policies(self, policies: dict[str, dict[str, Any]]) -> None:
+        """Replace publish_policy.channels from frame_ingest dialog (authoritative)."""
+        pp = self.req.get("publish_policy")
+        if not isinstance(pp, dict):
+            pp = {}
+            self.req["publish_policy"] = pp
+        cleaned: dict[str, dict[str, Any]] = {}
+        for name, spec in policies.items():
+            n = str(name).strip()
+            if not n or not isinstance(spec, dict):
+                continue
+            cleaned[n] = dict(spec)
+        pp["channels"] = cleaned
+        self.mark_req_dirty()
+
+    def prune_orphan_publish_policies(self) -> None:
+        """Drop service policy entries with no provider Out left."""
+        live = set(self.provided_service_shorts())
+        pp = self.req.get("publish_policy")
+        if not isinstance(pp, dict):
+            return
+        services = pp.get("services")
+        if not isinstance(services, dict):
+            return
+        drop = [k for k in list(services) if short_service(str(k)) not in live]
+        if not drop:
+            return
+        for k in drop:
+            del services[k]
+        self.mark_req_dirty()
+
     def modules(self) -> list[dict[str, Any]]:
         return list(self.wiring.get("modules") or [])
 
     def set_dataflows(self, flows: list[dict[str, Any]]) -> None:
         self.wiring["dataflows"] = flows
-        self.dirty_wiring = True
+        self.mark_wiring_dirty()
 
     def upsert_deployment(
         self,
@@ -213,6 +446,10 @@ class ProjectSession:
         process = process.strip()
         if not process:
             raise ValueError("process name required")
+        # Video contract lives on canvas + req.frame_ingest / EM inject — never deployments.
+        if self.is_frame_ingest_process(process=process):
+            self.scrub_frame_ingest_from_deployments()
+            return
         deps = list(self.wiring.get("deployments") or [])
         found = None
         for d in deps:
@@ -242,7 +479,7 @@ class ProjectSession:
                 for x in requires
                 if str(x).strip() and not is_channel_svc(str(x))
             ]
-        self.dirty_wiring = True
+        self.mark_wiring_dirty()
 
     def remove_deployment(self, process: str) -> None:
         process = process.strip()
@@ -258,9 +495,10 @@ class ProjectSession:
             if str(f.get("from")) != process and str(f.get("to")) != process
         ]
         self.wiring["dataflows"] = flows
-        self.dirty_wiring = True
+        self.mark_wiring_dirty()
 
     def canvas(self) -> dict[str, Any]:
+        """Ensure wiring.canvas exists (mutates structure; call only from writers)."""
         c = self.wiring.get("canvas")
         if not isinstance(c, dict):
             c = {}
@@ -270,7 +508,22 @@ class ProjectSession:
             c["nodes"] = {}
         return c
 
+    def get_node_ui(self, process: str) -> dict[str, Any]:
+        """Read-only copy of canvas node UI. Never creates entries."""
+        c = self.wiring.get("canvas")
+        if not isinstance(c, dict):
+            return {}
+        nodes = c.get("nodes")
+        if not isinstance(nodes, dict):
+            return {}
+        ui = nodes.get(process)
+        return dict(ui) if isinstance(ui, dict) else {}
+
     def node_ui(self, process: str) -> dict[str, Any]:
+        """Compat alias for get_node_ui (read-only; does not create canvas keys)."""
+        return self.get_node_ui(process)
+
+    def _ensure_node_ui(self, process: str) -> dict[str, Any]:
         nodes = self.canvas().setdefault("nodes", {})
         assert isinstance(nodes, dict)
         ui = nodes.get(process)
@@ -280,18 +533,33 @@ class ProjectSession:
         return ui
 
     def set_node_ui(self, process: str, **fields: Any) -> None:
-        ui = self.node_ui(process)
+        """Patch canvas node UI. ``None`` values are skipped (never delete).
+
+        To remove keys, call ``clear_node_ui_keys``.
+        """
+        ui = self._ensure_node_ui(process)
         changed = False
         for k, v in fields.items():
             if v is None:
-                if k in ui:
-                    ui.pop(k, None)
-                    changed = True
-            elif ui.get(k) != v:
+                continue
+            if ui.get(k) != v:
                 ui[k] = v
                 changed = True
         if changed:
-            self.dirty_wiring = True
+            self.mark_wiring_dirty()
+
+    def clear_node_ui_keys(self, process: str, *keys: str) -> None:
+        ui = self.get_node_ui(process)
+        if not ui:
+            return
+        live = self._ensure_node_ui(process)
+        changed = False
+        for k in keys:
+            if k in live:
+                live.pop(k, None)
+                changed = True
+        if changed:
+            self.mark_wiring_dirty()
 
     def set_ports(
         self,
@@ -326,7 +594,8 @@ class ProjectSession:
                     continue
                 new_flows.append(f)
             self.wiring["dataflows"] = new_flows
-        self.dirty_wiring = True
+        self.prune_orphan_publish_policies()
+        self.mark_wiring_dirty()
 
     def add_dataflow(self, frm: str, service: str, to: str) -> bool:
         """Append dataflow if not duplicate. Returns False if already present."""
@@ -442,7 +711,7 @@ class ProjectSession:
                 entry["fps"] = fps
             cleaned.append(entry)
         fi["camera_slots"] = cleaned
-        self.dirty_req = True
+        self.mark_req_dirty()
 
     def frame_ingest_cfg(self) -> dict[str, Any]:
         fi = self.req.get("frame_ingest")
@@ -458,7 +727,7 @@ class ProjectSession:
                 fi.pop(k, None)
             else:
                 fi[k] = v
-        self.dirty_req = True
+        self.mark_req_dirty()
 
     def upsert_camera_slot(self, slot: dict[str, Any]) -> None:
         sid = str(slot.get("id") or "").strip()
@@ -487,7 +756,7 @@ class ProjectSession:
 
     def set_channel_flows(self, flows: list[dict[str, Any]]) -> None:
         self.wiring["channel_flows"] = list(flows)
-        self.dirty_wiring = True
+        self.mark_wiring_dirty()
 
     def migrate_legacy_camera_channel_flows(self) -> None:
         """Rewrite camera.* → host.frame_ingest; scrub GfChannel out of deployments."""
@@ -517,8 +786,32 @@ class ProjectSession:
             for k in drop:
                 del nodes[k]
             if drop:
-                self.dirty_wiring = True
+                self.mark_wiring_dirty()
         self.scrub_channel_ports_from_deployments()
+        self.scrub_frame_ingest_from_deployments()
+
+    def scrub_frame_ingest_from_deployments(self) -> None:
+        """host.frame_ingest must not appear in deployments (canvas / EM only)."""
+        ingest = self.FRAME_INGEST_PROCESS
+        deps = list(self.wiring.get("deployments") or [])
+        cleaned = [
+            d
+            for d in deps
+            if isinstance(d, dict)
+            and not self.is_frame_ingest_process(process=str(d.get("process") or ""))
+        ]
+        if len(cleaned) != len(deps):
+            self.wiring["deployments"] = cleaned
+            self.mark_wiring_dirty()
+        # Drop any accidental SOA dataflows involving ingest
+        flows = self.dataflows()
+        kept = [
+            f
+            for f in flows
+            if str(f.get("from") or "") != ingest and str(f.get("to") or "") != ingest
+        ]
+        if len(kept) != len(flows):
+            self.set_dataflows(kept)
 
     def scrub_channel_ports_from_deployments(self) -> None:
         """Remove polluted gf.channel.* entries from deployments provides/requires."""
@@ -537,7 +830,28 @@ class ProjectSession:
                     dirty = True
         if dirty:
             self.wiring["deployments"] = deps
-            self.dirty_wiring = True
+            self.mark_wiring_dirty()
+
+    def seed_default_channel_flows(self) -> None:
+        """front → perception.fcm; other camera_slots → perception.surround when present."""
+        ingest = self.FRAME_INGEST_PROCESS
+        deps = {str(d.get("process")) for d in self.deployments()}
+        has_fcm = "perception.fcm" in deps
+        has_sur = "perception.surround" in deps
+        if not has_fcm and not has_sur:
+            return
+        for s in self.camera_slots():
+            sid = str(s.get("id") or "").strip()
+            if not sid:
+                continue
+            slot = self.gf_channel_slot_name(sid)
+            if sid == "front" and has_fcm:
+                to = "perception.fcm"
+            elif sid != "front" and has_sur:
+                to = "perception.surround"
+            else:
+                continue
+            self.add_channel_flow(ingest, to, slot=slot)
 
     def add_channel_flow(self, frm: str, to: str, *, slot: str = "") -> bool:
         """Append GfChannel edge (not iceoryx dataflow)."""
@@ -558,7 +872,7 @@ class ProjectSession:
                     continue
                 if slot_n and not existing:
                     f["slot"] = slot_n
-                    self.dirty_wiring = True
+                    self.mark_wiring_dirty()
                 return False
             # Same slot already wired from ingest to this consumer
             if (
@@ -610,7 +924,7 @@ class ProjectSession:
                     process=str(key), kind=str(ui.get("kind") or "")
                 ):
                     del nodes[key]
-                    self.dirty_wiring = True
+                    self.mark_wiring_dirty()
 
     def remove_camera_node(self, process: str) -> None:
         """Compat: per-lane camera.* → strip that camera_slot; ingest node uses remove_frame_ingest_node."""
@@ -635,7 +949,7 @@ class ProjectSession:
         nodes = self.canvas().get("nodes")
         if isinstance(nodes, dict) and process in nodes:
             del nodes[process]
-            self.dirty_wiring = True
+            self.mark_wiring_dirty()
 
     def upsert_module(
         self,
@@ -668,7 +982,7 @@ class ProjectSession:
                 found["fidl"] = fidl_rel
             if package:
                 found["package"] = package
-        self.dirty_wiring = True
+        self.mark_wiring_dirty()
 
     def resolve_hpp(self, hpp_rel: str) -> Path:
         return resolve_path(

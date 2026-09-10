@@ -12,8 +12,7 @@
 | **容量表**（RouDi TOML、bounds iceoryx） | 表数据；不是脚本开关 | compose → TOML / cmake |
 
 - YAML 是 **作者存盘**（gf-config）；板端 / 产品路径 **不信任** 可变 yaml 作行为真相。
-- **板端零行为 yaml**：stage **默认不拷** `platform/*.yaml`（`GF_STAGE_PLATFORM=1` 才拷）；产品 EM 只靠 `deploy_config.hpp`。
-- **SIL 产品路径默认不设 `GF_PLATFORM_DIR`**（hpp-only）。smoke / verify 若需作者树，**显式** `export GF_PLATFORM_DIR=…/platform`。
+- **SIL 产品路径默认不设 `GF_ARA_CFG_DIR`**（hpp-only）。smoke / verify 若需作者树，**显式** `export GF_ARA_CFG_DIR=…/cfg/gf_ara_cfg`。
 - **无** `GF_PLATFORM_USE_YAML` / **无** `GF_EM_USE_YAML` 政策开关。EM YAML 仅当显式 `--launch` 或 `GF_EM_LAUNCH`。
 - **runtime 自包含**：stage 后整树可拷到板端；禁止依赖 repo 外路径 / `carla_scenarios` import。
 - **板端零 Python（运行时）**：板端 `runtime/` / EM / GMT 依赖树 **不得**依赖 Python 解释器或 `.py` 模块。  
@@ -27,7 +26,7 @@
 | 机制 | 产物 | 消费者 |
 |------|------|--------|
 | EM 启动表 + DoIP/UDS/OTA 常量 | `deploy_config.hpp` | `gf_em_daemon` · `gf_doip_ota_server` |
-| exec / phm 表 | `platform_tables.hpp` | `process_bringup` |
+| exec / phm 表 | `ara_cfg_tables.hpp` | `process_bringup` |
 | log | `log_config.hpp` | Logger / EM |
 | frame_ingest | `frame_ingest_config.hpp` | ingest / FCM / gateway |
 | **Collector（含 sources / dtc_map）** | `collector_config.hpp` | bringup · DoIP |
@@ -56,7 +55,7 @@
 | 帧源 SIL 覆盖 | `GF_FRAME_SOURCE` · `GF_CARLA_*` | 覆盖 freeze 默认；板端仍读 hpp |
 | DoIP 主机覆盖 | `GF_DOIP_*` · `GF_DIAG_*` · `GF_OTA_*` | 默认读 `deploy_config.hpp` |
 | 故障注入 | `GF_PHM_FAULT_*` | **仅** `scripts/verify/` smoke 自设并自启进程；产品 `run_sil` 不涉及 |
-| smoke 作者树 | **`GF_PLATFORM_DIR`**（显式） | **后期删除**（[BL-CFG-YAML-FALLBACK](AP_LITE_BACKLOG.md)）：今日仅当对应 freeze 头未编入时 YAML 回落 |
+| smoke 作者树 | **`GF_ARA_CFG_DIR`**（显式） | **后期删除**（[BL-CFG-YAML-FALLBACK](AP_LITE_BACKLOG.md)）：今日仅当对应 freeze 头未编入时 YAML 回落 |
 
 **勿再加** `*.env` / 板端可变行为 yaml。
 
@@ -64,7 +63,7 @@
 
 | ID | 说明 |
 |----|------|
-| BL-CFG-YAML-FALLBACK | bringup/DoIP 仍保留「无 `GF_HAS_*` 头 + 显式 `GF_PLATFORM_DIR` → yaml」；SKU 产品路径应强制头齐全后删回落 |
+| BL-CFG-YAML-FALLBACK | bringup/DoIP 仍保留「无 `GF_HAS_*` 头 + 显式 `GF_ARA_CFG_DIR` → yaml」；SKU 产品路径应强制头齐全后删回落 |
 | BL-IOX-SHM-USED | iceoryx SHM 预算/报告今日偏 **allocated / RouDi reserve**，非运行期 **used**；见 `mem_budget.py` FORMULAS |
 
 ## 启动 / EM
@@ -82,11 +81,22 @@ systemd/init（产品）或 giraffe_launch（调试）/ run_sil
 
 异常退出策略：不可 relaunch → EM 停整机；板端靠 systemd `Restart=on-failure`。
 
+## Function Group freeze
+
+Compose 冻结字段（板端只信 hpp，不信可变 YAML）：
+
+| 表 | 字段 |
+|----|------|
+| `kFunctionGroups[]` | `id`, `kind` (`machine`\|`mode`), `initial`, `states[]` |
+| `kEmLaunch[]` / `ExecProcess` | `function_group`, `active_in[]` |
+
+中间件不消费 `drive_park_state`；产品 ModeDeclaration 名只出现在作者 YAML 与 App。
+
 ## 验收主路径
 
 ```text
 gf-config Verify(+Generate) → compile_sil → bash …/run_sil.sh
 # 板端：拷 runtime/ → systemctl enable --now giraffe-em
 # smoke 显式作者树（可选）：
-#   GF_PLATFORM_DIR=projects/afc/platform bash …/verify/smoke_….sh
+#   GF_ARA_CFG_DIR=projects/afc/cfg/gf_ara_cfg bash …/verify/smoke_….sh
 ```

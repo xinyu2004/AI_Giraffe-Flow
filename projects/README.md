@@ -7,6 +7,7 @@
 
 | 文档 | 内容 |
 |------|------|
+| [CFG_LAYOUT.md](CFG_LAYOUT.md) | **作者树一刀切：** `giraffe.yaml` + `cfg/{req,wiring,gf_ara_cfg}` |
 | [PROCESS_ROLES.md](PROCESS_ROLES.md) | 谁是 SOA App / Adapter / 平台 |
 | [MODULE_INTERFACE_LAYOUT.md](MODULE_INTERFACE_LAYOUT.md) | 接口与 DBC 均跟项目走 |
 | [SKU_LAYOUT_TARGET.md](SKU_LAYOUT_TARGET.md) | 现行：仅 `afc` / `adc` |
@@ -26,10 +27,11 @@
 
 ```text
 projects/<sku>/
-  project.yaml  req.yaml  oem/  interfaces/  integration/
-  scripts/         # 四入口 compile|run × sil|hil；验收 smoke → scripts/verify/
+  giraffe.yaml
+  cfg/req.yaml  cfg/wiring.yaml  cfg/gf_ara_cfg/*
+  oem/  interfaces/  apps/  scripts/
   reports/         # lineage、iox_shm_report 等（非 generated；本地生成）
   [golden/]
 ```
 
-**`req.yaml` 跟车型走：** SKU 契约（binding、runtime、acceptance）与部署裁剪（observability、apps）写在同一文件。SIL/HIL 只换编译与运行脚本。改款复制整个产品目录。
+**`cfg/req.yaml` 跟车型走：** SKU 契约与部署裁剪写在同一文件。入口索引是 `giraffe.yaml`。SIL/HIL 只换编译与运行脚本。改款复制整个产品目录。

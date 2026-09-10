@@ -9,7 +9,7 @@ ARA-inspired **Platform Health Management** (`gf_ara::phm`) — Alive / Deadline
 | `Evaluate` | `kOk` / `kAliveMissed` / `kDeadlineMissed` / `kLogicalFault` |
 | `SetPaused` | OTA / SM Updating |
 
-`platform/phm.yaml` `on_failure`:
+`cfg/gf_ara_cfg/phm.yaml` `on_failure`:
 
 | 值 | 行为 |
 |----|------|

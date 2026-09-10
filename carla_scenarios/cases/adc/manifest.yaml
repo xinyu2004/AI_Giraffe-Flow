@@ -1,0 +1,23 @@
+# ADC interaction cases. status: planned = listed; use --include-planned to run shells.
+kind: cases
+cases:
+  - id: assist_lc
+    script: assist_lc.py
+    status: planned
+    keyword: LC
+    tags: [adc, surround, lane_change]
+    description: Surround-assisted lane change (Driving + SurroundWorld side object)
+
+  - id: spot_search
+    script: spot_search.py
+    status: planned
+    keyword: APA
+    tags: [adc, parking, spot_search]
+    description: v<15 SpotSearch via ModeHint APA armed; driving still controls
+
+  - id: apa
+    script: apa.py
+    status: planned
+    keyword: APA
+    tags: [adc, parking, apa]
+    description: ModeHint confirm after stop → Parking → m_park_tick

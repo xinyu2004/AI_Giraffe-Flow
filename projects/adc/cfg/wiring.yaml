@@ -1,0 +1,334 @@
+schema_version: '0.1'
+project_id: adc
+variant: adc_drive_park
+topology: ap_only
+modules:
+- id: adapter.vehicle_can_gateway
+  hpp: projects/adc/interfaces/vehicle_gateway/io_types.hpp
+- id: perception.fcm
+  hpp:
+  - projects/adc/interfaces/fcm_perception/io_ports.hpp
+  - projects/adc/interfaces/fcm_perception/Perception_Out_messages.h
+  package: customer/fcm-perception
+- id: perception.surround
+  hpp: projects/adc/interfaces/perception_surround/io_types.hpp
+- id: planning.driving
+  hpp: projects/adc/interfaces/planning_driving/io_types.hpp
+  package: customer/planning-driving
+- id: planning.parking
+  hpp: projects/adc/interfaces/planning_parking/io_types.hpp
+- id: mode.drive_park
+  hpp: projects/adc/interfaces/mode_drive_park/io_types.hpp
+deployments:
+- process: external.vehicle_mcu
+  compute_domain: external
+  provides:
+  - services.semantic.VehicleBus
+  requires:
+  - services.semantic.Trajectory
+- process: adapter.vehicle_can_gateway
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.Perception_In_St
+  - services.semantic.Trajectory
+  - services.semantic.EgoMotion
+  requires:
+  - services.semantic.ParkingTrajectory
+  - services.semantic.Trajectory
+  - services.semantic.VehicleMode
+  - services.semantic.VehicleBus
+- process: perception.fcm
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.Perception_MESSAGE_Out_St
+  requires:
+  - services.semantic.Perception_In_St
+- process: perception.surround
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.SurroundWorld
+  requires:
+  - services.semantic.EgoMotion
+- process: planning.driving
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.Trajectory
+  requires:
+  - services.semantic.EgoMotion
+  - services.semantic.VehicleMode
+  - services.semantic.SurroundWorld
+  - services.semantic.Perception_MESSAGE_Out_St
+- process: planning.parking
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.ParkingTrajectory
+  requires:
+  - services.semantic.EgoMotion
+  - services.semantic.SurroundWorld
+  - services.semantic.VehicleMode
+- process: mode.drive_park
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.VehicleMode
+  requires:
+  - services.semantic.EgoMotion
+bindings:
+- module: adapter.vehicle_can_gateway
+  inputs:
+  - service: semantic.VehicleBus
+    type: VehicleBus
+  - service: semantic.Trajectory
+    type: Trajectory
+  - service: semantic.VehicleMode
+    type: VehicleMode
+  - service: semantic.ParkingTrajectory
+    type: ParkingTrajectory
+  outputs:
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  - service: semantic.Perception_In_St
+    type: Perception_In_St
+  - service: semantic.Trajectory
+    type: Trajectory
+- module: perception.fcm
+  inputs:
+  - service: semantic.Perception_In_St
+    type: Perception_In_St
+  outputs:
+  - service: semantic.Perception_MESSAGE_Out_St
+    type: Perception_MESSAGE_Out_St
+- module: perception.surround
+  inputs:
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  outputs:
+  - service: semantic.SurroundWorld
+    type: SurroundWorld
+- module: planning.driving
+  inputs:
+  - service: semantic.Perception_MESSAGE_Out_St
+    type: Perception_MESSAGE_Out_St
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  - service: semantic.VehicleMode
+    type: VehicleMode
+  - service: semantic.SurroundWorld
+    type: SurroundWorld
+  outputs:
+  - service: semantic.Trajectory
+    type: Trajectory
+- module: planning.parking
+  inputs:
+  - service: semantic.SurroundWorld
+    type: SurroundWorld
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  - service: semantic.VehicleMode
+    type: VehicleMode
+  outputs:
+  - service: semantic.ParkingTrajectory
+    type: ParkingTrajectory
+- module: mode.drive_park
+  inputs:
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  outputs:
+  - service: semantic.VehicleMode
+    type: VehicleMode
+dataflows:
+- from: external.vehicle_mcu
+  service: services.semantic.VehicleBus
+  to: adapter.vehicle_can_gateway
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.Perception_In_St
+  to: perception.fcm
+- from: perception.fcm
+  service: services.semantic.Perception_MESSAGE_Out_St
+  to: planning.driving
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: planning.driving
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: mode.drive_park
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: perception.surround
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: planning.parking
+- from: mode.drive_park
+  service: services.semantic.VehicleMode
+  to: adapter.vehicle_can_gateway
+- from: mode.drive_park
+  service: services.semantic.VehicleMode
+  to: planning.driving
+- from: mode.drive_park
+  service: services.semantic.VehicleMode
+  to: planning.parking
+- from: perception.surround
+  service: services.semantic.SurroundWorld
+  to: planning.driving
+- from: perception.surround
+  service: services.semantic.SurroundWorld
+  to: planning.parking
+- from: planning.driving
+  service: services.semantic.Trajectory
+  to: adapter.vehicle_can_gateway
+- from: planning.parking
+  service: services.semantic.ParkingTrajectory
+  to: adapter.vehicle_can_gateway
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.Trajectory
+  to: external.vehicle_mcu
+channel_flows:
+- from: host.frame_ingest
+  to: perception.fcm
+  kind: gf_channel
+  slot: gf.channel.front
+- from: host.frame_ingest
+  to: perception.surround
+  kind: gf_channel
+  slot: gf.channel.fl
+- from: host.frame_ingest
+  to: perception.surround
+  kind: gf_channel
+  slot: gf.channel.fr
+- from: host.frame_ingest
+  to: perception.surround
+  kind: gf_channel
+  slot: gf.channel.rl
+- from: host.frame_ingest
+  to: perception.surround
+  kind: gf_channel
+  slot: gf.channel.rr
+canvas:
+  nodes:
+    host.frame_ingest:
+      kind: frame_ingest
+      label: frame_ingest
+      x: 12130.6
+      y: -759.3
+      out_side: right
+      in_side: left
+      port_slot_order:
+        right:
+        - out:gf.channel.front
+        left:
+        - out:gf.channel.fl
+        - out:gf.channel.fr
+        - out:gf.channel.rl
+        - out:gf.channel.rr
+      port_sides:
+        out:gf.channel.fl: left
+        out:gf.channel.fr: left
+        out:gf.channel.rl: left
+        out:gf.channel.rr: left
+    external.vehicle_mcu: {}
+    adapter.vehicle_can_gateway:
+      x: 11203.8
+      y: -143.2
+      out_side: right
+      in_side: left
+      port_sides:
+        out:EgoMotion: right
+        in:ParkingTrajectory: right
+        in:VehicleMode: bottom
+        in:Trajectory: bottom
+        in:VehicleBus: top
+      port_slot_order:
+        bottom:
+        - in:Trajectory
+        - in:VehicleMode
+        top:
+        - in:VehicleBus
+        right:
+        - out:Perception_In_St
+        - out:Trajectory
+        - out:EgoMotion
+        - in:ParkingTrajectory
+    perception.fcm:
+      x: 12363.5
+      y: -343.3
+      out_side: right
+      in_side: left
+      port_sides:
+        in:gf.channel.front: top
+        out:Perception_MESSAGE_Out_St: bottom
+      port_slot_order:
+        left:
+        - in:Perception_In_St
+        bottom:
+        - out:Perception_MESSAGE_Out_St
+        top:
+        - in:gf.channel.front
+    perception.surround:
+      x: 11807.8
+      y: -508.2
+      out_side: right
+      in_side: left
+      port_sides:
+        in:gf.channel.fl: top
+        in:gf.channel.fr: top
+        in:gf.channel.rl: top
+        in:gf.channel.rr: top
+        out:SurroundWorld: bottom
+      port_slot_order:
+        left:
+        - in:EgoMotion
+        bottom:
+        - out:SurroundWorld
+        top:
+        - in:gf.channel.fl
+        - in:gf.channel.fr
+        - in:gf.channel.rl
+        - in:gf.channel.rr
+    planning.driving:
+      x: 12263.1
+      y: 66.7
+      out_side: right
+      in_side: left
+      port_sides:
+        in:Perception_MESSAGE_Out_St: top
+        in:SurroundWorld: top
+        out:Trajectory: bottom
+      port_slot_order:
+        left:
+        - in:EgoMotion
+        - in:VehicleMode
+        bottom:
+        - out:Trajectory
+        top:
+        - in:SurroundWorld
+        - in:Perception_MESSAGE_Out_St
+    planning.parking:
+      x: 11878.3
+      y: -155.7
+      out_side: right
+      in_side: left
+      port_sides:
+        out:ParkingTrajectory: left
+        in:SurroundWorld: top
+        in:VehicleMode: bottom
+        in:EgoMotion: left
+      port_slot_order:
+        left:
+        - in:EgoMotion
+        - out:ParkingTrajectory
+        bottom:
+        - in:VehicleMode
+        top:
+        - in:SurroundWorld
+    mode.drive_park:
+      x: 11957.0
+      y: 432.2
+      out_side: right
+      in_side: left
+      port_sides:
+        out:VehicleMode: top
+        in:EgoMotion: left
+      port_slot_order:
+        left:
+        - in:EgoMotion
+        top:
+        - out:VehicleMode

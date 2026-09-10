@@ -46,7 +46,7 @@
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| R2.1 | compose 产出 SKU cmake | `python -m gf_codegen.compose --project projects/afc/project.yaml` → `generated/gf_build.cmake` 含 `GF_WITH_*` / `GF_APPS` | □ | □ | □ | |
+| R2.1 | compose 产出 SKU cmake | `python -m gf_codegen.compose --project projects/afc/giraffe.yaml` → `generated/gf_build.cmake` 含 `GF_WITH_*` / `GF_APPS` | □ | □ | □ | |
 | R2.2 | GfModules 消费 | 存在 `cmake/GfModules.cmake`；configure 日志出现 binding/app | □ | □ | □ | |
 | R2.3 | desktop_default | `-DGF_SKU_CMAKE=cmake/profiles/desktop_default.cmake` | □ | □ | □ | |
 | R2.4 | desktop_minimal | 低配仅 demo；缺模块 STATUS skip 不炸 | □ | □ | □ | |
@@ -55,7 +55,7 @@
 **命令备忘：**
 
 ```bash
-python -m gf_codegen.compose --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 # 查看：projects/afc/generated/gf_build.cmake
 ```
 
@@ -119,7 +119,7 @@ python -m gf_codegen.compose --project projects/afc/project.yaml
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
 | R7.1 | 一键 smoke | `pytest tools/gmt/tests -q` + `GMT architect lineage --project …` | □ | □ | □ | 原 `smoke_ta.sh` 已删 |
-| R7.2 | architect lineage | `GMT architect lineage --project projects/afc/project.yaml` → PASS | □ | □ | □ | |
+| R7.2 | architect lineage | `GMT architect lineage --project projects/afc/giraffe.yaml` → PASS | □ | □ | □ | |
 | R7.3 | architect dag | `GMT architect dag --project …` 输出 nodes/edges JSON | □ | □ | □ | |
 | R7.4 | measure export | `GMT measure export --in tools/gmt/fixtures/session_stub.jsonl --out /tmp/x.mcap`；文件以 `\x89MCAP0` 开头 | □ | □ | □ | |
 | R7.5 | ARXML import | `gf-codegen import arxml tools/gf-codegen/schemas/examples/oem/demo_faracon_subset.arxml` → candidates 含 EgoMotion | □ | □ | □ | |
@@ -152,7 +152,7 @@ pip install -e "tools/gf-codegen[dev]" -e "tools/gmt[dev]"
 bash projects/afc/scripts/verify/smoke_doip_ota.sh
 bash scripts/smoke_bd_cyclone.sh
 bash projects/adc/scripts/verify/smoke_mcu_desktop.sh
-GMT architect lineage --project projects/afc/project.yaml
+GMT architect lineage --project projects/afc/giraffe.yaml
 
 pytest tools/gf-codegen/tests tools/gmt/tests -q
 ```

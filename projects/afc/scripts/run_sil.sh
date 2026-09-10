@@ -77,7 +77,7 @@ export GF_RUNTIME_DIR="${RUNTIME}"
 export GF_PROJECT_DIR="${PROJECT_DIR}"
 HOST="${GF_WS_HOST:-0.0.0.0}"
 PORT="${GF_WS_PORT:-8765}"
-# Product path: hpp-only (no default GF_PLATFORM_DIR). Smoke may export GF_PLATFORM_DIR explicitly.
+# Product path: hpp-only (no default GF_ARA_CFG_DIR). Smoke may export GF_ARA_CFG_DIR explicitly.
 export LD_LIBRARY_PATH="${RUNTIME}/lib:${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 # COVESA libdlt from in-tree build (not apt)
 _DLT_LIBDIR="${BUILD}/_dep-manifest/dlt-daemon/src/lib"
@@ -495,11 +495,11 @@ EM_BIN="${RUNTIME}/bin/gf_em_daemon"
 export GF_BUILD_DIR="${RUNTIME}"
 IOX_TOML="${RUNTIME}/etc/iox_roudi.toml"
 export GF_IOX_TOML="${IOX_TOML}"
-# Staged platform/ only when GF_STAGE_PLATFORM=1; else unset for hpp-only EM.
-if [[ -d "${RUNTIME}/platform" ]]; then
-  export GF_PLATFORM_DIR="${RUNTIME}/platform"
+# If runtime/gf_ara_cfg exists (manual copy), set GF_ARA_CFG_DIR; else hpp-only EM.
+if [[ -d "${RUNTIME}/gf_ara_cfg" ]]; then
+  export GF_ARA_CFG_DIR="${RUNTIME}/gf_ara_cfg"
 else
-  unset GF_PLATFORM_DIR || true
+  unset GF_ARA_CFG_DIR || true
 fi
 export GF_RUNTIME_DIR="${RUNTIME}"
 export LD_LIBRARY_PATH="${RUNTIME}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
@@ -582,10 +582,10 @@ host_info() {
   echo "${line}"
   if [[ "${DLT_ON}" == "1" && -x "${GF_DLT_LOG}" && -n "${DLT_PID:-}" ]] && kill -0 "${DLT_PID}" 2>/dev/null; then
     if command -v timeout >/dev/null 2>&1; then
-      timeout 0.8 env GF_DLT_APP_ID=HOST GF_PLATFORM_DIR="${GF_PLATFORM_DIR}" \
+      timeout 0.8 env GF_DLT_APP_ID=HOST GF_ARA_CFG_DIR="${GF_ARA_CFG_DIR}" \
         "${GF_DLT_LOG}" -a HOST -c host "${msg}" >/dev/null 2>&1 || true
     else
-      GF_DLT_APP_ID=HOST GF_PLATFORM_DIR="${GF_PLATFORM_DIR}" \
+      GF_DLT_APP_ID=HOST GF_ARA_CFG_DIR="${GF_ARA_CFG_DIR}" \
         "${GF_DLT_LOG}" -a HOST -c host "${msg}" >/dev/null 2>&1 &
     fi
   fi
@@ -622,7 +622,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR:-(hpp-only)} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
+echo "${TAG} run_sil: ara_cfg=${GF_ARA_CFG_DIR:-(hpp-only)} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
 
 # =============================================================================
 # --- EM (entry) -----------------------------------------------------------------
@@ -634,7 +634,7 @@ echo "${TAG} run_sil: platform=${GF_PLATFORM_DIR:-(hpp-only)} live=${LIVE_ON} in
 DLT_PID=""
 ROUDI_PID=""
 EM_PID=""
-host_info "run_sil begin platform=${GF_PLATFORM_DIR:-(hpp-only)} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
+host_info "run_sil begin ara_cfg=${GF_ARA_CFG_DIR:-(hpp-only)} live=${LIVE_ON} inject=${INJECT_MODE} doip=${DOIP_ON}:${DOIP_PORT} em=${EM_ON}"
 
 # Stale dlt/RouDi + IPC reclaim is inside EM StartAll (before Spawn host.*).
 
@@ -646,8 +646,8 @@ _EM_ARGS=(
   --build-dir "${RUNTIME}"
   --deadline-ms 0
 )
-if [[ -n "${GF_PLATFORM_DIR:-}" && -d "${GF_PLATFORM_DIR}" ]]; then
-  _EM_ARGS+=(--platform "${GF_PLATFORM_DIR}")
+if [[ -n "${GF_ARA_CFG_DIR:-}" && -d "${GF_ARA_CFG_DIR}" ]]; then
+  _EM_ARGS+=(--ara-cfg "${GF_ARA_CFG_DIR}")
 fi
 # Inherit console: EM + children stdout/stderr on this TTY; structured logs → DLT.
 "${EM_BIN}" "${_EM_ARGS[@]}" &

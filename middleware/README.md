@@ -20,7 +20,9 @@ Board-deployable SOA packages (`gf_ara::*`) — the last mile after the bench (v
 | per | [per](per/) | 持久化 KV stub（可裁剪） |
 | tsync | [tsync](tsync/) | 时间同步骨架（可裁剪；Modules 环内） |
 
-启动（systemd/init 或 `run_sil`）：只起 **EM** → 可选 daemons（dlt?/RouDi?/…）+ SOA apps。详见 [Giraffe_Modules](../gallery/Giraffe_Modules/README.md) · [DLT_PLAN](../docs/zh/operations/DLT_PLAN.md)。
+启动（systemd/init 或 `run_sil`）：只起 **EM** → 可选 daemons（dlt?/RouDi?/…）+ SOA apps。  
+**sm 不是开机入口**——各 App runtime bring-up / PHM / UCM 调用 `StateClient`（FG：Off/Running/Updating）。  
+详见 [Giraffe_Modules](../gallery/Giraffe_Modules/README.md) · [sm/README](sm/README.md) · [DLT_PLAN](../docs/zh/operations/DLT_PLAN.md)。
 
 另有： [core](core/) · [bindings/](bindings/) · [hal](hal/) · [trace](trace/)（偏 debug-path）· [third_party/](third_party/)。
 

@@ -20,8 +20,10 @@ bash projects/afc/scripts/run_sil.sh
 
 ## 配置
 
-- `req.yaml`（含 `frame_ingest` / `observability` / `publish_policy`）— **用 gf-config 编辑**
-- `integration/wiring.yaml` / `platform/*`
+- `giraffe.yaml` — 工程入口索引
+- `cfg/req.yaml`（含 `frame_ingest` / `observability` / `publish_policy`）— **用 gf-config 编辑**
+- `cfg/wiring.yaml` / `cfg/gf_ara_cfg/*`
+- 布局说明：[CFG_LAYOUT.md](../CFG_LAYOUT.md)
 - CARLA 联仿：板端 `apps/carla_io`（`gf_carla_io`）；上位机 `carla_scenarios/giraffe_client`
 
 ## Verify
@@ -34,7 +36,7 @@ bash projects/afc/scripts/run_sil.sh
 
 ```bash
 # gf-config 保存后，或：
-python -m gf_codegen.compose --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 # 可选写入 golden：
 GF_FUSA_PACK_UPDATE_GOLDEN=1 bash projects/afc/scripts/generate_fusa_artifacts.sh
 ```

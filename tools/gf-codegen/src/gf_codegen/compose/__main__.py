@@ -2,9 +2,9 @@
 
 Usage (repo root, venv active):
 
-  python -m gf_codegen.compose --project projects/afc/project.yaml
+  python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 
-Authors should prefer gf-config: Save → auto compose; Generate (Ctrl+G) for C++ APIs.
+Authors should prefer gf-config: Save → Verify; Generate (Ctrl+G) for C++ APIs.
 """
 
 from __future__ import annotations

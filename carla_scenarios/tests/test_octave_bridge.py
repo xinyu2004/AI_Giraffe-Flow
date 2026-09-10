@@ -283,8 +283,8 @@ def test_stdio_frame_roundtrip() -> None:
 def test_ipc_order_auto_stdio_then_file() -> None:
     from octave_bridge.runtime import ipc_order
 
-    assert ipc_order("auto", "win32") == ["stdio", "file"]
-    assert ipc_order("auto", "linux") == ["stdio", "file"]
+    assert ipc_order("auto", "win32") == ["stdio"]
+    assert ipc_order("auto", "linux") == ["stdio"]
     assert ipc_order("pipe", "win32") == ["pipe"]
     assert ipc_order("file", "linux") == ["file"]
     assert ipc_order("tcp", "win32") == ["tcp"]

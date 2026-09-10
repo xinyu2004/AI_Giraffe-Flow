@@ -1,4 +1,4 @@
-"""Load platform/*.yaml, validate process refs, merge into SOR platform_manifest."""
+"""Load cfg/gf_ara_cfg/*.yaml, validate process refs, merge into SOR gf_ara_cfg_manifest."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import yaml
 
 from gf_codegen.compose.load_project import PLATFORM_KEYS, ProjectPaths
 from gf_codegen.compose.mem_budget import estimate_mem_budget
+from gf_codegen.compose.fg_schema import validate_exec_function_groups
 
 # runtime_modules that unlock each platform file
 _MODULE_UNLOCK: dict[str, frozenset[str]] = {
@@ -59,16 +60,29 @@ def is_host_platform_process(name: str) -> bool:
 _is_host_platform_process = is_host_platform_process
 
 
-def _enabled_keys(runtime_modules: list[str], platform_paths: dict[str, Path]) -> list[str]:
+def enabled_platform_keys(
+    runtime_modules: list[str],
+    available_keys: list[str] | tuple[str, ...] | dict[str, Any] | None = None,
+) -> list[str]:
+    """Platform YAML keys unlocked by runtime_modules (order = PLATFORM_KEYS)."""
     mods = {str(m) for m in runtime_modules}
+    if available_keys is None:
+        keys = list(PLATFORM_KEYS)
+    elif isinstance(available_keys, dict):
+        keys = [k for k in PLATFORM_KEYS if k in available_keys]
+    else:
+        avail = set(available_keys)
+        keys = [k for k in PLATFORM_KEYS if k in avail]
     out: list[str] = []
-    for key in PLATFORM_KEYS:
-        if key not in platform_paths:
-            continue
+    for key in keys:
         unlock = _MODULE_UNLOCK.get(key, frozenset())
         if mods & unlock:
             out.append(key)
     return out
+
+
+def _enabled_keys(runtime_modules: list[str], platform_paths: dict[str, Path]) -> list[str]:
+    return enabled_platform_keys(runtime_modules, platform_paths)
 
 
 def validate_platform(
@@ -111,7 +125,7 @@ def validate_platform(
                 )
             fg = str(proc.get("function_group") or "").strip()
             if fg and fg_ids and fg not in fg_ids:
-                warnings.append(f"exec process {name}: unknown function_group {fg}")
+                bad.append(f"exec process {name}: unknown function_group {fg}")
             for dep in proc.get("depends_on") or []:
                 dep_s = str(dep).strip()
                 if (
@@ -120,6 +134,9 @@ def validate_platform(
                     and not _is_host_platform_process(dep_s)
                 ):
                     unknown_deps.append(f"{name} depends_on {dep_s}")
+        fg_errs, fg_warns = validate_exec_function_groups(exec_data)
+        errors.extend(f"platform.exec: {x}" for x in fg_errs)
+        warnings.extend(f"platform.exec: {x}" for x in fg_warns)
         if bad:
             errors.extend(f"platform.exec: {x}" for x in bad)
             checks.append({"id": "platform_exec_processes", "status": "fail", "detail": bad})
@@ -234,7 +251,7 @@ def validate_platform(
     return errors, warnings, checks
 
 
-def build_platform_manifest(loaded: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def build_gf_ara_cfg_manifest(loaded: dict[str, dict[str, Any]]) -> dict[str, Any]:
     manifest: dict[str, Any] = {"schema_version": "0.1"}
     for key in PLATFORM_KEYS:
         if key in loaded:
@@ -253,19 +270,21 @@ def merge_platform(
     wiring: dict[str, Any] | None = None,
 ) -> tuple[list[str], list[str], list[dict[str, Any]]]:
     """
-    Load enabled platform YAMLs into sor['platform_manifest'].
+    Load enabled platform YAMLs into sor['gf_ara_cfg_manifest'].
     Returns (errors, warnings, checks) for lineage.
     """
     errors: list[str] = []
     warnings: list[str] = []
     checks: list[dict[str, Any]] = []
 
-    if not paths.platform:
-        checks.append({"id": "platform_present", "status": "skip", "detail": "no project.platform"})
+    if not paths.gf_ara_cfg:
+        checks.append(
+            {"id": "platform_present", "status": "skip", "detail": "no giraffe.yaml gf_ara_cfg"}
+        )
         return errors, warnings, checks
 
     runtime_modules = [str(x) for x in (req.get("runtime_modules") or [])]
-    enabled = _enabled_keys(runtime_modules, paths.platform)
+    enabled = _enabled_keys(runtime_modules, paths.gf_ara_cfg)
     if not enabled:
         checks.append(
             {
@@ -280,7 +299,7 @@ def merge_platform(
     loaded: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     for key in enabled:
-        path = paths.platform[key]
+        path = paths.gf_ara_cfg[key]
         if not path.is_file():
             missing.append(f"{key}: {path}")
             continue
@@ -304,8 +323,8 @@ def merge_platform(
     checks.extend(v_checks)
 
     if loaded and not missing and not v_err:
-        sor["platform_manifest"] = build_platform_manifest(loaded)
+        sor["gf_ara_cfg_manifest"] = build_gf_ara_cfg_manifest(loaded)
     else:
-        sor.pop("platform_manifest", None)
+        sor.pop("gf_ara_cfg_manifest", None)
 
     return errors, warnings, checks

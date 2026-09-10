@@ -12,9 +12,9 @@ source "${SCRIPT_DIR}/_verify_common.sh"
 gf_project_env
 
 BUILD="${GF_BUILD_DIR:-${BUILD_SIL}}"
-export GF_PLATFORM_DIR="${GF_PLATFORM_DIR:-${PROJECT_DIR}/platform}"
+export GF_ARA_CFG_DIR="${GF_ARA_CFG_DIR:-${PROJECT_DIR}/cfg/gf_ara_cfg}"
 export GF_BUILD_DIR="${BUILD}"
-export GF_EM_LAUNCH="${GF_EM_LAUNCH:-${GF_PLATFORM_DIR}/em_launch.yaml}"
+export GF_EM_LAUNCH="${GF_EM_LAUNCH:-${GF_ARA_CFG_DIR}/em_launch.yaml}"
 export GF_EM_LOG_DIR="${GF_EM_LOG_DIR:-${BUILD}/em_daemon_logs}"
 export GF_PHM_FAULT_MS="${GF_PHM_FAULT_MS:-400}"
 export LD_LIBRARY_PATH="${ROOT}/middleware/.deps-prefix/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
@@ -56,7 +56,7 @@ export GF_IOX_TOML="${IOX_TOML}"
 export GF_EM_EXEC="${GF_EM_EXEC:-${PROJECT_DIR}/generated/exec.yaml}"
 _SRC_LAUNCH="${PROJECT_DIR}/generated/em_launch.yaml"
 if [[ ! -f "${_SRC_LAUNCH}" ]]; then
-  _SRC_LAUNCH="${GF_PLATFORM_DIR}/em_launch.yaml"
+  _SRC_LAUNCH="${GF_ARA_CFG_DIR}/em_launch.yaml"
 fi
 SMOKE_LAUNCH="${GF_EM_LOG_DIR}/em_launch.smoke.yaml"
 python3 - "${_SRC_LAUNCH}" "${SMOKE_LAUNCH}" <<'PY'
@@ -79,7 +79,7 @@ if ! grep -q 'host.iox_roudi' "${GF_EM_LAUNCH}" 2>/dev/null; then
 fi
 GF_EM_DEADLINE_MS="${GF_EM_DEADLINE_MS:-90000}" \
   "${EM}" \
-  --platform "${GF_PLATFORM_DIR}" \
+  --ara-cfg "${GF_ARA_CFG_DIR}" \
   --launch "${GF_EM_LAUNCH}" \
   --build-dir "${BUILD}" \
   --log-dir "${GF_EM_LOG_DIR}" \

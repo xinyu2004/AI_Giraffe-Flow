@@ -25,17 +25,19 @@ from gf_gmt.measure_vcd import export_session_vcd
 
 
 def _resolve_project(project: Path) -> tuple[dict, dict | None, Path | None]:
-    """Return (sor, req, report_path) from project.yaml directory."""
-    proj_dir = project.parent if project.name == "project.yaml" else project
-    if project.suffix in {".yaml", ".yml"} and project.name == "project.yaml":
+    """Return (sor, req, report_path) from giraffe.yaml directory."""
+    proj_dir = project.parent if project.name == "giraffe.yaml" else project
+    if project.suffix in {".yaml", ".yml"} and project.name == "giraffe.yaml":
         proj_dir = project.parent
     sor_path = proj_dir / "gf.sor.json"
-    req_path = proj_dir / "req.yaml"
+    req_path = proj_dir / "cfg" / "req.yaml"
+    if not req_path.is_file():
+        req_path = proj_dir / "req.yaml"
     report = proj_dir / "reports" / "signal_lineage_report.yaml"
     if not sor_path.is_file():
         raise FileNotFoundError(
             f"missing {sor_path}; save in gf-config (auto Compose) or: "
-            f"python -m gf_codegen.compose --project {proj_dir}/project.yaml"
+            f"python -m gf_codegen.compose --project {proj_dir}/giraffe.yaml"
         )
     sor = load_json(sor_path)
     req = load_yaml(req_path) if req_path.is_file() else None
@@ -171,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
         "--project",
         type=Path,
         default=None,
-        help="project dir / project.yaml (loads SOR if present)",
+        help="project dir / giraffe.yaml (loads SOR if present)",
     )
 
     args = parser.parse_args(argv)

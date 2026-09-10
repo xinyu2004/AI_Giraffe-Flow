@@ -60,10 +60,28 @@ def test_emit_deploy_config_hpp_and_tables(tmp_path: Path) -> None:
                 "schema_version": "0.1",
                 "processes": [
                     {
+                        "name": HOST_DLT,
+                        "binary": "bin/dlt-daemon",
+                        "args": [],
+                        "max_restarts": 3,
+                    },
+                    {
+                        "name": HOST_ROUDI,
+                        "binary": "bin/iox-roudi",
+                        "args": ["-c", "$GF_IOX_TOML"],
+                        "max_restarts": 3,
+                    },
+                    {
                         "name": "adapter.vehicle_can_gateway",
                         "binary": "apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway",
                         "args": ["15"],
                         "max_restarts": 2,
+                    },
+                    {
+                        "name": "planning.driving",
+                        "binary": "apps/planning/driving/gf_planning_driving",
+                        "args": ["0"],
+                        "max_restarts": 1,
                     },
                 ],
             }
@@ -74,12 +92,39 @@ def test_emit_deploy_config_hpp_and_tables(tmp_path: Path) -> None:
         yaml.safe_dump(
             {
                 "schema_version": "0.1",
-                "function_groups": [{"id": "MachineFG", "initial": "Running"}],
+                "function_groups": [
+                    {"id": "MachineFG", "kind": "machine", "initial": "Running"},
+                    {
+                        "id": "DriveParkFG",
+                        "kind": "mode",
+                        "initial": "DrivingActive",
+                        "states": ["DrivingActive", "ParkingActive"],
+                    },
+                ],
                 "processes": [
+                    {
+                        "name": HOST_DLT,
+                        "function_group": "MachineFG",
+                        "depends_on": [],
+                        "execution_client": False,
+                    },
+                    {
+                        "name": HOST_ROUDI,
+                        "function_group": "MachineFG",
+                        "depends_on": [HOST_DLT],
+                        "execution_client": False,
+                    },
                     {
                         "name": "adapter.vehicle_can_gateway",
                         "function_group": "MachineFG",
-                        "depends_on": [],
+                        "depends_on": [HOST_ROUDI],
+                        "execution_client": True,
+                    },
+                    {
+                        "name": "planning.driving",
+                        "function_group": "DriveParkFG",
+                        "active_in": ["DrivingActive"],
+                        "depends_on": [HOST_ROUDI],
                         "execution_client": True,
                     },
                 ],
@@ -133,6 +178,10 @@ def test_emit_deploy_config_hpp_and_tables(tmp_path: Path) -> None:
     assert "adapter.vehicle_can_gateway" in hpp
     assert "bool restart_enabled" in hpp
     assert ", true, 2u" in hpp
+    assert "FgKind::kMode" in hpp
+    assert "kFunctionGroups[]" in hpp
+    assert "kActiveIn_planning_driving" in hpp
+    assert "DrivingActive" in hpp
     # Human dumps still written
     assert Path(meta["em_launch"]).is_file()
     assert Path(meta["exec"]).is_file()
@@ -208,7 +257,8 @@ def test_emit_product_em_filters_dlt(tmp_path: Path) -> None:
     assert HOST_DLT not in (roudi.get("depends_on") or [])
 
 
-def test_emit_product_em_includes_frame_ingest(tmp_path: Path) -> None:
+def test_emit_product_em_does_not_invent_frame_ingest(tmp_path: Path) -> None:
+    """Capability on but host absent in authored YAML → emit must not invent the row."""
     plat = tmp_path / "platform"
     plat.mkdir()
     (plat / "em_launch.yaml").write_text(
@@ -262,10 +312,9 @@ def test_emit_product_em_includes_frame_ingest(tmp_path: Path) -> None:
     )
     launch = yaml.safe_load(Path(meta["em_launch"]).read_text(encoding="utf-8"))
     names = [p["name"] for p in launch["processes"]]
-    assert HOST_FRAME_INGEST in names
-    assert names.index(HOST_FRAME_INGEST) < names.index("adapter.vehicle_can_gateway")
-    fi = next(p for p in launch["processes"] if p["name"] == HOST_FRAME_INGEST)
-    assert fi["binary"] == "bin/gf_frame_ingest"
+    assert HOST_FRAME_INGEST not in names
     exec_doc = yaml.safe_load(Path(meta["exec"]).read_text(encoding="utf-8"))
+    assert HOST_FRAME_INGEST not in [p["name"] for p in exec_doc["processes"]]
     fcm = next(p for p in exec_doc["processes"] if p["name"] == "perception.fcm")
+    # depends_on overlay may still reference the host when capability is on
     assert HOST_FRAME_INGEST in (fcm.get("depends_on") or [])

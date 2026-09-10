@@ -2,30 +2,30 @@
 
 **English:** [README.md](README.md)
 
-PySide6 工具：按 **SKU** 编辑 `req.yaml`，用 **类 Simulink 信号图** 编辑 `wiring.yaml`，一键 `compose` + lineage。
+PySide6 工具：按 **SKU** 编辑 `cfg/req.yaml`，用 **类 Simulink 信号图** 编辑 `cfg/wiring.yaml`，页 2 编辑 `cfg/gf_ara_cfg/*`，一键 `compose` + lineage。
 
 > **流程：** 改页 1/2 → **Ctrl+S 保存**（只写盘）→ **Verify（Ctrl+R）** 合成 SOR + lineage + `generated/*.hpp`（行为冻结）→ 需要 Proxy/Skeleton 时再 **Generate（Ctrl+G）**。  
 > **作者态到此结束。** 之后才是 `compile_sil` / `run_sil`（**不再**自动 compose）。  
-> CI / 无界面：`python -m gf_codegen.compose --project …`；代码生成仍用 `gf-codegen generate`。  
-> 边界：`gf-config` = 唯一作者 GUI · `gf-codegen` = lint / generate / import · GMT = 只读 CI + 度量
+> CI / 无界面：`python -m gf_codegen.compose --project projects/afc/giraffe.yaml`；代码生成仍用 `gf-codegen generate`。  
+> 边界：`gf-config` = 唯一作者 GUI · `gf-codegen` = lint / generate / import · GMT = 只读 CI + 度量  
+> 布局说明：[projects/CFG_LAYOUT.md](../../projects/CFG_LAYOUT.md)
 
 ## `req.yaml` 与 `wiring.yaml`
 
-| | **req.yaml** | **wiring.yaml** |
-|--|--------------|-----------------|
-| **一句话** | 这辆车 / 这个 SKU **要什么、裁什么、验什么** | 进程 **怎么连、谁提供谁订阅** |
-| **谁改** | 页 1 薄 SKU + 页 2 `runtime_modules` | 页 1 画布 |
-| **典型内容** | `variant` / `topology` / `product` · `capabilities` · `runtime_modules` · `bindings` · `observability` · `apps` · `acceptance` | `modules`（hpp）· `deployments`（provides/requires）· `dataflows` · `bindings`（模块 IO） |
-| **进流水线** | `merge_req` → SOR 产品变体 + lineage 门禁 | `apply_wiring` → SOR deployments / dataflows / types |
-| **不写什么** | 不写具体 from→to 边 | 不写「要不要编进 com/phm」这类 SKU 裁剪 |
+| | **cfg/req.yaml** | **cfg/wiring.yaml** | **cfg/gf_ara_cfg/** |
+|--|--------------|-----------------|---------------------|
+| **一句话** | SKU **要什么、裁什么、验什么** | 进程 **怎么连** | 中间件 **怎么跑** |
+| **谁改** | 页 1 薄 SKU + 页 2 `runtime_modules` | 页 1 画布 | 页 2 子页 |
+| **入口索引** | `giraffe.yaml` → `delivery.req` | `integration.wiring` | `gf_ara_cfg:*` |
 
 ```text
-req.yaml（SKU 契约） ──┐
-                       ├── gf-config 保存 → compose → gf.sor.json → Generate / lineage
-wiring.yaml（集成连线）─┘
+giraffe.yaml（索引）
+  cfg/req.yaml ──┐
+  cfg/wiring.yaml ├── gf-config 保存 → Verify(compose) → gf.sor.json / generated/*.hpp
+  cfg/gf_ara_cfg/* ─┘
 ```
 
-**口诀：** req = 要什么、裁多深、验哪些服务；wiring = 谁跟谁说话。
+**口诀：** req = 要什么；wiring = 谁跟谁说话；gf_ara_cfg = ARA/中间件运行时。
 
 ## 安装
 
@@ -39,7 +39,8 @@ pip install -e tools/gf-config
 ## 启动
 
 ```bash
-gf-config projects/afc/project.yaml
+gf-config projects/afc/giraffe.yaml
+# 文件 → 新建 Giraffe 工程… 可 scaffold 最小 cfg/ 树
 ```
 
 ## 页签（P3 两页）
@@ -67,11 +68,11 @@ gf-config projects/afc/project.yaml
 
 ### 页 2 · 有界内存（`bounds.yaml` + BL-MEM-BOUND / BL-MEM-ROUDI）
 
-- 跨模块硬上限：DLT contexts · LoopbackBus · per KV · DoIP rx · DID map · 可选 budget。
+- 按模块分段：未勾选的 runtime_modules / 未开 iceoryx 时对应段隐藏且不计入预估。
 - **iceoryx / RouDi**：`mgmt`（→ `IOX_MAX_*`，改后须 rebuild iceoryx）+ `mempools`（→ `generated/iox_roudi.toml`）。
-- `req.bindings` 含 iceoryx 时 SIL 自动起 RouDi（配置驱动）。
-- 关联写回：`log.file_max_bytes`、`collector.local.*`、`diag.doip.rx_max_bytes`。
-- **只读预估**含 RAM/DISK/SHM 公式行；见 `gf_codegen.compose.mem_budget` FORMULAS。
+- `req.bindings` 含 iceoryx 时由 EM 拉起 RouDi（platform daemon）。
+- 磁盘/环容量在本页**不再双写**：`log.file_max_bytes` 在「日志」页，`collector.local.*` 在「事件收集」页；`diag.doip.rx_max_bytes` 与 bounds·diag 同步。
+- **只读预估**含 RAM/DISK（及 iceoryx 开启时的 SHM）公式行；见 `gf_codegen.compose.mem_budget` FORMULAS。
 
 ## 页 1 画布日常四步
 
@@ -93,7 +94,7 @@ gf-config projects/afc/project.yaml
 - [x] 打开 `afc` 可见带端口的连线图  
 - [x] 右键增删节点 / 拖线 / Save 写回 `wiring.yaml`  
 - [x] 页 1 薄 SKU + 页 2 runtime_modules / platform 可写回  
-- [x] 页 2「EM 启动表」读写 `platform/em_launch.yaml`（勾选 `exec` 后出现）  
+- [x] 页 2「EM 启动表」读写 `cfg/gf_ara_cfg/em_launch.yaml`（勾选 `exec` 后出现）  
 - [x] Verify 后右侧 Lineage 红绿显示检查项（含 `platform_em_launch`）  
 - [x] 日志表：行号选中 + 重复 context id Verify 失败  
 - [x] 撤销/重做跳转到对应页（含平台子页）  

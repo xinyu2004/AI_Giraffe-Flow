@@ -47,12 +47,12 @@
 | 交付 | 现状 | P2 态度 |
 |------|------|---------|
 | gf-config B + Verify/MCU | ✅ 可用 | **W1–W2 主攻**：A 瘦身 + **C·平台** + compose 读 platform |
-| platform/*.yaml 空壳 | ✅ 已落 | compose 校验 + C 页编辑 |
+| cfg/gf_ara_cfg/*.yaml 空壳 | ✅ 已落 | compose 校验 + C 页编辑 |
 | W0 粗端口 wiring（无 FAPA） | ✅ 基线 | Cfg 之后 R 轨按此跑 SIL |
 | iceoryx 双进程 | ✅ 真跑 | 扩展为 **多进程主链** |
 | Proxy/Skeleton generate | ✅ 头文件 | **主链 App 全部接入** |
 | exec / phm | 单测 smoke | **platform 配置 + 挂主链监督** |
-| diag DoIP | API stub | **platform/diag.yaml 最小表**；真台架 → P3 |
+| diag DoIP | API stub | **cfg/gf_ara_cfg/diag.yaml 最小表**；真台架 → P3 |
 | CycloneDDS | offline stub | **真源码收发 demo（B）** |
 | GMT MCAP | fixture 雏形 | **真实 session + Tag 窗**；Foxglove MVP |
 | DEM | — | **不做** |
@@ -92,7 +92,7 @@ flowchart TD
 |------|------|------|--------|
 | 0 | **R0** | req/wiring/acceptance 与粗端口一致；lineage 绿 | 必做 · 很快 |
 | 1 | **Cfg** | **gf-config 定型**：A 瘦身 · B 巩固 · **C·平台五子页** · 菜单已齐 | **最先主轨** |
-| 2 | **P** | compose 读 `project.platform` → 校验 → `platform_manifest`；（可选）generate 常量表 | 紧随 Cfg |
+| 2 | **P** | compose 读 `giraffe.yaml gf_ara_cfg` → 校验 → `gf_ara_cfg_manifest`；（可选）generate 常量表 | 紧随 Cfg |
 | 3 | **R** | 多进程 App + smoke_sil_verify | 配置闭环后 |
 | 4 | **X** | 读 platform → Running + Alive；故障注入 1 例 | 随 R |
 | 5 | **O** | Record + Tag + MCAP | 并行加深 |
@@ -143,9 +143,9 @@ flowchart TD
 
 | # | 交付物 |
 |---|--------|
-| P-1 | compose 读 `project.yaml` → `platform:` 路径 |
+| P-1 | compose 读 `giraffe.yaml` → `gf_ara_cfg:` 路径 |
 | P-2 | 校验：exec/phm 的 process ∈ wiring（非 external）→ 失败非 0、信息可读 |
-| P-3 | 写入 SOR `platform_manifest`（或旁路 JSON） |
+| P-3 | 写入 SOR `gf_ara_cfg_manifest`（或旁路 JSON） |
 | P-4 | （可选）generate 常量表供运行时加载 |
 | P-5 | Verify（Ctrl+R）跑通含 platform 的检查 |
 
@@ -199,8 +199,8 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 
 | # | 交付物 |
 |---|--------|
-| X-1 | Offer→Running（读 `platform/exec.yaml`） |
-| X-2 | 1～2 进程 Alive（读 `platform/phm.yaml`） |
+| X-1 | Offer→Running（读 `cfg/gf_ara_cfg/exec.yaml`） |
+| X-2 | 1～2 进程 Alive（读 `cfg/gf_ara_cfg/phm.yaml`） |
 | X-3 | 故障注入 1 例 |
 | X-4 | 与 OTA Pause 关系文档 |
 
@@ -271,8 +271,8 @@ MCU/车身(可 sim) ──VehicleBus──► gateway ──fat outs──► fc
 | **W5** | **F** + **G** 收口（可压缩进 W4 末） | **可演示收口** |
 
 ```bash
-gf-config projects/afc/project.yaml   # 先把 A/B/C 配稳
-python -m gf_codegen.compose --project projects/afc/project.yaml
+gf-config projects/afc/giraffe.yaml   # 先把 A/B/C 配稳
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 bash projects/afc/scripts/verify/smoke_sil_verify.sh
 ```
 
@@ -292,7 +292,7 @@ bash projects/afc/scripts/verify/smoke_sil_verify.sh
 ## 15. 开工检查清单（按你的优先级）
 
 - [x] D1–D6 / MIDDLEWARE_CONFIG_PLAN 拍板
-- [x] `platform/*.yaml` 空壳 + `project.yaml` 索引
+- [x] `cfg/gf_ara_cfg/*.yaml` 空壳 + `giraffe.yaml` 索引
 - [ ] **W1：Cfg — A 瘦身 + C·平台页（读/写五文件）**
 - [ ] W2：compose/Verify 吃 platform
 - [ ] 其后：R App 目录落点 + smoke

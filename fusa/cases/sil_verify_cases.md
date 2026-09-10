@@ -61,8 +61,9 @@
 ### SIL-SM-01 — PHM miss → SM health_fault（notify_sm）+ 共享 Collector
 - 类别: fusa
 - 脚本: `projects/afc/scripts/verify/smoke_sil_sm_fg.sh`
-- 环境: `GF_PHM_FAULT_TARGET=uss` · `GF_SM_ENTER_UPDATING_ON_FAULT=1` · `GF_COLLECTOR_STORE=…/runtime/collector/events.ndjson`
-- 期望: `uss.log` 含 PHM miss · `sm: health_fault` · `collector: event` ·（可选）Updating/paused；`gateway.log` 仍有 Trajectory；共享 store 含 miss 事件
+- 环境: `GF_PHM_FAULT_MS` · `GF_SM_ENTER_UPDATING_ON_FAULT=1` · `GF_COLLECTOR_STORE`；目标进程 fcm（`notify_sm`）
+- 期望: `fcm_sm_fg.log` 含 miss · `sm: health_fault` · Updating/paused · `collector: event`；共享 store 含 phm miss
+- 说明: AFC 无 USS；本脚本**不**与主链 Trajectory 同跑（Updating pause FCM）。Trajectory 隔离见 `smoke_sil_phm_fault`
 - 状态: active
 - SG: SG-03 · SG-04（跨进程 store）
 
@@ -92,7 +93,7 @@
 - 类别: fusa
 - 库级: `ctest -R gf_em_daemon_smoke`（EMD-01…04）；进程原语 `ctest -R gf_osal_process_smoke`
 - SIL: `projects/afc/scripts/verify/smoke_sil_em_daemon.sh`
-- 配置: `platform/em_launch.yaml` + `phm.yaml`（planning → `restart`）
+- 配置: `cfg/gf_ara_cfg/em_launch.yaml` + `phm.yaml`（planning → `restart`）
 - 期望: daemon 日志 `relaunch name=planning.driving`；子进程 `em os_restart_exit`；gateway 仍收到 Trajectory
 - 机制: 子进程 exit **75** → `waitpid` → `fork/exec`；relaunch 时清 `GF_PHM_FAULT_MS`
 - 状态: active

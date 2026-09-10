@@ -7,9 +7,40 @@ from typing import Any
 
 import yaml
 
+from gf_codegen.compose.fg_schema import (
+    normalize_exec_process,
+    normalize_function_groups,
+)
+
 HOST_DLT = "host.dlt_daemon"
 HOST_ROUDI = "host.iox_roudi"
 HOST_FRAME_INGEST = "host.frame_ingest"
+
+# Stable EM bring-up order when capabilities are on.
+HOST_PLATFORM_ORDER = (HOST_DLT, HOST_ROUDI, HOST_FRAME_INGEST)
+
+HOST_DEFAULT_BINARY = {
+    HOST_DLT: "bin/dlt-daemon",
+    HOST_ROUDI: "bin/iox-roudi",
+    HOST_FRAME_INGEST: "bin/gf_frame_ingest",
+}
+
+
+def gated_host_processes(
+    *,
+    k_dlt: bool,
+    k_roudi: bool,
+    k_frame_ingest: bool = False,
+) -> list[str]:
+    """Platform daemons allowed in exec/EM for the current capability flags."""
+    out: list[str] = []
+    if k_dlt:
+        out.append(HOST_DLT)
+    if k_roudi:
+        out.append(HOST_ROUDI)
+    if k_frame_ingest:
+        out.append(HOST_FRAME_INGEST)
+    return out
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -30,7 +61,7 @@ def _filter_depends(deps: list[Any], drop: set[str]) -> list[str]:
 
 
 def build_product_em_tables(
-    platform_dir: Path,
+    ara_cfg_dir: Path,
     *,
     k_dlt: bool,
     k_roudi: bool,
@@ -38,8 +69,8 @@ def build_product_em_tables(
     gateway_forever: bool = True,
 ) -> dict[str, Any]:
     """Build frozen launch/exec tables (no I/O). Used by deploy_config.hpp + YAML dumps."""
-    launch = _load_yaml(platform_dir / "em_launch.yaml")
-    exec_doc = _load_yaml(platform_dir / "exec.yaml")
+    launch = _load_yaml(ara_cfg_dir / "em_launch.yaml")
+    exec_doc = _load_yaml(ara_cfg_dir / "exec.yaml")
 
     drop: set[str] = set()
     if not k_dlt:
@@ -65,47 +96,8 @@ def build_product_em_tables(
             entry["args"] = ["-c", "$GF_IOX_TOML"]
         procs_out.append(entry)
 
-    names = {str(p.get("name")) for p in procs_out}
-    if k_dlt and HOST_DLT not in names:
-        procs_out.insert(
-            0,
-            {
-                "name": HOST_DLT,
-                "binary": "bin/dlt-daemon",
-                "args": [],
-                "max_restarts": 3,
-            },
-        )
-    if k_roudi and HOST_ROUDI not in names:
-        idx = 1 if k_dlt else 0
-        procs_out.insert(
-            idx,
-            {
-                "name": HOST_ROUDI,
-                "binary": "bin/iox-roudi",
-                "args": ["-c", "$GF_IOX_TOML"],
-                "max_restarts": 3,
-            },
-        )
-    if k_frame_ingest and HOST_FRAME_INGEST not in names:
-        # After RouDi (or DLT), before SOA apps.
-        idx = 0
-        for i, p in enumerate(procs_out):
-            if str(p.get("name") or "").startswith("adapter.") or str(
-                p.get("name") or ""
-            ).startswith("perception."):
-                idx = i
-                break
-            idx = i + 1
-        procs_out.insert(
-            idx,
-            {
-                "name": HOST_FRAME_INGEST,
-                "binary": "bin/gf_frame_ingest",
-                "args": [],
-                "max_restarts": 3,
-            },
-        )
+    # Authoring truth: do not invent missing host.* rows (gf-config / validate gate).
+    # Capability-off hosts are filtered via `drop` above.
 
     launch_out = {
         "schema_version": str(launch.get("schema_version") or "0.1"),
@@ -121,11 +113,11 @@ def build_product_em_tables(
         name = str(p.get("name") or "").strip()
         if not name or name in drop:
             continue
-        entry = dict(p)
+        entry = normalize_exec_process(dict(p))
         deps = _filter_depends(list(entry.get("depends_on") or []), drop)
         if name.startswith("adapter.") or name.startswith("perception.") or name.startswith(
             "planning."
-        ) or name.startswith("sensing."):
+        ) or name.startswith("sensing.") or name.startswith("mode."):
             if k_roudi and HOST_ROUDI not in deps:
                 deps = [HOST_ROUDI] + deps
             elif k_dlt and HOST_DLT not in deps and not k_roudi:
@@ -139,63 +131,19 @@ def build_product_em_tables(
             entry["execution_client"] = False
         eprocs_out.append(entry)
 
-    enames = {str(p.get("name")) for p in eprocs_out}
-    if k_dlt and HOST_DLT not in enames:
-        eprocs_out.insert(
-            0,
-            {
-                "name": HOST_DLT,
-                "function_group": "MachineFG",
-                "depends_on": [],
-                "execution_client": False,
-            },
-        )
-    if k_roudi and HOST_ROUDI not in enames:
-        eprocs_out.insert(
-            1 if k_dlt else 0,
-            {
-                "name": HOST_ROUDI,
-                "function_group": "MachineFG",
-                "depends_on": [HOST_DLT] if k_dlt else [],
-                "execution_client": False,
-            },
-        )
-    if k_frame_ingest and HOST_FRAME_INGEST not in enames:
-        deps_fi: list[str] = []
-        if k_roudi:
-            deps_fi = [HOST_ROUDI]
-        elif k_dlt:
-            deps_fi = [HOST_DLT]
-        # Insert before first SOA app
-        idx = len(eprocs_out)
-        for i, p in enumerate(eprocs_out):
-            n = str(p.get("name") or "")
-            if n.startswith("adapter.") or n.startswith("perception.") or n.startswith(
-                "planning."
-            ):
-                idx = i
-                break
-        eprocs_out.insert(
-            idx,
-            {
-                "name": HOST_FRAME_INGEST,
-                "function_group": "MachineFG",
-                "depends_on": deps_fi,
-                "execution_client": False,
-            },
-        )
+    # Authoring truth: do not invent missing host.* rows.
 
     exec_out = {
         "schema_version": str(exec_doc.get("schema_version") or "0.1"),
-        "function_groups": exec_doc.get("function_groups")
-        or [{"id": "MachineFG", "initial": "Running"}],
+        # DIFF-ONLY dump: same shape as freeze (kind + states + active_in).
+        "function_groups": normalize_function_groups(exec_doc.get("function_groups")),
         "processes": eprocs_out,
     }
     return {"launch": launch_out, "exec": exec_out}
 
 
 def emit_product_em_assets(
-    platform_dir: Path,
+    ara_cfg_dir: Path,
     gen_dir: Path,
     *,
     k_dlt: bool,
@@ -208,7 +156,7 @@ def emit_product_em_assets(
     Product EM path reads deploy_config.hpp; YAML is not behavior truth on board.
     """
     tables = build_product_em_tables(
-        platform_dir,
+        ara_cfg_dir,
         k_dlt=k_dlt,
         k_roudi=k_roudi,
         k_frame_ingest=k_frame_ingest,

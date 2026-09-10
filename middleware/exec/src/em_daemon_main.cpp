@@ -15,12 +15,12 @@ namespace {
 void Usage(const char* argv0) {
   std::cerr
       << "Usage: " << argv0
-      << " --build-dir DIR [--platform DIR] [--deadline-ms N]\n"
+      << " --build-dir DIR [--ara-cfg DIR] [--deadline-ms N]\n"
       << "       [--log-dir DIR]  (optional debug only: redirect child stdout to files)\n"
       << "       (product: LoadFromDeployConfig / deploy_config.hpp; logs → console + DLT)\n"
       << "   or: " << argv0
-      << " --platform DIR --launch FILE --build-dir DIR  (YAML smoke; explicit --launch)\n"
-      << "Env: GF_PLATFORM_DIR GF_BUILD_DIR GF_EM_LAUNCH [GF_EM_LOG_DIR]\n";
+      << " --ara-cfg DIR --launch FILE --build-dir DIR  (YAML smoke; explicit --launch)\n"
+      << "Env: GF_ARA_CFG_DIR GF_BUILD_DIR GF_EM_LAUNCH [GF_EM_LOG_DIR]\n";
 }
 
 std::string OptOrEnv(int argc, char** argv, const char* flag, const char* env,
@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  const std::string platform = OptOrEnv(argc, argv, "--platform", "GF_PLATFORM_DIR");
+  const std::string ara_cfg = OptOrEnv(argc, argv, "--ara-cfg", "GF_ARA_CFG_DIR");
   const std::string launch = OptOrEnv(argc, argv, "--launch", "GF_EM_LAUNCH");
   const std::string build = OptOrEnv(argc, argv, "--build-dir", "GF_BUILD_DIR");
   const std::string log_dir = OptOrEnv(argc, argv, "--log-dir", "GF_EM_LOG_DIR", "");
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
   }
 
   const bool yaml_mode = UseYaml(argc, argv);
-  if (yaml_mode && (platform.empty() || launch.empty())) {
+  if (yaml_mode && (ara_cfg.empty() || launch.empty())) {
     Usage(argv[0]);
     return 2;
   }
@@ -101,8 +101,8 @@ int main(int argc, char** argv) {
   const std::string& logs = log_dir;
   {
     auto& log = gf_ara::log::Logger::Instance();
-    if (!log.ConfigureFromGenerated() && !platform.empty()) {
-      std::ifstream in(platform + "/log.yaml");
+    if (!log.ConfigureFromGenerated() && !ara_cfg.empty()) {
+      std::ifstream in(ara_cfg + "/log.yaml");
       if (in) {
         std::ostringstream ss;
         ss << in.rdbuf();
@@ -121,18 +121,18 @@ int main(int argc, char** argv) {
     log.ApplyEnvFileSink();
     const std::string log_note = logs.empty() ? "(console+DLT)" : logs;
     if (yaml_mode) {
-      log.Info("em", "gf_em_daemon start mode=yaml platform=" + platform +
+      log.Info("em", "gf_em_daemon start mode=yaml ara_cfg=" + ara_cfg +
                          " launch=" + launch + " build=" + build +
                          " log_dir=" + log_note);
     } else {
-      log.Info("em", "gf_em_daemon start mode=deploy_config platform=" + platform +
+      log.Info("em", "gf_em_daemon start mode=deploy_config ara_cfg=" + ara_cfg +
                          " build=" + build + " log_dir=" + log_note);
     }
   }
 
   gf_ara::exec::EmDaemon em;
-  const bool loaded = yaml_mode ? em.Load(platform, launch, build, logs)
-                                : em.LoadFromDeployConfig(platform, build, logs);
+  const bool loaded = yaml_mode ? em.Load(ara_cfg, launch, build, logs)
+                                : em.LoadFromDeployConfig(ara_cfg, build, logs);
   if (!loaded) {
     gf_ara::log::Logger::Instance().Error("em", "Load failed");
     return 1;
@@ -143,7 +143,8 @@ int main(int argc, char** argv) {
   }
   gf_ara::log::Logger::Instance().Info(
       "em",
-      "policy: abnormal child exit (no relaunch) stops EM; board recovery = systemd Restart");
+      "policy: RouDi abnormal exit → reclaim + EM shutdown; "
+      "DLT/frame_ingest → degrade (continue); other abnormal unrelaunchable → EM shutdown");
   gf_ara::log::Logger::Instance().Info("em", "polling children");
   const int rc = em.RunForMs(deadline_ms);
   em.ShutdownAll();

@@ -2,8 +2,8 @@
 
 Module engineers deliver **`io_types.hpp` only** — no JSON fragments.
 
-Wiring and process topology: [integration/wiring.yaml](../../../projects/afc/integration/wiring.yaml)
+Wiring and process topology: [cfg/wiring.yaml](../../../projects/afc/cfg/wiring.yaml)
 
-One-shot compose: [projects/adc/project.yaml](../../../projects/adc/project.yaml)
+One-shot compose: [projects/adc/giraffe.yaml](../../../projects/adc/giraffe.yaml)
 
 Contract: [sor-authoring.md](../../../docs/zh/architecture/sor-authoring.md)

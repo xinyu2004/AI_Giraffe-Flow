@@ -71,9 +71,12 @@
 | **daemons（按 gf-config）** | dlt / RouDi / SOME/IP / DDS? | EM 各拉一份；无则不起 |
 | **OSAL** | 时钟 / 线程 / **process** Spawn·Wait·Kill | EM 唯一用它起停进程 |
 | **exec / EM** | `ExecutionClient` + daemon | 读 em_launch；失败可 relaunch |
-| **sm** | 功能组 Off ↔ Running ↔ Updating | runtime EnsureGroup；PHM 故障通知；UCM 进 Updating |
+| **sm** | 功能组 **Off ↔ Running ↔ Updating**（库，非开机入口） | runtime EnsureGroup；PHM `NotifyHealthFault`；UCM → Updating；**不早于 EM** |
 | **phm** | Alive / Deadline / Logical | App ReportAlive；失败 → log / collector / sm / EM restart |
-| **runtime** | 进程内 bring-up 胶水 | log → SM → Exec Offer → PHM Alive → collector 钩子 |
+| **runtime** | 进程内 bring-up 胶水 | log → SM EnsureGroup → Exec Offer → PHM Alive → collector 钩子 |
+
+> **行泊 Mode：** Mode Manager 调 SM `DriveParkFG`（`DrivingActive`/`ParkingActive`）；
+> EM 差集起停两侧 planning。感知在 MachineFG。不用 FG Off 做快切，也无 Suspended。
 
 ### 通信与时间
 

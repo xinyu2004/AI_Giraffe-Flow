@@ -111,7 +111,7 @@ KeyValueStorage& KeyValueStorage::Instance() {
 std::string KeyValueStorage::DirPath() const {
   const char* d = std::getenv("GF_PER_DIR");
   if (d == nullptr || d[0] == '\0') {
-    return ".";
+    return {};
   }
   return std::string(d);
 }
@@ -161,7 +161,12 @@ gf_ara::core::Result<void> KeyValueStorage::Open(std::string_view instance) {
   if (instance.empty()) {
     return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kInvalidArgument);
   }
-  ::mkdir(DirPath().c_str(), 0755);
+  const std::string dir = DirPath();
+  if (dir.empty()) {
+    // Require explicit GF_PER_DIR (launch scripts set it). Never fall back to cwd.
+    return gf_ara::core::Result<void>::Err(gf_ara::core::ErrorCode::kNotAvailable);
+  }
+  ::mkdir(dir.c_str(), 0755);
   instance_ = std::string(instance);
   open_ = true;
   LoadBestSlotLocked();

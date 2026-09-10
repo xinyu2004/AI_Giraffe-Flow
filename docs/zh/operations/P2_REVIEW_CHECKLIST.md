@@ -28,12 +28,12 @@
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| Cfg.1 | A · SKU 瘦身 | `gf-config …/project.yaml`：topology / capabilities / runtime_modules；apps 在高级折叠 | □ | □ | □ | |
+| Cfg.1 | A · SKU 瘦身 | `gf-config …/giraffe.yaml`：topology / capabilities / runtime_modules；apps 在高级折叠 | □ | □ | □ | |
 | Cfg.2 | B · 信号链接 | 画布拖线；右侧连线/Lineage；布局保持 | □ | □ | □ | |
 | Cfg.3 | C · 平台 | 子页编辑 exec/phm/diag/log/ucm；进程候选来自 wiring（无 external） | □ | □ | □ | |
 | Cfg.4 | Save / Verify | Ctrl+S 落盘 A+B+C；Verify 前 flush；错 process 红 | □ | □ | □ | |
 
-**代码：** `tools/gf-config/src/gf_config/gui/{main_window,req_editor,platform_editor}.py`
+**代码：** `tools/gf-config/src/gf_config/gui/{main_window,req_editor,ara_cfg_editor}.py`
 
 ---
 
@@ -41,13 +41,13 @@
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| P.1 | 读 platform | `project.yaml` → `platform:` 五路径 | □ | □ | □ | |
+| P.1 | 读 platform | `giraffe.yaml` → `gf_ara_cfg:` 五路径 | □ | □ | □ | |
 | P.2 | 坏 process 失败 | `pytest tools/gf-codegen/tests/test_merge_platform.py -q` | □ | □ | □ | |
-| P.3 | SOR 含 manifest | compose 后 `platform_manifest` 含 exec/phm/diag/log；**无 dem** | □ | □ | □ | |
+| P.3 | SOR 含 manifest | compose 后 `gf_ara_cfg_manifest` 含 exec/phm/diag/log；**无 dem** | □ | □ | □ | |
 | P.4 | bench golden | `pytest tools/gf-codegen/tests/test_afc_bench_golden.py -q` | □ | □ | □ | |
 
 ```bash
-python -m gf_codegen.compose --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test_afc_bench_golden.py -q
 ```
 
@@ -67,7 +67,7 @@ pytest tools/gf-codegen/tests/test_merge_platform.py tools/gf-codegen/tests/test
 
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
-| X.1 | Offer→Running | 主链 verify 设 `GF_PLATFORM_DIR=…/platform`；日志有 Running | □ | □ | □ | |
+| X.1 | Offer→Running | 主链 verify 设 `GF_ARA_CFG_DIR=…/cfg/gf_ara_cfg`；日志有 Running | □ | □ | □ | |
 | X.2 | Alive | 读 `phm.yaml`；周期 ReportAlive | □ | □ | □ | |
 | X.3 | 故障注入 | `GF_PHM_FAULT_MS=…` → AliveMiss 可观测后恢复 | □ | □ | □ | |
 | X.4 | OTA Pause 文档 | [PHM_OTA_PAUSE.md](PHM_OTA_PAUSE.md) / [OTA_SPIKE.md](OTA_SPIKE.md) 可读 | □ | □ | □ | |

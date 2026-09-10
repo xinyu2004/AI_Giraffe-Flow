@@ -1,6 +1,7 @@
 #include "gf_ara/com/binding/cross_domain_ipc/transport.hpp"
 
 #include <cerrno>
+#include <cstddef>
 #include <cstring>
 #include <iostream>
 #include <unistd.h>
@@ -10,6 +11,8 @@
 
 namespace gf_ara::com::binding::cross_domain_ipc {
 namespace {
+
+constexpr const char kAbstractName[] = "gf_cp_ipc";
 
 bool WriteAll(int fd, const void* buf, size_t n) {
   const auto* p = static_cast<const uint8_t*>(buf);
@@ -51,6 +54,41 @@ bool ReadAll(int fd, void* buf, size_t n) {
   return true;
 }
 
+bool UseAbstract(const std::string& path) {
+  return path.empty() || path == "@" || (path.size() > 1 && path[0] == '@');
+}
+
+const char* AbstractId(const std::string& path) {
+  if (path.size() > 1 && path[0] == '@') {
+    return path.c_str() + 1;
+  }
+  return kAbstractName;
+}
+
+bool FillAddr(sockaddr_un* addr, socklen_t* len, const std::string& path, bool* filesystem) {
+  std::memset(addr, 0, sizeof(*addr));
+  addr->sun_family = AF_UNIX;
+  if (UseAbstract(path)) {
+    const char* name = AbstractId(path);
+    const std::size_t n = std::strlen(name);
+    if (n == 0 || n + 1 >= sizeof(addr->sun_path)) {
+      return false;
+    }
+    addr->sun_path[0] = '\0';
+    std::memcpy(addr->sun_path + 1, name, n);
+    *len = static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + 1 + n);
+    *filesystem = false;
+    return true;
+  }
+  if (path.size() >= sizeof(addr->sun_path)) {
+    return false;
+  }
+  std::memcpy(addr->sun_path, path.c_str(), path.size());
+  *len = static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + path.size() + 1);
+  *filesystem = true;
+  return true;
+}
+
 }  // namespace
 
 SocketTransport::~SocketTransport() { Close(); }
@@ -64,35 +102,38 @@ void SocketTransport::Close() {
     ::close(listen_fd_);
     listen_fd_ = -1;
   }
-  if (is_server_ && !path_.empty()) {
+  if (is_server_ && filesystem_bind_ && !path_.empty()) {
     ::unlink(path_.c_str());
   }
   path_.clear();
   is_server_ = false;
+  filesystem_bind_ = false;
 }
 
 bool SocketTransport::ListenAndAccept(const std::string& path) {
   Close();
   path_ = path;
   is_server_ = true;
-  ::unlink(path_.c_str());
+
+  sockaddr_un addr{};
+  socklen_t addr_len = 0;
+  if (!FillAddr(&addr, &addr_len, path_, &filesystem_bind_)) {
+    std::cerr << "cross_domain_ipc: bad listen path\n";
+    Close();
+    return false;
+  }
+  if (filesystem_bind_) {
+    ::unlink(path_.c_str());
+  }
 
   listen_fd_ = ::socket(AF_UNIX, SOCK_STREAM, 0);
   if (listen_fd_ < 0) {
     std::cerr << "cross_domain_ipc: socket failed: " << std::strerror(errno) << "\n";
-    return false;
-  }
-
-  sockaddr_un addr{};
-  addr.sun_family = AF_UNIX;
-  if (path_.size() >= sizeof(addr.sun_path)) {
-    std::cerr << "cross_domain_ipc: path too long\n";
     Close();
     return false;
   }
-  std::strncpy(addr.sun_path, path_.c_str(), sizeof(addr.sun_path) - 1);
 
-  if (::bind(listen_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+  if (::bind(listen_fd_, reinterpret_cast<sockaddr*>(&addr), addr_len) < 0) {
     std::cerr << "cross_domain_ipc: bind failed: " << std::strerror(errno) << "\n";
     Close();
     return false;
@@ -119,22 +160,21 @@ bool SocketTransport::Connect(const std::string& path) {
   path_ = path;
   is_server_ = false;
 
+  sockaddr_un addr{};
+  socklen_t addr_len = 0;
+  if (!FillAddr(&addr, &addr_len, path_, &filesystem_bind_)) {
+    std::cerr << "cross_domain_ipc: bad connect path\n";
+    Close();
+    return false;
+  }
+
   fd_ = ::socket(AF_UNIX, SOCK_STREAM, 0);
   if (fd_ < 0) {
     std::cerr << "cross_domain_ipc: socket failed: " << std::strerror(errno) << "\n";
     return false;
   }
 
-  sockaddr_un addr{};
-  addr.sun_family = AF_UNIX;
-  if (path_.size() >= sizeof(addr.sun_path)) {
-    std::cerr << "cross_domain_ipc: path too long\n";
-    Close();
-    return false;
-  }
-  std::strncpy(addr.sun_path, path_.c_str(), sizeof(addr.sun_path) - 1);
-
-  if (::connect(fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+  if (::connect(fd_, reinterpret_cast<sockaddr*>(&addr), addr_len) < 0) {
     std::cerr << "cross_domain_ipc: connect failed: " << std::strerror(errno) << "\n";
     Close();
     return false;

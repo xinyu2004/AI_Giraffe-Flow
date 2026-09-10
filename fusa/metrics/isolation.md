@@ -9,7 +9,7 @@
 | ISO-EM-01 | planning exit 75（PHM restart） | daemon relaunch；子进程 `em os_restart_exit`；链路恢复 | `smoke_sil_em_daemon.sh` · SIL-EM-02 | SG-01 | **PASS** 2026-07-31 · exit→relaunch **0 ms** · exit→spawn2 **1 ms** |
 | ISO-EM-02 | EM 软重启账本 | RequestRestart → soft relaunch | `gf_exec_em_smoke` EM-03/04 | SG-01 | L1 矩阵覆盖（`run_cases`）；本轮未单独计时 |
 | ISO-SM-01 | 非法 FG 迁移 | 拒绝 Off→Updating 等 | `gf_sm_fg_smoke` SM-03 | SG-03 | L1 矩阵覆盖 |
-| ISO-SM-02 | uss Alive miss → notify_sm | `uss.log`：miss · `sm: health_fault` · collector；gateway Trajectory 仍在 | `smoke_sil_sm_fg.sh` · SIL-SM-01 | SG-03 | 脚本已落；跑 `GF_FUSA_SIL=1` 刷新状态 |
+| ISO-SM-02 | fcm Alive miss → notify_sm | `fcm.log`：miss · `sm: health_fault` · collector；gateway Trajectory 仍在 | `smoke_sil_sm_fg.sh` · SIL-SM-01 | SG-03 | AFC 无 USS；跑 `GF_FUSA_SIL=1` 刷新状态 |
 | ISO-COLL-01 | 两进程 ReportEvent | 共享 `GF_COLLECTOR_STORE` NDJSON 可见两侧事件 | `gf_collector_xproc_smoke` · COLL-X* | SG-04 | L1；SIL-SM-01 附带 store |
 
 ## 复现

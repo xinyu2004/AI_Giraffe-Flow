@@ -21,7 +21,7 @@ pip install -e 'tools/gmt[gui]'
 
 GMT gui
 GMT gui --project projects/afc
-GMT gui --project projects/afc/project.yaml
+GMT gui --project projects/afc/giraffe.yaml
 ```
 
 **Main path:** set **Host** → both top-bar channels may connect at once:
@@ -40,7 +40,7 @@ GMT gui --project projects/afc/project.yaml
   - **Collector**: local NDJSON or UDS `0x31 01 F201` dump of the on-target ring
 - Graphics (CANoe-style): one row per signal; wheel / ± zoom; drag name-column edge for width; orange playhead  
 - Wall clock: one `session_meta` anchor + `(t_ns - t0_ns)`  
-- Without `project.yaml`: **inject disabled**; Live still works  
+- Without `giraffe.yaml`: **inject disabled**; Live still works  
 
 `GF_INJECT_LIVE=0` forces live_tap off during inject.
 

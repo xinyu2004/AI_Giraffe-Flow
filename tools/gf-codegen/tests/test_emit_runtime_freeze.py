@@ -1,4 +1,4 @@
-"""runtime freeze headers from platform_manifest."""
+"""runtime freeze headers from gf_ara_cfg_manifest."""
 
 from __future__ import annotations
 

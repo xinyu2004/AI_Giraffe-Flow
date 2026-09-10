@@ -2,11 +2,12 @@
 
 **中文:** [README_zh.md](README_zh.md)
 
-PySide6 tool: edit **SKU** via `req.yaml`, edit the **Simulink-like signal graph** via `wiring.yaml`, then one-shot `compose` + lineage.
+PySide6 tool: edit **SKU** via `cfg/req.yaml`, **Simulink-like graph** via `cfg/wiring.yaml`, tab 2 via `cfg/gf_ara_cfg/*`, then Verify (`compose`) + lineage.
 
 > **Flow:** edit tabs 1/2 → **Ctrl+S Save** (disk only) → **Verify (Ctrl+R)** builds SOR + lineage + `generated/*.hpp` (behavior freeze) → optional **Generate (Ctrl+G)** for Proxy/Skeleton.  
 > **Authoring ends there.** Then `compile_sil` / `run_sil` (**no** auto-compose).  
-> Headless / CI: `python -m gf_codegen.compose --project …`; codegen remains `gf-codegen generate`.  
+> Headless / CI: `python -m gf_codegen.compose --project projects/afc/giraffe.yaml`.  
+> Layout: [projects/CFG_LAYOUT.md](../../projects/CFG_LAYOUT.md) · entry file is **`giraffe.yaml`** (was `project.yaml`).  
 > Boundaries: `gf-config` = authoring GUI · `gf-codegen` = lint / generate / import · GMT = read-only CI + measure
 
 ## `req.yaml` vs `wiring.yaml`
@@ -39,7 +40,7 @@ pip install -e tools/gf-config
 ## Launch
 
 ```bash
-gf-config projects/afc/project.yaml
+gf-config projects/afc/giraffe.yaml
 ```
 
 ## Tabs (P3 · two pages)
@@ -92,7 +93,7 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 - [x] Open `afc` shows ported graph  
 - [x] Add/remove nodes / drag edges / Save writes `wiring.yaml`  
 - [x] Tab 1 thin SKU + tab 2 runtime_modules / platform round-trip  
-- [x] Tab 2 **EM launch map** edits `platform/em_launch.yaml` (unlocked by `exec`)  
+- [x] Tab 2 **EM launch map** edits `cfg/gf_ara_cfg/em_launch.yaml` (unlocked by `exec`)  
 - [x] Verify shows Lineage pass/fail (incl. `platform_em_launch`)  
 - [x] Log table: row-number select + duplicate context id fails Verify  
 - [x] Undo/Redo navigates to the changed page (incl. platform subpages)  

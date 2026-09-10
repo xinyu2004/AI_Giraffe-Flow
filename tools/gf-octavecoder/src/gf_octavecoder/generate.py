@@ -164,6 +164,31 @@ inline LatTraj m_lat_traj(float speed_mps, float D_see, float T_plan, bool lane_
     )
 
 
+def _emit_park_tick_hpp() -> str:
+    return (
+        _HEADER
+        + """
+#pragma once
+
+#include "gf_octave_planning/park_tick.hpp"
+
+namespace oct_gen {
+
+using gf_octave_planning::ParkTickOut;
+using gf_octave_planning::kParkTrajPoints;
+
+/** Corresponds to octave_planning/parking/m_park_tick.m */
+inline ParkTickOut m_park_tick(float slot_x, float slot_y, float slot_yaw, float slot_len,
+                               float slot_wid, bool free, bool confirmed) {
+  return gf_octave_planning::m_park_tick(slot_x, slot_y, slot_yaw, slot_len, slot_wid, free,
+                                         confirmed);
+}
+
+}  // namespace oct_gen
+"""
+    )
+
+
 def generate_sku(*, repo_root: Path, sku: str, force: bool = False) -> int:
     m_common = repo_root / "octave_planning" / "common"
     m_sku = repo_root / "octave_planning" / sku
@@ -186,29 +211,44 @@ def generate_sku(*, repo_root: Path, sku: str, force: bool = False) -> int:
     out_mtime = _oct_gen_stamp(oct_gen)
     if not force and out_mtime >= src_mtime and (oct_gen / "gf_clamp.hpp").is_file():
         print(f"[gf-octavecoder] up-to-date ({sku}) → {oct_gen}", flush=True)
-        return 0
+    else:
+        clamp_m = m_common / "gf_clamp.m"
+        if clamp_m.is_file():
+            text = clamp_m.read_text(encoding="utf-8")
+            if not _CLAMP_M.search(text):
+                print(f"[gf-octavecoder] refuse: {clamp_m} signature not whitelist", flush=True)
+                return 1
+            (oct_gen / "gf_clamp.hpp").write_text(_emit_gf_clamp_hpp(), encoding="utf-8")
+            print(f"[gf-octavecoder] wrote {oct_gen / 'gf_clamp.hpp'}", flush=True)
 
-    clamp_m = m_common / "gf_clamp.m"
-    if clamp_m.is_file():
-        text = clamp_m.read_text(encoding="utf-8")
-        if not _CLAMP_M.search(text):
-            print(f"[gf-octavecoder] refuse: {clamp_m} signature not whitelist", flush=True)
-            return 1
-        (oct_gen / "gf_clamp.hpp").write_text(_emit_gf_clamp_hpp(), encoding="utf-8")
-        print(f"[gf-octavecoder] wrote {oct_gen / 'gf_clamp.hpp'}", flush=True)
+        if sku == "afc":
+            for name, emit in (
+                ("m_lon_acc_aeb.m", _emit_afc_lon_hpp),
+                ("m_lat_lka.m", _emit_afc_lat_lka_hpp),
+                ("m_lat_traj.m", _emit_afc_lat_traj_hpp),
+                ("m_plan_tick.m", _emit_afc_plan_tick_hpp),
+            ):
+                src = m_sku / name
+                if src.is_file():
+                    out = oct_gen / (src.stem + ".hpp")
+                    out.write_text(emit(), encoding="utf-8")
+                    print(f"[gf-octavecoder] wrote {out}", flush=True)
 
-    if sku == "afc":
-        for name, emit in (
-            ("m_lon_acc_aeb.m", _emit_afc_lon_hpp),
-            ("m_lat_lka.m", _emit_afc_lat_lka_hpp),
-            ("m_lat_traj.m", _emit_afc_lat_traj_hpp),
-            ("m_plan_tick.m", _emit_afc_plan_tick_hpp),
-        ):
-            src = m_sku / name
-            if src.is_file():
-                out = oct_gen / (src.stem + ".hpp")
-                out.write_text(emit(), encoding="utf-8")
+        print(f"[gf-octavecoder] OK sku={sku} → {oct_gen}", flush=True)
+
+    # ADC parking gold → projects/adc/apps/planning/parking/oct_gen
+    if sku == "adc":
+        m_park = repo_root / "octave_planning" / "parking"
+        park_gen = (
+            repo_root / "projects" / "adc" / "apps" / "planning" / "parking" / "oct_gen"
+        )
+        park_gen.mkdir(parents=True, exist_ok=True)
+        (park_gen / ".gitkeep").touch(exist_ok=True)
+        park_m = m_park / "m_park_tick.m"
+        if park_m.is_file():
+            out = park_gen / "m_park_tick.hpp"
+            if force or not out.is_file() or out.stat().st_mtime < park_m.stat().st_mtime:
+                out.write_text(_emit_park_tick_hpp(), encoding="utf-8")
                 print(f"[gf-octavecoder] wrote {out}", flush=True)
 
-    print(f"[gf-octavecoder] OK sku={sku} → {oct_gen}", flush=True)
     return 0

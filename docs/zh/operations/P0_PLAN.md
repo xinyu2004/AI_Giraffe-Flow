@@ -19,7 +19,7 @@
 pip install -e "tools/gf-codegen[dev]"
 bash scripts/bootstrap_deps.sh
 bash projects/afc/scripts/verify/smoke_sil.sh   # SIL 双进程
-gf-codegen compose --project projects/adc/project.yaml
+gf-codegen compose --project projects/adc/giraffe.yaml
 bash devops/ci/scripts/smoke.sh                        # 全量冒烟（含 adc compose）
 ```
 
@@ -96,20 +96,20 @@ flowchart TD
 |----|------|----------|------|
 | A1 | `gf-codegen --help` | 入口可装可跑 | ✅ |
 | A2 | `gf-codegen lint <sor.json>` | 读 JSON + 对照 schema 必填字段 | ✅ |
-| A3 | `gf-codegen compose --project <project.yaml>` | compose 管道 | ✅ afc + adc |
+| A3 | `gf-codegen compose --project <giraffe.yaml>` | compose 管道 | ✅ afc + adc |
 | A4 | `gf-codegen suggest wiring --project ...` | 打印建议 YAML 片段 | ✅ |
 | A5 | `gf-codegen generate <sor.json> --out generated/` | types + Proxy/Skeleton | ✅ |
 
 ### 2.3 `compose --project` 内部管道
 
-读取项目 `project.yaml`：
+读取项目 `giraffe.yaml`：
 
 ```text
-1. load project.yaml
+1. load giraffe.yaml
 2. load base SOR（desktop_ap_only 或空骨架）
 3. import oem → DBC + manifest
 4. parse interfaces/*.hpp
-5. apply integration/wiring.yaml
+5. apply cfg/wiring.yaml
 6. merge req.yaml
 7. write out + lineage_check
 ```
@@ -185,10 +185,10 @@ HIL：`compile_hil.sh` 需 `aarch64-linux-gnu-g++`；`run_hil` / `deploy_hil` �
 
 | 文件 | 角色 |
 |------|------|
-| `project.yaml` | 索引 |
+| `giraffe.yaml` | 索引 |
 | `oem/oem_import.dbc` + `oem_import.yaml` | OEM |
 | `interfaces/**/io_types.hpp` | 模块类型 |
-| `integration/wiring.yaml` | 连线 |
+| `cfg/wiring.yaml` | 连线 |
 | `req.yaml` | SKU / 验收 / 观测与 apps |
 
 ## 附录 B — 依赖（主机 vs 板）

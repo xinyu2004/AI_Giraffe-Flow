@@ -7,7 +7,10 @@
 namespace gf_ara::com::binding::cross_domain_ipc {
 
 constexpr uint32_t kMagic = 0x47465849u;  // 'GFXI'
-constexpr const char* kDefaultSockPath = "/tmp/gf_cp_ipc.sock";
+
+/// Default rendezvous: Linux abstract Unix name `gf_cp_ipc` (no filesystem node).
+/// Pass an absolute filesystem path only when explicitly required (tests/debug).
+constexpr const char* kDefaultSockPath = "";
 
 enum class MsgType : uint32_t {
   CanInfo20ms = 1,
@@ -50,6 +53,7 @@ class SocketTransport {
   int listen_fd_{-1};
   std::string path_;
   bool is_server_{false};
+  bool filesystem_bind_{false};
 };
 
 template <typename T>

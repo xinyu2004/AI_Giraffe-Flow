@@ -1,4 +1,4 @@
-"""Load project.yaml and resolve related paths."""
+"""Load giraffe.yaml (project index) and resolve related paths."""
 
 from __future__ import annotations
 
@@ -10,8 +10,11 @@ import yaml
 
 from gf_codegen.paths import find_repo_root, resolve_path
 
+# Canonical Giraffe project entry filename (clean cut; was project.yaml).
+GIRAFFE_YAML = "giraffe.yaml"
 
-PLATFORM_KEYS = (
+# Keys under giraffe.yaml → gf_ara_cfg: (middleware runtime authoring tree).
+GF_ARA_CFG_KEYS = (
     "exec",
     "em_launch",
     "phm",
@@ -22,6 +25,9 @@ PLATFORM_KEYS = (
     "tsync",
     "bounds",
 )
+
+# Back-compat alias for imports that still say PLATFORM_KEYS.
+PLATFORM_KEYS = GF_ARA_CFG_KEYS
 
 
 @dataclass
@@ -38,12 +44,25 @@ class ProjectPaths:
     out_sor: Path
     lineage_report: Path
     fail_on_error: bool
-    # key → absolute path; missing project.platform → empty dict
-    platform: dict[str, Path]
+    # key → absolute path; missing giraffe.yaml gf_ara_cfg: → empty dict
+    gf_ara_cfg: dict[str, Path]
+
+
+def resolve_giraffe_file(path: Path) -> Path:
+    """Accept giraffe.yaml, or a SKU directory containing it."""
+    p = path.resolve()
+    if p.is_dir():
+        cand = p / GIRAFFE_YAML
+        if cand.is_file():
+            return cand
+        raise FileNotFoundError(f"{GIRAFFE_YAML} not found under {p}")
+    if p.is_file():
+        return p
+    raise FileNotFoundError(str(p))
 
 
 def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPaths:
-    project_file = project_file.resolve()
+    project_file = resolve_giraffe_file(project_file)
     project_dir = project_file.parent
     root = repo_root or find_repo_root(project_dir)
 
@@ -54,7 +73,7 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
     integ = data.get("integration") or {}
     delivery = data.get("delivery") or {}
     lineage = data.get("lineage") or {}
-    plat = data.get("platform") or {}
+    ara = data.get("gf_ara_cfg") or {}
 
     base_rel = data.get("base") or "tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json"
     base_sor = resolve_path(root, base_rel, repo_root=root)
@@ -65,15 +84,15 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
     report_rel = lineage.get("report") or "reports/signal_lineage_report.yaml"
     lineage_report = resolve_path(project_dir, report_rel, repo_root=root)
 
-    platform_paths: dict[str, Path] = {}
-    # Only resolve keys explicitly listed under project.platform (no silent defaults)
-    if isinstance(plat, dict) and plat:
-        for key in PLATFORM_KEYS:
-            if key not in plat:
+    ara_paths: dict[str, Path] = {}
+    # Only resolve keys explicitly listed under gf_ara_cfg (no silent defaults)
+    if isinstance(ara, dict) and ara:
+        for key in GF_ARA_CFG_KEYS:
+            if key not in ara:
                 continue
-            rel = plat.get(key)
+            rel = ara.get(key)
             if rel:
-                platform_paths[key] = resolve_path(project_dir, str(rel), repo_root=root)
+                ara_paths[key] = resolve_path(project_dir, str(rel), repo_root=root)
 
     return ProjectPaths(
         repo_root=root,
@@ -86,11 +105,11 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
             project_dir, oem.get("manifest") or "oem/oem_import.yaml", repo_root=root
         ),
         wiring=resolve_path(
-            project_dir, integ.get("wiring") or "integration/wiring.yaml", repo_root=root
+            project_dir, integ.get("wiring") or "cfg/wiring.yaml", repo_root=root
         ),
-        req=resolve_path(project_dir, delivery.get("req") or "req.yaml", repo_root=root),
+        req=resolve_path(project_dir, delivery.get("req") or "cfg/req.yaml", repo_root=root),
         out_sor=out_sor,
         lineage_report=lineage_report,
         fail_on_error=bool(lineage.get("fail_on_error", True)),
-        platform=platform_paths,
+        gf_ara_cfg=ara_paths,
     )

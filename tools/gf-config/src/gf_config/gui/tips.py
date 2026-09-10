@@ -52,28 +52,55 @@ MODULE: dict[str, str] = {
         "无 DoIP 时 CAN PDU 交 MCU。解锁「诊断」。"
     ),
     "tsync": (
-        "时间同步 lite：platform/tsync.yaml；SIL 用 osal mock，"
+        "时间同步 lite：cfg/gf_ara_cfg/tsync.yaml；SIL 用 osal mock，"
         "板上配 linuxptp/ptp4l，本模块用 pmc 读状态。"
     ),
 }
 
 # ── exec / SM ───────────────────────────────────────────────
 FG_ID = "功能组名字，供 SM StateClient 注册；进程通过 function_group 挂到这个组。"
+FG_KIND = (
+    "功能组类型：\n"
+    "• machine：固定 Off|Running|Updating（平台/OTA）\n"
+    "• mode：ModeDeclaration，态名任意（行泊/底盘/EMB 等产品词只写在 App）"
+)
+FG_KIND_ITEMS: dict[str, str] = {
+    "machine": "MachineFG 三态；bring-up EnsureGroup(Running)；不可写 active_in。",
+    "mode": "任意态名；EM 按进程 active_in 做 set-diff；Mode App 调 RequestTransitionNamed。",
+}
 FG_INITIAL = (
     "开机后该功能组进入的状态。\n"
-    "• Off：关闭，不应跑业务\n"
-    "• Running：正常业务，进程可提供服务\n"
-    "• Updating：更新/OTA 窗；PHM 可暂停监督，失败可回滚\n"
-    "非法转移：Off→Updating。"
+    "• machine：仅 Off / Running / Updating\n"
+    "• mode：任意字符串，须属于 states[]\n"
+    "禁止把 DrivingActive 等 mode 态塞进 machine 的 Off/Running/Updating。"
 )
+FG_INITIAL_MODE = "ModeDeclaration 的初始态：只能从上方 states 列表里选，先编辑 states。"
+FG_INITIAL_NEED_STATES = "请先在 states 列弹出对话框添加至少一个态名，再选 initial。"
+FG_STATES = (
+    "ModeDeclaration 合法态名列表。点击单元格弹出编辑器逐项添加/删除/改名。\n"
+    "不要用逗号手写；initial 与进程 active_in 都从这里选。"
+)
+FG_STATES_MACHINE = "machine FG 无自由 states（固定 Off|Running|Updating）；本列灰显不可编辑。"
 FG_INITIAL_ITEMS: dict[str, str] = {
     "Off": "关闭态：组内进程不应处于业务运行；从 Off 不能直接进 Updating。",
     "Running": "正常运行态：组内进程可提供/消费服务；SIL 默认初始多为 Running。",
     "Updating": "更新窗：OTA/刷写期间使用；会配合 PHM pause，失败时可 Rollback。",
 }
 
-PROC_NAME = "要纳入 exec 拓扑的进程（来自页 1 wiring，不含 external.*）。"
-PROC_FG = "该进程隶属的功能组：随 FG 的 Off/Running/Updating 一起被 SM 管理。"
+PROC_NAME = (
+    "进程名：wiring SOA，或能力允许的 host.*。\n"
+    "空白行表示尚未选定。不要在此发明 wiring 里没有的 SOA 名。\n"
+    "host 是否与能力一致由保存/打开校验强制；不会自动插删行。"
+)
+PROC_FG = (
+    "该进程隶属的功能组。\n"
+    "machine：常驻（Running 语义）；mode：仅当当前 FG 态 = active_in 时由 EM 拉起。"
+)
+PROC_ACTIVE_IN = (
+    "ModeDeclaration 成员态（单选）：该进程只在所选态下运行。\n"
+    "差集场景通常一行一态（如 driving→DrivingActive）；勿多选。"
+)
+PROC_ACTIVE_IN_MACHINE = "machine FG：无 active_in（常驻），本列灰显不可编辑。"
 PROC_DEPS = (
     "启动依赖：EM 会先拉起勾选的进程，成功后再 Spawn 本进程。"
     "用来保证例如 gateway 先于感知/规划就绪。"
@@ -93,8 +120,43 @@ PROC_EC_ITEMS: dict[str, str] = {
     "false": "不要求客户端上报；EM 仅根据进程存活/退出码管理（适合极简 stub）。",
 }
 
+HOST_ROW_DLT = (
+    "host.dlt_daemon：Log → sinks 勾选 dlt 时，exec/EM 表应有此行（校验强制）。\n"
+    "取消 dlt 后请手动删除多余行；不会自动同步。"
+)
+HOST_ROW_ROUDI = (
+    "host.iox_roudi：SKU bindings 勾选 iceoryx 时表中应有此行。\n"
+    "RouDi 异常退出 → EM 记日志并有序析构整栈。"
+)
+HOST_ROW_FRAME = (
+    "host.frame_ingest：页 1 frame_ingest 开启时表中应有此行。"
+)
+HOST_ROW_GENERIC = (
+    "platform daemon（host.*）：由能力决定是否应在表中；人工维护，校验拦截不一致。"
+)
+# Delete-blocked dialogs (one host → one tip; never list all hosts together).
+HOST_DEL_DLT = (
+    "不可删除 host.dlt_daemon。\n"
+    "它由 Log → sinks 勾选 dlt 产生；请取消勾选 dlt，行会自动从 exec/EM 移除。"
+)
+HOST_DEL_ROUDI = (
+    "不可删除 host.iox_roudi。\n"
+    "它由 SKU bindings 勾选 iceoryx 产生；请取消勾选 iceoryx，行会自动移除。"
+)
+HOST_DEL_FRAME = (
+    "不可删除 host.frame_ingest。\n"
+    "它由页 1 frame_ingest 开启产生；请关闭 frame_ingest，行会自动移除。"
+)
+HOST_DEL_GENERIC = (
+    "不可删除该 platform daemon（host.*）。\n"
+    "请取消对应能力勾选以移除；禁止在本表删除。"
+)
+
 # ── EM launch ───────────────────────────────────────────────
-EM_NAME = "要由 OS EM（gf_em_daemon）Spawn 的进程，须与 exec/wiring 中的名字一致。"
+EM_NAME = (
+    "由 OS EM（gf_em_daemon）Spawn 的进程名（来自 wiring 或能力允许的 host.*）。\n"
+    "与 exec 只共享名字；不必覆盖 exec 全部成员。host 与能力不一致无法保存。"
+)
 EM_BINARY = (
     "可执行文件路径，相对 $GF_BUILD_DIR（compose/编译产物目录）。"
     "例如 apps/planning/driving/gf_planning_driving。"
@@ -231,6 +293,10 @@ LOG_DEFAULT = (
 )
 LOG_CTX_ID = "日志上下文名（代码里 Logger 的 context id），用于分类过滤。"
 LOG_CTX_LEVEL = "该 context 的级别覆盖默认值；未列出的 context 仍用 default_level。"
+LOG_FILE_MAX = (
+    "file sink 单文件软上限（字节）；轮转保留 path + path.1，"
+    "计入有界内存 DISK 预估 ×2。在「日志」页编辑，不在有界内存页重复。"
+)
 LOG_LEVEL_ITEMS: dict[str, str] = {
     "FATAL": "只保留致命错误。",
     "ERROR": "错误及以上。",
@@ -278,7 +344,18 @@ COL_SOURCE = (
     "（列表为空则不过滤，兼容旧配置）。"
 )
 COL_LOCAL_EN = "是否启用本地 DEM-lite 存储；关则只转发、不在本机留历史。"
-COL_MAX = "本地最多保留多少条事件；超出按策略丢弃最旧条目，防止磁盘涨满。"
+COL_MAX = (
+    "本地最多保留多少条事件；超出按策略丢弃最旧条目。"
+    "计入有界内存 RAM（collector_ring）；在「事件收集」页编辑。"
+)
+COL_DEB = (
+    "防抖 map 最大键数；RAM ≈ keys × C_DEBOUNCE_ENTRY。"
+    "在「事件收集」页编辑，有界内存预估会自动计入。"
+)
+COL_STORE = (
+    "共享 NDJSON 文件软上限；保留 ×2，计入 DISK 预估。"
+    "在「事件收集」页编辑。"
+)
 
 # ── bounds / iceoryx ────────────────────────────────────────
 BND_DLT_CTX = (
@@ -298,16 +375,6 @@ BND_DID_N = "UDS DID 表最多条目数。"
 BND_DID_PAY = "单个 DID payload 最大字节数。"
 BND_BUD_RAM = "可选门禁：预估 total_ram 超过此值则 Verify 警告；0=不检查。"
 BND_BUD_DISK = "可选门禁：预估 total_disk 超过此值则 Verify 警告；0=不检查。"
-BND_FILE_MAX = (
-    "写回 log.file_max_bytes：file sink 单文件软上限；"
-    "预估 DISK 按 path + path.1 计 ×2（仅当启用 file sink）。"
-)
-BND_COL_MAX = "写回 collector.local.max_entries：本地事件环最大条数。"
-BND_COL_DEB = "写回 collector.local.debounce_max_keys：防抖 map 最大键数。"
-BND_COL_STORE = (
-    "写回 collector.local.store_max_bytes：共享 NDJSON 软上限；"
-    "预估 DISK 按双文件计 ×2。"
-)
 
 IOX_WARN = (
     "两类配置、两套生效方式：\n"
@@ -443,28 +510,24 @@ SKU_ACC_SVCS = (
     "验收必须出现的服务（required_services）；"
     "compose/lineage 会检查画布是否覆盖这些服务。"
 )
-SKU_PUBLISH = (
-    "每话题如何发布：周期 / 变化时。写入 req.publish_policy，"
-    "compose 进 SOR 与 generated/publish_policy.hpp。"
-    "周期口填 period_ms（车态默认 10）。变化时填 expect_fps（期望/告警带，不发冻帧）。"
-    "expect_fps 须 ≤ 相机 fps。这不是 PHM 喂狗，也不是 FCM 自己设帧率。"
-)
-SKU_PUBLISH_TRIGGER = "period=按点发；on_change=有新样本才发（无冻帧）。"
-SKU_PUBLISH_VALUE = (
-    "周期：period_ms。变化时：expect_fps（预算/告警带，不是发报钟）。"
-    "0 fps=未填。须 ≤ frame_ingest 相机 fps。"
-)
-
 # Buttons (short but still purposeful)
 BTN_ADD_FG = "新增一个功能组行，随后在 initial 里选开机状态。"
 BTN_DEL_ROW = "删除当前选中的配置行（不可撤销，保存前可重开项目恢复）。"
-BTN_ADD_PROC = "新增进程行；进程名从 wiring 选择，避免手打错名。"
-BTN_SYNC_WIRING = (
-    "按页 1 wiring 的进程列表重建本表；"
-    "已填的 FG / depends_on / execution_client 会尽量按进程名保留。"
+BTN_DEL_PROC = (
+    "删除选中的进程行（含 host.*）。"
+    "能力勾选与 host 行不一致时无法保存——请改表或改勾选。"
 )
-BTN_ADD_EM = "新增一条 EM 启动项（选进程、填 binary/args/重启次数）。"
-BTN_SYNC_EXEC = "按 exec 进程表重建 EM 启动表；已有 binary/args/max_restarts 按进程名保留。"
+BTN_DEL_EM = (
+    "删除选中的 EM 启动行（含 host.*）。"
+    "host 与能力不一致由校验拦截，不会自动增删。"
+)
+BTN_ADD_PROC = (
+    "新增一行；name 从 wiring / 能力允许的 host.* 下拉选择，再配 FG / depends_on / active_in。"
+)
+BTN_ADD_EM = (
+    "新增一条 EM 启动项；选进程名后填 binary/args/重启次数。"
+    "与 exec 只共享进程名，不要求成员集合相同。"
+)
 BTN_ADD_PHM = "新增一条健康监督实体，绑定某个 wiring 进程。"
 BTN_ADD_DID = "新增一个诊断 DID 定义。"
 BTN_ADD_CTX = "新增一个日志 context 覆盖项。"

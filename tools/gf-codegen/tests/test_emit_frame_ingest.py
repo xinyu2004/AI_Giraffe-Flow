@@ -128,12 +128,12 @@ def test_normalize_rejects_missing_camera_slots_key_uses_default_front() -> None
     assert cfg["camera_slots"][0]["id"] == "front"
 
 
-def test_replay_frame_path_optional(tmp_path: Path) -> None:
+def test_replay_frame_path_explicit(tmp_path: Path) -> None:
     cfg = normalize_frame_ingest(
         {
             "frame_ingest": {
                 "active_source": "replay",
-                "paths": {"frame": "/tmp/gf_front.yuv"},
+                "paths": {"frame": "runtime_ipc/front.yuv"},
             }
         },
         project_dir=tmp_path,
@@ -142,27 +142,26 @@ def test_replay_frame_path_optional(tmp_path: Path) -> None:
     assert "cmd" not in cfg["paths"]
 
 
-def test_legacy_rgb_path_migrates_to_yuv(tmp_path: Path) -> None:
+def test_replay_rgb_suffix_rewritten_to_yuv(tmp_path: Path) -> None:
     cfg = normalize_frame_ingest(
         {
             "frame_ingest": {
                 "active_source": "replay",
-                "paths": {"frame": "/tmp/gf_front.rgb"},
+                "paths": {"frame": "runtime_ipc/front.rgb"},
                 "pixel_format": "nv12",
             }
         },
         project_dir=tmp_path,
     )
     assert cfg["paths"]["frame"].endswith("front.yuv")
-    assert not cfg["paths"]["frame"].startswith("/tmp/gf_")
 
 
-def test_emit_replay_mkdirs_runtime_ipc(tmp_path: Path) -> None:
+def test_emit_replay_mkdirs_explicit_frame_parent(tmp_path: Path) -> None:
     req = {
         "product": "AFC",
         "frame_ingest": {
             "active_source": "replay",
-            "paths": {"frame": "/tmp/gf_front.yuv"},
+            "paths": {"frame": "runtime_ipc/front.yuv"},
         },
     }
     proj = tmp_path / "projects" / "afc"
@@ -171,6 +170,11 @@ def test_emit_replay_mkdirs_runtime_ipc(tmp_path: Path) -> None:
     (tmp_path / "carla_scenarios").mkdir()
     emit_frame_ingest(req, gen)
     assert (proj / "runtime_ipc").is_dir()
+
+
+def test_replay_without_paths_frame_stays_empty() -> None:
+    cfg = normalize_frame_ingest({"frame_ingest": {"active_source": "replay"}})
+    assert cfg["paths"]["frame"] == ""
 
 
 def test_gf_build_cmake_no_frame_ingest_env(tmp_path: Path) -> None:

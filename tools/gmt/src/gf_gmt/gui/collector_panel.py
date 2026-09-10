@@ -33,37 +33,10 @@ from gf_gmt.i18n import t
 
 
 def default_collector_store(project_dir: Path | None = None) -> Path:
-    """Resolve NDJSON path: env → project build-sil/build → cwd fallbacks."""
+    """NDJSON path from GF_COLLECTOR_STORE only (launch/SIL sets it). No cwd archaeology."""
+    del project_dir  # kept for call-site compatibility
     env = (os.environ.get("GF_COLLECTOR_STORE") or "").strip()
-    if env:
-        return Path(env)
-
-    candidates: list[Path] = []
-    if project_dir is not None:
-        root = Path(project_dir)
-        candidates.extend(
-            [
-                root / "build-sil" / "runtime" / "collector" / "events.ndjson",
-                root / "build" / "runtime" / "collector" / "events.ndjson",
-            ]
-        )
-    cwd = Path.cwd()
-    candidates.extend(
-        [
-            cwd / "projects" / "afc" / "build-sil" / "runtime" / "collector" / "events.ndjson",
-            cwd / "build-sil" / "runtime" / "collector" / "events.ndjson",
-            cwd / "build" / "runtime" / "collector" / "events.ndjson",
-        ]
-    )
-    for cand in candidates:
-        if cand.is_file():
-            return cand
-    # Prefer product default even if not created yet (matches run_sil.sh).
-    if project_dir is not None:
-        return (
-            Path(project_dir) / "build-sil" / "runtime" / "collector" / "events.ndjson"
-        )
-    return cwd / "build-sil" / "runtime" / "collector" / "events.ndjson"
+    return Path(env) if env else Path("")
 
 
 class CollectorPanel(QWidget):

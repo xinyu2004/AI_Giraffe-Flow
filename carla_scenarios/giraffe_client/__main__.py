@@ -29,7 +29,10 @@ if str(_LIB) not in sys.path:
 from _ctrl_tip import TipSender  # noqa: E402
 from _fake_perc_pack import pack_fake_perc_pod  # noqa: E402
 from _lane_truth import measure_lane_topology  # noqa: E402
+from _mode_hint import read_mode_hint  # noqa: E402
 from _objects_truth import collect_dyn_objects  # noqa: E402
+from _surround_pack import pack_mode_hint_pod, pack_surround_world_pod  # noqa: E402
+from _surround_truth import collect_surround_world  # noqa: E402
 from _tsr_static_truth import collect_tsr_static  # noqa: E402
 from _perf import PerfAgg, dump_ue_settings, perf_enabled  # noqa: E402
 
@@ -46,6 +49,8 @@ GF_COSIM_MSG_HEARTBEAT = 2
 GF_COSIM_MSG_VEHICLE_STATE = 10
 GF_COSIM_MSG_FAKE_PERC = 11
 GF_COSIM_MSG_CAMERA_NV12 = 12
+GF_COSIM_MSG_SURROUND_WORLD = 13
+GF_COSIM_MSG_MODE_HINT = 14
 GF_COSIM_MSG_VEHICLE_CMD = 20
 GF_COSIM_SLOT_ID_LEN = 32
 
@@ -80,6 +85,19 @@ def _giraffe_cam_on() -> bool:
     """Host default off. Board/surround: GF_GIRAFFE_CAM=1."""
     v = (_env("GF_GIRAFFE_CAM", "0")).strip().lower()
     return v in ("1", "on", "true", "yes")
+
+
+def _surround_cosim_on() -> bool:
+    """ADC / parking: GF_SURROUND=1 (default on when GF_PRODUCT=adc)."""
+    v = (_env("GF_SURROUND", "")).strip().lower()
+    if v:
+        return v in ("1", "on", "true", "yes")
+    return (_env("GF_PRODUCT", "")).strip().lower() == "adc"
+
+
+def _mode_hint_cosim_on() -> bool:
+    v = (_env("GF_MODE_HINT", "1")).strip().lower()
+    return v not in ("0", "off", "false", "no")
 
 
 def _now_ns() -> int:
@@ -160,6 +178,12 @@ class CosimSock:
 
     def send_fake_perc(self, blob: bytes, ts: int) -> None:
         self._send_frame(GF_COSIM_MSG_FAKE_PERC, blob, ts)
+
+    def send_surround_world(self, blob: bytes, ts: int) -> None:
+        self._send_frame(GF_COSIM_MSG_SURROUND_WORLD, blob, ts)
+
+    def send_mode_hint(self, blob: bytes, ts: int) -> None:
+        self._send_frame(GF_COSIM_MSG_MODE_HINT, blob, ts)
 
     def send_camera(self, slot_id: str, w: int, h: int, nv12: bytes, ts: int) -> None:
         sid = slot_id.encode("ascii", "ignore")[:GF_COSIM_SLOT_ID_LEN]
@@ -433,11 +457,26 @@ def run() -> int:
     steer = 0.0
     tip_seq = 0
     perc_seq = 0
+    surround_seq = 0
+    hint_seq = 0
     cmd_seen = False
     cmd_miss_logged = False
     first_perc_mono = 0.0
     tip = TipSender()
     lane_log_once = False
+    surround_log_once = False
+    want_surround = _surround_cosim_on()
+    want_hint = _mode_hint_cosim_on()
+    if want_surround:
+        print(
+            "[giraffe_client] SurroundWorld cosim on (GF_SURROUND / GF_PRODUCT=adc)",
+            flush=True,
+        )
+    if want_hint:
+        print(
+            "[giraffe_client] ModeHint cosim on (GF_APA_ARMED / shm gf_mode_hint)",
+            flush=True,
+        )
 
     while not STOP:
         t_loop = time.perf_counter()
@@ -484,6 +523,35 @@ def run() -> int:
             )
             cosim.send_fake_perc(perc_blob, ts)
             t4 = time.perf_counter()
+            if want_surround:
+                sw = collect_surround_world(hero, world)
+                surround_seq += 1
+                sw_blob = pack_surround_world_pod(
+                    objects=sw.get("objects") or [],
+                    slots=sw.get("slots") or [],
+                    seq=surround_seq,
+                    timestamp_ns=ts,
+                )
+                cosim.send_surround_world(sw_blob, ts)
+                if not surround_log_once:
+                    surround_log_once = True
+                    print(
+                        f"[giraffe_client] surround_world n_obj={sw.get('n_obj')} "
+                        f"n_slot={sw.get('n_slot')}",
+                        flush=True,
+                    )
+            if want_hint:
+                apa, confirm = read_mode_hint()
+                hint_seq += 1
+                cosim.send_mode_hint(
+                    pack_mode_hint_pod(
+                        apa_armed=apa,
+                        slot_confirmed=confirm,
+                        seq=hint_seq,
+                        timestamp_ns=ts,
+                    ),
+                    ts,
+                )
             if first_perc_mono <= 0.0:
                 first_perc_mono = time.monotonic()
             if not lane_log_once:

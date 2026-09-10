@@ -28,7 +28,7 @@ bash projects/afc/scripts/run_sil.sh
 | 客户端 | 连接 |
 |--------|------|
 | **Foxglove Studio** | Open connection → `ws://127.0.0.1:8765` |
-| **GMT GUI** | 打开 **project.yaml** → host:port → **连接**；可关 **跟随最新**（只记盘不跟播） |
+| **GMT GUI** | 打开 **giraffe.yaml** → host:port → **连接**；可关 **跟随最新**（只记盘不跟播） |
 | **回灌 playhead** | SIL：`GF_INJECT_MODE=playhead` → GMT「回灌」页连 `:8767`（跟 playhead 灌） |
 
 Foxglove 连接后加 **Raw Messages** / **Plot**，勾选 `/gf/EgoMotion`、`/gf/Trajectory`。

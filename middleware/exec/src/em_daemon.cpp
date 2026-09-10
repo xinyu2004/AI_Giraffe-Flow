@@ -4,6 +4,7 @@
 #include "gf/osal/clock.hpp"
 
 #include <gf_ara/log/logger.hpp>
+#include <gf_ara/sm/state_client.hpp>
 
 #if defined(GF_HAS_DEPLOY_CONFIG) && GF_HAS_DEPLOY_CONFIG
 #include <gf_gen/deploy_config.hpp>
@@ -223,12 +224,12 @@ bool EmDaemon::Configure(EmDaemonConfig cfg) {
   return true;
 }
 
-bool EmDaemon::LoadFromDeployConfig(std::string_view platform_dir,
+bool EmDaemon::LoadFromDeployConfig(std::string_view ara_cfg_dir,
                                     std::string_view build_dir,
                                     std::string_view log_dir) {
 #if defined(GF_HAS_DEPLOY_CONFIG) && GF_HAS_DEPLOY_CONFIG
   EmDaemonConfig cfg;
-  cfg.platform_dir = std::string(platform_dir);
+  cfg.ara_cfg_dir = std::string(ara_cfg_dir);
   cfg.build_dir = std::string(build_dir);
   cfg.log_dir = std::string(log_dir);
   if (!gf_gen::deploy::kEm) {
@@ -254,8 +255,26 @@ bool EmDaemon::LoadFromDeployConfig(std::string_view platform_dir,
     }
     spec.restart_enabled = e.restart_enabled;
     spec.max_restarts = e.max_restarts;
+    spec.function_group =
+        (e.function_group != nullptr && e.function_group[0] != '\0') ? e.function_group
+                                                                    : "MachineFG";
+    for (std::size_t ai = 0; ai < e.n_active_in; ++ai) {
+      if (e.active_in != nullptr && e.active_in[ai] != nullptr && e.active_in[ai][0] != '\0') {
+        spec.active_in.emplace_back(e.active_in[ai]);
+      }
+    }
     if (!spec.name.empty() && !spec.binary.empty()) {
       cfg.processes.push_back(std::move(spec));
+    }
+  }
+  for (std::size_t i = 0; i < gf_gen::deploy::kFunctionGroupCount; ++i) {
+    const auto& fg = gf_gen::deploy::kFunctionGroups[i];
+    if (fg.id == nullptr || fg.id[0] == '\0') {
+      continue;
+    }
+    if (fg.kind == gf_gen::deploy::FgKind::kMode && fg.initial != nullptr &&
+        fg.initial[0] != '\0') {
+      cfg.mode_fg_initial[fg.id] = fg.initial;
     }
   }
   if (cfg.processes.empty()) {
@@ -265,10 +284,10 @@ bool EmDaemon::LoadFromDeployConfig(std::string_view platform_dir,
   gf_ara::log::Logger::Instance().Info(
       "em", "LoadFromDeployConfig ok processes=" +
                 std::to_string(cfg.processes.size()) +
-                " platform=" + cfg.platform_dir);
+                " ara_cfg=" + cfg.ara_cfg_dir);
   return Configure(std::move(cfg));
 #else
-  (void)platform_dir;
+  (void)ara_cfg_dir;
   (void)build_dir;
   (void)log_dir;
   gf_ara::log::Logger::Instance().Error(
@@ -278,10 +297,10 @@ bool EmDaemon::LoadFromDeployConfig(std::string_view platform_dir,
 #endif
 }
 
-bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
+bool EmDaemon::Load(std::string_view ara_cfg_dir, std::string_view launch_yaml,
                     std::string_view build_dir, std::string_view log_dir) {
   EmDaemonConfig cfg;
-  cfg.platform_dir = std::string(platform_dir);
+  cfg.ara_cfg_dir = std::string(ara_cfg_dir);
   cfg.build_dir = std::string(build_dir);
   cfg.log_dir = std::string(log_dir);
 
@@ -291,18 +310,12 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
       override != nullptr && override[0] != '\0') {
     exec_path = override;
   } else {
-    exec_path = JoinPath(cfg.platform_dir, "exec.yaml");
-    if (ReadFile(exec_path).empty()) {
-      const auto alt = JoinPath(cfg.platform_dir, "platform/exec.yaml");
-      if (!ReadFile(alt).empty()) {
-        exec_path = alt;
-      }
-    }
+    exec_path = JoinPath(cfg.ara_cfg_dir, "exec.yaml");
   }
   const std::string exec_text = ReadFile(exec_path);
   if (exec_text.empty()) {
     gf_ara::log::Logger::Instance().Error(
-        "em", "cannot read exec.yaml under " + cfg.platform_dir);
+        "em", "cannot read exec.yaml under " + cfg.ara_cfg_dir);
     return false;
   }
 
@@ -313,13 +326,7 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
     return false;
   }
 
-  std::string phm_path = JoinPath(cfg.platform_dir, "phm.yaml");
-  if (ReadFile(phm_path).empty()) {
-    const auto alt = JoinPath(cfg.platform_dir, "platform/phm.yaml");
-    if (!ReadFile(alt).empty()) {
-      phm_path = alt;
-    }
-  }
+  const std::string phm_path = JoinPath(cfg.ara_cfg_dir, "phm.yaml");
   const std::string phm_text = ReadFile(phm_path);
 
   // Line-oriented parse (reliable under C++ ECMAScript regex).
@@ -367,6 +374,7 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
   {
     EmProcessSpec cur;
     bool in_depends = false;
+    bool in_active_in = false;
     auto flush = [&]() {
       if (cur.name.empty()) {
         return;
@@ -375,14 +383,20 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
       if (lit == launch_map.end()) {
         cur = EmProcessSpec{};
         in_depends = false;
+        in_active_in = false;
         return;
       }
       EmProcessSpec spec = lit->second;
       spec.name = cur.name;
       spec.depends_on = cur.depends_on;
+      if (!cur.function_group.empty()) {
+        spec.function_group = cur.function_group;
+      }
+      spec.active_in = cur.active_in;
       cfg.processes.push_back(std::move(spec));
       cur = EmProcessSpec{};
       in_depends = false;
+      in_active_in = false;
     };
     std::istringstream iss(exec_text);
     std::string line;
@@ -396,13 +410,48 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
       if (cur.name.empty()) {
         continue;
       }
+      if (std::regex_match(line, m, std::regex(R"(\s*function_group:\s*(\S+)\s*)"))) {
+        cur.function_group = m[1].str();
+        in_depends = false;
+        in_active_in = false;
+        continue;
+      }
+      if (std::regex_search(line, m, std::regex(R"(active_in:\s*\[([^\]]*)\])"))) {
+        in_active_in = false;
+        in_depends = false;
+        std::string inner = m[1].str();
+        std::regex tok_re(R"(([A-Za-z0-9_./]+))");
+        for (std::sregex_iterator it(inner.begin(), inner.end(), tok_re), end; it != end;
+             ++it) {
+          cur.active_in.push_back((*it)[1].str());
+        }
+        continue;
+      }
+      if (std::regex_match(line, std::regex(R"(\s*active_in:\s*)"))) {
+        in_active_in = true;
+        in_depends = false;
+        continue;
+      }
+      if (in_active_in && std::regex_match(line, m, std::regex(R"(\s*-\s+(\S+)\s*)"))) {
+        cur.active_in.push_back(m[1].str());
+        continue;
+      }
+      // Legacy authoring: drive_park_state → single active_in entry.
+      if (std::regex_match(line, m, std::regex(R"(\s*drive_park_state:\s*(\S+)\s*)"))) {
+        cur.active_in = {m[1].str()};
+        in_depends = false;
+        in_active_in = false;
+        continue;
+      }
       if (std::regex_match(line, std::regex(R"(\s*depends_on:\s*\[\s*\]\s*)"))) {
         in_depends = false;
+        in_active_in = false;
         continue;
       }
       // Inline: depends_on: [a, b]
       if (std::regex_search(line, m, std::regex(R"(depends_on:\s*\[([^\]]*)\])"))) {
         in_depends = false;
+        in_active_in = false;
         std::string inner = m[1].str();
         std::regex tok_re(R"(([A-Za-z0-9_./]+))");
         for (std::sregex_iterator it(inner.begin(), inner.end(), tok_re), end; it != end;
@@ -413,6 +462,7 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
       }
       if (std::regex_match(line, std::regex(R"(\s*depends_on:\s*)"))) {
         in_depends = true;
+        in_active_in = false;
         continue;
       }
       if (in_depends && std::regex_match(line, m, std::regex(R"(\s*-\s+(\S+)\s*)"))) {
@@ -421,9 +471,66 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
       }
       if (std::regex_match(line, std::regex(R"(\s*[a-z_]+:.*)"))) {
         in_depends = false;
+        in_active_in = false;
       }
     }
     flush();
+  }
+
+  // Seed mode FG initials from function_groups (kind: mode or non-Machine three-state).
+  {
+    std::string cur_id;
+    std::string cur_kind;
+    std::string cur_initial;
+    auto flush_fg = [&]() {
+      if (cur_id.empty() || cur_initial.empty()) {
+        cur_id.clear();
+        cur_kind.clear();
+        cur_initial.clear();
+        return;
+      }
+      const bool is_machine =
+          cur_kind == "machine" ||
+          (cur_kind.empty() &&
+           (cur_initial == "Off" || cur_initial == "Running" || cur_initial == "Updating"));
+      if (!is_machine) {
+        cfg.mode_fg_initial[cur_id] = cur_initial;
+      }
+      cur_id.clear();
+      cur_kind.clear();
+      cur_initial.clear();
+    };
+    std::istringstream iss(exec_text);
+    std::string line;
+    bool in_fgs = false;
+    while (std::getline(iss, line)) {
+      if (std::regex_match(line, std::regex(R"(function_groups:\s*)"))) {
+        in_fgs = true;
+        continue;
+      }
+      if (in_fgs && std::regex_match(line, std::regex(R"(processes:\s*)"))) {
+        flush_fg();
+        break;
+      }
+      if (!in_fgs) {
+        continue;
+      }
+      std::smatch m;
+      if (std::regex_match(line, m, std::regex(R"(\s*- id:\s*(\S+)\s*)"))) {
+        flush_fg();
+        cur_id = m[1].str();
+        continue;
+      }
+      if (cur_id.empty()) {
+        continue;
+      }
+      if (std::regex_match(line, m, std::regex(R"(\s*kind:\s*(\S+)\s*)"))) {
+        cur_kind = m[1].str();
+      } else if (std::regex_match(line, m, std::regex(R"(\s*initial:\s*(\S+)\s*)"))) {
+        cur_initial = m[1].str();
+      }
+    }
+    flush_fg();
   }
 
   if (cfg.processes.empty()) {
@@ -460,7 +567,7 @@ bool EmDaemon::Load(std::string_view platform_dir, std::string_view launch_yaml,
   }
   gf_ara::log::Logger::Instance().Info(
       "em", "Load ok processes=" + std::to_string(cfg.processes.size()) +
-                " platform=" + cfg.platform_dir);
+                " ara_cfg=" + cfg.ara_cfg_dir);
   return Configure(std::move(cfg));
 }
 
@@ -485,7 +592,7 @@ bool EmDaemon::Spawn(Runtime& rt, bool is_relaunch) {
       return s;
     };
     a = replace_all(a, "$GF_BUILD_DIR", cfg_.build_dir.c_str());
-    a = replace_all(a, "$GF_PLATFORM_DIR", cfg_.platform_dir.c_str());
+    a = replace_all(a, "$GF_ARA_CFG_DIR", cfg_.ara_cfg_dir.c_str());
     if (const char* iox = std::getenv("GF_IOX_TOML"); iox && *iox) {
       a = replace_all(a, "$GF_IOX_TOML", iox);
     }
@@ -511,7 +618,7 @@ bool EmDaemon::Spawn(Runtime& rt, bool is_relaunch) {
     req.stdout_append = is_relaunch;
   }
   req.env_set.emplace_back("GF_EM_MANAGED", "1");
-  req.env_set.emplace_back("GF_PLATFORM_DIR", cfg_.platform_dir);
+  req.env_set.emplace_back("GF_ARA_CFG_DIR", cfg_.ara_cfg_dir);
   // Children share structured logging via Logger (console + DLT). Optional file
   // only when caller set GF_LOG_FILE / log_dir for debug smoke.
   if (const char* lf = std::getenv("GF_LOG_FILE"); lf != nullptr && lf[0] != '\0') {
@@ -564,13 +671,25 @@ bool EmDaemon::StartAll() {
     }
   }
   ReclaimStalePlatformDaemons(cfg_.build_dir, need_roudi, need_dlt, dlt_binary);
+
+  // Seed ModeDeclaration FG states from freeze/YAML initials before first Mode App publish.
+  for (const auto& [fg_id, initial] : cfg_.mode_fg_initial) {
+    (void)gf_ara::sm::StateClient::PublishFgState(fg_id, initial);
+    log.Info("em", "em_daemon: seed FgState fg=" + fg_id + " initial=" + initial);
+  }
+
   log.Info("em", "StartAll begin count=" + std::to_string(runtimes_.size()));
   for (auto& rt : runtimes_) {
+    if (!WantRunning(rt.spec)) {
+      rt.fg_held_off = true;
+      rt.terminal_exit = false;
+      log.Info("em", "em_daemon: hold-off name=" + rt.spec.name + " fg=" +
+                         rt.spec.function_group + " active_in≠current");
+      continue;
+    }
     if (!Spawn(rt, false)) {
       return false;
     }
-    // Only real IPC daemons need a long beat; other host.* / apps stay short
-    // (smoke host.base fixtures must not pay 600ms each).
     const bool ipc_daemon =
         rt.spec.name.find("iox_roudi") != std::string::npos ||
         rt.spec.name.find("dlt_daemon") != std::string::npos;
@@ -581,11 +700,70 @@ bool EmDaemon::StartAll() {
   return true;
 }
 
+void EmDaemon::StopForFg(Runtime& rt) {
+  if (!gf::osal::IsValidProcessId(rt.pid)) {
+    rt.fg_held_off = true;
+    return;
+  }
+  auto& log = gf_ara::log::Logger::Instance();
+  log.Info("em", "em_daemon: FG set-diff stop name=" + rt.spec.name +
+                     " pid=" + std::to_string(rt.pid));
+  rt.fg_held_off = true;
+  (void)gf::osal::TerminateProcess(rt.pid);
+  std::this_thread::sleep_for(std::chrono::milliseconds(80));
+  if (gf::osal::IsValidProcessId(rt.pid)) {
+    const auto wr = gf::osal::WaitProcess(rt.pid, true);
+    if (wr.status == gf::osal::ProcessWaitStatus::kStillRunning) {
+      (void)gf::osal::KillProcess(rt.pid);
+      (void)gf::osal::WaitProcess(rt.pid, false);
+    }
+  }
+  rt.pid = gf::osal::kInvalidProcessId;
+  rt.terminal_exit = false;
+}
+
+bool EmDaemon::WantRunning(const EmProcessSpec& spec) const {
+  if (spec.active_in.empty()) {
+    return true;
+  }
+  const std::string cur = gf_ara::sm::StateClient::ReadFgState(spec.function_group);
+  if (cur.empty()) {
+    return false;
+  }
+  for (const auto& s : spec.active_in) {
+    if (s == cur) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void EmDaemon::ApplyFgSetDiff() {
+  for (auto& rt : runtimes_) {
+    if (rt.spec.active_in.empty()) {
+      continue;
+    }
+    const bool want = WantRunning(rt.spec);
+    const bool alive = gf::osal::IsValidProcessId(rt.pid);
+    if (want && !alive) {
+      rt.fg_held_off = false;
+      if (!Spawn(rt, rt.ever_started)) {
+        gf_ara::log::Logger::Instance().Error(
+            "em", "FG set-diff spawn failed name=" + rt.spec.name);
+      }
+    } else if (!want && alive) {
+      StopForFg(rt);
+    }
+  }
+}
+
 bool EmDaemon::PollOnce() {
   if (shutting_down_) {
     return true;
   }
   auto& log = gf_ara::log::Logger::Instance();
+
+  ApplyFgSetDiff();
 
   for (auto& rt : runtimes_) {
     if (!gf::osal::IsValidProcessId(rt.pid)) {
@@ -603,14 +781,15 @@ bool EmDaemon::PollOnce() {
         (wr.status == gf::osal::ProcessWaitStatus::kExited) ? wr.exit_code : -1;
     const bool signaled = (wr.status == gf::osal::ProcessWaitStatus::kSignaled);
     const bool abnormal = signaled || exit_code != 0;
+    const bool intentional_fg = rt.fg_held_off;
     const std::string detail =
         "t_ms=" + std::to_string(MonoMs()) + " em_daemon: child exit name=" +
         rt.spec.name + " pid=" + std::to_string(rt.pid) +
         " code=" + std::to_string(exit_code) +
-        " signaled=" + (signaled ? "yes" : "no");
-    if (abnormal) {
+        " signaled=" + (signaled ? "yes" : "no") +
+        (intentional_fg ? " fg_held_off=yes" : "");
+    if (abnormal && !intentional_fg) {
       log.Error("em", detail);
-      // Surface last lines of redirected child log (host_*.log / app logs).
       if (!cfg_.log_dir.empty()) {
         std::string safe = rt.spec.name;
         for (char& c : safe) {
@@ -635,6 +814,12 @@ bool EmDaemon::PollOnce() {
     }
     rt.pid = gf::osal::kInvalidProcessId;
 
+    if (intentional_fg) {
+      rt.fg_held_off = true;
+      rt.terminal_exit = false;
+      continue;
+    }
+
     const bool do_restart =
         !shutting_down_ && rt.spec.restart_enabled &&
         rt.restarts < rt.spec.max_restarts &&
@@ -649,9 +834,34 @@ bool EmDaemon::PollOnce() {
       }
     } else {
       rt.terminal_exit = true;
-      // Mechanism: abnormal exit that will not relaunch → stop the machine.
-      // Board recovery = systemd Restart=on-failure of the EM unit (whole tree).
       if (abnormal && !shutting_down_) {
+        const bool is_roudi =
+            rt.spec.name.find("iox_roudi") != std::string::npos;
+        const bool is_dlt =
+            rt.spec.name.find("dlt_daemon") != std::string::npos;
+        const bool is_frame =
+            rt.spec.name.find("frame_ingest") != std::string::npos;
+
+        if (is_dlt || is_frame) {
+          // Degrade: keep EM + remaining children; logging / frames may be limited.
+          log.Error(
+              "em",
+              std::string("platform daemon exited — continuing degraded name=") +
+                  rt.spec.name + " (RouDi stays fatal; DLT/frame_ingest do not stop EM)");
+          continue;
+        }
+
+        if (is_roudi) {
+          log.Error(
+              "em",
+              "RouDi fatal — reclaim iceoryx resources and orderly EM shutdown name=" +
+                  rt.spec.name + " reason=" + detail);
+          ReclaimStalePlatformDaemons(cfg_.build_dir, /*reclaim_roudi=*/true,
+                                      /*reclaim_dlt=*/false, /*dlt_binary=*/"");
+          RequestShutdown();
+          return false;
+        }
+
         log.Error("em", "abnormal child exit → shutting down EM after failure of " +
                             rt.spec.name);
         RequestShutdown();

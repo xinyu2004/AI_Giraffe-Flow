@@ -18,6 +18,7 @@
 | [run_mainchain_verify.sh](run_mainchain_verify.sh) | 有限帧主链（verify 壳；可选 caller 注入 PHM） |
 | [smoke_sil_observability.sh](smoke_sil_observability.sh) | main-chain → Tag → MCAP |
 | [smoke_sil_phm_fault.sh](smoke_sil_phm_fault.sh) | PHM miss→recover（自设 fault） |
+| [smoke_sil_sm_fg.sh](smoke_sil_sm_fg.sh) | SIL-SM-01：fcm `notify_sm` → `sm: health_fault` + Collector；Trajectory 仍在 |
 | [smoke_sil_em_daemon.sh](smoke_sil_em_daemon.sh) | OS EM fork/exec + PHM restart relaunch |
 | [smoke_doip_ota.sh](smoke_doip_ota.sh) | DoIP 通路冒烟（**不**冒烟刷写本身） |
 | [smoke_gmt_vcd.sh](smoke_gmt_vcd.sh) | GMT VCD |

@@ -228,5 +228,5 @@ iceoryx 路径：  hpp / fidl 进 SOR types → iceoryx binding（不用 fdepl /
 ```bash
 source .venv/bin/activate
 pip install -e "tools/gf-codegen[dev]" -e tools/gf-config
-gf-config projects/afc/project.yaml
+gf-config projects/afc/giraffe.yaml
 ```

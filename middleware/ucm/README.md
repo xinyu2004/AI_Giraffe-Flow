@@ -7,7 +7,7 @@ ARA-inspired **Update and Configuration Management** (`gf_ara::ucm`).
 | `PackageManager` | Idle→Transfer→Process→Activate / Rollback 状态机；SIL 校验产物 magic（`GFSW` / `PK` / `RAUC`） |
 | `OtaOrchestrator` | SM `Updating` + pause hook → PackageManager → Collector；失败可 Rollback |
 
-**入口：** GMT OTA（DoIP/UDS）或进程内 smoke。配置：`platform/ucm.yaml`（编排策略）+ `diag.yaml`（传输 SID / 时序）。见 [DOIP_OTA.md](../../docs/zh/operations/DOIP_OTA.md)。
+**入口：** GMT OTA（DoIP/UDS）或进程内 smoke。配置：`cfg/gf_ara_cfg/ucm.yaml`（编排策略）+ `diag.yaml`（传输 SID / 时序）。见 [DOIP_OTA.md](../../docs/zh/operations/DOIP_OTA.md)。
 
 失败注入：`GF_UCM_FORCE_FAIL=1` 或 `artifact_path` 含 `FORCE_FAIL` → Collector `ucm/ota_failed`。
 

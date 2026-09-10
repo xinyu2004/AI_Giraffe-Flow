@@ -17,10 +17,13 @@ from PySide6.QtWidgets import (
 )
 
 
+from gf_config.i18n import t
+
+
 class LineageView(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._summary = QLabel("Verify 后显示 lineage 检查结果")
+        self._summary = QLabel(t("Verify 后显示 lineage 检查结果"))
         self._summary.setWordWrap(True)
         font = QFont()
         font.setPointSize(11)
@@ -31,11 +34,11 @@ class LineageView(QWidget):
         self._checks.setReadOnly(True)
         self._raw = QPlainTextEdit()
         self._raw.setReadOnly(True)
-        self._raw.setPlaceholderText("原始 signal_lineage_report.yaml …")
+        self._raw.setPlaceholderText(t("原始 signal_lineage_report.yaml …"))
 
-        split = QSplitter()
+        split = QSplitter(self)
         split.setOrientation(Qt.Orientation.Vertical)
-        top = QWidget()
+        top = QWidget(split)
         top_l = QVBoxLayout(top)
         top_l.setContentsMargins(0, 0, 0, 0)
         top_l.addWidget(self._summary)
@@ -57,17 +60,17 @@ class LineageView(QWidget):
     def set_report_text(self, text: str) -> None:
         self._raw.setPlainText(text or "")
         if not text.strip():
-            self.set_placeholder("（无报告内容）")
+            self.set_placeholder(t("（无报告内容）"))
             return
         try:
             data = yaml.safe_load(text) or {}
         except Exception:  # noqa: BLE001
-            self._summary.setText("报告不是合法 YAML，见下方原文")
+            self._summary.setText(t("报告不是合法 YAML，见下方原文"))
             self._summary.setStyleSheet("color:#c0392b;")
             self._checks.setPlainText(text)
             return
         if not isinstance(data, dict):
-            self._summary.setText("报告格式异常")
+            self._summary.setText(t("报告格式异常"))
             self._summary.setStyleSheet("color:#c0392b;")
             self._checks.setPlainText(text)
             return
@@ -80,11 +83,15 @@ class LineageView(QWidget):
         checks = [c for c in (data.get("checks") or []) if isinstance(c, dict)]
 
         if ok:
-            self._summary.setText(f"Lineage PASS · {len(checks)} 项检查通过")
+            self._summary.setText(
+                t("Lineage PASS · {n} 项检查通过").format(n=len(checks))
+            )
             self._summary.setStyleSheet("color:#1e8449;")
         else:
             self._summary.setText(
-                f"Lineage FAIL · {len(errors)} 个错误 · {len(warnings)} 个警告"
+                t("Lineage FAIL · {e} 个错误 · {w} 个警告").format(
+                    e=len(errors), w=len(warnings)
+                )
             )
             self._summary.setStyleSheet("color:#c0392b;")
 
@@ -103,17 +110,17 @@ class LineageView(QWidget):
             cursor.insertText(text)
 
         if errors:
-            write("错误\n", color="#c0392b", bold=True)
+            write(t("错误\n"), color="#c0392b", bold=True)
             for e in errors:
                 write(f"  ✗ {e}\n", color="#c0392b")
             write("\n")
         if warnings:
-            write("警告\n", color="#d68910", bold=True)
+            write(t("警告\n"), color="#d68910", bold=True)
             for w in warnings:
                 write(f"  ! {w}\n", color="#d68910")
             write("\n")
 
-        write("检查项\n", bold=True)
+        write(t("检查项\n"), bold=True)
         for c in checks:
             cid = str(c.get("id") or "?")
             status = str(c.get("status") or "")

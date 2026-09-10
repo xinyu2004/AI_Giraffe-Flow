@@ -1,7 +1,7 @@
-"""Emit compile-frozen collector / bounds / ucm / diag DID tables from platform_manifest.
+"""Emit compile-frozen collector / bounds / ucm / diag DID tables from gf_ara_cfg_manifest.
 
 Authoring YAML stays in gf-config; product runtime reads these headers only.
-Smoke may still point GF_PLATFORM_DIR at authoring platform for YAML fallback
+Smoke may still point GF_ARA_CFG_DIR at authoring platform for YAML fallback
 when headers are not compiled in (middleware-only builds).
 """
 

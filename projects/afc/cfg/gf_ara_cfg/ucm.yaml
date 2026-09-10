@@ -1,0 +1,12 @@
+# gf_ara::ucm — SIL OTA orchestration (stub backend; RAUC → BL-RAUC)
+schema_version: "0.1"
+enabled: true
+package_source: "sil://artifact"
+allow_rollback: true
+allow_downgrade: false
+function_group: MachineFG
+# software_clusters:
+#   - name: perception
+#     processes: [perception.fcm]
+#     install_dir: /opt/gf/perception
+#     version_file: /var/gf/ver/perception

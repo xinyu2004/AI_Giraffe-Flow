@@ -43,7 +43,7 @@ Giraffe Flow 板端与工具链按三层分工，避免「业务改中间件、O
 
 | 命令 | 产出 | 说明 |
 |------|------|------|
-| `compose --project …/project.yaml` | `projects/.../gf.sor.json` | 合并四类输入 |
+| `compose --project …/giraffe.yaml` | `projects/.../gf.sor.json` | 合并四类输入 |
 | 同上 | `projects/.../reports/signal_lineage_report.yaml` | 连线/信号闭环检查（lineage） |
 | `generate …/gf.sor.json --out …/generated/` | `include/gf_gen/types/*.hpp` | 结构体类型 |
 | 同上 | `include/gf_gen/skeleton/*_skeleton.hpp` | **提供方**（publish / `Send`） |
@@ -68,8 +68,8 @@ bash projects/afc/scripts/verify/smoke_sil.sh
 |------|------|
 | `interfaces/**/io_types.hpp` | 模块接口（外仓交付或本车型） |
 | `oem/oem_import.dbc` + `oem_import.yaml` | OEM 信号与归属 |
-| `integration/wiring.yaml` | provide/require、bindings、dataflows |
-| `req.yaml` + `project.yaml` | SKU / 验收 / 索引 |
+| `cfg/wiring.yaml` | provide/require、bindings、dataflows |
+| `req.yaml` + `giraffe.yaml` | SKU / 验收 / 索引 |
 
 示例验收项目：[`projects/afc/`](../../projects/afc/)。
 

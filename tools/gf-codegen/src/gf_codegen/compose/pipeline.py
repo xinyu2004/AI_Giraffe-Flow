@@ -16,7 +16,7 @@ from gf_codegen.compose.emit_deploy_config import emit_deploy_config
 from gf_codegen.compose.emit_frame_ingest import emit_frame_ingest
 from gf_codegen.compose.emit_iox import emit_iox_assets
 from gf_codegen.compose.emit_log_config import emit_log_config
-from gf_codegen.compose.emit_platform_tables import emit_platform_tables
+from gf_codegen.compose.emit_ara_cfg_tables import emit_ara_cfg_tables
 from gf_codegen.compose.emit_runtime_freeze import emit_runtime_freeze
 from gf_codegen.compose.import_oem import import_oem
 from gf_codegen.compose.lineage import run_lineage
@@ -127,17 +127,17 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     gen_dir = paths.project_dir / "generated"
     fi_meta = emit_frame_ingest(req, gen_dir)
     pub_meta = emit_publish_policy(req, gen_dir)
-    plat_loaded = sor.get("platform_manifest") if isinstance(sor.get("platform_manifest"), dict) else {}
+    plat_loaded = sor.get("gf_ara_cfg_manifest") if isinstance(sor.get("gf_ara_cfg_manifest"), dict) else {}
     deploy_meta = emit_deploy_config(
         req,
         plat_loaded,
-        paths.project_dir / "platform",
+        paths.project_dir / "cfg" / "gf_ara_cfg",
         gen_dir,
         wiring=wiring,
     )
     log_meta = emit_log_config(plat_loaded, gen_dir)
     # exec/phm tables: prefer generated/exec.yaml written by deploy_config.
-    pt_path = emit_platform_tables(plat_loaded, gen_dir)
+    pt_path = emit_ara_cfg_tables(plat_loaded, gen_dir)
     freeze_meta = emit_runtime_freeze(plat_loaded, gen_dir)
     iox_meta = emit_iox_assets(gen_dir, plat_loaded, req)
     report.setdefault("outputs", {})["sku_cmake"] = str(sku_cmake)
@@ -159,7 +159,7 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     report.setdefault("outputs", {})["ucm_config_hpp"] = freeze_meta["ucm"]
     report.setdefault("outputs", {})["diag_seed_hpp"] = freeze_meta["diag_seed"]
     if pt_path is not None:
-        report.setdefault("outputs", {})["platform_tables_hpp"] = str(pt_path)
+        report.setdefault("outputs", {})["ara_cfg_tables_hpp"] = str(pt_path)
     if iox_meta:
         report.setdefault("outputs", {})["iox_roudi_toml"] = iox_meta["toml"]
         report.setdefault("outputs", {})["iox_mgmt_cmake"] = iox_meta["cmake"]
@@ -185,16 +185,16 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     print(f"em_launch (human dump) wrote: {deploy_meta['em_launch']}")
     print(f"exec (human dump) wrote: {deploy_meta['exec']}")
     if pt_path is not None:
-        print(f"platform_tables wrote: {pt_path}")
+        print(f"ara_cfg_tables wrote: {pt_path}")
     if iox_meta:
         print(f"iox_roudi.toml wrote: {iox_meta['toml']}")
         print(
             f"iox_mgmt.cmake wrote: {iox_meta['cmake']} "
             "(iceoryx.mgmt change → reconfigure + rebuild iceoryx)"
         )
-    if sor.get("platform_manifest"):
-        keys = sorted(k for k in sor["platform_manifest"] if k != "schema_version")
-        print(f"platform_manifest: {', '.join(keys)}")
+    if sor.get("gf_ara_cfg_manifest"):
+        keys = sorted(k for k in sor["gf_ara_cfg_manifest"] if k != "schema_version")
+        print(f"gf_ara_cfg_manifest: {', '.join(keys)}")
     for chk in plat_checks:
         if chk.get("id") == "platform_mem_budget":
             print(

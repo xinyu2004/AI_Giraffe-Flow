@@ -22,29 +22,11 @@ def _find_lib() -> Path:
     for part in (os.environ.get("LD_LIBRARY_PATH") or "").split(":"):
         if part:
             candidates.append(Path(part) / "libgf_channel.so")
-    here = Path(__file__).resolve()
-    # tools/gmt/src/gf_gmt → repo root ≈ parents[3]
-    try:
-        repo = here.parents[3]
-        candidates.append(
-            repo / "middleware" / "bindings" / "gf_channel" / "libgf_channel.so"
-        )
-        candidates.append(
-            repo
-            / "projects"
-            / "afc"
-            / "build-sil"
-            / "runtime"
-            / "lib"
-            / "libgf_channel.so"
-        )
-    except IndexError:
-        pass
     for c in candidates:
         if c.is_file():
             return c
     raise FileNotFoundError(
-        "libgf_channel.so not found (set GF_RUNTIME_DIR / LD_LIBRARY_PATH after stage)"
+        "libgf_channel.so not found (set GF_RUNTIME_DIR or LD_LIBRARY_PATH after stage)"
     )
 
 

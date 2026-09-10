@@ -12,3 +12,5 @@ children:
   - cases/roadway
   - cases/isp_env
   - cases/weather
+  # ADC shells (planned): python3 run_cases.py cases/adc
+  # - cases/adc

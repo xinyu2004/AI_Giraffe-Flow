@@ -4,7 +4,7 @@
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$(cd "${PROJECT_DIR}/../.." && pwd)"
-PROJECT_YAML="${PROJECT_DIR}/project.yaml"
+PROJECT_YAML="${PROJECT_DIR}/giraffe.yaml"
 SOR_JSON="${PROJECT_DIR}/gf.sor.json"
 GEN_OUT="${PROJECT_DIR}/generated"
 TAG="[afc]"
@@ -235,6 +235,8 @@ gf_sil_sync_runtime() {
 
   if [[ "${_gf_sil_sync_copied}" -gt 0 ]] && command -v ldd >/dev/null 2>&1; then
     export LD_LIBRARY_PATH="${rt}/lib:${build}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    # One physical .so → one sync (many gf_* share libdlt etc.).
+    declare -A _gf_sil_ldd_seen=()
     for exe in "${rt}/bin/"*; do
       [[ -f "${exe}" && -x "${exe}" ]] || continue
       case "$(basename "${exe}")" in
@@ -246,9 +248,13 @@ gf_sil_sync_runtime() {
         case "${path}" in
           /lib/*|/lib64/*|/usr/lib/*|/usr/lib64/*) continue ;;
         esac
+        real="$(readlink -f "${path}" 2>/dev/null || printf '%s' "${path}")"
+        [[ -n "${_gf_sil_ldd_seen[${real}]:-}" ]] && continue
+        _gf_sil_ldd_seen["${real}"]=1
         gf_sil_sync_file "${path}" "${rt}/lib/$(basename "${path}")" || true
       done < <(ldd "${exe}" 2>/dev/null || true)
     done
+    unset _gf_sil_ldd_seen
   fi
 
   if [[ "${GF_STAGE_GIRAFFE_LAUNCH:-1}" == "1" && ! -x "${rt}/bin/giraffe_launch" ]]; then
@@ -261,8 +267,8 @@ export GF_BUILD_DIR="${ROOT}"
 export GF_RUNTIME_DIR="${ROOT}"
 export GF_IOX_TOML="${ROOT}/etc/iox_roudi.toml"
 export LD_LIBRARY_PATH="${ROOT}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-if [[ -d "${ROOT}/platform" ]]; then
-  export GF_PLATFORM_DIR="${ROOT}/platform"
+if [[ -d "${ROOT}/gf_ara_cfg" ]]; then
+  export GF_ARA_CFG_DIR="${ROOT}/gf_ara_cfg"
 fi
 exec "${ROOT}/bin/gf_em_daemon" --build-dir "${ROOT}" "$@"
 EOS

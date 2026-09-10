@@ -1,12 +1,16 @@
-"""Signal-link graph: Simulink-style ports, drag-wire, context menus, hpp import."""
+"""Signal-link graph view: canvas widget, wiring UX, import/hpp.
+
+Graphics items live in ``wiring_graph_items`` (ProcessCard / PortItem / edges).
+This module owns the view, session wiring, Ctrl+drag relocate, and dialogs.
+"""
 
 from __future__ import annotations
 
-import math
+import os
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
-import shiboken6
 from PySide6.QtCore import QEvent, QPointF, QRectF, QTimer, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
@@ -16,8 +20,6 @@ from PySide6.QtGui import (
     QKeySequence,
     QMouseEvent,
     QPainter,
-    QPainterPath,
-    QPainterPathStroker,
     QPen,
     QShortcut,
     QTransform,
@@ -26,17 +28,12 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
-    QButtonGroup,
-    QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
-    QGraphicsEllipseItem,
     QGraphicsItem,
     QGraphicsLineItem,
-    QGraphicsPathItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QGraphicsView,
@@ -47,18 +44,13 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QMessageBox,
-    QPushButton,
-    QRadioButton,
-    QScrollArea,
     QSizePolicy,
-    QSpinBox,
     QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from gf_codegen.compose.parse_hpp import is_fat_port_name
 from gf_config.core import (
     ProjectSession,
     canon_service,
@@ -66,1408 +58,33 @@ from gf_config.core import (
     normalize_channel_slot,
     short_service,
 )
-from gf_config.gui.cursors import (
-    port_move_cursor,
-    wire_link_cursor,
-)
+from gf_config.gui.cursors import port_move_cursor, wire_link_cursor
+from gf_config.gui.editor_history import HistoryHooksMixin
 from gf_config.gui.lineage_view import LineageView
-
-
-def _qt_alive(obj: Any) -> bool:
-    """True if the wrapped C++ QObject/QGraphicsItem still exists."""
-    try:
-        return obj is not None and shiboken6.isValid(obj)
-    except Exception:  # noqa: BLE001
-        return False
-
-SERVICE_COLORS: dict[str, str] = {
-    "EgoMotion": "#5dade2",
-    "UssZones": "#58d68d",
-    "FrontObjectList": "#f5b041",
-    "Trajectory": "#af7ac5",
-    "VehicleModeStatus": "#76d7c4",
-    "SurroundWorld": "#85c1e9",
-    "ParkingWorld": "#f1948a",
-    "DrivingObjectList": "#f7dc6f",
-    "ActuatorCommand": "#e59866",
-    "EgoMotionExtended": "#aed6f1",
-    "Perception_In_St": "#5dade2",
-    "Perception_MESSAGE_Out_St": "#f5b041",
-    "IPC_CanInfo_10ms_St": "#76d7c4",
-    "IPC_CanInfo_20ms_St": "#76d7c4",
-    "IPC_CanInfo_100ms_St": "#76d7c4",
-    "IPC_ADC_Perception_Out_St": "#f1948a",
-    "VehicleBus": "#c9a227",
-}
-
-
-def service_color(svc: str) -> QColor:
-    return QColor(SERVICE_COLORS.get(short_service(svc), "#aab7b8"))
-
-
-_PORT_SIDES = ("left", "right", "top", "bottom")
-_SIDE_LABEL = {"left": "left", "right": "right", "top": "top", "bottom": "bottom"}
-
-
-def is_external_node(*, kind: str = "", process: str = "") -> bool:
-    return kind == "external" or process.startswith("external.")
-
-
-def is_frame_ingest_node(*, kind: str = "", process: str = "") -> bool:
-    return ProjectSession.is_frame_ingest_process(kind=kind, process=process)
-
-
-def is_camera_source(*, kind: str = "", process: str = "") -> bool:
-    """Compat alias for frame_ingest / legacy camera.* canvas nodes."""
-    return is_frame_ingest_node(kind=kind, process=process)
-
-
-def port_label(svc: str) -> str:
-    """Display name: keep full gf.channel.* slot; SOA uses short service."""
-    ch = normalize_channel_slot(svc or "")
-    if ch:
-        return ch
-    return short_service(svc)
-
-
-def port_link_key(svc: str) -> str:
-    ch = normalize_channel_slot(svc or "")
-    if ch:
-        return ch
-    return short_service(svc)
-
-
-def _norm_side(side: str | None, default: str) -> str:
-    s = (side or default).strip().lower()
-    return s if s in _PORT_SIDES else default
-
-
-def _qpoint(x: float, y: float) -> QPointF:
-    return QPointF(x, y)
-
-
-class DeselectableListWidget(QListWidget):
-    """Click empty area → clear current row (no sticky last selection)."""
-
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        if self.itemAt(event.position().toPoint()) is None:
-            self.clearSelection()
-            self.setCurrentRow(-1)
-            event.accept()
-            return
-        super().mousePressEvent(event)
-
-
-def cubic_bezier_point(p0: QPointF, p1: QPointF, p2: QPointF, p3: QPointF, t: float) -> QPointF:
-    u = 1.0 - t
-    return _qpoint(
-        u**3 * p0.x() + 3 * u**2 * t * p1.x() + 3 * u * t**2 * p2.x() + t**3 * p3.x(),
-        u**3 * p0.y() + 3 * u**2 * t * p1.y() + 3 * u * t**2 * p2.y() + t**3 * p3.y(),
-    )
-
-
-def cubic_bezier_tangent(p0: QPointF, p1: QPointF, p2: QPointF, p3: QPointF, t: float) -> QPointF:
-    u = 1.0 - t
-    return _qpoint(
-        3 * u**2 * (p1.x() - p0.x()) + 6 * u * t * (p2.x() - p1.x()) + 3 * t**2 * (p3.x() - p2.x()),
-        3 * u**2 * (p1.y() - p0.y()) + 6 * u * t * (p2.y() - p1.y()) + 3 * t**2 * (p3.y() - p2.y()),
-    )
-
-
-def append_chevron(path: QPainterPath, apex: QPointF, ux: float, uy: float, *, arrow_len: float = 10.0, arrow_w: float = 5.0) -> None:
-    """Open chevron arrow at apex, oriented by unit direction (ux, uy)."""
-    px, py = -uy, ux
-    base = QPointF(apex.x() - ux * arrow_len, apex.y() - uy * arrow_len)
-    path.moveTo(apex)
-    path.lineTo(QPointF(base.x() + px * arrow_w, base.y() + py * arrow_w))
-    path.moveTo(apex)
-    path.lineTo(QPointF(base.x() - px * arrow_w, base.y() - py * arrow_w))
-
-
-class PortItem(QGraphicsEllipseItem):
-    """Out (green) / In (orange). Bare drag = wire; Ctrl+drag = side + order."""
-
-    SIZE = 16.0
-    HIT = 22.0  # larger pick target than the painted disc
-
-    def __init__(
-        self,
-        card: ProcessCard,
-        direction: str,
-        service: str,
-        index: int,
-        *,
-        side: str = "right",
-    ) -> None:
-        s = self.SIZE
-        super().__init__(-s / 2, -s / 2, s, s)
-        self.card = card
-        self.direction = direction  # "in" | "out"
-        self.service = service
-        self.index = index
-        self.side = _norm_side(side, "right" if direction == "out" else "left")
-        self.setParentItem(card)
-        self.setZValue(20)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
-        self.setAcceptHoverEvents(True)
-        self.setAcceptedMouseButtons(
-            Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton
-        )
-        self.setCursor(wire_link_cursor())
-        self._home_pos = QPointF(0, 0)
-        self._origin_side = self.side
-        self._origin_index = index
-        self._pending_side: str | None = None
-        self._pending_index: int | None = None
-        self._apply_brush()
-
-    def _hover_cursor_for(self) -> QCursor:
-        g = self.card.graph if self.card is not None else None
-        # During wire drag, override cursor owns the look; keep hand here.
-        if g is not None and g._wire_src is not None:
-            return wire_link_cursor()
-        mods = QApplication.queryKeyboardModifiers()
-        if mods & Qt.KeyboardModifier.ControlModifier:
-            return port_move_cursor()
-        return wire_link_cursor()
-
-    def hoverEnterEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        self.setCursor(self._hover_cursor_for())
-        super().hoverEnterEvent(event)
-
-    def hoverMoveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        self.setCursor(self._hover_cursor_for())
-        super().hoverMoveEvent(event)
-
-    def hoverLeaveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        self.setCursor(wire_link_cursor())
-        super().hoverLeaveEvent(event)
-
-    def shape(self) -> QPainterPath:
-        """Fat hit target so ports are easy to grab."""
-        h = self.HIT
-        path = QPainterPath()
-        path.addEllipse(QRectF(-h / 2, -h / 2, h, h))
-        return path
-
-    def _apply_brush(self) -> None:
-        # 颜色 = 方向（Out 绿 / In 橙）；未连用虚线描边提示
-        selected = bool(self.card and (self.card.isSelected() or self.card._emphasis))
-        linked = bool(self.card and self.card.is_port_linked(self.direction, self.service))
-        if self.direction == "out":
-            fill = QColor("#2ecc71") if selected else QColor("#58d68d")
-            tip_dir = "Out"
-        else:
-            fill = QColor("#e67e22") if selected else QColor("#f39c12")
-            tip_dir = "In"
-        if linked:
-            border = QColor("#ffffff") if selected else QColor("#f8f9f9")
-            tip = "linked"
-            pen = QPen(border, 2.5 if selected else 1.5)
-        else:
-            border = QColor("#922b21")
-            tip = "unlinked"
-            pen = QPen(border, 2.0 if selected else 1.6)
-            pen.setStyle(Qt.PenStyle.DashLine)
-        self.setBrush(QBrush(fill))
-        self.setPen(pen)
-        side_l = _SIDE_LABEL.get(self.side, self.side)
-        # 裸拖连线（Out↔In）；Ctrl+拖 = 改边 / 同边调序（减交叉）
-        self.setToolTip(
-            f"{tip_dir}: {port_label(self.service)} ({tip} · {side_l})\n"
-            "拖拽连线 · Ctrl+拖：改边或同边调序 · 右键选边"
-        )
-        s = self.SIZE
-        if self.direction == "in":
-            self.setRect(-s / 2, -s / 2 + 1, s, s - 2)
-        else:
-            self.setRect(-s / 2, -s / 2, s, s)
-
-    def scene_center(self) -> QPointF:
-        return self.sceneBoundingRect().center()
-
-    def nearest_card_side(self, scene_pos: QPointF) -> str:
-        """Pick left/right/top/bottom from cursor vs card rect in scene coords."""
-        r = self.card.sceneBoundingRect()
-        cx = (r.left() + r.right()) / 2.0
-        cy = (r.top() + r.bottom()) / 2.0
-        dx = scene_pos.x() - cx
-        dy = scene_pos.y() - cy
-        dist_l = abs(scene_pos.x() - r.left())
-        dist_r = abs(scene_pos.x() - r.right())
-        dist_t = abs(scene_pos.y() - r.top())
-        dist_b = abs(scene_pos.y() - r.bottom())
-        if not r.contains(scene_pos):
-            if abs(dx) >= abs(dy):
-                return "right" if dx >= 0 else "left"
-            return "bottom" if dy >= 0 else "top"
-        return min(
-            (dist_l, "left"),
-            (dist_r, "right"),
-            (dist_t, "top"),
-            (dist_b, "bottom"),
-            key=lambda t: t[0],
-        )[1]
-
-    def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if event.button() == Qt.MouseButton.LeftButton and self.card.graph is not None:
-            self._home_pos = QPointF(self.pos())
-            self._origin_side = self.side
-            self._pending_side = None
-            self._pending_index = None
-            ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
-            # 裸拖（Out/In）→ 拉线；Ctrl+拖拽 → 改端口边 / 同边调序
-            if ctrl:
-                self.card.graph.begin_port_relocate(self)
-            else:
-                self.card.graph.begin_wire(self)
-            event.accept()
-            return
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        g = self.card.graph
-        if g is not None:
-            if g._wire_src is not None:
-                g.update_wire_preview(event.scenePos())
-                event.accept()
-                return
-            if g._reloc_port is not None:
-                g.update_port_relocate(event.scenePos())
-                event.accept()
-                return
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        g = self.card.graph
-        if g is not None and event.button() == Qt.MouseButton.LeftButton:
-            if g._reloc_port is not None:
-                g.finish_port_relocate()
-                event.accept()
-                return
-            if g._wire_src is not None:
-                g.finish_wire(event.scenePos())
-                event.accept()
-                return
-        super().mouseReleaseEvent(event)
-
-    def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.card.graph is None:
-            return
-        menu = QMenu()
-        menu.addAction(f"{short_service(self.service)} — move to:").setEnabled(False)
-        for s in _PORT_SIDES:
-            act = menu.addAction(f"  {_SIDE_LABEL[s]}")
-            act.setData(s)
-            if s == self.side:
-                act.setCheckable(True)
-                act.setChecked(True)
-        chosen = menu.exec(event.screenPos())
-        if chosen is not None and chosen.data():
-            self.card.graph.set_single_port_side(self, str(chosen.data()))
-        event.accept()
-
-
-class ProcessCard(QGraphicsItem):
-    WIDTH = 200
-    # External MCU card: compact (no port list / tutorial lines)
-    EXT_WIDTH = 180
-    EXT_HEIGHT = 56
-    LINE = 16
-    HEADER = 28  # title only
-
-    def __init__(
-        self,
-        name: str,
-        provides: list[str],
-        requires: list[str],
-        x: float,
-        y: float,
-        graph: WiringGraphView | None = None,
-        *,
-        out_side: str = "right",
-        in_side: str = "left",
-        kind: str = "process",
-        label: str = "",
-        compute_domain: str = "ap_linux",
-        port_sides: dict[str, str] | None = None,
-    ) -> None:
-        super().__init__()
-        self.process_name = name
-        self.provides = list(provides)
-        self.requires = list(requires)
-        self.graph = graph
-        self.out_side = _norm_side(out_side, "right")
-        self.in_side = _norm_side(in_side, "left")
-        # Keys: "out:Trajectory" / "in:Trajectory"（同名透传端口互不影响）
-        # 兼容旧键 "Trajectory"（无方向前缀，两侧共用，读时仍生效）
-        self.port_sides: dict[str, str] = {}
-        for k, v in (port_sides or {}).items():
-            if not str(v).strip():
-                continue
-            key = str(k).strip()
-            if ":" in key:
-                d, _, svc_name = key.partition(":")
-                d = d.strip().lower()
-                svc_name = short_service(svc_name)
-                if d in ("in", "out") and svc_name:
-                    self.port_sides[f"{d}:{svc_name}"] = _norm_side(
-                        v, self.out_side if d == "out" else self.in_side
-                    )
-            else:
-                self.port_sides[short_service(key)] = _norm_side(v, self.out_side)
-        self.kind = kind or "process"
-        self.label = label or ""
-        self.compute_domain = compute_domain or "ap_linux"
-        # 画布隐藏：仅与 MCU 边界相关的端口（yaml dataflow 仍保留）
-        self._canvas_hide_out: set[str] = set()
-        self._canvas_hide_in: set[str] = set()
-        self._edges: list[Any] = []
-        self._out_ports: list[PortItem] = []
-        self._in_ports: list[PortItem] = []
-        self._emphasis = False
-        self._dimmed = False
-        self._updating_links = False
-        # 已有 dataflow / channel_flow 的 Out / In（SOA 用短名；GfChannel 用全槽名）
-        self._linked_out: set[str] = set()
-        self._linked_in: set[str] = set()
-        self.setPos(x, y)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
-        self.setAcceptHoverEvents(True)
-        self._height = self._compute_height()
-        self._rebuild_ports()
-
-    def set_link_status(self, *, linked_out: set[str], linked_in: set[str]) -> None:
-        """按 dataflow / channel_flow 标记端口是否已连；未连线文字/圆点为红。"""
-        self._linked_out = {port_link_key(s) for s in linked_out}
-        self._linked_in = {port_link_key(s) for s in linked_in}
-        if _qt_alive(self):
-            self.update()
-            for p in self._out_ports + self._in_ports:
-                if _qt_alive(p):
-                    p._apply_brush()
-
-    def is_port_linked(self, direction: str, service: str) -> bool:
-        key = port_link_key(service)
-        if direction == "out":
-            return key in self._linked_out
-        return key in self._linked_in
-
-    def is_external(self) -> bool:
-        return is_external_node(kind=self.kind, process=self.process_name)
-
-    def is_camera(self) -> bool:
-        return self.is_frame_ingest()
-
-    def is_frame_ingest(self) -> bool:
-        return is_frame_ingest_node(kind=self.kind, process=self.process_name)
-
-    @property
-    def card_width(self) -> float:
-        if self.is_external():
-            return float(self.EXT_WIDTH)
-        if self.is_frame_ingest():
-            return 220.0
-        return float(self.WIDTH)
-
-    def set_canvas_hide(
-        self,
-        *,
-        out: set[str] | None = None,
-        inn: set[str] | None = None,
-    ) -> None:
-        """Hide MCU-boundary ports on canvas (directional). yaml 不变。"""
-        if out is not None:
-            self._canvas_hide_out = {short_service(s) for s in out}
-        if inn is not None:
-            self._canvas_hide_in = {short_service(s) for s in inn}
-        self._height = self._compute_height()
-        self._rebuild_ports()
-        self.prepareGeometryChange()
-        self.update()
-
-    def _visible_provides(self) -> list[str]:
-        return [p for p in self.provides if short_service(p) not in self._canvas_hide_out]
-
-    def _visible_requires(self) -> list[str]:
-        return [r for r in self.requires if short_service(r) not in self._canvas_hide_in]
-
-    def set_ports(self, provides: list[str], requires: list[str]) -> None:
-        self.provides = list(provides)
-        self.requires = list(requires)
-        self._height = self._compute_height()
-        self._rebuild_ports()
-        self.prepareGeometryChange()
-        self.update()
-        for e in self._edges:
-            e.update_path()
-
-    @staticmethod
-    def port_side_key(direction: str, service: str) -> str:
-        d = "out" if direction == "out" else "in"
-        return f"{d}:{short_service(service)}"
-
-    def port_side_for(self, service: str, direction: str) -> str:
-        key = short_service(service)
-        dir_key = self.port_side_key(direction, service)
-        if dir_key in self.port_sides:
-            return _norm_side(
-                self.port_sides[dir_key],
-                self.out_side if direction == "out" else self.in_side,
-            )
-        # 旧版无方向前缀：两侧曾共用一个键
-        if key in self.port_sides:
-            return _norm_side(
-                self.port_sides[key],
-                self.out_side if direction == "out" else self.in_side,
-            )
-        return self.out_side if direction == "out" else self.in_side
-
-    def set_port_sides(self, *, out_side: str | None = None, in_side: str | None = None) -> None:
-        if out_side is not None:
-            self.out_side = _norm_side(out_side, self.out_side)
-        if in_side is not None:
-            self.in_side = _norm_side(in_side, self.in_side)
-        self._rebuild_ports()
-        self.prepareGeometryChange()
-        self.update()
-        for e in list(self._edges):
-            if hasattr(e, "update_path"):
-                e.update_path()
-
-    def _compute_height(self) -> float:
-        # External MCU: compact block, no signal ports on canvas
-        if self.is_external():
-            return float(self.EXT_HEIGHT)
-        # CameraSource / frame_ingest: title + Out only (GfChannel slot)
-        if self.is_frame_ingest():
-            n = 1 + max(len(self._visible_provides()), 1)
-            return self.HEADER + n * self.LINE + 12
-        n = (
-            1
-            + max(len(self._visible_requires()), 1)
-            + 1
-            + max(len(self._visible_provides()), 1)
-        )
-        return self.HEADER + n * self.LINE + 12
-
-    def _place_on_side(self, side: str, index: int, count: int) -> QPointF:
-        n = max(count, 1)
-        t = (index + 1) / (n + 1)
-        w = self.card_width
-        if side == "right":
-            return QPointF(w, self.HEADER + t * (self._height - self.HEADER))
-        if side == "left":
-            return QPointF(0, self.HEADER + t * (self._height - self.HEADER))
-        if side == "top":
-            return QPointF(t * w, 0)
-        return QPointF(t * w, self._height)
-
-    def _rebuild_ports(self) -> None:
-        for p in self._out_ports + self._in_ports:
-            if p.scene():
-                p.scene().removeItem(p)
-            else:
-                p.setParentItem(None)
-        self._out_ports.clear()
-        self._in_ports.clear()
-
-        # 外部 MCU：无端口（与 gateway 用边界连线，不在画布上挂信号）
-        if self.is_external():
-            return
-
-        from collections import defaultdict
-
-        outs = self._visible_provides()
-        ins = self._visible_requires()
-        out_by_side: dict[str, list[str]] = defaultdict(list)
-        in_by_side: dict[str, list[str]] = defaultdict(list)
-        for svc in outs:
-            out_by_side[self.port_side_for(svc, "out")].append(svc)
-        for svc in ins:
-            in_by_side[self.port_side_for(svc, "in")].append(svc)
-
-        for side, svcs in out_by_side.items():
-            for i, svc in enumerate(svcs):
-                port = PortItem(self, "out", svc, i, side=side)
-                port.setPos(self._place_on_side(side, i, len(svcs)))
-                self._out_ports.append(port)
-        for side, svcs in in_by_side.items():
-            for i, svc in enumerate(svcs):
-                port = PortItem(self, "in", svc, i, side=side)
-                port.setPos(self._place_on_side(side, i, len(svcs)))
-                self._in_ports.append(port)
-
-    def out_port_for_service(self, service: str) -> PortItem | None:
-        key = port_link_key(service)
-        for p in self._out_ports:
-            if port_link_key(p.service) == key:
-                return p
-        return self._out_ports[0] if self._out_ports else None
-
-    def in_port_for_service(self, service: str) -> PortItem | None:
-        key = port_link_key(service)
-        for p in self._in_ports:
-            if port_link_key(p.service) == key:
-                return p
-        return self._in_ports[0] if self._in_ports else None
-
-    def out_anchor(self, service: str) -> QPointF:
-        port = self.out_port_for_service(service)
-        if port:
-            return port.scene_center()
-        return self.scenePos() + QPointF(self.card_width, self._height / 2)
-
-    def in_anchor(self, service: str) -> QPointF:
-        port = self.in_port_for_service(service)
-        if port:
-            return port.scene_center()
-        return self.scenePos() + QPointF(0, self._height / 2)
-
-    def peer_anchor(self, toward: ProcessCard) -> QPointF:
-        """MCU↔gateway 边界连线锚点（模块中心朝向对端一侧）。"""
-        w = self.EXT_WIDTH if self.is_external() else self.WIDTH
-        h = self._height
-        sp = self.pos()  # itemChange 期间比 scenePos() 更安全
-        c = sp + QPointF(w / 2, h / 2)
-        ow = toward.EXT_WIDTH if toward.is_external() else toward.WIDTH
-        other = toward.pos() + QPointF(ow / 2, toward._height / 2)
-        if other.x() >= c.x():
-            return sp + QPointF(w, h / 2)
-        return sp + QPointF(0, h / 2)
-
-    def set_visual_state(self, *, emphasis: bool = False, dimmed: bool = False) -> None:
-        self._emphasis = emphasis
-        self._dimmed = dimmed
-        if _qt_alive(self):
-            self.update()
-            for p in self._out_ports + self._in_ports:
-                if _qt_alive(p):
-                    p._apply_brush()
-
-    def boundingRect(self) -> QRectF:
-        return QRectF(-8, -4, self.card_width + 16, self._height + 8)
-
-    def paint(self, painter: QPainter, _option, _widget=None) -> None:  # type: ignore[no-untyped-def]
-        w = self.card_width
-        r = QRectF(0, 0, w, self._height)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        external = self.is_external()
-        camera = self.is_frame_ingest()
-
-        if self._emphasis or self.isSelected():
-            if external:
-                fill = QColor("#3d3a1e")
-            elif camera:
-                fill = QColor("#1a3a4a")
-            else:
-                fill = QColor("#1e6b4f")
-            border = QColor("#f7dc6f")
-            border_w = 3.5
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(QColor(247, 220, 111, 50)))
-            painter.drawRoundedRect(r.adjusted(-5, -5, 5, 5), 12, 12)
-        elif self._dimmed:
-            if external:
-                fill = QColor("#1a1a14")
-            elif camera:
-                fill = QColor("#0f1c24")
-            else:
-                fill = QColor("#0f221c")
-            border = QColor("#5c5346")
-            border_w = 1.5
-        else:
-            if external:
-                fill = QColor("#2a2618")
-                border = QColor("#c9a227")
-            elif camera:
-                fill = QColor("#152832")
-                border = QColor("#5dade2")
-            else:
-                fill = QColor("#15352c")
-                border = QColor("#7dcea0")
-            border_w = 2
-
-        painter.setBrush(QBrush(fill))
-        pen = QPen(border, border_w)
-        if external:
-            pen.setStyle(Qt.PenStyle.DashLine)
-        elif camera:
-            pen.setStyle(Qt.PenStyle.DashDotLine)
-        painter.setPen(pen)
-        painter.drawRoundedRect(r, 10, 10)
-
-        title_c = QColor("#fff8dc") if (self._emphasis or self.isSelected()) else QColor("#eafaf1")
-        if camera and not (self._emphasis or self.isSelected()):
-            title_c = QColor("#d6eaf8")
-        if self._dimmed:
-            title_c = QColor("#5d6d63")
-
-        y = 8
-        font_title = QFont()
-        font_title.setPointSize(10)
-        font_title.setBold(True)
-        painter.setFont(font_title)
-        painter.setPen(title_c)
-        title = self.label or self.process_name
-        painter.drawText(
-            QRectF(8, y, w - 16, 20),
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            title,
-        )
-
-        if external:
-            return
-
-        font_small = QFont()
-        font_small.setPointSize(8)
-        painter.setFont(font_small)
-        y = self.HEADER
-        outs = self._visible_provides()
-        outs_head = QColor("#145a32") if self._dimmed else QColor("#00e676")
-        out_ok = QColor("#1e8449") if self._dimmed else QColor("#69f0ae")
-        if camera:
-            outs_head = QColor("#1a5276") if self._dimmed else QColor("#5dade2")
-            out_ok = QColor("#2874a6") if self._dimmed else QColor("#85c1e9")
-            painter.setPen(outs_head)
-            painter.drawText(8, y + 12, "Out · GfChannel")
-            y += self.LINE
-            for svc in outs:
-                linked = self.is_port_linked("out", svc)
-                painter.setPen(out_ok)
-                mark = "" if linked else " !"
-                painter.drawText(16, y + 12, f"{port_label(svc)}{mark}")
-                y += self.LINE
-            return
-
-        ins = self._visible_requires()
-        # Color = direction; unlinked ports get a trailing !
-        # 列表顺序：In 在上、Out 在下（与常见「输入→处理→输出」阅读方向一致）
-        out_head = QColor("#145a32") if self._dimmed else QColor("#00e676")
-        out_ok = QColor("#1e8449") if self._dimmed else QColor("#69f0ae")
-        in_head = QColor("#6e2c00") if self._dimmed else QColor("#ff9100")
-        in_ok = QColor("#935116") if self._dimmed else QColor("#ffb74d")
-        painter.setPen(in_head)
-        painter.drawText(8, y + 12, "In")
-        y += self.LINE
-        for svc in ins:
-            linked = self.is_port_linked("in", svc)
-            painter.setPen(in_ok)
-            mark = "" if linked else " !"
-            painter.drawText(16, y + 12, f"{port_label(svc)}{mark}")
-            y += self.LINE
-        painter.setPen(out_head)
-        painter.drawText(8, y + 12, "Out")
-        y += self.LINE
-        for svc in outs:
-            linked = self.is_port_linked("out", svc)
-            painter.setPen(out_ok)
-            mark = "" if linked else " !"
-            painter.drawText(16, y + 12, f"{port_label(svc)}{mark}")
-            y += self.LINE
-
-    def itemChange(self, change, value):  # type: ignore[no-untyped-def]
-        if not _qt_alive(self):
-            return value
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
-            # 拖动中禁止 setSceneRect / ensureVisible（否则飞快 + RecursionError）
-            if not self._updating_links:
-                self._updating_links = True
-                try:
-                    for e in self._edges:
-                        if _qt_alive(e):
-                            e.update_path()
-                finally:
-                    self._updating_links = False
-            if self.graph is not None:
-                self.graph.note_card_pos_live(self)
-        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
-            self.update()
-            for p in self._out_ports + self._in_ports:
-                if _qt_alive(p):
-                    p._apply_brush()
-        return super().itemChange(change, value)
-
-    def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if (
-            event.button() == Qt.MouseButton.LeftButton
-            and self.graph is not None
-            and self.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable
-        ):
-            self.graph.begin_card_drag(self)
-        super().mousePressEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        super().mouseReleaseEvent(event)
-        if self.graph is not None and event.button() == Qt.MouseButton.LeftButton:
-            self.graph.finalize_card_drag(self)
-
-    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.graph is not None:
-            if self.is_frame_ingest():
-                self.graph.edit_frame_ingest(self)
-            else:
-                self.graph.edit_ports(self)
-            event.accept()
-            return
-        super().mouseDoubleClickEvent(event)
-
-    def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.graph is not None:
-            self.graph.show_card_menu(self, event.screenPos())
-            event.accept()
-            return
-        super().contextMenuEvent(event)
-
-
-class RouteHandle(QGraphicsEllipseItem):
-    """Draggable midpoint to reshape an edge path (child of EdgeCurve)."""
-
-    R = 9.0
-
-    def __init__(self, edge: EdgeCurve) -> None:
-        r = self.R
-        # 挂在线上：点手柄不会取消线的选中（独立 scene 项会清选中→黄点立刻消失）
-        super().__init__(-r, -r, 2 * r, 2 * r, edge)
-        self.edge = edge
-        self.setZValue(50)
-        self.setBrush(QBrush(QColor("#ff2d95")))  # 品红，选中线上易见
-        self.setPen(QPen(QColor("#ffffff"), 2.0))
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
-        self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
-        self.setCursor(Qt.CursorShape.SizeAllCursor)
-        self.setToolTip("Drag to adjust route (Ctrl+S to save)")
-        self._updating = False
-        self.hide()
-
-    def itemChange(self, change, value):  # type: ignore[no-untyped-def]
-        if (
-            change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged
-            and not self._updating
-            and _qt_alive(self.edge)
-        ):
-            self.edge.on_handle_moved(self.scenePos())
-        return super().itemChange(change, value)
-
-
-class EdgeCurve(QGraphicsPathItem):
-    def __init__(
-        self,
-        src: ProcessCard,
-        dst: ProcessCard,
-        service: str,
-        flow: dict[str, Any],
-        fan_index: int,
-        fan_count: int,
-        graph: WiringGraphView | None = None,
-    ) -> None:
-        super().__init__()
-        self.src = src
-        self.dst = dst
-        self.service = service
-        self.flow = flow
-        self.fan_index = fan_index
-        self.fan_count = fan_count
-        self.graph = graph
-        self._base_color = service_color(service)
-        self._highlight = False
-        self._dimmed = False
-        self._role = ""  # "" | "out" | "in" — 相对选中节点的进出
-        self._handle: RouteHandle | None = None
-        self.setZValue(-1)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-        # PathItem 默认裁剪子项到线形；关掉才能看见路径点
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, False)
-        self.setAcceptHoverEvents(True)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        src._edges.append(self)
-        dst._edges.append(self)
-
-        self._label = QGraphicsSimpleTextItem(short_service(service))
-        font = QFont()
-        font.setPointSize(9)
-        font.setBold(True)
-        self._label.setFont(font)
-        self._apply_style()
-        self.update_path()
-
-    def set_visual_state(
-        self,
-        *,
-        highlight: bool = False,
-        dimmed: bool = False,
-        role: str = "",
-    ) -> None:
-        self._highlight = highlight
-        self._dimmed = dimmed
-        self._role = role
-        if not _qt_alive(self):
-            return
-        self._apply_style()
-        self.update_path()
-
-    def _apply_style(self) -> None:
-        selected = self.isSelected()
-        if selected:
-            # 选中线本身：亮黄 + 显示路径点
-            color = QColor("#f7dc6f")
-            width = 3.2
-        elif self._highlight and self._role == "out":
-            color = QColor("#2ecc71")
-            width = 2.8
-        elif self._highlight and self._role == "in":
-            color = QColor("#e67e22")
-            width = 2.8
-        elif self._highlight:
-            color = QColor("#f7dc6f")
-            width = 2.5
-        elif self._dimmed:
-            color = QColor(self._base_color)
-            color.setAlpha(55)
-            width = 1.2
-        else:
-            color = self._base_color
-            width = 2.0
-        self.setPen(QPen(color, width))
-        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-        if selected:
-            lc = QColor("#f7dc6f")
-        elif self._highlight and self._role == "out":
-            lc = QColor("#abebc6")
-        elif self._highlight and self._role == "in":
-            lc = QColor("#fad7a0")
-        else:
-            lc = self._base_color.lighter(130)
-        if self._dimmed and not selected and not self._highlight:
-            lc.setAlpha(80)
-        self._label.setBrush(QBrush(lc))
-
-    def shape(self) -> QPainterPath:
-        """Widen hit area so thin lines are easy to select."""
-        stroker = QPainterPathStroker()
-        stroker.setWidth(14.0)
-        stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
-        return stroker.createStroke(self.path())
-
-    @staticmethod
-    def _leave_point(p: QPointF, side: str, dist: float, spread: float) -> QPointF:
-        if side == "right":
-            return QPointF(p.x() + dist, p.y() + spread)
-        if side == "left":
-            return QPointF(p.x() - dist, p.y() + spread)
-        if side == "top":
-            return QPointF(p.x() + spread, p.y() - dist)
-        return QPointF(p.x() + spread, p.y() + dist)
-
-    @staticmethod
-    def _approach_point(p: QPointF, side: str, dist: float, spread: float) -> QPointF:
-        if side == "left":
-            return QPointF(p.x() - dist, p.y() + spread)
-        if side == "right":
-            return QPointF(p.x() + dist, p.y() + spread)
-        if side == "top":
-            return QPointF(p.x() + spread, p.y() - dist)
-        return QPointF(p.x() + spread, p.y() + dist)
-
-    def update_path(self) -> None:
-        p0 = self.src.out_anchor(self.service)
-        p3 = self.dst.in_anchor(self.service)
-        if self.fan_count > 1:
-            spread = (self.fan_index - (self.fan_count - 1) / 2.0) * 28.0
-        else:
-            spread = 0.0
-        dist = max(48.0, 0.25 * math.hypot(p3.x() - p0.x(), p3.y() - p0.y()))
-        src_port = self.src.out_port_for_service(self.service)
-        dst_port = self.dst.in_port_for_service(self.service)
-        src_side = (
-            src_port.side
-            if src_port is not None
-            else self.src.port_side_for(self.service, "out")
-        )
-        dst_side = (
-            dst_port.side
-            if dst_port is not None
-            else self.dst.port_side_for(self.service, "in")
-        )
-        p1 = self._leave_point(p0, src_side, dist, spread)
-        p2 = self._approach_point(p3, dst_side, dist, spread)
-
-        route = self.flow.get("route") if isinstance(self.flow.get("route"), dict) else {}
-        mid_dx = float(route.get("mid_dx") or 0.0)
-        mid_dy = float(route.get("mid_dy") or 0.0)
-        p1 = QPointF(p1.x() + mid_dx, p1.y() + mid_dy)
-        p2 = QPointF(p2.x() + mid_dx, p2.y() + mid_dy)
-
-        path = QPainterPath(p0)
-        path.cubicTo(p1, p2, p3)
-
-        label_pt = cubic_bezier_point(p0, p1, p2, p3, 0.42)
-        apex = cubic_bezier_point(p0, p1, p2, p3, 0.68)
-        tang = cubic_bezier_tangent(p0, p1, p2, p3, 0.68)
-        length = math.hypot(tang.x(), tang.y()) or 1.0
-        ux, uy = tang.x() / length, tang.y() / length
-        append_chevron(path, apex, ux, uy)
-        self.setPath(path)
-
-        if self.scene() and self._label.scene() is None:
-            self.scene().addItem(self._label)
-        self._label.setText(short_service(self.service))
-        self._label.setPos(label_pt.x() - 20, label_pt.y() - 18)
-        self._label.setZValue(2 if (self._highlight or self.isSelected()) else 1)
-        self.setZValue(1 if self.isSelected() else (0 if self._highlight else -1))
-
-        handle_pt = cubic_bezier_point(p0, p1, p2, p3, 0.5)
-        show_handle = self.isSelected()  # 仅选中该线时显示路径点
-        if show_handle:
-            if self._handle is None:
-                self._handle = RouteHandle(self)
-            if self._handle is not None and _qt_alive(self._handle):
-                self._handle._updating = True
-                # 子项坐标相对 EdgeCurve（默认在 0,0）
-                self._handle.setPos(self.mapFromScene(handle_pt))
-                self._handle.show()
-                self._handle.setZValue(50)
-                self._handle._updating = False
-        elif self._handle is not None and _qt_alive(self._handle):
-            self._handle.hide()
-
-    def on_handle_moved(self, scene_pos: QPointF) -> None:
-        """User dragged route handle → persist offset relative to default mid."""
-        p0 = self.src.out_anchor(self.service)
-        p3 = self.dst.in_anchor(self.service)
-        if self.fan_count > 1:
-            spread = (self.fan_index - (self.fan_count - 1) / 2.0) * 28.0
-        else:
-            spread = 0.0
-        dist = max(48.0, 0.25 * math.hypot(p3.x() - p0.x(), p3.y() - p0.y()))
-        src_port = self.src.out_port_for_service(self.service)
-        dst_port = self.dst.in_port_for_service(self.service)
-        src_side = (
-            src_port.side
-            if src_port is not None
-            else self.src.port_side_for(self.service, "out")
-        )
-        dst_side = (
-            dst_port.side
-            if dst_port is not None
-            else self.dst.port_side_for(self.service, "in")
-        )
-        p1 = self._leave_point(p0, src_side, dist, spread)
-        p2 = self._approach_point(p3, dst_side, dist, spread)
-        default_mid = QPointF((p1.x() + p2.x()) / 2.0, (p1.y() + p2.y()) / 2.0)
-        self.flow["route"] = {
-            "mid_dx": round(scene_pos.x() - default_mid.x(), 1),
-            "mid_dy": round(scene_pos.y() - default_mid.y(), 1),
-        }
-        if self.graph is not None and self.graph._session is not None:
-            self.graph._session.dirty_wiring = True
-            self.graph.changed.emit()
-        self.update_path()
-
-    def remove_label(self) -> None:
-        if self._handle is not None and _qt_alive(self._handle):
-            sc = self._handle.scene()
-            if sc is not None:
-                sc.removeItem(self._handle)
-            else:
-                self._handle.setParentItem(None)
-            self._handle = None
-        if _qt_alive(self._label) and self._label.scene():
-            self._label.scene().removeItem(self._label)
-
-    def itemChange(self, change, value):  # type: ignore[no-untyped-def]
-        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
-            self._apply_style()
-            self.update_path()
-        return super().itemChange(change, value)
-
-    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.graph is not None:
-            self.graph.edit_edge(self)
-            event.accept()
-            return
-        super().mouseDoubleClickEvent(event)
-
-    def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.graph is not None:
-            self.graph.show_edge_menu(self, event.screenPos())
-            event.accept()
-            return
-        super().contextMenuEvent(event)
-
-
-class MissingEdge(QGraphicsPathItem):
-    def __init__(
-        self,
-        src: ProcessCard,
-        dst: ProcessCard,
-        service: str,
-        graph: WiringGraphView | None = None,
-    ) -> None:
-        super().__init__()
-        self.src = src
-        self.dst = dst
-        self.service = service
-        self.graph = graph
-        self._dimmed = False
-        self._highlight = False
-        self.setZValue(-2)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-        self.setAcceptHoverEvents(True)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        src._edges.append(self)
-        dst._edges.append(self)
-        self._label = QGraphicsSimpleTextItem(f"? {short_service(service)}")
-        self._label.setBrush(QBrush(QColor("#f5b7b1")))
-        self._apply_style()
-        self.update_path()
-
-    def _apply_style(self) -> None:
-        selected = self.isSelected()
-        if self._highlight or selected:
-            color = QColor("#f7dc6f")
-            width = 3.0 if selected else 2.5
-        elif self._dimmed:
-            color = QColor("#e74c3c")
-            color.setAlpha(50)
-            width = 1.5
-        else:
-            color = QColor("#e74c3c")
-            width = 2.0
-        self.setPen(QPen(color, width, Qt.PenStyle.DashLine))
-        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-        lc = QColor("#fff8dc") if (self._highlight or selected) else QColor("#f5b7b1")
-        if self._dimmed and not selected:
-            lc.setAlpha(80)
-        self._label.setBrush(QBrush(lc))
-
-    def set_visual_state(self, *, highlight: bool = False, dimmed: bool = False) -> None:
-        self._highlight = highlight
-        self._dimmed = dimmed
-        if not _qt_alive(self):
-            return
-        self._apply_style()
-        self.update_path()
-
-    def shape(self) -> QPainterPath:
-        stroker = QPainterPathStroker()
-        stroker.setWidth(14.0)
-        stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
-        return stroker.createStroke(self.path())
-
-    def update_path(self) -> None:
-        p0 = self.src.out_anchor(self.service)
-        p3 = self.dst.in_anchor(self.service)
-        ctrl = QPointF((p0.x() + p3.x()) / 2, (p0.y() + p3.y()) / 2 - 40)
-        path = QPainterPath(p0)
-        path.quadTo(ctrl, p3)
-
-        def q_point(t: float) -> QPointF:
-            u = 1.0 - t
-            return QPointF(
-                u * u * p0.x() + 2 * u * t * ctrl.x() + t * t * p3.x(),
-                u * u * p0.y() + 2 * u * t * ctrl.y() + t * t * p3.y(),
-            )
-
-        def q_tang(t: float) -> QPointF:
-            u = 1.0 - t
-            return QPointF(
-                2 * u * (ctrl.x() - p0.x()) + 2 * t * (p3.x() - ctrl.x()),
-                2 * u * (ctrl.y() - p0.y()) + 2 * t * (p3.y() - ctrl.y()),
-            )
-
-        label_pt = q_point(0.42)
-        apex = q_point(0.68)
-        tang = q_tang(0.68)
-        length = math.hypot(tang.x(), tang.y()) or 1.0
-        ux, uy = tang.x() / length, tang.y() / length
-        append_chevron(path, apex, ux, uy)
-        self.setPath(path)
-        if self.scene() and self._label.scene() is None:
-            self.scene().addItem(self._label)
-        self._label.setPos(label_pt.x() - 10, label_pt.y() - 16)
-        self._label.setZValue(2 if (self._highlight or self.isSelected()) else 1)
-        self.setZValue(1 if self.isSelected() else -2)
-
-    def remove_label(self) -> None:
-        if self._label.scene():
-            self._label.scene().removeItem(self._label)
-
-    def itemChange(self, change, value):  # type: ignore[no-untyped-def]
-        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
-            self._apply_style()
-            self.update_path()
-        return super().itemChange(change, value)
-
-    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.graph is not None:
-            self.graph.fix_missing_edge(self)
-            event.accept()
-            return
-        super().mouseDoubleClickEvent(event)
-
-    def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.graph is not None:
-            self.graph.show_missing_menu(self, event.screenPos())
-            event.accept()
-            return
-        super().contextMenuEvent(event)
-
-
-class McuPeerLink(QGraphicsPathItem):
-    """External MCU ↔ gateway boundary link (services stay in yaml)."""
-
-    def __init__(
-        self,
-        mcu: ProcessCard,
-        gateway: ProcessCard,
-        services: list[str],
-        graph: WiringGraphView | None = None,
-    ) -> None:
-        super().__init__()
-        self.mcu = mcu
-        self.gateway = gateway
-        self.services = list(services)
-        self.graph = graph
-        self.src = mcu
-        self.dst = gateway
-        self._highlight = False
-        self._dimmed = False
-        self.setZValue(-1)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-        self.setAcceptHoverEvents(True)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        mcu._edges.append(self)
-        gateway._edges.append(self)
-        label = "gateway"
-        if services:
-            shorts = sorted({short_service(s) for s in services})
-            label = " / ".join(shorts[:3])
-        self._label = QGraphicsSimpleTextItem(label)
-        font = QFont()
-        font.setPointSize(9)
-        font.setBold(True)
-        self._label.setFont(font)
-        self._apply_style()
-        self.update_path()
-
-    def set_visual_state(self, *, highlight: bool = False, dimmed: bool = False) -> None:
-        self._highlight = highlight
-        self._dimmed = dimmed
-        if not _qt_alive(self):
-            return
-        self._apply_style()
-        self.update_path()
-
-    def _apply_style(self) -> None:
-        selected = self.isSelected()
-        if self._highlight or selected:
-            color = QColor("#f7dc6f")
-            width = 3.5
-        elif self._dimmed:
-            color = QColor("#c9a227")
-            color.setAlpha(55)
-            width = 1.8
-        else:
-            color = QColor("#c9a227")
-            width = 2.8
-        pen = QPen(color, width, Qt.PenStyle.DashLine)
-        self.setPen(pen)
-        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-        lc = QColor("#fff8dc") if (self._highlight or selected) else QColor("#f0e6b0")
-        if self._dimmed and not selected:
-            lc.setAlpha(80)
-        self._label.setBrush(QBrush(lc))
-
-    def shape(self) -> QPainterPath:
-        stroker = QPainterPathStroker()
-        stroker.setWidth(16.0)
-        stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
-        return stroker.createStroke(self.path())
-
-    def update_path(self) -> None:
-        if not _qt_alive(self.mcu) or not _qt_alive(self.gateway):
-            return
-        # 拖动卡片时 peer_anchor 可能再入 itemChange；用几何缓存避免深递归
-        p0 = self.mcu.peer_anchor(self.gateway)
-        p3 = self.gateway.peer_anchor(self.mcu)
-        mid = QPointF((p0.x() + p3.x()) / 2.0, (p0.y() + p3.y()) / 2.0)
-        path = QPainterPath(p0)
-        path.quadTo(mid + QPointF(0, -24), p3)
-        # 双向示意箭头
-        for apex, base in ((p3, mid), (p0, mid)):
-            dx, dy = apex.x() - base.x(), apex.y() - base.y()
-            length = math.hypot(dx, dy) or 1.0
-            ux, uy = dx / length, dy / length
-            append_chevron(path, apex, ux, uy, arrow_len=9.0, arrow_w=4.5)
-        self.setPath(path)
-        if self.scene() and self._label.scene() is None:
-            self.scene().addItem(self._label)
-        if _qt_alive(self._label):
-            self._label.setPos(mid.x() - 40, mid.y() - 36)
-            self._label.setZValue(2 if (self._highlight or self.isSelected()) else 1)
-
-    def remove_label(self) -> None:
-        if _qt_alive(self._label) and self._label.scene():
-            self._label.scene().removeItem(self._label)
-
-    def itemChange(self, change, value):  # type: ignore[no-untyped-def]
-        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
-            self._apply_style()
-            self.update_path()
-        return super().itemChange(change, value)
-
-    def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.graph is not None:
-            self.graph.show_peer_menu(self, event.screenPos())
-            event.accept()
-            return
-        super().contextMenuEvent(event)
-
-
-class ChannelEdge(QGraphicsPathItem):
-    """GfChannel camera edge (camera → consumer); not an iceoryx dataflow."""
-
-    def __init__(
-        self,
-        src: ProcessCard,
-        dst: ProcessCard,
-        slot: str,
-        flow: dict[str, Any],
-        graph: WiringGraphView | None = None,
-    ) -> None:
-        super().__init__()
-        self.src = src
-        self.dst = dst
-        self.slot = (slot or "").strip() or "gf.channel.front"
-        self.flow = flow
-        self.service = self.slot  # PortItem/anchor helpers reuse service name
-        self.graph = graph
-        self._base_color = QColor("#5dade2")
-        self._highlight = False
-        self._dimmed = False
-        self._role = ""
-        self.setZValue(-1)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, False)
-        self.setAcceptHoverEvents(True)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        src._edges.append(self)
-        dst._edges.append(self)
-        self._label = QGraphicsSimpleTextItem(self.slot)
-        font = QFont()
-        font.setPointSize(9)
-        font.setBold(True)
-        self._label.setFont(font)
-        self._apply_style()
-        self.update_path()
-
-    def set_visual_state(
-        self,
-        *,
-        highlight: bool = False,
-        dimmed: bool = False,
-        role: str = "",
-    ) -> None:
-        self._highlight = highlight
-        self._dimmed = dimmed
-        self._role = role
-        if not _qt_alive(self):
-            return
-        self._apply_style()
-        self.update_path()
-
-    def _apply_style(self) -> None:
-        selected = self.isSelected()
-        if selected:
-            color = QColor("#f7dc6f")
-            width = 3.2
-        elif self._highlight and self._role == "out":
-            color = QColor("#5dade2")
-            width = 2.8
-        elif self._highlight and self._role == "in":
-            color = QColor("#48c9b0")
-            width = 2.8
-        elif self._highlight:
-            color = QColor("#5dade2")
-            width = 2.5
-        elif self._dimmed:
-            color = QColor(self._base_color)
-            color.setAlpha(55)
-            width = 1.2
-        else:
-            color = self._base_color
-            width = 2.2
-        pen = QPen(color, width, Qt.PenStyle.DashDotLine)
-        self.setPen(pen)
-        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-        lc = QColor("#d6eaf8") if not selected else QColor("#f7dc6f")
-        if self._dimmed and not selected and not self._highlight:
-            lc.setAlpha(80)
-        self._label.setBrush(QBrush(lc))
-
-    def shape(self) -> QPainterPath:
-        stroker = QPainterPathStroker()
-        stroker.setWidth(14.0)
-        stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
-        return stroker.createStroke(self.path())
-
-    def update_path(self) -> None:
-        if not _qt_alive(self.src) or not _qt_alive(self.dst):
-            return
-        p0 = self.src.out_anchor(self.slot)
-        p3 = self.dst.in_anchor(self.slot)
-        dist = max(48.0, 0.25 * math.hypot(p3.x() - p0.x(), p3.y() - p0.y()))
-        src_port = self.src.out_port_for_service(self.slot)
-        dst_port = self.dst.in_port_for_service(self.slot)
-        src_side = (
-            src_port.side
-            if src_port is not None
-            else self.src.port_side_for(self.slot, "out")
-        )
-        dst_side = (
-            dst_port.side
-            if dst_port is not None
-            else self.dst.port_side_for(self.slot, "in")
-        )
-        p1 = EdgeCurve._leave_point(p0, src_side, dist, 0.0)
-        p2 = EdgeCurve._approach_point(p3, dst_side, dist, 0.0)
-        path = QPainterPath(p0)
-        path.cubicTo(p1, p2, p3)
-        apex = cubic_bezier_point(p0, p1, p2, p3, 0.68)
-        tang = cubic_bezier_tangent(p0, p1, p2, p3, 0.68)
-        length = math.hypot(tang.x(), tang.y()) or 1.0
-        append_chevron(path, apex, tang.x() / length, tang.y() / length)
-        self.setPath(path)
-        label_pt = cubic_bezier_point(p0, p1, p2, p3, 0.42)
-        if self.scene() and self._label.scene() is None:
-            self.scene().addItem(self._label)
-        self._label.setText(self.slot)
-        self._label.setPos(label_pt.x() - 28, label_pt.y() - 18)
-        self._label.setZValue(2 if (self._highlight or self.isSelected()) else 1)
-        self.setZValue(1 if self.isSelected() else (0 if self._highlight else -1))
-
-    def remove_label(self) -> None:
-        if _qt_alive(self._label) and self._label.scene():
-            self._label.scene().removeItem(self._label)
-
-    def itemChange(self, change, value):  # type: ignore[no-untyped-def]
-        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
-            self._apply_style()
-            self.update_path()
-        return super().itemChange(change, value)
-
-    def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self.graph is not None:
-            self.graph.show_channel_edge_menu(self, event.screenPos())
-            event.accept()
-            return
-        super().contextMenuEvent(event)
-
+from gf_config.gui.wiring_dialogs import (
+    AddNodeDialog,
+    FrameIngestDialog,
+    ImportPortsDialog,
+    PortEditDialog,
+)
+from gf_config.gui.wiring_graph_items import (
+    ChannelEdge,
+    DeselectableListWidget,
+    EdgeCurve,
+    MissingEdge,
+    McuPeerLink,
+    PortItem,
+    ProcessCard,
+    RouteHandle,
+    _norm_side,
+    _qt_alive,
+    is_camera_source,
+    is_external_node,
+    is_frame_ingest_node,
+    port_label,
+    port_link_key,
+)
+from gf_config.i18n import t
 
 class ZoomGraphicsView(QGraphicsView):
     """Ctrl+wheel zoom; wire-drag mouse routing; stores default transform."""
@@ -1490,6 +107,9 @@ class ZoomGraphicsView(QGraphicsView):
         self.customContextMenuRequested.connect(self._graph._on_view_context_menu)
 
     def remember_default_transform(self) -> None:
+        # Never lock "default zoom" to a broken cold-start fit (tiny m11).
+        if self.transform().m11() < 0.08:
+            return
         self._default_transform = QTransform(self.transform())
 
     def reset_to_default_zoom(self) -> None:
@@ -1500,10 +120,19 @@ class ZoomGraphicsView(QGraphicsView):
             delta = event.angleDelta().y()
             if delta == 0:
                 return
-            factor = 1.15 if delta > 0 else 1 / 1.15
-            scale = self.transform().m11() * factor
-            if 0.25 <= scale <= 4.0:
-                self.scale(factor, factor)
+            zoom_in = delta > 0
+            factor = 1.15 if zoom_in else 1 / 1.15
+            cur = self.transform().m11()
+            # If stuck below the floor after a bad fit, still allow zoom-in.
+            if zoom_in:
+                if cur * factor > 4.0:
+                    event.accept()
+                    return
+            else:
+                if cur * factor < 0.25:
+                    event.accept()
+                    return
+            self.scale(factor, factor)
             event.accept()
             return
         super().wheelEvent(event)
@@ -1574,500 +203,12 @@ class ZoomGraphicsView(QGraphicsView):
             self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
 
 
-class PortEditDialog(QDialog):
-    """Double-click block: add/remove In/Out ports (Simulink-like). Side layout = drag ports on canvas."""
-
-    def __init__(
-        self,
-        process: str,
-        provides: list[str],
-        requires: list[str],
-        candidates: list[str],
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(f"编辑端口 — {process}")
-        self.resize(480, 480)
-        self._active: QListWidget | None = None
-
-        self._provides = QListWidget()
-        self._requires = QListWidget()
-        for p in provides:
-            self._provides.addItem(canon_service(p))
-        for r in requires:
-            self._requires.addItem(canon_service(r))
-        # In / Out 互斥选中：同一时刻只有一个列表有 current item
-        self._provides.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self._requires.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self._provides.itemSelectionChanged.connect(
-            lambda: self._on_list_selected(self._provides)
-        )
-        self._requires.itemSelectionChanged.connect(
-            lambda: self._on_list_selected(self._requires)
-        )
-        self._provides.itemClicked.connect(lambda *_: self._set_active(self._provides))
-        self._requires.itemClicked.connect(lambda *_: self._set_active(self._requires))
-
-        self._svc = QComboBox()
-        self._svc.setEditable(True)
-        for c in candidates:
-            self._svc.addItem(canon_service(c) if not c.startswith("services.") else c)
-        if not candidates:
-            self._svc.addItem("services.semantic.")
-
-        layout = QVBoxLayout(self)
-        # In 在上、Out 在下（与画布卡片一致）
-        layout.addWidget(QLabel("In (requires)"))
-        layout.addWidget(self._requires)
-        layout.addWidget(QLabel("Out (provides)"))
-        layout.addWidget(self._provides)
-
-        row = QHBoxLayout()
-        row.addWidget(QLabel("service"))
-        row.addWidget(self._svc, stretch=1)
-        btn_out = QPushButton("＋ Out")
-        btn_in = QPushButton("＋ In")
-        btn_del = QPushButton("删除选中")
-        btn_swap = QPushButton("切换方向")
-        btn_out.clicked.connect(lambda: self._add("out"))
-        btn_in.clicked.connect(lambda: self._add("in"))
-        btn_del.clicked.connect(self._delete_selected)
-        btn_swap.clicked.connect(self._swap_direction)
-        row.addWidget(btn_in)
-        row.addWidget(btn_out)
-        row.addWidget(btn_del)
-        row.addWidget(btn_swap)
-        layout.addLayout(row)
-
-        hint = QLabel(
-            "提示：In / Out 只能选中一侧；也可从候选下拉选 hpp 类型名；"
-            "手输短名会规范为 services.semantic.*。"
-            "\n透传模块（如 gateway）In/Out 可同名（如 Trajectory）；"
-            "改边/调序互不影响。若画布上易混淆，可起不同短名，但连线类型需一致。"
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#888;font-size:11px;")
-        layout.addWidget(hint)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def _set_active(self, lst: QListWidget) -> None:
-        self._active = lst
-
-    def _on_list_selected(self, lst: QListWidget) -> None:
-        """Selecting in one list clears the other — only one side active."""
-        if not lst.selectedItems():
-            return
-        other = self._requires if lst is self._provides else self._provides
-        other.blockSignals(True)
-        other.clearSelection()
-        other.setCurrentRow(-1)
-        other.blockSignals(False)
-        self._active = lst
-        lst.setFocus(Qt.FocusReason.MouseFocusReason)
-
-    def _add(self, direction: str) -> None:
-        text = self._svc.currentText().strip()
-        if not text:
-            return
-        svc = canon_service(text)
-        lst = self._provides if direction == "out" else self._requires
-        existing = {lst.item(i).text() for i in range(lst.count())}
-        if svc in existing or short_service(svc) in {short_service(x) for x in existing}:
-            return
-        lst.addItem(svc)
-        lst.setCurrentRow(lst.count() - 1)
-        self._on_list_selected(lst)
-
-    def _active_list(self) -> QListWidget | None:
-        if self._active is not None and self._active.currentRow() >= 0:
-            return self._active
-        if self._requires.currentRow() >= 0:
-            return self._requires
-        if self._provides.currentRow() >= 0:
-            return self._provides
-        return None
-
-    def _delete_selected(self) -> None:
-        lst = self._active_list()
-        if lst is None:
-            return
-        row = lst.currentRow()
-        if row >= 0:
-            lst.takeItem(row)
-
-    def _swap_direction(self) -> None:
-        lst = self._active_list()
-        if lst is None:
-            return
-        row = lst.currentRow()
-        if row < 0:
-            return
-        item = lst.takeItem(row)
-        if item is None:
-            return
-        dst = self._requires if lst is self._provides else self._provides
-        dst.addItem(item.text())
-        dst.setCurrentRow(dst.count() - 1)
-        self._on_list_selected(dst)
-
-    def result_ports(self) -> tuple[list[str], list[str]]:
-        provides = [self._provides.item(i).text() for i in range(self._provides.count())]
-        requires = [self._requires.item(i).text() for i in range(self._requires.count())]
-        return provides, requires
-
-
-class ImportPortsDialog(QDialog):
-    """Shared dialog: pick candidates from hpp or fidl → module ports."""
-
-    def __init__(
-        self,
-        candidates: list[str],
-        processes: list[str],
-        default_process: str,
-        parent: QWidget | None = None,
-        *,
-        title: str = "添加端口",
-        hint: str = "勾选要加入的名称（作为 service 短名）：",
-    ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.resize(460, 480)
-        self._all = list(candidates)
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(hint))
-
-        self._fat_only = QCheckBox("仅粗端口 / 整包对接（推荐，隐藏 Item 碎片）")
-        self._fat_only.setChecked(len(candidates) > 6)
-        self._fat_only.toggled.connect(self._rebuild_checks)
-        layout.addWidget(self._fat_only)
-
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._checks_host = QWidget()
-        self._checks_layout = QVBoxLayout(self._checks_host)
-        self._scroll.setWidget(self._checks_host)
-        layout.addWidget(self._scroll, stretch=1)
-        self._checks: list[QCheckBox] = []
-        self._rebuild_checks()
-
-        form = QFormLayout()
-        self._proc = QComboBox()
-        self._proc.addItems(processes)
-        if default_process in processes:
-            self._proc.setCurrentText(default_process)
-        form.addRow("目标模块", self._proc)
-
-        self._dir_out = QRadioButton("Out (provides)")
-        self._dir_in = QRadioButton("In (requires)")
-        self._dir_in.setChecked(True)
-        bg = QButtonGroup(self)
-        bg.addButton(self._dir_out)
-        bg.addButton(self._dir_in)
-        dir_row = QHBoxLayout()
-        dir_row.addWidget(self._dir_in)
-        dir_row.addWidget(self._dir_out)
-        form.addRow("方向", dir_row)
-        layout.addLayout(form)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def _rebuild_checks(self) -> None:
-        while self._checks_layout.count():
-            item = self._checks_layout.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.deleteLater()
-        self._checks.clear()
-        names = self._all
-        if self._fat_only.isChecked():
-            fat = [n for n in self._all if is_fat_port_name(n)]
-            if fat:
-                names = fat
-        for name in names:
-            cb = QCheckBox(name)
-            cb.setChecked(True)
-            self._checks.append(cb)
-            self._checks_layout.addWidget(cb)
-        self._checks_layout.addStretch(1)
-
-    def selected(self) -> tuple[str, list[str], str]:
-        names = [cb.text() for cb in self._checks if cb.isChecked()]
-        direction = "out" if self._dir_out.isChecked() else "in"
-        return self._proc.currentText(), names, direction
-
-
-class FrameIngestDialog(QDialog):
-    """Configure host.frame_ingest lanes (id/WxH/pixel). Frame source = runtime GF_FRAME_SOURCE."""
-
-    def __init__(
-        self,
-        fi: dict[str, Any],
-        slots: list[dict[str, Any]],
-        *,
-        parent: QWidget | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("frame_ingest · 视频契约")
-        self.setMinimumWidth(480)
-        self._rows: list[dict[str, Any]] = []
-        root = QVBoxLayout(self)
-        hint = QLabel(
-            "每路 = 一个 Out（gf.channel.{id}）→ 拖到消费方。\n"
-            "SOP 默认帧源=isp；SIL 用 GF_FRAME_SOURCE=carla|replay|colorbar|none（run_sil）。\n"
-            "无外参/内参/ego；buffers=AB 固定 2。"
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#888;font-size:11px;")
-        root.addWidget(hint)
-
-        root.addWidget(QLabel("通道（每路一条 GfChannel Out）"))
-        self._list = QListWidget()
-        self._list.currentRowChanged.connect(self._on_row)
-        root.addWidget(self._list)
-        form = QFormLayout()
-        self._id = QLineEdit()
-        self._w = QSpinBox()
-        self._w.setRange(16, 8192)
-        self._h = QSpinBox()
-        self._h.setRange(16, 8192)
-        self._pixel = QComboBox()
-        self._pixel.setEditable(True)
-        for p in ("nv12", "nv21", "yuv422", "yuv444", "rgb8"):
-            self._pixel.addItem(p, p)
-        self._fps = QSpinBox()
-        self._fps.setRange(0, 240)
-        self._fps.setSuffix(" fps")
-        self._fps.setToolTip("相机物理帧率。0=未填。Out expect_fps 须 ≤ 此值。")
-        self._slot_ro = QLabel("")
-        self._slot_ro.setStyleSheet("color:#5dade2;")
-        form.addRow("id", self._id)
-        form.addRow("槽名", self._slot_ro)
-        form.addRow("宽", self._w)
-        form.addRow("高", self._h)
-        form.addRow("pixel_format", self._pixel)
-        form.addRow("fps", self._fps)
-        root.addLayout(form)
-        row_btns = QHBoxLayout()
-        btn_add = QPushButton("添加一路")
-        btn_del = QPushButton("删除当前路")
-        btn_add.clicked.connect(self._add_row)
-        btn_del.clicked.connect(self._del_row)
-        row_btns.addWidget(btn_add)
-        row_btns.addWidget(btn_del)
-        row_btns.addStretch(1)
-        root.addLayout(row_btns)
-        self._id.textChanged.connect(self._sync_slot_label)
-        self._id.editingFinished.connect(self._apply_form_to_row)
-        self._w.valueChanged.connect(lambda _v: self._apply_form_to_row())
-        self._h.valueChanged.connect(lambda _v: self._apply_form_to_row())
-        self._pixel.currentTextChanged.connect(lambda _t: self._apply_form_to_row())
-        self._fps.valueChanged.connect(lambda _v: self._apply_form_to_row())
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self._on_accept)
-        buttons.rejected.connect(self.reject)
-        root.addWidget(buttons)
-        self._loading = False
-        self._load(fi, slots)
-
-    @staticmethod
-    def _set_combo(cb: QComboBox, value: str) -> None:
-        idx = cb.findData(value)
-        if idx < 0:
-            idx = cb.findText(value)
-        if idx >= 0:
-            cb.setCurrentIndex(idx)
-        elif cb.isEditable():
-            cb.setEditText(value)
-
-    def _default_slot(self, sid: str = "front") -> dict[str, Any]:
-        return {"id": sid, "w": 640, "h": 480, "pixel_format": "nv12", "fps": 30}
-
-    def _load(self, fi: dict[str, Any], slots: list[dict[str, Any]]) -> None:
-        default_pix = str(fi.get("pixel_format") or "nv12")
-        self._rows = []
-        for s in slots:
-            if not isinstance(s, dict):
-                continue
-            sid = str(s.get("id") or "").strip()
-            if not sid:
-                continue
-            self._rows.append(
-                {
-                    "id": sid,
-                    "w": int(s.get("w") or fi.get("frame_w") or 640),
-                    "h": int(s.get("h") or fi.get("frame_h") or 480),
-                    "pixel_format": str(s.get("pixel_format") or default_pix),
-                    "fps": int(s.get("fps") or 0),
-                }
-            )
-        if not self._rows:
-            self._rows.append(self._default_slot("front"))
-        self._refresh_list()
-        self._list.setCurrentRow(0)
-
-    def _refresh_list(self) -> None:
-        self._list.blockSignals(True)
-        self._list.clear()
-        for r in self._rows:
-            sid = str(r.get("id") or "?")
-            pix = str(r.get("pixel_format") or "nv12")
-            fps = int(r.get("fps") or 0)
-            extra = f"  {fps}fps" if fps > 0 else ""
-            self._list.addItem(f"{sid}  →  gf.channel.{sid}  ({pix}{extra})")
-        self._list.blockSignals(False)
-
-    def _on_row(self, row: int) -> None:
-        if row < 0 or row >= len(self._rows):
-            return
-        self._loading = True
-        try:
-            r = self._rows[row]
-            self._id.setText(str(r.get("id") or ""))
-            self._w.setValue(int(r.get("w") or 640))
-            self._h.setValue(int(r.get("h") or 480))
-            self._set_combo(self._pixel, str(r.get("pixel_format") or "nv12"))
-            self._fps.setValue(int(r.get("fps") or 0))
-            self._sync_slot_label()
-        finally:
-            self._loading = False
-
-    def _sync_slot_label(self) -> None:
-        sid = self._id.text().strip() or "?"
-        self._slot_ro.setText(f"gf.channel.{sid}")
-
-    def _apply_form_to_row(self) -> None:
-        if self._loading:
-            return
-        row = self._list.currentRow()
-        if row < 0 or row >= len(self._rows):
-            return
-        sid = self._id.text().strip() or f"cam{row + 1}"
-        pix = str(self._pixel.currentData() or self._pixel.currentText() or "nv12")
-        self._rows[row] = {
-            "id": sid,
-            "w": int(self._w.value()),
-            "h": int(self._h.value()),
-            "pixel_format": pix,
-            "fps": int(self._fps.value()),
-        }
-        item = self._list.item(row)
-        if item is not None:
-            fps = int(self._fps.value())
-            extra = f"  {fps}fps" if fps > 0 else ""
-            item.setText(f"{sid}  →  gf.channel.{sid}  ({pix}{extra})")
-
-    def _add_row(self) -> None:
-        self._apply_form_to_row()
-        used = {str(r.get("id")) for r in self._rows}
-        n = 1
-        sid = "front"
-        while sid in used:
-            n += 1
-            sid = f"cam{n}"
-        self._rows.append(self._default_slot(sid))
-        self._refresh_list()
-        self._list.setCurrentRow(len(self._rows) - 1)
-
-    def _del_row(self) -> None:
-        row = self._list.currentRow()
-        if row < 0 or len(self._rows) <= 1:
-            QMessageBox.information(self, "通道", "至少保留一路。")
-            return
-        del self._rows[row]
-        self._refresh_list()
-        self._list.setCurrentRow(min(row, len(self._rows) - 1))
-
-    def _on_accept(self) -> None:
-        self._apply_form_to_row()
-        ids = [str(r.get("id") or "").strip() for r in self._rows]
-        if not all(ids) or len(ids) != len(set(ids)):
-            QMessageBox.warning(self, "通道", "每路 id 必填且唯一。")
-            return
-        self.accept()
-
-    def result_config(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-        """Freeze SOP default isp; SIL overrides via GF_FRAME_SOURCE."""
-        slots = []
-        for r in self._rows:
-            slots.append(
-                {
-                    "id": str(r.get("id")),
-                    "w": int(r.get("w") or 640),
-                    "h": int(r.get("h") or 480),
-                    "pixel_format": str(r.get("pixel_format") or "nv12"),
-                    "fps": int(r.get("fps") or 0),
-                }
-            )
-        fields: dict[str, Any] = {
-            "active_source": "isp",
-            "frame_source": "none",
-            "bridge": {"enabled": True},
-        }
-        if slots:
-            fields["frame_w"] = int(slots[0]["w"])
-            fields["frame_h"] = int(slots[0]["h"])
-            fields["pixel_format"] = str(slots[0].get("pixel_format") or "nv12")
-        return fields, slots
-
-
-class AddNodeDialog(QDialog):
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("添加模块")
-        form = QFormLayout(self)
-        self._name = QLineEdit("sensing.new_app")
-        self._domain = QComboBox()
-        self._domain.setEditable(False)
-        # 普通 SOA/Adapter 模块；MCU 走单独入口，不在此选 external
-        self._domain.addItem("ap_linux — AP Linux (default)", "ap_linux")
-        self._domain.addItem("host — desktop / sim PC", "host")
-        self._domain.setCurrentIndex(0)
-        self._domain.setToolTip(
-            "compute_domain: where the process runs.\n"
-            "Written to wiring.yaml → Verify → gf.sor.json deployments[]."
-        )
-        hint = QLabel(
-            "compute_domain is a wiring field (into SOR).\n"
-            "For an external MCU node: blank canvas → right-click → Add external MCU.\n"
-            "视频契约：空白处右键 → 添加 frame_ingest（不进 deployments）。"
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#888;font-size:11px;")
-        form.addRow("进程名", self._name)
-        form.addRow("compute_domain", self._domain)
-        form.addRow(hint)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
-
-    def values(self) -> tuple[str, str]:
-        name = self._name.text().strip()
-        data = self._domain.currentData()
-        domain = str(data) if data else "ap_linux"
-        return name, domain or "ap_linux"
-
-
-class WiringGraphView(QWidget):
+class WiringGraphView(HistoryHooksMixin, QWidget):
     changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._init_history_hooks()
         self._session: ProjectSession | None = None
         self._nodes: dict[str, ProcessCard] = {}
         self._edges: list[EdgeCurve] = []
@@ -2085,53 +226,57 @@ class WiringGraphView(QWidget):
         self._layout_pos: dict[str, tuple[float, float]] = {}
         # 打开项目时 Tab 可能尚未显示，viewport=0 → fitInView 无效；显示后再 fit
         self._need_fit_on_show = False
+        self._fit_scheduled = False
+        self._batch_depth = 0
         self._undo_suppress = False
         self._drag_undo_armed = False
-        self._checkpoint_fn: Callable[..., None] | None = None
-        self._end_edit_fn: Callable[[], None] | None = None
-        self._clear_history_fn: Callable[[], None] | None = None
 
         self._scene = QGraphicsScene(self)
         self._view = ZoomGraphicsView(self._scene, self)
         self._scene.selectionChanged.connect(self._on_selection_changed)
 
-        self._flow_list = DeselectableListWidget()
+        self._flow_list = DeselectableListWidget(self)
         self._flow_list.setMinimumWidth(340)
         self._flow_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
-        self._search = QLineEdit()
-        self._search.setPlaceholderText("搜索信号（模糊匹配名 / 进程）…")
+        self._search = QLineEdit(self)
+        self._search.setPlaceholderText(t("搜索信号（模糊匹配名 / 进程）…"))
         self._search.textChanged.connect(self._on_search_text)
-        self._search_hits = QListWidget()
+        self._search_hits = QListWidget(self)
         self._search_hits.setMaximumHeight(140)
         self._search_hits.itemClicked.connect(self._on_search_hit_clicked)
         self._search_hits.setVisible(False)
 
         self._legend = QLabel(
-            "Out=绿 · In=橙 · ! =未连\n"
-            "蓝点划线=GfChannel（frame_ingest Out）\n"
-            "拖拽连线 · Ctrl+拖改边/同边调序 · Ctrl+Z/Y 撤销（全应用）"
+            t(
+                "Out=绿 · In=橙 · !=未连\n"
+                "线色=源模块（同卡扇出同色）· 蓝点划线=GfChannel\n"
+                "拖拽连线 · Ctrl+拖改边/同边调序 · Ctrl+Z/Y 撤销"
+            ),
+            self,
         )
         self._legend.setWordWrap(True)
         self._legend.setStyleSheet("color: #a9cfc0; font-size: 11px;")
 
-        flows_page = QWidget()
+        flows_page = QWidget(self)
+        flows_page.setObjectName("gf_flows_page")
         flows_l = QVBoxLayout(flows_page)
         flows_l.setContentsMargins(4, 4, 4, 4)
         flows_l.addWidget(self._legend)
         flows_l.addWidget(self._search)
         flows_l.addWidget(self._search_hits)
-        flows_l.addWidget(QLabel("dataflows / channel_flows"))
+        flows_l.addWidget(QLabel(t("dataflows / channel_flows")))
         flows_l.addWidget(self._flow_list)
 
-        self._lineage = LineageView()
-        self._lineage.set_placeholder("尚无 lineage。菜单：文件 → Verify（Ctrl+R）")
+        self._lineage = LineageView(self)
+        self._lineage.set_placeholder(t("尚无 lineage。菜单：文件 → Verify（Ctrl+R）"))
 
-        self._right_tabs = QTabWidget()
-        self._right_tabs.addTab(flows_page, "连线")
-        self._right_tabs.addTab(self._lineage, "Lineage")
+        self._right_tabs = QTabWidget(self)
+        self._right_tabs.addTab(flows_page, t("连线"))
+        self._right_tabs.addTab(self._lineage, t("Lineage"))
 
-        self._right_panel = QWidget()
+        self._right_panel = QWidget(self)
+        self._right_panel.setObjectName("gf_right_panel")
         right = QVBoxLayout(self._right_panel)
         right.setContentsMargins(0, 0, 0, 0)
         right.addWidget(self._right_tabs)
@@ -2141,10 +286,10 @@ class WiringGraphView(QWidget):
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
         )
 
-        self._btn_toggle_right = QToolButton()
+        self._btn_toggle_right = QToolButton(self)
         # 面板在右：展开时 ▶=收起；收起后 ◀=展开。默认收起，画布优先。
         self._btn_toggle_right.setText("◀")
-        self._btn_toggle_right.setToolTip("折叠 / 展开右侧面板（连线 + Lineage）")
+        self._btn_toggle_right.setToolTip(t("折叠 / 展开右侧面板（连线 + Lineage）"))
         self._btn_toggle_right.setFixedWidth(22)
         self._btn_toggle_right.clicked.connect(self._toggle_right_panel)
         self._right_collapsed = True
@@ -2190,27 +335,10 @@ class WiringGraphView(QWidget):
     def delete_selection(self) -> None:
         self._delete_selection()
 
-    def set_history_hooks(
-        self,
-        checkpoint: Callable[..., None] | None,
-        end_edit: Callable[[], None] | None = None,
-        clear: Callable[[], None] | None = None,
-    ) -> None:
-        """Bind document-wide undo (MainWindow DocHistory)."""
-        self._checkpoint_fn = checkpoint
-        self._end_edit_fn = end_edit
-        self._clear_history_fn = clear
-
     def _push_undo(self) -> None:
         if self._undo_suppress or self._session is None:
             return
-        if self._checkpoint_fn is not None:
-            self._checkpoint_fn(coalesce=False)
-            return
-
-    def _end_doc_edit(self) -> None:
-        if self._end_edit_fn is not None:
-            self._end_edit_fn()
+        self._checkpoint(coalesce=False)
 
     def begin_card_drag(self, card: ProcessCard) -> None:
         """Arm one undo snapshot per drag gesture."""
@@ -2237,25 +365,88 @@ class WiringGraphView(QWidget):
 
     def clear_undo_history(self) -> None:
         self._drag_undo_armed = False
-        if self._clear_history_fn is not None:
-            self._clear_history_fn()
+        self._clear_doc_history()
+
+    def _is_quiet_boot(self) -> bool:
+        """True while cli maps the window off-screen and suppresses deferred fit."""
+        win = self.window()
+        if win is None:
+            return False
+        if getattr(win, "_quiet_booting", False):
+            return True
+        return win.testAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
 
     def showEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().showEvent(event)
+        if self._is_quiet_boot():
+            return
+        if self._batch_depth:
+            return
         if self._need_fit_on_show:
-            QTimer.singleShot(0, self._fit_after_show)
+            self.schedule_fit()
 
     def resizeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().resizeEvent(event)
+        if self._batch_depth:
+            return
+        if self._is_quiet_boot():
+            return
         if self._need_fit_on_show and self._view.viewport().width() > 40:
-            QTimer.singleShot(0, self._fit_after_show)
+            self.schedule_fit()
+
+    def begin_batch_update(self) -> None:
+        """Freeze view paints during rebuild (open / quiet boot)."""
+        self._batch_depth += 1
+        if self._batch_depth == 1:
+            self._view.setUpdatesEnabled(False)
+            self._fit_scheduled = False
+
+    def end_batch_update(self, *, fit: bool = True) -> None:
+        if self._batch_depth <= 0:
+            return
+        self._batch_depth -= 1
+        if self._batch_depth:
+            return
+        if fit:
+            self.fit_now()
+        # During quiet boot the CLI keeps paints frozen until reveal; do not
+        # re-enable here or a pre-fit paint can slip out early.
+        if not self._is_quiet_boot():
+            self._view.setUpdatesEnabled(True)
+
+    def fit_now(self) -> bool:
+        """Synchronous fit; returns True if applied (viewport large enough)."""
+        self._fit_scheduled = False
+        if not self._nodes:
+            self._need_fit_on_show = False
+            return True
+        vw = self._view.viewport().width()
+        vh = self._view.viewport().height()
+        if vw < 40 or vh < 40:
+            self._need_fit_on_show = True
+            self._refresh_scene_rect()
+            return False
+        self._fit_and_remember()
+        return not self._need_fit_on_show
+
+    def schedule_fit(self) -> None:
+        """Coalesce fitInView to a single deferred call."""
+        self._need_fit_on_show = True
+        if self._batch_depth:
+            return
+        if self._fit_scheduled:
+            return
+        self._fit_scheduled = True
+        QTimer.singleShot(0, self._fit_after_show)
 
     def _fit_after_show(self) -> None:
-        if not self._need_fit_on_show:
+        self._fit_scheduled = False
+        if self._batch_depth or not self._need_fit_on_show:
+            return
+        if self._is_quiet_boot():
             return
         if self._view.viewport().width() < 40:
             return
-        self._need_fit_on_show = False
         self._fit_and_remember()
 
     def _toggle_right_panel(self) -> None:
@@ -2287,14 +478,15 @@ class WiringGraphView(QWidget):
         self._layout_pos.clear()
         self.clear_undo_history()
         self._last_topo: str | None = None
-        self.rebuild(fit_view=True)
+        # Rebuild without fit; open_project batch / quiet boot fits once.
+        self.rebuild(fit_view=False)
+        if self._batch_depth == 0:
+            self._need_fit_on_show = True
 
     def _topology(self) -> str:
         if not self._session:
             return "ap_only"
-        req = getattr(self._session, "req", None) or {}
-        topo = str(req.get("topology") or self._session.wiring.get("topology") or "ap_only")
-        return topo.strip() or "ap_only"
+        return self._session.topology()
 
     def _show_external_mcu(self) -> bool:
         """ap_mcu_cp shows MCU card; ap_only hides it (gateway 对外端口仍可见)."""
@@ -2323,16 +515,19 @@ class WiringGraphView(QWidget):
         p = card.pos()
         self._layout_pos[card.process_name] = (p.x(), p.y())
         if self._session is not None:
-            self._session.set_node_ui(
-                card.process_name,
-                x=round(p.x(), 1),
-                y=round(p.y(), 1),
-                out_side=card.out_side,
-                in_side=card.in_side,
-                port_sides=dict(card.port_sides) if card.port_sides else None,
-                kind=card.kind if card.kind != "process" else None,
-                label=card.label or None,
-            )
+            fields: dict[str, Any] = {
+                "x": round(p.x(), 1),
+                "y": round(p.y(), 1),
+                "out_side": card.out_side,
+                "in_side": card.in_side,
+            }
+            if card.port_sides:
+                fields["port_sides"] = dict(card.port_sides)
+            if card.kind and card.kind != "process":
+                fields["kind"] = card.kind
+            if card.label:
+                fields["label"] = card.label
+            self._session.set_node_ui(card.process_name, **fields)
             self.changed.emit()
         self._refresh_scene_rect()
         self._drag_undo_armed = False
@@ -2401,6 +596,10 @@ class WiringGraphView(QWidget):
         content = self._nodes_content_rect().adjusted(-pad, -pad, pad, pad)
         self._scene.setSceneRect(content)
         self._view.fitInView(content, Qt.AspectRatioMode.KeepAspectRatio)
+        # Bad fit (viewport still collapsing) → defer; do not remember tiny scale.
+        if self._view.transform().m11() < 0.08:
+            self._need_fit_on_show = True
+            return
         self._view.remember_default_transform()
         self._need_fit_on_show = False
 
@@ -2694,7 +893,7 @@ class WiringGraphView(QWidget):
                 slot=slot,
             )
             if not ok:
-                QMessageBox.information(self, "连线", "该 GfChannel 边已存在")
+                QMessageBox.information(self, t("连线"), t("该 GfChannel 边已存在"))
                 return
             self.rebuild()
             self.changed.emit()
@@ -2736,7 +935,7 @@ class WiringGraphView(QWidget):
             in_port.card.process_name,
         )
         if not ok:
-            QMessageBox.information(self, "连线", "该 dataflow 已存在")
+            QMessageBox.information(self, t("连线"), t("该 dataflow 已存在"))
             return
         self.rebuild()
         self.changed.emit()
@@ -2791,9 +990,7 @@ class WiringGraphView(QWidget):
         self._reloc_port = port
         port._home_pos = QPointF(port.pos())
         port._origin_side = port.side
-        peers = self._ports_on_side_ordered(
-            port.card, port.direction, port.side, exclude=None
-        )
+        peers = self._ports_on_side_unified(port.card, port.side, exclude=None)
         try:
             port._origin_index = peers.index(port)
         except ValueError:
@@ -2814,41 +1011,45 @@ class WiringGraphView(QWidget):
     def _services_list(self, card: ProcessCard, direction: str) -> list[str]:
         return list(card.provides if direction == "out" else card.requires)
 
-    def _ports_on_side_ordered(
+    def _ports_on_side_unified(
         self,
         card: ProcessCard,
-        direction: str,
         side: str,
         *,
         exclude: PortItem | None = None,
     ) -> list[PortItem]:
-        """Same-side peers in provides/requires order (matches apply / rebuild)."""
-        ex_key = short_service(exclude.service) if exclude is not None else ""
-        port_map = {
-            short_service(p.service): p
-            for p in (card._out_ports if direction == "out" else card._in_ports)
+        """Same-side Out+In peers in current slot order (allows interleave)."""
+        side_n = _norm_side(side, "left")
+        by_key = {
+            ProcessCard.slot_key(p.direction, p.service): p
+            for p in (card._out_ports + card._in_ports)
+            if p.side == side_n
         }
+        ex_key = (
+            ProcessCard.slot_key(exclude.direction, exclude.service)
+            if exclude is not None
+            else ""
+        )
         out: list[PortItem] = []
-        for svc in self._services_list(card, direction):
-            key = short_service(svc)
-            if ex_key and key == ex_key:
+        for raw in card.port_slot_order.get(side_n, []):
+            if ex_key and raw == ex_key:
                 continue
-            if card.port_side_for(svc, direction) != side:
-                continue
-            p = port_map.get(key)
+            p = by_key.pop(raw, None)
             if p is not None:
                 out.append(p)
+        for key, p in list(by_key.items()):
+            if ex_key and key == ex_key:
+                continue
+            out.append(p)
         return out
 
     def _insert_index_on_side(
         self, port: PortItem, side: str, scene_pos: QPointF
     ) -> int:
-        """Insert index among same-side peers (provides order, not Y-sort)."""
+        """Insert index among same-side Out+In peers."""
         card = port.card
         local = card.mapFromScene(scene_pos)
-        peers = self._ports_on_side_ordered(
-            card, port.direction, side, exclude=port
-        )
+        peers = self._ports_on_side_unified(card, side, exclude=port)
         if side in ("left", "right"):
             coord = local.y()
             for i, p in enumerate(peers):
@@ -2868,22 +1069,18 @@ class WiringGraphView(QWidget):
         from collections import defaultdict
 
         card = moving.card
-        direction = moving.direction
+        new_side = _norm_side(new_side, moving.side)
         groups: dict[str, list[PortItem]] = defaultdict(list)
-        for svc in self._services_list(card, direction):
-            key = short_service(svc)
-            if key == short_service(moving.service):
+        for p in card._out_ports + card._in_ports:
+            if p is moving:
                 continue
-            side = card.port_side_for(svc, direction)
-            port_map = {
-                short_service(p.service): p
-                for p in (
-                    card._out_ports if direction == "out" else card._in_ports
-                )
-            }
-            p = port_map.get(key)
-            if p is not None:
-                groups[side].append(p)
+            groups[p.side].append(p)
+        # Keep each side's relative order from current slot list when possible.
+        for side in list(groups.keys()):
+            ordered = self._ports_on_side_unified(card, side, exclude=moving)
+            groups[side] = [p for p in ordered if p in groups[side]] + [
+                p for p in groups[side] if p not in ordered
+            ]
         dest = list(groups.get(new_side, []))
         new_index = max(0, min(int(new_index), len(dest)))
         dest.insert(new_index, moving)
@@ -2892,6 +1089,7 @@ class WiringGraphView(QWidget):
             n = len(plist)
             for i, p in enumerate(plist):
                 p.side = side
+                p.index = i
                 p.setPos(card._place_on_side(side, i, n))
         moving._pending_side = new_side
         moving._pending_index = new_index
@@ -3009,7 +1207,9 @@ class WiringGraphView(QWidget):
         *,
         card: ProcessCard | None = None,
     ) -> None:
-        """Persist port edge + order in provides/requires (reduces crossings)."""
+        """Persist port edge + same-side Out/In slot order (may interleave)."""
+        from collections import defaultdict
+
         if not self._session:
             return
         card = card if card is not None else port.card
@@ -3019,33 +1219,67 @@ class WiringGraphView(QWidget):
         direction = port.direction
         moved_svc = port.service
         key = short_service(moved_svc)
+        moved_slot = ProcessCard.slot_key(direction, moved_svc)
         side_n = _norm_side(new_side, "right" if direction == "out" else "left")
         dir_key = ProcessCard.port_side_key(direction, moved_svc)
         card.port_sides[dir_key] = side_n
         # 去掉旧版无方向键，避免同名 In/Out 再被绑在一起
         card.port_sides.pop(key, None)
+
+        # Drop moved from all side orders, then insert on destination side.
+        for s, keys in list(card.port_slot_order.items()):
+            card.port_slot_order[s] = [k for k in keys if k != moved_slot]
+            if not card.port_slot_order[s]:
+                card.port_slot_order.pop(s, None)
+
+        out_by: dict[str, list[str]] = defaultdict(list)
+        in_by: dict[str, list[str]] = defaultdict(list)
+        for svc in card.provides:
+            if direction == "out" and short_service(svc) == key:
+                continue
+            out_by[card.port_side_for(svc, "out")].append(svc)
+        for svc in card.requires:
+            if direction == "in" and short_service(svc) == key:
+                continue
+            in_by[card.port_side_for(svc, "in")].append(svc)
+
+        base = card._slots_for_side(side_n, out_by, in_by)
+        idx = max(0, min(int(new_index), len(base)))
+        base.insert(idx, (direction, moved_svc))
+        card.port_slot_order[side_n] = [
+            ProcessCard.slot_key(d, svc) for d, svc in base
+        ]
+        for s in ("left", "right", "top", "bottom"):
+            if s == side_n:
+                continue
+            rebuilt = card._slots_for_side(s, out_by, in_by)
+            if rebuilt:
+                card.port_slot_order[s] = [
+                    ProcessCard.slot_key(d, svc) for d, svc in rebuilt
+                ]
+            else:
+                card.port_slot_order.pop(s, None)
+
+        new_prov = self._services_from_slot_orders(card, "out", list(card.provides))
+        new_req = self._services_from_slot_orders(card, "in", list(card.requires))
+
         self._session.set_node_ui(
-            card.process_name, port_sides=dict(card.port_sides)
+            card.process_name,
+            port_sides=dict(card.port_sides),
+            port_slot_order={
+                s: list(keys) for s, keys in card.port_slot_order.items()
+            },
         )
-
-        def side_of(svc: str) -> str:
-            return card.port_side_for(svc, direction)
-
-        if direction == "out":
-            new_prov = self._reorder_services_on_side(
-                list(card.provides), moved_svc, side_n, new_index, side_of
-            )
-            new_req = list(card.requires)
-            # 仅调序/改边，不剪 dataflow（避免误删 + 加速）
-            self._session.set_ports(
-                card.process_name, new_prov, new_req, prune_flows=False
-            )
-            card.set_ports(new_prov, new_req)
+        # frame_ingest Outs are GfChannel slots (canvas only) — never push through
+        # set_ports / deployments (that strips channel services).
+        if card.is_frame_ingest():
+            card.provides = list(new_prov)
+            card.requires = list(new_req)
+            card._height = card._compute_height()
+            card._rebuild_ports()
+            card.prepareGeometryChange()
+            card.update()
         else:
-            new_prov = list(card.provides)
-            new_req = self._reorder_services_on_side(
-                list(card.requires), moved_svc, side_n, new_index, side_of
-            )
             self._session.set_ports(
                 card.process_name, new_prov, new_req, prune_flows=False
             )
@@ -3056,6 +1290,31 @@ class WiringGraphView(QWidget):
         self._drag_undo_armed = False
         self._end_doc_edit()
         self.changed.emit()
+
+    @staticmethod
+    def _services_from_slot_orders(
+        card: ProcessCard, direction: str, services: list[str]
+    ) -> list[str]:
+        """Order provides/requires to follow interleaved port_slot_order."""
+        by_short = {short_service(s): s for s in services}
+        seen: set[str] = set()
+        result: list[str] = []
+        for side in ("left", "right", "top", "bottom"):
+            for raw in card.port_slot_order.get(side, []):
+                parsed = ProcessCard.parse_slot_key(raw)
+                if parsed is None or parsed[0] != direction:
+                    continue
+                sk = parsed[1]
+                full = by_short.get(sk)
+                if full is not None and sk not in seen:
+                    result.append(full)
+                    seen.add(sk)
+        for s in services:
+            sk = short_service(s)
+            if sk not in seen:
+                result.append(s)
+                seen.add(sk)
+        return result
 
     # --- context menus / edit ---
 
@@ -3079,16 +1338,18 @@ class WiringGraphView(QWidget):
             cur = cur.parentItem()
 
         menu = QMenu(self)
-        act_add = menu.addAction("添加模块…")
-        act_cam = menu.addAction("添加 frame_ingest…")
-        act_ext = menu.addAction("Add external MCU…")
+        act_add = menu.addAction(t("添加模块…"))
+        act_cam = menu.addAction(t("添加 frame_ingest…"))
+        act_ext = menu.addAction(t("添加外部 MCU…"))
         act_ext.setEnabled(self._show_external_mcu())
         if not self._show_external_mcu():
             act_ext.setToolTip(
-                "当前拓扑为仅 AP。请先改为「AP + MCU CP」；"
-                "对外控制信号可挂在 gateway 端口上。"
+                t(
+                    "当前拓扑为仅 AP。请先改为「AP + MCU CP」；"
+                    "对外控制信号可挂在 gateway 端口上。"
+                )
             )
-        act_import = menu.addAction("导入 hpp/h…")
+        act_import = menu.addAction(t("导入 hpp/h…"))
         chosen = menu.exec(self._view.mapToGlobal(pos))
         if chosen is act_add:
             self.add_node()
@@ -3102,16 +1363,17 @@ class WiringGraphView(QWidget):
     def show_edge_menu(self, edge: EdgeCurve, global_pos) -> None:  # type: ignore[no-untyped-def]
         edge.setSelected(True)
         menu = QMenu(self)
-        act_edit = menu.addAction("编辑信号名…")
-        act_reset = menu.addAction("重置连线路径")
-        act_del = menu.addAction("删除信号线")
+        act_edit = menu.addAction(t("编辑信号名…"))
+        act_reset = menu.addAction(t("重置连线路径"))
+        act_del = menu.addAction(t("删除信号线"))
         chosen = menu.exec(global_pos)
         if chosen is act_edit:
             self.edit_edge(edge)
         elif chosen is act_reset:
-            edge.flow.pop("route", None)
             if self._session:
-                self._session.dirty_wiring = True
+                self._session.set_flow_route(edge.flow, None)
+            else:
+                edge.flow.pop("route", None)
             edge.update_path()
             self.changed.emit()
         elif chosen is act_del:
@@ -3120,7 +1382,7 @@ class WiringGraphView(QWidget):
     def show_channel_edge_menu(self, edge: ChannelEdge, global_pos) -> None:  # type: ignore[no-untyped-def]
         edge.setSelected(True)
         menu = QMenu(self)
-        act_del = menu.addAction("删除 GfChannel 边")
+        act_del = menu.addAction(t("删除 GfChannel 边"))
         chosen = menu.exec(global_pos)
         if chosen is act_del:
             self._remove_channel_edge(edge)
@@ -3128,9 +1390,9 @@ class WiringGraphView(QWidget):
     def show_missing_menu(self, miss: MissingEdge, global_pos) -> None:  # type: ignore[no-untyped-def]
         miss.setSelected(True)
         menu = QMenu(self)
-        act_fix = menu.addAction("补上连线（写入 dataflow）")
-        act_ignore = menu.addAction("忽略此建议（不再显示）")
-        act_drop = menu.addAction("移除目标 In 端口（不再需要该输入）")
+        act_fix = menu.addAction(t("补上连线（写入 dataflow）"))
+        act_ignore = menu.addAction(t("忽略此建议（不再显示）"))
+        act_drop = menu.addAction(t("移除目标 In 端口（不再需要该输入）"))
         chosen = menu.exec(global_pos)
         if chosen is act_fix:
             self.fix_missing_edge(miss)
@@ -3148,7 +1410,7 @@ class WiringGraphView(QWidget):
             miss.dst.process_name,
         )
         if not ok:
-            QMessageBox.information(self, "补线", "该 dataflow 已存在")
+            QMessageBox.information(self, t("补线"), t("该 dataflow 已存在"))
             return
         self.rebuild()
         self.changed.emit()
@@ -3292,8 +1554,8 @@ class WiringGraphView(QWidget):
 
     def show_peer_menu(self, peer: McuPeerLink, global_pos) -> None:  # type: ignore[no-untyped-def]
         menu = QMenu(self)
-        act_focus_mcu = menu.addAction("Select MCU")
-        act_focus_gw = menu.addAction("Select gateway")
+        act_focus_mcu = menu.addAction(t("Select MCU"))
+        act_focus_gw = menu.addAction(t("Select gateway"))
         chosen = menu.exec(global_pos)
         if chosen is act_focus_mcu:
             self._scene.clearSelection()
@@ -3388,10 +1650,10 @@ class WiringGraphView(QWidget):
         if not self._session:
             return
         dlg = QDialog(self)
-        dlg.setWindowTitle("编辑信号")
+        dlg.setWindowTitle(t("编辑信号"))
         form = QFormLayout(dlg)
-        form.addRow("from", QLabel(edge.src.process_name))
-        form.addRow("to", QLabel(edge.dst.process_name))
+        form.addRow(t("源"), QLabel(edge.src.process_name))
+        form.addRow(t("目的"), QLabel(edge.dst.process_name))
         svc = QLineEdit(edge.service)
         form.addRow("service", svc)
         buttons = QDialogButtonBox(
@@ -3497,24 +1759,24 @@ class WiringGraphView(QWidget):
     def show_card_menu(self, card: ProcessCard, global_pos) -> None:  # type: ignore[no-untyped-def]
         menu = QMenu(self)
         if card.is_external():
-            act_del = menu.addAction("Delete external MCU")
+            act_del = menu.addAction(t("Delete external MCU"))
             chosen = menu.exec(global_pos)
             if chosen is act_del:
                 self.delete_node(card)
             return
         if card.is_frame_ingest():
-            act_edit = menu.addAction("编辑 frame_ingest…")
-            act_del = menu.addAction("删除 frame_ingest")
+            act_edit = menu.addAction(t("编辑 frame_ingest…"))
+            act_del = menu.addAction(t("删除 frame_ingest"))
             chosen = menu.exec(global_pos)
             if chosen is act_edit:
                 self.edit_frame_ingest(card)
             elif chosen is act_del:
                 self.delete_node(card)
             return
-        act_edit = menu.addAction("编辑端口…")
-        act_import = menu.addAction("从此模块导入 hpp…")
+        act_edit = menu.addAction(t("编辑端口…"))
+        act_import = menu.addAction(t("从此模块导入 hpp…"))
         menu.addSeparator()
-        act_del = menu.addAction("删除模块")
+        act_del = menu.addAction(t("删除模块"))
         chosen = menu.exec(global_pos)
         if chosen is act_edit:
             self.edit_ports(card)
@@ -3525,17 +1787,11 @@ class WiringGraphView(QWidget):
 
     def set_single_port_side(self, port: PortItem, side: str) -> None:
         """Move one Out/In port (e.g. EgoMotion only) to another card edge."""
-        # Append to end of that side (context-menu path).
+        # Append to end of that side's unified Out+In ladder.
         card = port.card
-        peers = [
-            p
-            for p in (
-                card._out_ports if port.direction == "out" else card._in_ports
-            )
-            if p is not port
-            and card.port_side_for(p.service, port.direction) == _norm_side(side, port.side)
-        ]
-        self.apply_port_side_and_order(port, side, len(peers))
+        side_n = _norm_side(side, port.side)
+        peers = self._ports_on_side_unified(card, side_n, exclude=port)
+        self.apply_port_side_and_order(port, side_n, len(peers))
 
     def add_node(self) -> None:
         if not self._session:
@@ -3547,7 +1803,7 @@ class WiringGraphView(QWidget):
         if not name:
             return
         if name in self._nodes:
-            QMessageBox.warning(self, "添加模块", f"已存在：{name}")
+            QMessageBox.warning(self, t("添加模块"), t("已存在：{name}").format(name=name))
             return
         self._push_undo()
         self._session.upsert_deployment(name, compute_domain=domain, provides=[], requires=[])
@@ -3564,8 +1820,8 @@ class WiringGraphView(QWidget):
         ):
             QMessageBox.information(
                 self,
-                "frame_ingest",
-                f"已存在视频契约节点。请双击 {name} 编辑。",
+                t("frame_ingest"),
+                t("已存在视频契约节点。请双击 {name} 编辑。").format(name=name),
             )
             self.edit_frame_ingest(self._nodes.get(name))
             return
@@ -3575,12 +1831,19 @@ class WiringGraphView(QWidget):
             slots = [{"id": "front", "w": 640, "h": 480}]
         if str(fi.get("active_source") or "none") == "none":
             fi = {**fi, "active_source": "isp"}
-        dlg = FrameIngestDialog(fi, slots, parent=self)
+        dlg = FrameIngestDialog(
+            fi,
+            slots,
+            parent=self,
+            channel_policies=self._session.publish_policy_channels(),
+            channel_names=self._session.channel_policy_names(),
+        )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self._push_undo()
         fields, new_slots = dlg.result_config()
         self._apply_frame_ingest(fields, new_slots, seed_fcm=True)
+        self._session.apply_channel_publish_policies(dlg.result_channel_policies())
         self.rebuild(fit_view=True)
         self.changed.emit()
 
@@ -3589,12 +1852,19 @@ class WiringGraphView(QWidget):
             return
         fi = dict(self._session.frame_ingest_cfg())
         slots = list(self._session.camera_slots())
-        dlg = FrameIngestDialog(fi, slots, parent=self)
+        dlg = FrameIngestDialog(
+            fi,
+            slots,
+            parent=self,
+            channel_policies=self._session.publish_policy_channels(),
+            channel_names=self._session.channel_policy_names(),
+        )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self._push_undo()
         fields, new_slots = dlg.result_config()
         self._apply_frame_ingest(fields, new_slots, seed_fcm=False)
+        self._session.apply_channel_publish_policies(dlg.result_channel_policies())
         self.rebuild()
         self.changed.emit()
 
@@ -3637,25 +1907,21 @@ class WiringGraphView(QWidget):
         ui = self._session.node_ui(name)
         x = float(ui["x"]) if "x" in ui else -80.0
         y = float(ui["y"]) if "y" in ui else -320.0
-        self._session.set_node_ui(
-            name,
-            kind="frame_ingest",
-            label=str(ui.get("label") or "frame_ingest"),
-            x=x,
-            y=y,
-            out_side="right",
-            in_side="left",
-        )
+        # Preserve authored out_side / port_sides / slot order when editing slots.
+        fields_ui: dict[str, Any] = {
+            "kind": "frame_ingest",
+            "label": str(ui.get("label") or "frame_ingest"),
+            "x": x,
+            "y": y,
+        }
+        if "out_side" not in ui:
+            fields_ui["out_side"] = "right"
+        if "in_side" not in ui:
+            fields_ui["in_side"] = "left"
+        self._session.set_node_ui(name, **fields_ui)
         self._layout_pos[name] = (x, y)
         if seed_fcm and not self._session.channel_flows():
-            deps = {str(d.get("process")) for d in self._session.deployments()}
-            if "perception.fcm" in deps and slots:
-                sid = str(slots[0].get("id") or "front")
-                self._session.add_channel_flow(
-                    name,
-                    "perception.fcm",
-                    slot=ProjectSession.gf_channel_slot_name(sid),
-                )
+            self._session.seed_default_channel_flows()
 
     def add_external_mcu_node(self) -> None:
         """Add external MCU boundary node (VehicleBus / Trajectory via gateway)."""
@@ -3664,15 +1930,17 @@ class WiringGraphView(QWidget):
         if not self._show_external_mcu():
             QMessageBox.information(
                 self,
-                "外部 MCU",
-                "当前拓扑为「仅 AP（无 MCU）」，不显示 MCU 节点。\n"
-                "请先在 SKU 将拓扑改为「AP + MCU CP」。\n"
-                "对外控制信号（如 VehicleBus / Trajectory）可直接挂在 gateway 等模块端口上。",
+                t("外部 MCU"),
+                t(
+                    "当前拓扑为「仅 AP（无 MCU）」，不显示 MCU 节点。\n"
+                    "请先在 SKU 将拓扑改为「AP + MCU CP」。\n"
+                    "对外控制信号（如 VehicleBus / Trajectory）可直接挂在 gateway 等模块端口上。"
+                ),
             )
             return
         name = "external.vehicle_mcu"
         if name in self._nodes:
-            QMessageBox.information(self, "外部节点", f"已存在：{name}")
+            QMessageBox.information(self, t("外部节点"), t("已存在：{name}").format(name=name))
             return
         self._push_undo()
         self._session.upsert_deployment(
@@ -3712,26 +1980,36 @@ class WiringGraphView(QWidget):
                 break
         self.rebuild(fit_view=True)
         self.changed.emit()
-        QMessageBox.information(self, "external MCU", f"Added {name}")
+        QMessageBox.information(self, t("external MCU"), t("已添加 {name}").format(name=name))
 
     def flush_canvas(self) -> None:
-        """Persist node positions / sides into wiring.canvas before save."""
+        """Persist node positions / sides into wiring.canvas before save.
+
+        Only write fields the card owns. ``set_node_ui`` skips None (never deletes).
+        """
         if not self._session:
             return
         for name, card in self._nodes.items():
             if not _qt_alive(card):
                 continue
             p = card.pos()
-            self._session.set_node_ui(
-                name,
-                x=round(p.x(), 1),
-                y=round(p.y(), 1),
-                out_side=card.out_side,
-                in_side=card.in_side,
-                port_sides=dict(card.port_sides) if card.port_sides else None,
-                kind=card.kind if card.kind != "process" else None,
-                label=card.label or None,
-            )
+            fields: dict[str, Any] = {
+                "x": round(p.x(), 1),
+                "y": round(p.y(), 1),
+                "out_side": card.out_side,
+                "in_side": card.in_side,
+            }
+            if card.port_sides:
+                fields["port_sides"] = dict(card.port_sides)
+            if card.port_slot_order:
+                fields["port_slot_order"] = {
+                    s: list(keys) for s, keys in card.port_slot_order.items()
+                }
+            if card.kind and card.kind != "process":
+                fields["kind"] = card.kind
+            if card.label:
+                fields["label"] = card.label
+            self._session.set_node_ui(name, **fields)
 
     def delete_node(self, card: ProcessCard) -> None:
         if not self._session:
@@ -3739,9 +2017,11 @@ class WiringGraphView(QWidget):
         if card.is_frame_ingest():
             reply = QMessageBox.question(
                 self,
-                "删除 frame_ingest",
-                "删除视频契约节点？\n"
-                "将清空 camera_slots / channel_flows，并把 active_source 设为 none。",
+                t("删除 frame_ingest"),
+                t(
+                    "删除视频契约节点？\n"
+                    "将清空 camera_slots / channel_flows，并把 active_source 设为 none。"
+                ),
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
@@ -3752,8 +2032,8 @@ class WiringGraphView(QWidget):
             return
         reply = QMessageBox.question(
             self,
-            "删除模块",
-            f"删除 {card.process_name} 及其相关 dataflows？",
+            t("删除模块"),
+            t("删除 {name} 及其相关 dataflows？").format(name=card.process_name),
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -3794,8 +2074,8 @@ class WiringGraphView(QWidget):
         if card.is_external():
             QMessageBox.information(
                 self,
-                "external MCU",
-                "No editable ports on canvas (boundary link to gateway only).",
+                t("external MCU"),
+                t("画布上无端口可编辑（边界节点仅连 gateway）。"),
             )
             return
         if card.is_frame_ingest():
@@ -3809,12 +2089,15 @@ class WiringGraphView(QWidget):
             soa_req,
             self._port_candidates(card.process_name),
             self,
+            out_policies=self._session.publish_policy_services(),
         )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self._push_undo()
         provides, requires = dlg.result_ports()
         self._session.set_ports(card.process_name, provides, requires)
+        self._session.apply_out_publish_policies(dlg.result_out_policies())
+        self._session.prune_orphan_publish_policies()
         self.rebuild()
         self.changed.emit()
 
@@ -3823,7 +2106,7 @@ class WiringGraphView(QWidget):
             return
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择头文件",
+            t("选择头文件"),
             str(self._session.paths.project_dir),
             "C/C++ Headers (*.hpp *.h);;All (*)",
         )
@@ -3833,18 +2116,18 @@ class WiringGraphView(QWidget):
         try:
             candidates = self._session.parse_hpp_candidates(hpp_path)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "解析失败", str(exc))
+            QMessageBox.critical(self, t("解析失败"), str(exc))
             return
         if not candidates:
-            QMessageBox.information(self, "导入", "未解析到 struct，请检查头文件格式")
+            QMessageBox.information(self, t("导入"), t("未解析到 struct，请检查头文件格式"))
             return
         self._apply_import_candidates(
             candidates,
             default_process,
             source_path=hpp_path,
             kind="hpp",
-            title="从头文件添加端口",
-            hint="勾选要加入的类型（作为 service 短名）：",
+            title=t("从头文件添加端口"),
+            hint=t("勾选要加入的类型（作为 service 短名）："),
         )
 
     def import_fidl(self, default_process: str = "") -> None:
@@ -3852,7 +2135,7 @@ class WiringGraphView(QWidget):
             return
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择 FIDL",
+            t("选择 FIDL"),
             str(self._session.paths.project_dir),
             "Franca IDL (*.fidl);;All (*)",
         )
@@ -3862,13 +2145,13 @@ class WiringGraphView(QWidget):
         try:
             candidates = self._session.parse_fidl_candidates(fidl_path)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "解析失败", str(exc))
+            QMessageBox.critical(self, t("解析失败"), str(exc))
             return
         if not candidates:
             QMessageBox.information(
                 self,
-                "导入",
-                "未解析到 interface/struct/method/broadcast，请检查 .fidl 格式",
+                t("导入"),
+                t("未解析到 interface/struct/method/broadcast，请检查 .fidl 格式"),
             )
             return
         self._apply_import_candidates(
@@ -3876,8 +2159,8 @@ class WiringGraphView(QWidget):
             default_process,
             source_path=fidl_path,
             kind="fidl",
-            title="从 FIDL 添加端口",
-            hint="勾选要加入的名称（struct / broadcast / method / interface）：",
+            title=t("从 FIDL 添加端口"),
+            hint=t("勾选要加入的名称（struct / broadcast / method / interface）："),
         )
 
     def _apply_import_candidates(
@@ -3893,7 +2176,7 @@ class WiringGraphView(QWidget):
         assert self._session is not None
         procs = sorted(self._nodes.keys())
         if not procs:
-            QMessageBox.information(self, "导入", "请先添加至少一个模块")
+            QMessageBox.information(self, t("导入"), t("请先添加至少一个模块"))
             return
         default = default_process if default_process in procs else procs[0]
         dlg = ImportPortsDialog(
@@ -3927,9 +2210,11 @@ class WiringGraphView(QWidget):
         self.changed.emit()
         QMessageBox.information(
             self,
-            "导入完成",
-            f"已关联 {rel}\n向 {process} 添加了 {len(names)} 个{direction} 端口。\n"
-            "可双击模块继续调整，再从 Out 拖到 In 连线。",
+            t("导入完成"),
+            t(
+                "已关联 {rel}\n向 {process} 添加了 {n} 个{direction} 端口。\n"
+                "可双击模块继续调整，再从 Out 拖到 In 连线。"
+            ).format(rel=rel, process=process, n=len(names), direction=direction),
         )
 
     def rebuild(
@@ -3939,391 +2224,15 @@ class WiringGraphView(QWidget):
         reset_layout: bool = False,
         keep_layout_pos: bool = False,
     ) -> None:
-        self.cancel_wire()
-        # Snapshot positions before C++ items are destroyed — unless caller
-        # already filled _layout_pos (undo/redo) or asked to drop layout.
-        if reset_layout:
-            self._layout_pos.clear()
-        elif not keep_layout_pos:
-            for name, card in list(self._nodes.items()):
-                if _qt_alive(card):
-                    p = card.pos()
-                    self._layout_pos[name] = (p.x(), p.y())
+        from gf_config.gui.wiring_rebuild import rebuild_wiring_graph
 
-        # Block selectionChanged while tearing down — scene.clear() deletes C++ items
-        # while Python still briefly holds ProcessCard/EdgeCurve wrappers.
-        self._scene.blockSignals(True)
-        self._flow_list.blockSignals(True)
-        try:
-            for e in self._edges:
-                if _qt_alive(e):
-                    e.remove_label()
-            for e in self._channel_edges:
-                if _qt_alive(e):
-                    e.remove_label()
-            for m in self._missing:
-                if _qt_alive(m):
-                    m.remove_label()
-            for p in self._peers:
-                if _qt_alive(p):
-                    p.remove_label()
-            self._nodes.clear()
-            self._edges.clear()
-            self._channel_edges.clear()
-            self._missing.clear()
-            self._peers.clear()
-            self._scene.clear()
-            self._flow_list.clear()
-        finally:
-            self._scene.blockSignals(False)
-            self._flow_list.blockSignals(False)
+        rebuild_wiring_graph(
+            self,
+            fit_view=fit_view,
+            reset_layout=reset_layout,
+            keep_layout_pos=keep_layout_pos,
+        )
 
-        if not self._session:
-            return
-
-        self._session.migrate_legacy_camera_channel_flows()
-
-        # Ensure single frame_ingest canvas node when frame source / active / channel_flows present
-        fi_cfg = self._session.frame_ingest_cfg()
-        active = str(fi_cfg.get("active_source") or "none").strip() or "none"
-        camera_slots = self._session.camera_slots()
-        ch_flows = self._session.channel_flows()
-        need_ingest = bool(camera_slots) or active != "none" or bool(ch_flows)
-        ingest_name = ProjectSession.FRAME_INGEST_PROCESS
-        if need_ingest:
-            ui = self._session.node_ui(ingest_name)
-            if str(ui.get("kind") or "") != "frame_ingest":
-                self._session.set_node_ui(
-                    ingest_name,
-                    kind="frame_ingest",
-                    label=str(ui.get("label") or "frame_ingest"),
-                )
-            if "x" not in ui or "y" not in ui:
-                self._session.set_node_ui(ingest_name, x=-80.0, y=-320.0)
-
-        dep_map: dict[str, dict[str, Any]] = {}
-        for d in self._session.deployments():
-            p = d.get("process")
-            if p:
-                dep_map[str(p)] = d
-
-        ordered = list(dep_map.keys())
-        for fl in self._session.dataflows():
-            for key in ("from", "to"):
-                p = fl.get(key)
-                if p and str(p) not in dep_map:
-                    dep_map[str(p)] = {"process": p, "provides": [], "requires": []}
-                    ordered.append(str(p))
-
-        depths = self._compute_depths(ordered, self._session.dataflows())
-        cols: dict[int, list[str]] = {}
-        for name in ordered:
-            cols.setdefault(depths.get(name, 0), []).append(name)
-
-        # auto-layout slots for nodes without a remembered position
-        show_mcu = self._show_external_mcu()
-        ap_x0 = 120.0 if show_mcu else 40.0
-        auto_slots: dict[str, tuple[float, float]] = {}
-        ext_i = 0
-        for depth, names in sorted(cols.items()):
-            for i, name in enumerate(names):
-                if is_external_node(process=name):
-                    # MCU 默认在最左，避免挤进 AP 列被裁切
-                    auto_slots[name] = (-280.0, 40.0 + ext_i * 120.0)
-                    ext_i += 1
-                else:
-                    # 有 MCU 时 AP 列右移留空；仅 AP 拓扑则贴左
-                    auto_slots[name] = (ap_x0 + depth * 280.0, 40.0 + i * 240.0)
-
-        # Consumer channel Ins derived from channel_flows (never from deployments)
-        channel_ins: dict[str, list[str]] = {}
-        for fl in self._session.channel_flows():
-            dst = str(fl.get("to") or "").strip()
-            if not dst:
-                continue
-            slot = normalize_channel_slot(str(fl.get("slot") or "")) or ""
-            frm = str(fl.get("from") or "")
-            if not slot and frm.startswith("camera."):
-                slot = ProjectSession.gf_channel_slot_name(
-                    ProjectSession.slot_id_from_camera_process(frm)
-                )
-            if not slot and frm == ProjectSession.FRAME_INGEST_PROCESS:
-                continue
-            if slot and slot not in channel_ins.setdefault(dst, []):
-                channel_ins[dst].append(slot)
-
-        for name in ordered:
-            d = dep_map.get(name) or {}
-            provides = [
-                str(x) for x in (d.get("provides") or []) if not is_channel_svc(str(x))
-            ]
-            requires = [
-                str(x) for x in (d.get("requires") or []) if not is_channel_svc(str(x))
-            ]
-            for slot in channel_ins.get(name, []):
-                if not any(normalize_channel_slot(str(r)) == slot for r in requires):
-                    requires.append(slot)
-            ui = self._session.node_ui(name)
-            kind = str(ui.get("kind") or "")
-            if is_external_node(kind=kind, process=name) and not kind:
-                kind = "external"
-            # ap_only：不画 MCU 卡片；YAML/dataflow 仍保留，gateway 对外端口可见
-            if is_external_node(kind=kind, process=name) and not show_mcu:
-                continue
-            if name in self._layout_pos:
-                x, y = self._layout_pos[name]
-            elif "x" in ui and "y" in ui:
-                x, y = float(ui["x"]), float(ui["y"])
-                self._layout_pos[name] = (x, y)
-            else:
-                x, y = auto_slots.get(name, (40.0, 40.0))
-                if name not in auto_slots:
-                    n = len(self._layout_pos)
-                    x, y = 80.0 + (n % 4) * 40.0, 80.0 + (n // 4) * 40.0
-                self._layout_pos[name] = (x, y)
-            raw_ps = ui.get("port_sides") if isinstance(ui.get("port_sides"), dict) else {}
-            card = ProcessCard(
-                name,
-                provides,
-                requires,
-                x,
-                y,
-                graph=self,
-                out_side=str(ui.get("out_side") or "right"),
-                in_side=str(ui.get("in_side") or "left"),
-                kind=kind or "process",
-                label=str(ui.get("label") or ""),
-                compute_domain=str(d.get("compute_domain") or "ap_linux"),
-                port_sides={str(k): str(v) for k, v in raw_ps.items()},
-            )
-            self._scene.addItem(card)
-            self._nodes[name] = card
-
-        # Single frame_ingest card: one Out per camera_slot
-        if need_ingest and ingest_name not in self._nodes:
-            outs = [
-                ProjectSession.gf_channel_slot_name(str(s.get("id")))
-                for s in camera_slots
-                if str(s.get("id") or "").strip()
-            ]
-            if not outs and active != "none":
-                outs = [ProjectSession.gf_channel_slot_name("front")]
-            ui = self._session.node_ui(ingest_name)
-            if ingest_name in self._layout_pos:
-                x, y = self._layout_pos[ingest_name]
-            elif "x" in ui and "y" in ui:
-                x, y = float(ui["x"]), float(ui["y"])
-                self._layout_pos[ingest_name] = (x, y)
-            else:
-                x, y = -80.0, -320.0
-                self._layout_pos[ingest_name] = (x, y)
-            card = ProcessCard(
-                ingest_name,
-                outs,
-                [],
-                x,
-                y,
-                graph=self,
-                out_side=str(ui.get("out_side") or "right"),
-                in_side=str(ui.get("in_side") or "left"),
-                kind="frame_ingest",
-                label=str(ui.get("label") or "frame_ingest"),
-                compute_domain="host",
-            )
-            self._scene.addItem(card)
-            self._nodes[ingest_name] = card
-
-        # drop positions for deleted processes / cameras
-        self._layout_pos = {k: v for k, v in self._layout_pos.items() if k in self._nodes}
-
-        flows = self._session.dataflows()
-        outbound_count: dict[str, int] = {}
-        outbound_seen: dict[str, int] = {}
-        peer_svcs: dict[tuple[str, str], list[str]] = {}
-        for fl in flows:
-            src = str(fl.get("from") or "")
-            outbound_count[src] = outbound_count.get(src, 0) + 1
-        for fl in flows:
-            src = str(fl.get("from") or "")
-            dst = str(fl.get("to") or "")
-            svc = str(fl.get("service") or "")
-            src_n = self._nodes.get(src)
-            dst_n = self._nodes.get(dst)
-            if not src_n or not dst_n:
-                continue
-            # External-MCU flows: one boundary link on canvas; yaml keeps services
-            if src_n.is_external() or dst_n.is_external():
-                a, b = (src, dst) if src_n.is_external() else (dst, src)
-                key = (a, b)
-                peer_svcs.setdefault(key, []).append(svc)
-                continue
-            idx = outbound_seen.get(src, 0)
-            outbound_seen[src] = idx + 1
-            edge = EdgeCurve(src_n, dst_n, svc, fl, idx, outbound_count.get(src, 1), graph=self)
-            self._scene.addItem(edge)
-            edge.update_path()  # 入景后再挂路径控制点
-            self._edges.append(edge)
-            item = QListWidgetItem(f"{short_service(svc)}:  {src}  →  {dst}")
-            item.setData(Qt.ItemDataRole.UserRole, ("edge", len(self._edges) - 1))
-            self._flow_list.addItem(item)
-
-        for fl in self._session.channel_flows():
-            src = str(fl.get("from") or "")
-            dst = str(fl.get("to") or "")
-            slot = str(fl.get("slot") or "").strip()
-            if not slot and src.startswith("camera."):
-                slot = ProjectSession.gf_channel_slot_name(
-                    ProjectSession.slot_id_from_camera_process(src)
-                )
-            src_n = self._nodes.get(src)
-            dst_n = self._nodes.get(dst)
-            if not src_n or not dst_n or not slot:
-                continue
-            cedge = ChannelEdge(src_n, dst_n, slot, fl, graph=self)
-            self._scene.addItem(cedge)
-            cedge.update_path()
-            self._channel_edges.append(cedge)
-            item = QListWidgetItem(f"[GfChannel] {slot}:  {src}  →  {dst}")
-            item.setData(
-                Qt.ItemDataRole.UserRole, ("channel", len(self._channel_edges) - 1)
-            )
-            self._flow_list.addItem(item)
-
-        # gateway 上仅面向 MCU 的端口：画布隐藏（保留 planning→Trajectory In 等）
-        hide_out: dict[str, set[str]] = {}
-        hide_in: dict[str, set[str]] = {}
-        for fl in flows:
-            src = str(fl.get("from") or "")
-            dst = str(fl.get("to") or "")
-            svc = short_service(str(fl.get("service") or ""))
-            src_n = self._nodes.get(src)
-            dst_n = self._nodes.get(dst)
-            if not src_n or not dst_n or not svc:
-                continue
-            if src_n.is_external() and not dst_n.is_external():
-                hide_in.setdefault(dst, set()).add(svc)
-            elif dst_n.is_external() and not src_n.is_external():
-                hide_out.setdefault(src, set()).add(svc)
-        for name, card in self._nodes.items():
-            if card.is_external() or card.is_camera():
-                continue
-            card.set_canvas_hide(out=hide_out.get(name, set()), inn=hide_in.get(name, set()))
-        # 隐藏端口后 gateway 高度变化，刷新已有边锚点
-        for e in self._edges:
-            if _qt_alive(e):
-                e.update_path()
-        for e in self._channel_edges:
-            if _qt_alive(e):
-                e.update_path()
-
-        # 有 dataflow / channel_flow 的端口=已连（绿/橙）；否则红
-        linked_out: dict[str, set[str]] = {n: set() for n in self._nodes}
-        linked_in: dict[str, set[str]] = {n: set() for n in self._nodes}
-        for fl in flows:
-            src = str(fl.get("from") or "")
-            dst = str(fl.get("to") or "")
-            svc = short_service(str(fl.get("service") or ""))
-            if not svc:
-                continue
-            if src in linked_out:
-                linked_out[src].add(svc)
-            if dst in linked_in:
-                linked_in[dst].add(svc)
-        for fl in self._session.channel_flows():
-            src = str(fl.get("from") or "")
-            dst = str(fl.get("to") or "")
-            slot = str(fl.get("slot") or "").strip()
-            if not slot and src.startswith("camera."):
-                slot = ProjectSession.gf_channel_slot_name(
-                    ProjectSession.slot_id_from_camera_process(src)
-                )
-            if not slot:
-                continue
-            if src in linked_out:
-                linked_out[src].add(slot)
-            if dst in linked_in:
-                linked_in[dst].add(slot)
-        for name, card in self._nodes.items():
-            card.set_link_status(
-                linked_out=linked_out.get(name, set()),
-                linked_in=linked_in.get(name, set()),
-            )
-
-        for (mcu_name, gw_name), svcs in peer_svcs.items():
-            mcu_n = self._nodes.get(mcu_name)
-            gw_n = self._nodes.get(gw_name)
-            if not mcu_n or not gw_n:
-                continue
-            peer = McuPeerLink(mcu_n, gw_n, svcs, graph=self)
-            self._scene.addItem(peer)
-            peer.update_path()
-            self._peers.append(peer)
-            pitem = QListWidgetItem(f"[boundary] {mcu_name} ↔ {gw_name}")
-            pitem.setData(
-                Qt.ItemDataRole.UserRole, ("peer", len(self._peers) - 1)
-            )
-            self._flow_list.addItem(pitem)
-
-        provided_by: dict[str, list[str]] = {}
-        for name, card in self._nodes.items():
-            if card.is_camera():
-                continue
-            for p in card.provides:
-                if is_channel_svc(p):
-                    continue
-                provided_by.setdefault(short_service(p), []).append(name)
-
-        # 仅当某 In 端口「完全没有」入边时才提示缺失；
-        # External MCU / CameraSource / GfChannel In：不画缺失虚线
-        for cons_name, card in self._nodes.items():
-            if card.is_external() or card.is_camera():
-                continue
-            ignored = set()
-            if self._session:
-                ignored = {
-                    str(x)
-                    for x in (self._session.node_ui(cons_name).get("ignore_missing") or [])
-                }
-            for req in card.requires:
-                if is_channel_svc(req):
-                    continue
-                svc_s = short_service(req)
-                satisfied = any(
-                    str(f.get("to")) == cons_name
-                    and short_service(str(f.get("service") or "")) == svc_s
-                    for f in flows
-                )
-                if satisfied:
-                    continue
-                providers = provided_by.get(svc_s) or []
-                if not providers:
-                    # 无提供方：仍在列表提示，不画到虚构节点
-                    mitem = QListWidgetItem(f"[缺失] {svc_s}:  (无 Provide)  →  {cons_name}")
-                    mitem.setData(Qt.ItemDataRole.UserRole, ("missing_orphan", svc_s))
-                    self._flow_list.addItem(mitem)
-                    continue
-                for prov in providers:
-                    key = f"{prov}|{svc_s}|{cons_name}"
-                    if key in ignored:
-                        continue
-                    src_n = self._nodes.get(prov)
-                    if not src_n or src_n.is_external() or src_n.is_camera():
-                        continue
-                    miss = MissingEdge(src_n, card, req, graph=self)
-                    self._scene.addItem(miss)
-                    self._missing.append(miss)
-                    mitem = QListWidgetItem(f"[缺失] {svc_s}:  {prov}  →  {cons_name}")
-                    mitem.setData(
-                        Qt.ItemDataRole.UserRole, ("missing", len(self._missing) - 1)
-                    )
-                    self._flow_list.addItem(mitem)
-
-        if self._search.text().strip():
-            self._on_search_text(self._search.text())
-        self._refresh_scene_rect()
-        if fit_view:
-            self._fit_and_remember()
-        self._last_topo = self._topology()
 
     @staticmethod
     def _compute_depths(procs: list[str], flows: list[dict[str, Any]]) -> dict[str, int]:

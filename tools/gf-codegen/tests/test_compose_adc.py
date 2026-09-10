@@ -7,7 +7,7 @@ from gf_codegen.compose.pipeline import compose_project
 
 
 def test_compose_adc_empty_slot(repo_root: Path, tmp_path: Path) -> None:
-    project = repo_root / "projects/adc/project.yaml"
+    project = repo_root / "projects/adc/giraffe.yaml"
     out = tmp_path / "gf.sor.json"
     rc = compose_project(project, repo_root=repo_root, out=out)
     assert rc == 0

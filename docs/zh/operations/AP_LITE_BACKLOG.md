@@ -25,7 +25,7 @@
 | BL-UDS-19FULL | 全量 0x19 子功能 | deferred | 按 OEM 增量 | 本轮最小集 + 冻结帧读 |
 | BL-GMT-COLL-LIVE | GMT Collector 真·live（ws 推送，非轮询） | deferred | 观测波 | 现：文件 + UDS RID F201 |
 | BL-COLL-FILTER | runtime 按 collector.yaml `sources` 过滤 ReportEvent | **done** | 平台波 | 非空 `sources` 白名单；空=不过滤；现已冻进 `collector_config.hpp` |
-| BL-CFG-YAML-FALLBACK | 去掉 bringup/DoIP「无 hpp 时 `GF_PLATFORM_DIR`→yaml」回落 | deferred | 配置硬化收口 | 今日：有对应 `GF_HAS_*` 头则只读 hpp；无头且显式设了 `GF_PLATFORM_DIR` 才读作者 yaml（smoke）。目标：SKU 构建强制头齐全，删 yaml 回落路径 |
+| BL-CFG-YAML-FALLBACK | 去掉 bringup/DoIP「无 hpp 时 `GF_ARA_CFG_DIR`→yaml」回落 | deferred | 配置硬化收口 | 今日：有对应 `GF_HAS_*` 头则只读 hpp；无头且显式设了 `GF_ARA_CFG_DIR` 才读作者 yaml（smoke）。目标：SKU 构建强制头齐全，删 yaml 回落路径 |
 | BL-IOX-SHM-USED | iceoryx SHM 度量改为**实际使用**而非**分配/预留** | deferred | 平台硬化 / 观测 | 今日 `mem_budget` / `iox_shm_report` 多为 RouDi reserve / mempool **allocated** 上界；需区分 used vs allocated（payload 占用、mgmt 实测）并进 Verify/UI |
 | BL-BOARD-NO-PY | **板端 runtime 零 Python**（含 frame_ingest） | deferred | P3z 真板 / 载荷收口 | **政策：**凡会随 `runtime/` / GMT 依赖上板的组件，**不得**依赖 Python 解释器或 `share/**/*.py`。`gf_frame_ingest` 板端路径 = C++ only（Create GfChannel + ISP/V4L 等适配，**禁止** `execlp(python…)`）。帧桥 / replay / colorbar **仅宿主机 SIL**；板端 stage **不得**打进 Python 模块。资源：板端环境复杂且紧，Python 运行时与依赖一律不上板 |
 | BL-STAGE-PY-MTIME | stage 对 SIL 主机侧 frame-bridge / scenario py 做 mtime 增量拷贝 | deferred | SIL 工具链卫生 | 仅影响**宿主机** SIL；与 BL-BOARD-NO-PY 正交。`tools/carla_bridge/` 已移除——对象改为仍会 stage 的主机侧 `.py`（若有）。今日改 py 后 `compile_sil` 常 skip stage → 仍跑旧拷贝 |

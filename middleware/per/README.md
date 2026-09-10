@@ -6,7 +6,7 @@
 | `SetValue` / `GetValue` | KV；写后原子落盘到另一槽 + 世代号 |
 | `ClearValues` / `Close` | 清空并持久化 / 关闭 |
 
-**Not SQLite.** 环境变量 `GF_PER_DIR`（默认 `.`）。SKU：`req.runtime_modules` 含 `per`。
+**Not SQLite.** 环境变量 **`GF_PER_DIR` 必填**（launch/`run_sil` 会设到 `$BUILD/runtime/per`）。SKU：`req.runtime_modules` 含 `per`。
 
 Smoke: `gf_per_smoke`（PER-01…04，含跨 Open 持久化）.
 

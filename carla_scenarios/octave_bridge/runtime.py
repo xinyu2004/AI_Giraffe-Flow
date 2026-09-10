@@ -100,14 +100,12 @@ def last_ipc() -> str:
 
 
 def ipc_order(want: str, platform: str) -> list[str]:
-    """auto: stdio then file on both OS. Windows named-pipe fopen does not work.
-
-    Windows stdio needs in-process _setmode (gf_stdio_binmode_oct). Never default tcp.
-    """
+    """auto: stdio only. Explicit GF_OCTAVE_IPC=file|pipe|tcp to opt into those."""
+    del platform
     w = (want or "auto").strip().lower()
     if w in _KNOWN_IPC:
         return [w]
-    return ["stdio", "file"]
+    return ["stdio"]
 
 
 _HDR_ST = struct.Struct("<II")

@@ -9,6 +9,6 @@ Not Classic DEM. PHM/UCM/process events → debounce → FDC-lite → confirmed 
 | `ListDtcs` / `ClearDtc` / `SetDtcControlEnabled` | 供 UDS 0x19 / 0x14 / 0x85 |
 | `GetFreezeFrame` | 冻结帧（confirmed 时采样） |
 
-Config: `platform/collector.yaml`. Persist: `GF_PER_DIR` + module `per`.
+Config: `cfg/gf_ara_cfg/collector.yaml`. Persist: `GF_PER_DIR` + module `per`.
 
 Smoke: `gf_collector_smoke` · `gf_dem_lite_smoke`.

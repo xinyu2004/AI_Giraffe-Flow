@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 _ORG = "GiraffeFlow"
 _APP = "gf-config"
 _LANG = "zh"
@@ -21,7 +19,20 @@ _EN: dict[str, str] = {
     "B · 信号链接": "B · Signal graph",
     "C · 平台": "C · Platform",
     "文件": "File",
-    "打开 project.yaml…": "Open project.yaml…",
+    "打开 giraffe.yaml…": "Open giraffe.yaml…",
+    "新建 Giraffe 工程…": "New Giraffe project…",
+    "选择 giraffe.yaml": "Select giraffe.yaml",
+    "选择新建工程的父目录": "Parent folder for new project",
+    "新建 Giraffe 工程": "New Giraffe project",
+    "工程目录名（project_id）：": "Project folder name (project_id):",
+    "新建失败": "Create failed",
+    "目录非空：": "Directory not empty: ",
+    "已生成最小完备树：": "Scaffolded minimal tree:\n",
+    "含 cfg/req.yaml · cfg/wiring.yaml · cfg/gf_ara_cfg/*\n请补 OEM DBC 后 Verify。": (
+        "Includes cfg/req.yaml · cfg/wiring.yaml · cfg/gf_ara_cfg/*\n"
+        "Add OEM DBC then Verify."
+    ),
+    "打开 giraffe.yaml…": "Open giraffe.yaml…",  # legacy tip key
     "保存（只写盘，不检查）": "Save (disk only, no check)",
     "保存并 Verify…": "Save & Verify…",
     "Verify（合成 SOR / 检查闭环）": "Verify (compose SOR / check)",
@@ -146,6 +157,17 @@ _EN: dict[str, str] = {
     "record 白名单，每行一个": "record allowlist, one per line",
     "required_services，每行一个": "required_services, one per line",
     "runtime_modules → 页 2": "runtime_modules → tab 2",
+    "行来自各模块 Out（画布双击亦可改触发）。一发多收共享同一话题策略。": (
+        "Rows come from module Outs (also editable via canvas double-click). "
+        "Fan-out shares one topic policy."
+    ),
+    "语义话题：画布双击模块 → Out 表改触发。"
+    "通道话题：双击 frame_ingest 改触发。"
+    "一发多收共享同一话题策略；Signals 页不再编辑发布表。": (
+        "Semantic topics: canvas double-click → Out table. "
+        "Channel topics: double-click frame_ingest. "
+        "Fan-out shares one topic policy; Signals page no longer edits the table."
+    ),
     "（未识别）": " (unknown)",
     "production-release：live/record/trace 灰调；不编 iox_obs_tap；run_sil 不起 Foxglove。bindings 仍保留。": (
         "production-release: live/record/trace disabled; no iox_obs_tap; "
@@ -224,20 +246,20 @@ _EN: dict[str, str] = {
     "OTA ucm": "OTA (ucm)",
     "事件收集": "Event collector",
     "有界内存": "Memory bounds",
+    "有界内存预估": "Memory-bound estimate",
     "BL-MEM-BOUND：平台有界内存 / 磁盘上界。"
-    "下方预估为保守上界（非实测 RSS），公式与常量可 review："
-    "tools/gf-codegen/.../mem_budget.py 模块 docstring FORMULAS。"
-    "Verify / Generate 会跑同一套 estimate。": (
+    "下方预估为保守上界（非实测 RSS），公式见 mem_budget.py FORMULAS。"
+    "未勾选的模块对应段不显示、不计入预估。"
+    "log.file_max / collector 环与落盘上限在「日志」「事件收集」页编辑。"
+    "Verify / Generate 跑同一套 estimate。": (
         "BL-MEM-BOUND: platform RAM/disk upper bounds. "
-        "Estimate below is conservative (not measured RSS). Reviewable formulas: "
-        "tools/gf-codegen/.../mem_budget.py FORMULAS docstring. "
+        "Estimate below is conservative (not measured RSS); formulas in mem_budget.py FORMULAS. "
+        "Unchecked modules are hidden and excluded from the estimate. "
+        "Edit log.file_max / collector ring & store on the Log / Event collector pages. "
         "Verify/Generate uses the same estimate."
     ),
     "公式常量（字节）": "Formula constants (bytes)",
-    "bounds.yaml（跨模块硬上限）": "bounds.yaml (cross-module hard caps)",
-    "关联上限（写回 log / collector / diag）": (
-        "Linked caps (write back to log / collector / diag)"
-    ),
+    "bounds · budget（总预算）": "bounds · budget (totals)",
     "静态上界预估（只读 · 含公式）": "Static upper-bound estimate (read-only · with formulas)",
     "载入实测 SHM": "Load measured SHM",
     "iox SHM 报告 (*.json);;所有文件 (*)": "iox SHM report (*.json);;All files (*)",
@@ -252,14 +274,61 @@ _EN: dict[str, str] = {
     ),
     "iceoryx / RouDi（BL-MEM-ROUDI）": "iceoryx / RouDi (BL-MEM-ROUDI)",
     "添加 mempool": "Add mempool",
-    "file sink 软轮转上限（字节）；保留 path + path.1，计入 DISK 预估 ×2": (
-        "File sink soft rotate (bytes); keeps path + path.1; DISK estimate ×2"
+    "补齐缺失 SOA": "Append missing SOA",
+    "不可删除 host": "Cannot delete host",
+    "补齐": "Fill gaps",
+    "无法保存": "Cannot save",
+    "工程非法，已拒绝打开": "Invalid project — open refused",
+    "磁盘配置未通过校验（不会自动修补）。请用 gf-config 修正后重开。": (
+        "On-disk config failed validation (no auto-repair). "
+        "Fix with gf-config and reopen."
     ),
-    "防抖 map 最大键数（BL-MEM-BOUND）；RAM ≈ keys × C_DEBOUNCE_ENTRY": (
-        "Debounce map max keys (BL-MEM-BOUND); RAM ≈ keys × C_DEBOUNCE_ENTRY"
+    "校验未通过，未写入磁盘（更改仍在内存）。": (
+        "Validation failed — nothing written (edits remain in memory)."
     ),
-    "共享 NDJSON 文件软上限；保留 ×2，计入 DISK 预估": (
-        "Shared NDJSON soft cap; ×2 retained; counted in DISK estimate"
+    "校验未通过，未写入磁盘。可丢弃更改后退出，或取消继续编辑。": (
+        "Validation failed — nothing written. Discard to quit, or Cancel to keep editing."
+    ),
+    "校验未通过 — 未写盘": "Validation failed — not saved",
+    "保存（Verify 通过后写盘）": "Save (write after validation passes)",
+    "已打开（异常：加载后出现未保存标记，请报告）": (
+        "Opened (bug: dirty after load — please report)"
+    ),
+    "已打开（已自动迁移旧格式，请保存）": (
+        "Opened (legacy format migrated — please save)"
+    ),
+    "有未保存的 SKU / 连线 / ARA cfg 更改，是否保存？": (
+        "Unsaved SKU / wiring / ARA cfg changes. Save?"
+    ),
+    "Verify": "Verify",
+    "Generate": "Generate",
+    "成功。请查看右侧「Lineage」。\n\n"
+    "拓扑图见页 1 画布；评审附件可用「文件 → 导出 Graphviz」。\n"
+    "运行时序/回放请用 GMT GUI。\n\n"
+    "若要生成 Proxy/Skeleton：文件 → Generate 或 Ctrl+G。": (
+        "OK. See Lineage on the right.\n\n"
+        "Topology is on tab-1 canvas; use File → Export Graphviz for review attachments.\n"
+        "Use GMT GUI for runtime timeline / replay.\n\n"
+        "For Proxy/Skeleton: File → Generate or Ctrl+G."
+    ),
+    "em_launch.yaml：EM Spawn 表（binary / args / max_restarts）。"
+    "进程名来自 wiring（及能力允许的 host.*）；与 exec.yaml 只共享名字，"
+    "成员集合互不强制对齐。binary 相对 $GF_BUILD_DIR。": (
+        "em_launch.yaml: EM Spawn table (binary / args / max_restarts). "
+        "Names from wiring (and capability-gated host.*); shares only names with "
+        "exec.yaml — membership sets need not match. binary relative to $GF_BUILD_DIR."
+    ),
+    "exec / wiring 中没有可同步的 SOA 进程名。": (
+        "No SOA process names available from exec / wiring."
+    ),
+    "没有缺失项：EM 表已覆盖 exec SOA 进程。": (
+        "Nothing missing: EM table already covers exec SOA processes."
+    ),
+    "尚未勾选可选平台模块（exec / phm / diag / log / ucm / sm / collector …）。\n"
+    "core / com / osal 常开；勾选后对应清单出现在左侧（有界内存因 com 常显）。": (
+        "No optional platform modules checked (exec / phm / diag / log / ucm / sm / collector …).\n"
+        "core / com / osal stay on; checked modules appear in the left nav "
+        "(Memory bounds stays visible because com is always on)."
     ),
     "gf_ara::core — Result / ErrorCode（常开）": (
         "gf_ara::core — Result / ErrorCode (usually on)"
@@ -301,7 +370,7 @@ _EN: dict[str, str] = {
     "添加 FG": "Add FG",
     "删除选中": "Delete selected",
     "添加进程行": "Add process row",
-    "从 wiring 同步进程名": "Sync names from wiring",
+    "从 wiring 选择": "Pick from wiring",
     "depends_on（空格/逗号分隔）": "depends_on (space/comma)",
     "em_launch.yaml：OS EM（gf_em_daemon）二进制表。"
     "binary 相对 $GF_BUILD_DIR；与 exec.yaml 进程名对齐。"
@@ -339,7 +408,6 @@ _EN: dict[str, str] = {
         "PHM on_failure=restart + GF_EM_MANAGED → exit 75 then relaunch up to max_restarts."
     ),
     "添加行": "Add row",
-    "从 exec 同步进程名": "Sync names from exec",
     "binary（相对 build_dir）": "binary (rel. build_dir)",
     "args（空格/逗号）": "args (space/comma)",
     "phm.yaml：Alive / Deadline。process ∈ wiring（非 external）。"
@@ -418,6 +486,37 @@ _EN: dict[str, str] = {
     "选择 depends_on": "Select depends_on",
     "选择": "Select",
     "勾选后确定；可多选。": "Check items, then OK. Multi-select allowed.",
+    "编辑列表": "Edit list",
+    "逐项添加态名；不要用逗号拼写。双击可改名。": (
+        "Add state names one by one; do not join with commas. Double-click to rename."
+    ),
+    "新态名，例如 DrivingActive": "New state name, e.g. DrivingActive",
+    "添加": "Add",
+    "改名": "Rename",
+    "态名": "State name",
+    "（点击编辑 states）": "(click to edit states)",
+    "编辑 ModeDeclaration states": "Edit ModeDeclaration states",
+    "信号与应用": "Signals & apps",
+    "dataflows / channel_flows": "dataflows / channel_flows",
+    "Lineage": "Lineage",
+    "linked": "linked",
+    "unlinked": "unlinked",
+    "拖拽调整路径（Ctrl+S 保存）": "Drag to adjust route (Ctrl+S to save)",
+    "Verify 后显示 lineage 检查结果": "Lineage checks appear here after Verify",
+    "原始 signal_lineage_report.yaml …": "Raw signal_lineage_report.yaml …",
+    "（无报告内容）": "(empty report)",
+    "报告不是合法 YAML，见下方原文": "Report is not valid YAML; see raw text below",
+    "报告格式异常": "Unexpected report format",
+    "Lineage PASS · {n} 项检查通过": "Lineage PASS · {n} checks ok",
+    "Lineage FAIL · {e} 个错误 · {w} 个警告": "Lineage FAIL · {e} errors · {w} warnings",
+    "错误\n": "Errors\n",
+    "警告\n": "Warnings\n",
+    "检查项\n": "Checks\n",
+    "require ProgrammingSession": "require ProgrammingSession",
+    "require SecurityAccess": "require SecurityAccess",
+    "service": "service",
+    "源": "from",
+    "目的": "to",
     "（未选服务）": "(no services)",
     "选择 live 服务": "Select live services",
     "选择 record 服务": "Select record services",
@@ -519,8 +618,11 @@ _EN: dict[str, str] = {
     ),
     "local（DEM-lite 落盘）": "local (DEM-lite on disk)",
     # Language switch / SKU localized labels (yaml values stay English)
+    "切换语言将刷新界面。有未保存的更改，是否保存？": (
+        "Switching language refreshes the UI. Save unsaved changes?"
+    ),
     "切换语言将重启应用。有未保存的更改，是否保存？": (
-        "Switching language restarts the app. Save unsaved changes?"
+        "Switching language refreshes the UI. Save unsaved changes?"
     ),
     "变体": "Variant",
     "拓扑": "Topology",
@@ -594,6 +696,9 @@ _EN: dict[str, str] = {
     "录制关闭 → 录制服务灰调": "Record off → record services greyed",
     # Status bar
     "已打开": "Opened",
+    "有未保存更改 — Ctrl+S 保存（须校验通过）": (
+        "Unsaved changes — Ctrl+S to save (validation required)"
+    ),
     "有未保存更改 — Ctrl+S 只保存；Verify 另点": (
         "Unsaved changes — Ctrl+S saves; Verify separately"
     ),
@@ -616,7 +721,7 @@ _EN: dict[str, str] = {
         "Verify exit {rc} — see red items in Lineage"
     ),
     "Generate OK → {out}/include/gf_gen/": "Generate OK → {out}/include/gf_gen/",
-    # Memory bounds / SHM (BL-MEM-ROUDI) — keep in sync with platform_editor
+    # Memory bounds / SHM (BL-MEM-ROUDI) — keep in sync with ara_cfg_editor
     "SHM 实测：未载入（roudi_mgmt 用近似值，非精确）": (
         "SHM measured: not loaded (roudi_mgmt uses approximate value, not exact)"
     ),
@@ -702,6 +807,186 @@ _EN: dict[str, str] = {
         "Edit here → Save/Verify → compile → run_sil "
         "(behavior is compile-frozen; do not hand-edit camera JSON)"
     ),
+    # Canvas / port / frame_ingest (wiring_dialogs + wiring_graph)
+    "编辑端口 — {process}": "Edit ports — {process}",
+    "Out（服务）": "Out (service)",
+    "触发": "Trigger",
+    "ms / fps": "ms / fps",
+    "In（requires）": "In (requires)",
+    "Out（provides）— 触发写在发布话题上（多订阅共享一份）": (
+        "Out (provides) — trigger is on the publish topic (shared by subscribers)"
+    ),
+    "＋ Out": "+ Out",
+    "＋ In": "+ In",
+    "删除选中": "Delete selected",
+    "切换方向": "Swap direction",
+    "一发多收：多模块 In 同名正常（DDS/SOME/IP 多订阅）。"
+    "透传时可两模块 Out 同名；publish_policy 按短名一份，属发布话题而非边。"
+    "\n手输短名 → services.semantic.*；In/Out 同模块可同名（gateway）。": (
+        "Fan-out: same In name on many modules is OK (DDS/SOME/IP). "
+        "Passthrough may Out the same short on two modules; "
+        "publish_policy is one entry per short (topic, not edge).\n"
+        "Typed shorts → services.semantic.*; same module may In/Out same name (gateway)."
+    ),
+    "添加端口": "Add ports",
+    "勾选要加入的名称（作为 service 短名）：": (
+        "Check names to add (as service short names):"
+    ),
+    "仅粗端口 / 整包对接（推荐，隐藏 Item 碎片）": (
+        "Fat ports / whole-package only (hide Item fragments)"
+    ),
+    "目标模块": "Target module",
+    "Out（provides）": "Out (provides)",
+    "In（requires）": "In (requires)",
+    "方向": "Direction",
+    "frame_ingest · 视频契约": "frame_ingest · video contract",
+    "每路 = 一个 Out（gf.channel.{id}）→ 拖到消费方。\n"
+    "SOP 默认帧源=isp；SIL 用 GF_FRAME_SOURCE=carla|replay|colorbar|none（run_sil）。\n"
+    "无外参/内参/ego；buffers=AB 固定 2。": (
+        "Each lane = one Out (gf.channel.{id}) → drag to consumer.\n"
+        "SOP default source=isp; SIL uses GF_FRAME_SOURCE=carla|replay|colorbar|none (run_sil).\n"
+        "No extrinsics/intrinsics/ego; buffers=AB fixed at 2."
+    ),
+    "相机路（每路一条 GfChannel Out）": "Camera lanes (one GfChannel Out each)",
+    "相机物理帧率。0=未填。Out expect_fps 须 ≤ 此值。": (
+        "Camera physical fps. 0=unset. Out expect_fps must be ≤ this."
+    ),
+    "槽名": "Slot",
+    "宽": "Width",
+    "高": "Height",
+    "添加一路": "Add lane",
+    "删除当前路": "Delete current lane",
+    "通道发布策略": "Channel publish policy",
+    "添加通道": "Add channel",
+    "删除选中通道": "Delete selected channel",
+    "请先选中一行通道。": "Select a channel row first.",
+    "通道名必填。": "Channel name is required.",
+    "通道名必须唯一。": "Channel names must be unique.",
+    "通道发布策略（publish_policy.channels）": (
+        "Channel publish policy (publish_policy.channels)"
+    ),
+    "通道": "Channel",
+    "至少保留一路。": "Keep at least one lane.",
+    "每路 id 必填且唯一。": "Each lane id is required and unique.",
+    "添加模块": "Add module",
+    "ap_linux — AP Linux（默认）": "ap_linux — AP Linux (default)",
+    "host — 桌面 / 仿真 PC": "host — desktop / sim PC",
+    "compute_domain：进程运行位置。\n"
+    "写入 wiring.yaml → Verify → gf.sor.json deployments[]。": (
+        "compute_domain: where the process runs.\n"
+        "Written to wiring.yaml → Verify → gf.sor.json deployments[]."
+    ),
+    "compute_domain 是 wiring 字段（进 SOR）。\n"
+    "外部 MCU：空白画布右键 → 添加外部 MCU。\n"
+    "视频契约：空白处右键 → 添加 frame_ingest（不进 deployments）。": (
+        "compute_domain is a wiring field (into SOR).\n"
+        "External MCU: blank canvas → right-click → Add external MCU.\n"
+        "Video contract: blank → right-click → Add frame_ingest (not a deployment)."
+    ),
+    "进程名": "Process name",
+    "计算域": "Compute domain",
+    "搜索信号（模糊匹配名 / 进程）…": "Search signals (fuzzy name / process)…",
+    "Out=绿 · In=橙 · !=未连\n"
+    "线色=源模块（同卡扇出同色）· 蓝点划线=GfChannel\n"
+    "拖拽连线 · Ctrl+拖改边/同边调序 · Ctrl+Z/Y 撤销": (
+        "Out=green · In=orange · !=unwired\n"
+        "Edge color=source module (fan-out same color) · blue dots=GfChannel\n"
+        "Drag to wire · Ctrl+drag move/reorder · Ctrl+Z/Y undo"
+    ),
+    "尚无 lineage。菜单：文件 → Verify（Ctrl+R）": (
+        "No lineage yet. Menu: File → Verify (Ctrl+R)"
+    ),
+    "连线": "Wires",
+    "折叠 / 展开右侧面板（连线 + Lineage）": (
+        "Collapse / expand right panel (wires + Lineage)"
+    ),
+    "添加模块…": "Add module…",
+    "添加 frame_ingest…": "Add frame_ingest…",
+    "添加外部 MCU…": "Add external MCU…",
+    "导入 hpp/h…": "Import hpp/h…",
+    "从头文件添加端口": "Add ports from header",
+    "勾选要加入的类型（作为 service 短名）：": (
+        "Check types to add (as service short names):"
+    ),
+    "从 FIDL 添加端口": "Add ports from FIDL",
+    "勾选要加入的名称（struct / broadcast / method / interface）：": (
+        "Check names to add (struct / broadcast / method / interface):"
+    ),
+    "语义话题：画布双击模块 → Out 表改触发。"
+    "通道话题：双击 frame_ingest 改触发。"
+    "一发多收共享同一话题策略；Signals 页不再编辑发布表。": (
+        "Semantic topics: canvas double-click → Out table. "
+        "Channel topics: double-click frame_ingest. "
+        "Fan-out shares one topic policy; Signals page no longer edits the table."
+    ),
+    "周期": "Period",
+    "变化时": "On change",
+    "编辑信号": "Edit signal",
+    "编辑信号名…": "Edit signal name…",
+    "重置连线路径": "Reset wire path",
+    "删除信号线": "Delete signal wire",
+    "删除 GfChannel 边": "Delete GfChannel edge",
+    "补上连线（写入 dataflow）": "Add wire (write dataflow)",
+    "忽略此建议（不再显示）": "Ignore suggestion (hide)",
+    "移除目标 In 端口（不再需要该输入）": "Remove target In port",
+    "补线": "Wire",
+    "该 dataflow 已存在": "This dataflow already exists",
+    "该 GfChannel 边已存在": "This GfChannel edge already exists",
+    "编辑 frame_ingest…": "Edit frame_ingest…",
+    "删除 frame_ingest": "Delete frame_ingest",
+    "编辑端口…": "Edit ports…",
+    "从此模块导入 hpp…": "Import hpp from this module…",
+    "删除模块": "Delete module",
+    "已存在：{name}": "Already exists: {name}",
+    "frame_ingest": "frame_ingest",
+    "已存在视频契约节点。请双击 {name} 编辑。": (
+        "Video contract node already exists. Double-click {name} to edit."
+    ),
+    "外部 MCU": "External MCU",
+    "当前拓扑为「仅 AP（无 MCU）」，不显示 MCU 节点。\n"
+    "请先在 SKU 将拓扑改为「AP + MCU CP」。\n"
+    "对外控制信号（如 VehicleBus / Trajectory）可直接挂在 gateway 等模块端口上。": (
+        "Topology is AP-only (no MCU); MCU node is hidden.\n"
+        "Switch SKU topology to「AP + MCU CP」first.\n"
+        "Outbound control (e.g. VehicleBus / Trajectory) can hang on gateway ports."
+    ),
+    "当前拓扑为仅 AP。请先改为「AP + MCU CP」；"
+    "对外控制信号可挂在 gateway 端口上。": (
+        "Topology is AP-only. Switch to「AP + MCU CP」first; "
+        "outbound control can hang on gateway ports."
+    ),
+    "外部节点": "External node",
+    "external MCU": "external MCU",
+    "已添加 {name}": "Added {name}",
+    "删除视频契约节点？\n"
+    "将清空 camera_slots / channel_flows，并把 active_source 设为 none。": (
+        "Delete video contract node?\n"
+        "Clears camera_slots / channel_flows and sets active_source to none."
+    ),
+    "删除 {name} 及其相关 dataflows？": "Delete {name} and related dataflows?",
+    "画布上无端口可编辑（边界节点仅连 gateway）。": (
+        "No editable ports on canvas (boundary links to gateway only)."
+    ),
+    "选择头文件": "Select header",
+    "选择 FIDL": "Select FIDL",
+    "解析失败": "Parse failed",
+    "导入": "Import",
+    "未解析到 struct，请检查头文件格式": (
+        "No struct parsed; check header format"
+    ),
+    "未解析到 interface/struct/method/broadcast，请检查 .fidl 格式": (
+        "No interface/struct/method/broadcast parsed; check .fidl format"
+    ),
+    "请先添加至少一个模块": "Add at least one module first",
+    "导入完成": "Import done",
+    "已关联 {rel}\n向 {process} 添加了 {n} 个{direction} 端口。\n"
+    "可双击模块继续调整，再从 Out 拖到 In 连线。": (
+        "Linked {rel}\nAdded {n} {direction} ports to {process}.\n"
+        "Double-click the module to adjust, then drag Out→In to wire."
+    ),
+    "拖拽连线 · Ctrl+拖：改边或同边调序 · 右键选边": (
+        "Drag to wire · Ctrl+drag: move/reorder · right-click for side"
+    ),
 }
 
 # Authoritative field tips (gf_config.gui.tips) — purpose/effect, not enum noise.
@@ -740,52 +1025,17 @@ def save_language(lang: str) -> None:
         pass
 
 
-def set_pending_reopen_project(path: str | None) -> None:
-    """Remember project.yaml to reopen after language-switch restart."""
+def clear_stale_pending_open() -> None:
+    """Drop leftover session/pending_open from older process-restart language switch."""
     try:
         from PySide6.QtCore import QSettings
 
-        s = QSettings(_ORG, _APP)
-        if path:
-            s.setValue("session/pending_open", path)
-        else:
-            s.remove("session/pending_open")
+        QSettings(_ORG, _APP).remove("session/pending_open")
     except Exception:
         pass
-
-
-def take_pending_reopen_project() -> str | None:
-    """Consume pending reopen path (one-shot after language restart)."""
-    try:
-        from PySide6.QtCore import QSettings
-
-        s = QSettings(_ORG, _APP)
-        raw = str(s.value("session/pending_open", "") or "").strip()
-        s.remove("session/pending_open")
-        return raw or None
-    except Exception:
-        return None
 
 
 def t(zh: str) -> str:
     if _LANG == "en":
         return _EN.get(zh, zh)
     return zh
-
-
-def switch_language_and_restart(
-    lang: str, *, project_path: str | None = None
-) -> None:
-    """Persist language, remember project, relaunch this process (sys.argv)."""
-    from PySide6.QtCore import QProcess
-    from PySide6.QtWidgets import QApplication
-
-    save_language(lang)
-    set_pending_reopen_project(project_path)
-    app = QApplication.instance()
-    if app is not None:
-        for w in app.topLevelWidgets():
-            w.hide()
-    QProcess.startDetached(sys.executable, sys.argv)
-    if app is not None:
-        app.quit()

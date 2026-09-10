@@ -99,14 +99,14 @@ class DocHistory:
 
 
 def capture_snapshot(sess: ProjectSession) -> _Snapshot:
-    dirty_plat = set(sess.dirty_platform or set())
+    dirty_plat = set(sess.dirty_ara_cfg or set())
     return {
         "req": copy.deepcopy(sess.req),
         "wiring": copy.deepcopy(sess.wiring),
-        "platform": copy.deepcopy(sess.platform),
+        "ara_cfg": copy.deepcopy(sess.ara_cfg),
         "dirty_req": bool(sess.dirty_req),
         "dirty_wiring": bool(sess.dirty_wiring),
-        "dirty_platform": dirty_plat,
+        "dirty_ara_cfg": dirty_plat,
     }
 
 
@@ -117,13 +117,13 @@ def _capture(sess: ProjectSession) -> _Snapshot:
 def apply_snapshot(sess: ProjectSession, snap: _Snapshot) -> None:
     sess.req = copy.deepcopy(snap["req"])
     sess.wiring = copy.deepcopy(snap["wiring"])
-    sess.platform = copy.deepcopy(snap["platform"])
+    sess.ara_cfg = copy.deepcopy(snap["ara_cfg"])
     sess.dirty_req = bool(snap.get("dirty_req"))
     sess.dirty_wiring = bool(snap.get("dirty_wiring"))
-    sess.dirty_platform = set(snap.get("dirty_platform") or set())
+    sess.dirty_ara_cfg = set(snap.get("dirty_ara_cfg") or set())
 
 
-# platform yaml key → nav title (same strings as platform_editor._NAV; i18n via t())
+# platform yaml key → nav title (same strings as ara_cfg_editor._NAV; i18n via t())
 _PLATFORM_LABELS = {
     "exec": "执行 / 功能组",
     "em_launch": "EM 启动表",
@@ -141,22 +141,22 @@ def locate_doc_change(
 ) -> tuple[str, str | None, str]:
     """Where *after* differs from *before* (the edit being undone/redone).
 
-    Returns (area, platform_key|None, hint).
-    area: 'platform' | 'wiring' | 'req' | 'signals'
+    Returns (area, ara_cfg_key|None, hint).
+    area: 'ara_cfg' | 'wiring' | 'req' | 'signals'
     """
-    plat_a = before.get("platform") or {}
-    plat_b = after.get("platform") or {}
+    plat_a = before.get("ara_cfg") or {}
+    plat_b = after.get("ara_cfg") or {}
     if plat_a != plat_b:
         keys = sorted(set(plat_a) | set(plat_b))
         changed = [k for k in keys if plat_a.get(k) != plat_b.get(k)]
         if len(changed) == 1:
             key = changed[0]
             label = t(_PLATFORM_LABELS.get(key, key))
-            return "platform", key, f"{t('平台')} · {label}"
+            return "ara_cfg", key, f"{t('平台')} · {label}"
         if changed:
             labels = "、".join(t(_PLATFORM_LABELS.get(k, k)) for k in changed[:3])
-            return "platform", changed[0], f"{t('平台')} · {labels}"
-        return "platform", None, t("平台运行时")
+            return "ara_cfg", changed[0], f"{t('平台')} · {labels}"
+        return "ara_cfg", None, t("平台运行时")
 
     req_diff = (before.get("req") or {}) != (after.get("req") or {})
     wir_diff = (before.get("wiring") or {}) != (after.get("wiring") or {})

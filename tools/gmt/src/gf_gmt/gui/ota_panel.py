@@ -91,12 +91,12 @@ def _load_diag_bundle(project_dir: Path | None) -> dict[str, Any]:
     }
     if project_dir is None:
         return out
-    proj = project_dir / "project.yaml"
-    diag = project_dir / "platform" / "diag.yaml"
+    proj = project_dir / "giraffe.yaml"
+    diag = project_dir / "cfg" / "gf_ara_cfg" / "diag.yaml"
     if proj.is_file():
         try:
             raw = yaml.safe_load(proj.read_text(encoding="utf-8")) or {}
-            plat = raw.get("platform") if isinstance(raw, dict) else None
+            plat = raw.get("gf_ara_cfg") if isinstance(raw, dict) else None
             if isinstance(plat, dict) and plat.get("diag"):
                 diag = project_dir / str(plat["diag"]).strip()
         except Exception:  # noqa: BLE001

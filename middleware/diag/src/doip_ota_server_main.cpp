@@ -44,8 +44,8 @@ std::string ReadFile(const std::string& path) {
   return ss.str();
 }
 
-std::string PlatformPath(const char* name) {
-  const char* dir = std::getenv("GF_PLATFORM_DIR");
+std::string AraCfgPath(const char* name) {
+  const char* dir = std::getenv("GF_ARA_CFG_DIR");
   if (dir == nullptr || dir[0] == '\0') {
     return {};
   }
@@ -139,7 +139,7 @@ void ConfigureCollector() {
   gf_ara::collector::CollectorConfig ccfg;
   ccfg.forward = "local_store";
   ccfg.local_enabled = true;
-  const auto collector_yaml = ReadFile(PlatformPath("collector.yaml"));
+  const auto collector_yaml = ReadFile(AraCfgPath("collector.yaml"));
   if (!collector_yaml.empty()) {
     gf_ara::collector::EventCollector::Instance().ConfigureFromYaml(collector_yaml);
   } else {
@@ -170,7 +170,7 @@ int main() {
   ur.enabled = true;
   ur.allow_rollback = true;
   ur.function_group = "MachineFG";
-  const auto ucm_yaml = ReadFile(PlatformPath("ucm.yaml"));
+  const auto ucm_yaml = ReadFile(AraCfgPath("ucm.yaml"));
   if (!ucm_yaml.empty()) {
     std::smatch m;
     if (std::regex_search(ucm_yaml, m, std::regex(R"(enabled:\s*(true|false))"))) {
@@ -258,7 +258,7 @@ int main() {
   std::uint32_t did_entries = 256;
   std::uint32_t did_payload = 4096;
   std::uint32_t rx_max = 65536;
-  const auto bounds_yaml = ReadFile(PlatformPath("bounds.yaml"));
+  const auto bounds_yaml = ReadFile(AraCfgPath("bounds.yaml"));
   if (!bounds_yaml.empty()) {
     std::smatch bm;
     if (std::regex_search(bounds_yaml, bm,
@@ -288,7 +288,7 @@ int main() {
         seed.id, std::vector<std::uint8_t>(name.begin(), name.end()));
   }
 #else
-  const auto diag_yaml = ReadFile(PlatformPath("diag.yaml"));
+  const auto diag_yaml = ReadFile(AraCfgPath("diag.yaml"));
   if (!diag_yaml.empty()) {
     std::smatch dm;
     if (std::regex_search(diag_yaml, dm, std::regex(R"(rx_max_bytes:\s*(\d+))"))) {

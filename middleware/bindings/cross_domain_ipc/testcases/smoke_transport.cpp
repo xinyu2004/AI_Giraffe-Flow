@@ -27,7 +27,7 @@ void Pass(const char* id, const char* detail) {
 
 int main() {
   using namespace gf_ara::com::binding::cross_domain_ipc;
-  const char* path = "/tmp/gf_cp_ipc_smoke.sock";
+  const char* path = "";  // abstract Unix default (no /tmp node)
 
   Dummy d{};
   d.a = 42;

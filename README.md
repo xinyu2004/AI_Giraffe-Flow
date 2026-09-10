@@ -46,14 +46,14 @@ Defines **what**, **who talks to whom**, and **which board modules to trim** —
 | Tab | Writes | Output |
 |-----|--------|--------|
 | **1 · Signals & apps** | Thin SKU (`req.yaml`) + wiring canvas (`wiring.yaml`) | deployments / dataflows / live_tap |
-| **2 · Platform runtime** | `runtime_modules` + `platform/*` (exec · **EM launch** · PHM · collector · diag · log · ucm; **per/tsync** trimable) | `platform_manifest` → CMake trim / EM topo |
+| **2 · Platform runtime** | `runtime_modules` + `cfg/gf_ara_cfg/*` (exec · **EM launch** · PHM · collector · diag · log · ucm; **per/tsync** trimable) | `gf_ara_cfg_manifest` → CMake trim / EM topo |
 
 - Verify / Generate → SOR + Proxy/Skeleton + lineage (incl. `platform_em_launch`)
 
 ![gf-config — signal graph (tab 1)](gallery/gf-config.png)
 
 ```bash
-gf-config projects/afc/project.yaml
+gf-config projects/afc/giraffe.yaml
 ```
 
 Details: [tools/gf-config/README.md](tools/gf-config/README.md) · [WORKFLOW](docs/en/operations/WORKFLOW.md)

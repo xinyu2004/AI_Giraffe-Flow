@@ -19,14 +19,14 @@ fi
 # P2-G bench golden is included above (test_afc_bench_golden / test_merge_platform)
 
 echo "== compose + lint (afc) =="
-python -m gf_codegen.compose --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 gf-codegen lint projects/afc/gf.sor.json
 
 echo "== GMT architect lineage (CI read-only) =="
-GMT architect lineage --project projects/afc/project.yaml
+GMT architect lineage --project projects/afc/giraffe.yaml
 
 echo "== compose + lint (adc) =="
-python -m gf_codegen.compose --project projects/adc/project.yaml
+python -m gf_codegen.compose --project projects/adc/giraffe.yaml
 gf-codegen lint projects/adc/gf.sor.json
 
 echo "== lint schema example =="

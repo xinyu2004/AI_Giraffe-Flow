@@ -35,38 +35,19 @@ _DEFAULT_MOUNT: dict[str, float] = {
 }
 
 # Optional replay tee only (not vehicle/cmd/truth json IPC).
-_IPC_FILES = {
-    "frame": "front.yuv",
-}
-_LEGACY_TMP_NAMES = {
-    "/tmp/gf_front.yuv": "front.yuv",
-    "/tmp/gf_front.rgb": "front.yuv",
-}
-
-
-def _ipc_root(project_dir: Path | None) -> Path:
-    if project_dir is not None:
-        return Path(project_dir) / "runtime_ipc"
-    return Path("runtime_ipc")
 
 
 def _resolve_ipc_path(raw: str | None, key: str, project_dir: Path | None) -> str:
-    """Map missing/legacy /tmp paths → project/runtime_ipc/<name>."""
-    root = _ipc_root(project_dir)
-    default_name = _IPC_FILES[key]
+    """Resolve an **explicit** frame path. Empty → empty (no invented runtime_ipc /tmp)."""
+    del key
     if not raw or not str(raw).strip():
-        return str(root / default_name)
+        return ""
     s = str(raw).strip()
-    if s in _LEGACY_TMP_NAMES:
-        return str(root / _LEGACY_TMP_NAMES[s])
-    if s.startswith("/tmp/gf_"):
-        return str(root / Path(s).name.removeprefix("gf_"))
     p = Path(s)
-    if not p.is_absolute():
-        # Relative → under project (or cwd runtime_ipc if no project_dir)
-        if project_dir is not None:
-            return str((Path(project_dir) / p).resolve())
-        return str(p)
+    if p.is_absolute():
+        return s
+    if project_dir is not None:
+        return str((Path(project_dir) / p).resolve())
     return s
 
 
@@ -238,16 +219,12 @@ def normalize_frame_ingest(
             )
         )
 
-    # Replay/file only: optional frame path. Live CARLA uses GfChannel — no default front.yuv.
+    # Replay/file: only when req explicitly sets paths.frame (no invented runtime_ipc).
     frame_path = ""
     if paths.get("frame") is not None and str(paths.get("frame")).strip():
         frame_path = _resolve_ipc_path(str(paths["frame"]), "frame", proj)
         if frame_path.endswith(".rgb") and pixel != "rgb8":
             frame_path = frame_path[: -4] + ".yuv"
-    elif active in ("replay", "file") or source == "file":
-        # Explicit replay sources without paths.frame still get a conventional name
-        # under runtime_ipc (host tool / frame_replay); not product live IPC.
-        frame_path = _resolve_ipc_path(None, "frame", proj)
 
     if active in ("carla", "replay", "synth", "colorbar", "isp", "file"):
         bridge_enabled = True

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QInputDialog,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -363,16 +364,19 @@ def make_combo(
         opts = [""] + opts
     elif value and value not in opts:
         opts = [value] + opts
+    cb.blockSignals(True)
     cb.addItems(opts)
     if value in opts:
         cb.setCurrentIndex(opts.index(value))
     elif opts:
         cb.setCurrentIndex(0)
+    cb.blockSignals(False)
     tipify(cb, tip)
     if colors:
         style_enum_combo(cb, colors, item_tips=item_tips)
     elif item_tips:
         set_item_tips(cb, item_tips)
+    # Connect after initial value so construct does not call on_change / undo checkpoint.
     cb.currentTextChanged.connect(lambda *_a: on_change())
     return cb
 
@@ -538,6 +542,8 @@ def cell_text(table: QTableWidget, row: int, col: int) -> str:
     w = table.cellWidget(row, col)
     if isinstance(w, MultiCheckButton):
         return ", ".join(w.selected())
+    if isinstance(w, StringListEditButton):
+        return ", ".join(w.values())
     if isinstance(w, QComboBox):
         return w.currentText().strip()
     item = table.item(row, col)
@@ -645,6 +651,139 @@ QPushButton:disabled {
         self.changed.emit()
 
 
+class StringListEditButton(QWidget):
+    """Edit an ordered list of free-form strings via a popup (no comma typing)."""
+
+    changed = Signal()
+
+    def __init__(
+        self,
+        values: list[str],
+        *,
+        tip: str = "",
+        empty_label: str = "(none)",
+        title: str = "",
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._values = [str(x).strip() for x in values if str(x).strip()]
+        self._empty_label = empty_label
+        self._title = title or tip
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self._btn = QPushButton(self._label())
+        self._btn.setStyleSheet(
+            """
+QPushButton {
+  text-align: left;
+  padding: 2px 8px;
+  border: 1px solid #c8c8c8;
+  border-radius: 3px;
+  background: #fafafa;
+}
+QPushButton:hover { border: 1px solid #a8a8a8; }
+"""
+        )
+        tipify(self._btn, tip)
+        self._btn.clicked.connect(self._edit)
+        lay.addWidget(self._btn)
+
+    def values(self) -> list[str]:
+        return list(self._values)
+
+    def set_values(self, values: list[str]) -> None:
+        self._values = [str(x).strip() for x in values if str(x).strip()]
+        self._btn.setText(self._label())
+
+    def _label(self) -> str:
+        if not self._values:
+            body = self._empty_label
+        elif len(self._values) <= 2:
+            body = ", ".join(self._values)
+        else:
+            body = f"{self._values[0]} +{len(self._values) - 1}"
+        return f"{body}  ▾"
+
+    def _edit(self) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle(t(self._title) if self._title else t("编辑列表"))
+        dlg.setMinimumWidth(420)
+        dlg.setMinimumHeight(320)
+        v = QVBoxLayout(dlg)
+        hint = QLabel(t("逐项添加态名；不要用逗号拼写。双击可改名。"))
+        hint.setStyleSheet("color:#666;")
+        hint.setWordWrap(True)
+        v.addWidget(hint)
+        lst = QListWidget()
+        for name in self._values:
+            lst.addItem(QListWidgetItem(name))
+        v.addWidget(lst, stretch=1)
+
+        row = QHBoxLayout()
+        edit = QLineEdit()
+        edit.setPlaceholderText(t("新态名，例如 DrivingActive"))
+        add_btn = QPushButton(t("添加"))
+        rm_btn = QPushButton(t("删除选中"))
+        row.addWidget(edit, stretch=1)
+        row.addWidget(add_btn)
+        row.addWidget(rm_btn)
+        v.addLayout(row)
+
+        def add_item() -> None:
+            name = edit.text().strip()
+            if not name:
+                return
+            existing = [lst.item(i).text() for i in range(lst.count())]
+            if name in existing:
+                edit.clear()
+                return
+            lst.addItem(QListWidgetItem(name))
+            edit.clear()
+
+        def remove_item() -> None:
+            for item in lst.selectedItems():
+                lst.takeItem(lst.row(item))
+
+        def rename_item(item: QListWidgetItem) -> None:
+            text, ok = QInputDialog.getText(
+                dlg, t("改名"), t("态名"), text=item.text()
+            )
+            if not ok:
+                return
+            name = text.strip()
+            if not name:
+                return
+            others = [
+                lst.item(i).text()
+                for i in range(lst.count())
+                if lst.item(i) is not item
+            ]
+            if name in others:
+                return
+            item.setText(name)
+
+        add_btn.clicked.connect(add_item)
+        edit.returnPressed.connect(add_item)
+        rm_btn.clicked.connect(remove_item)
+        lst.itemDoubleClicked.connect(rename_item)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        v.addWidget(buttons)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._values = [
+            lst.item(i).text().strip()
+            for i in range(lst.count())
+            if lst.item(i) and lst.item(i).text().strip()
+        ]
+        self._btn.setText(self._label())
+        self.changed.emit()
+
+
 def set_multi_check(
     table: QTableWidget,
     row: int,
@@ -667,6 +806,37 @@ def set_multi_check(
     w.changed.connect(lambda: on_change())
     table.setCellWidget(row, col, w)
     return w
+
+
+def set_string_list_edit(
+    table: QTableWidget,
+    row: int,
+    col: int,
+    values: list[str],
+    on_change: Callable[..., None],
+    *,
+    tip: str = "",
+    empty_label: str = "(none)",
+    title: str = "",
+) -> StringListEditButton:
+    table.takeItem(row, col)
+    w = StringListEditButton(
+        values,
+        tip=tip,
+        empty_label=empty_label,
+        title=title or tip,
+    )
+    w.changed.connect(lambda: on_change())
+    table.setCellWidget(row, col, w)
+    return w
+
+
+def string_list_values(table: QTableWidget, row: int, col: int) -> list[str]:
+    w = table.cellWidget(row, col)
+    if isinstance(w, StringListEditButton):
+        return w.values()
+    raw = cell_text(table, row, col).replace(";", ",")
+    return [x.strip() for x in raw.split(",") if x.strip()]
 
 
 def multi_selected(table: QTableWidget, row: int, col: int) -> list[str]:

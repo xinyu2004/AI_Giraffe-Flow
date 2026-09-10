@@ -10,7 +10,7 @@ ARA-inspired **Diagnostics** (`gf_ara::diag`).
 | 时序 | `timing.*` | S3Server、TesterPresent 周期、P2/P2*、security_delay |
 | CAN | （无 DoIP 时） | AP **不做 ISO-TP**；完整 UDS PDU 交 MCU |
 
-配置：`platform/diag.yaml`（gf-config 页 2 · 诊断）。操作面：**GMT → OTA**（只读跟从 yaml）。说明：[DOIP_OTA.md](../../docs/zh/operations/DOIP_OTA.md)。
+配置：`cfg/gf_ara_cfg/diag.yaml`（gf-config 页 2 · 诊断）。操作面：**GMT → OTA**（只读跟从 yaml）。说明：[DOIP_OTA.md](../../docs/zh/operations/DOIP_OTA.md)。
 
 ```bash
 ctest --test-dir build -R 'gf_diag_doip_smoke|gf_uds_nrc_smoke|gf_doip_session_smoke' --output-on-failure

@@ -27,7 +27,7 @@ RELEASE="${GF_FUSA_PACK_RELEASE:-0}"
 mkdir -p "${PACK}"/{compose,lineage,mcap,logs,smoke,runs,toolchain,release}
 
 echo "${TAG} compose ..."
-python -m gf_codegen.compose --project "${PROJ}/project.yaml"
+python -m gf_codegen.compose --project "${PROJ}/giraffe.yaml"
 cp -f "${PROJ}/gf.sor.json" "${PACK}/compose/gf.sor.json"
 cp -f "${PROJ}/reports/signal_lineage_report.yaml" "${PACK}/lineage/signal_lineage_report.yaml"
 

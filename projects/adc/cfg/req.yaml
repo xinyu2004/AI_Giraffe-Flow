@@ -1,0 +1,128 @@
+schema_version: '0.1'
+profile: vehicle-debug
+variant: adc_drive_park
+topology: ap_only
+product: ADC
+capabilities:
+- front_camera
+- surround_camera
+- driving
+- parking
+runtime_modules:
+- core
+- com
+- osal
+- log
+- exec
+- phm
+- sm
+- collector
+- ucm
+- diag
+- per
+- tsync
+bindings:
+- iceoryx
+observability:
+  live_tap:
+    enabled: true
+    mode: wiring_all
+  record:
+    mode: minimal
+    services:
+    - services.semantic.EgoMotion
+    - services.semantic.Perception_MESSAGE_Out_St
+    - services.semantic.Trajectory
+    - services.semantic.VehicleMode
+frame_ingest:
+  frame_source: carla_file
+  pixel_format: nv12
+  ego_source: carla
+  frame_w: 640
+  frame_h: 480
+  camera_transport: shm
+  active_source: isp
+  camera_slots:
+  - id: front
+    w: 640
+    h: 480
+    pixel_format: nv12
+    fps: 30
+  - id: fl
+    w: 640
+    h: 480
+    pixel_format: nv12
+    fps: 30
+  - id: fr
+    w: 640
+    h: 480
+    pixel_format: nv12
+    fps: 30
+  - id: rl
+    w: 640
+    h: 480
+    pixel_format: nv12
+    fps: 30
+  - id: rr
+    w: 640
+    h: 480
+    pixel_format: nv12
+    fps: 30
+  bridge:
+    enabled: true
+  channels:
+    vehicle_state: gf.channel.vehicle_state
+    vehicle_cmd: gf.channel.vehicle_cmd
+    fake_perc: gf.channel.fake_perc
+    surround_world: gf.channel.surround_world
+apps:
+- adapters/vehicle_can_gateway
+- perception/fcm
+- perception/surround
+- planning/driving
+- planning/parking
+- mode/drive_park
+- frame_ingest
+- frame_colorbar
+- frame_replay
+- carla_io
+acceptance:
+  description: ADC — Front+Surround
+  lineage_required: false
+  required_services:
+  - services.semantic.EgoMotion
+  - services.semantic.Perception_In_St
+  - services.semantic.Perception_MESSAGE_Out_St
+  - services.semantic.Trajectory
+  - services.semantic.VehicleBus
+  - services.semantic.VehicleMode
+publish_policy:
+  services:
+    EgoMotion:
+      trigger: period
+      period_ms: 10
+    Perception_In_St:
+      trigger: period
+      period_ms: 10
+    VehicleBus:
+      trigger: period
+      period_ms: 10
+    Perception_MESSAGE_Out_St:
+      trigger: on_change
+      expect_fps: 20
+    Trajectory:
+      trigger: on_change
+    VehicleMode:
+      trigger: on_change
+    SurroundWorld:
+      trigger: on_change
+    ParkingTrajectory:
+      trigger: on_change
+  channels:
+    vehicle_cmd:
+      trigger: period
+      period_ms: 10
+    vehicle_state:
+      trigger: on_change
+    fake_perc:
+      trigger: on_change

@@ -19,21 +19,21 @@
 
 ---
 
-## 2. 四类输入 + 一个入口（`project.yaml` 不替代业务文件）
+## 2. 四类输入 + 一个入口（`giraffe.yaml` 不替代业务文件）
 
 | # | 文件 | 谁维护 | 内容 |
 |---|------|--------|------|
 | 1 | 各模块 **`io_types.hpp`** | 模块工程师 | 数据形状（struct） |
 | 2 | **`oem/oem_import.dbc`** | 系统工程师 | OEM 车身信号（每车型可不同） |
-| 3 | **`integration/wiring.yaml`** | 系统工程师 | provide/require、bindings、dataflows |
+| 3 | **`cfg/wiring.yaml`** | 系统工程师 | provide/require、bindings、dataflows |
 | 4 | **`req.yaml`** | 系统工程师 + DevOps | SKU、能力、profile、**验收项** |
-| — | **`project.yaml`** | 系统工程师 | **仅索引**以上路径 + compose 输出；不含业务细节 |
+| — | **`giraffe.yaml`** | 系统工程师 | **仅索引**以上路径 + compose 输出；不含业务细节 |
 
 示例工程：[projects/afc/](../../../projects/afc/)
 
 ```text
 io_types.hpp ──┐
-oem_import.dbc ┼── project.yaml（索引）──► compose ──► gf.sor.json + lineage 报告
+oem_import.dbc ┼── giraffe.yaml（索引）──► compose ──► gf.sor.json + lineage 报告
 wiring.yaml ───┤
 req.yaml ──────┘
 ```
@@ -45,18 +45,18 @@ req.yaml ──────┘
 ## 3. 一句话生成 gf.sor.json（集成工程师）
 
 ```bash
-# 推荐：gf-config 打开 project.yaml → Save（自动 compose）
+# 推荐：gf-config 打开 giraffe.yaml → Save（自动 compose）
 # 无 GUI / CI：
-python -m gf_codegen.compose --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 # 需要 Proxy/Skeleton 时：
-gf-codegen generate --project projects/afc/project.yaml
+gf-codegen generate --project projects/afc/giraffe.yaml
 # 或在 gf-config 点 Generate（Ctrl+G）
 ```
 
-[`project.yaml`](../../../projects/afc/project.yaml) 声明：
+[`giraffe.yaml`](../../../projects/afc/giraffe.yaml) 声明：
 
 - OEM：`oem/oem_import.dbc`（+ 可选 `oem/oem_import.yaml`）
-- 连线：`integration/wiring.yaml`
+- 连线：`cfg/wiring.yaml`
 - 交付：`req.yaml`
 - 模块 hpp 路径（在 wiring 的 `modules[]` 中登记）
 - 输出：`gf.sor.json` + `reports/signal_lineage_report.yaml`
@@ -93,7 +93,7 @@ struct DrivingObjectList { ... };
 
 可选 [`oem_import.yaml`](../../../projects/afc/oem/oem_import.yaml)：集成侧策略（白名单、USS 摘要、gateway provide 列表）。**非 OEM 交付物**；P1 可由 `import oem --dbc` 脚手架生成初稿。
 
-### 5.2 连线层 — `integration/wiring.yaml`
+### 5.2 连线层 — `cfg/wiring.yaml`
 
 替代原「开会 + module.meta.yaml」。包含：
 
@@ -102,7 +102,7 @@ struct DrivingObjectList { ... };
 - `bindings`：semantic 服务 ↔ hpp struct 名
 - `dataflows`：进程间边
 
-示例：[integration/wiring.yaml](../../../projects/afc/integration/wiring.yaml)
+示例：[cfg/wiring.yaml](../../../projects/afc/cfg/wiring.yaml)
 
 ### 5.3 交付层 — `req.yaml`
 
@@ -110,7 +110,7 @@ SKU、拓扑、runtime 裁剪、观测/apps、**DevOps 验收**（golden SOR 路
 
 示例：[req.yaml](../../../projects/afc/req.yaml)
 
-### 5.4 项目入口 — `project.yaml`
+### 5.4 项目入口 — `giraffe.yaml`
 
 把 DBC + wiring + req + base SOR + 输出路径捆在一起，供 `compose --project` 使用。**不**把 wiring 或 req 内容内联进 project。
 
@@ -154,8 +154,8 @@ P1：`gmt architect wiring --read-only` 只读画布标红缺口；P1+ 拖拽写
 ```bash
 # 集成工程师（主路径）：gf-config Save → 可选 Generate
 # 无 GUI：
-python -m gf_codegen.compose --project projects/afc/project.yaml
-gf-codegen generate --project projects/afc/project.yaml
+python -m gf_codegen.compose --project projects/afc/giraffe.yaml
+gf-codegen generate --project projects/afc/giraffe.yaml
 
 # 校验 golden / 本地调试
 gf-codegen lint projects/adc/golden/gf.sor.json

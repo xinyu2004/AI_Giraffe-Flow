@@ -21,7 +21,7 @@ build-sil/runtime/
            gf_frame_ingest, gf_carla_io, gf_frame_colorbar, gf_frame_replay, apps
   lib/     libgf_ara_*.so, libgf_osal.so, libgf_channel.so, libdlt.so*
   etc/     iox_roudi.toml
-  platform/  仅 GF_STAGE_PLATFORM=1 时拷贝（作者态；行为真源在 hpp）
+  # 不默认拷贝 cfg/gf_ara_cfg；行为真源在 hpp；smoke 显式 GF_ARA_CFG_DIR
 ```
 
 ## 运行
@@ -30,7 +30,7 @@ build-sil/runtime/
 # 拷 runtime/ 到目标机后（主机或板端同一入口）:
 ./bin/gf_em_daemon / gf_em_daemon / giraffe_launch(debug)(debug)
 # 或:
-export GF_BUILD_DIR=$PWD GF_PLATFORM_DIR=$PWD/platform \
+export GF_BUILD_DIR=$PWD GF_ARA_CFG_DIR=$PWD/gf_ara_cfg \
   GF_IOX_TOML=$PWD/etc/iox_roudi.toml LD_LIBRARY_PATH=$PWD/lib
 ./bin/gf_em_daemon
 ```

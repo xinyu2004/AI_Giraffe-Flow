@@ -24,7 +24,7 @@
 |------|------|
 | 意图 | 关键进程异常退出后不静默丢失监督；可 relaunch / soft restart |
 | 假设 | A-01 · A-03 · A-04 |
-| 设计 / 机制 | `middleware/exec` ExecutionManager；`gf_em_daemon` + `platform/em_launch.yaml`；OSAL `SpawnProcess`；PHM `on_failure: restart` → exit **75** |
+| 设计 / 机制 | `middleware/exec` ExecutionManager；`gf_em_daemon` + `cfg/gf_ara_cfg/em_launch.yaml`；OSAL `SpawnProcess`；PHM `on_failure: restart` → exit **75** |
 | 源码锚点 | `middleware/exec/` · `middleware/osal/`（process）· `projects/.../scripts/verify/smoke_sil_em_daemon.sh` |
 
 ### 安全需求
@@ -98,7 +98,7 @@
 | SR-03.2 | Running↔Updating 合法双向 | SM-02 |
 | SR-03.3 | Off→Updating 等非法迁移失败 | SM-03 · ISO-SM-01 |
 | SR-03.4 | Off→Running 成功；Running 下 NotifyHealthFault 计数增加 | SM-04 · SM-05 |
-| SR-03.5 | SIL：uss（notify_sm）miss → `sm: health_fault`；gateway Trajectory 仍在 | SIL-SM-01 · ISO-SM-02 |
+| SR-03.5 | SIL：fcm（notify_sm）miss → `sm: health_fault`；gateway Trajectory 仍在 | SIL-SM-01 · ISO-SM-02 |
 
 ### 证据索引
 

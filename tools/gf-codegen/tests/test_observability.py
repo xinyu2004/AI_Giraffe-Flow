@@ -144,7 +144,7 @@ def test_emit_observability_and_cmake(tmp_path: Path) -> None:
 
 
 def test_compose_afc_writes_observability(repo_root: Path, tmp_path: Path) -> None:
-    project = repo_root / "projects/afc/project.yaml"
+    project = repo_root / "projects/afc/giraffe.yaml"
     out = tmp_path / "gf.sor.json"
     rc = compose_project(project, repo_root=repo_root, out=out)
     assert rc == 0
@@ -167,7 +167,7 @@ def test_compose_afc_writes_observability(repo_root: Path, tmp_path: Path) -> No
 
 
 def test_generate_writes_obs_tap_main(repo_root: Path, tmp_path: Path) -> None:
-    project = repo_root / "projects/afc/project.yaml"
+    project = repo_root / "projects/afc/giraffe.yaml"
     assert compose_project(project, repo_root=repo_root) == 0
     sor = repo_root / "projects/afc/gf.sor.json"
     out = tmp_path / "generated"

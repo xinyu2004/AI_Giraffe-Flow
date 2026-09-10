@@ -17,7 +17,7 @@ gf_project_env
 BUILD="${GF_BUILD_DIR:-${BUILD_SIL}}"
 TRAJ_COUNT="${GF_MP_TRAJ_COUNT:-15}"
 TIMEOUT_SEC="${GF_MP_TIMEOUT_SEC:-60}"
-export GF_PLATFORM_DIR="${GF_PLATFORM_DIR:-${PROJECT_DIR}/platform}"
+export GF_ARA_CFG_DIR="${GF_ARA_CFG_DIR:-${PROJECT_DIR}/cfg/gf_ara_cfg}"
 # Smoke opt-in only; unset → 0 (no inject).
 FAULT_MS="${GF_PHM_FAULT_MS:-0}"
 FAULT_TARGET="${GF_PHM_FAULT_TARGET:-planning}"
@@ -35,7 +35,7 @@ FCM="${BUILD}/apps/perception/fcm/gf_perception_fcm"
 PLAN="${BUILD}/apps/planning/driving/gf_planning_driving"
 
 IOX_ON=0
-if [[ -f "${PROJECT_DIR}/req.yaml" ]] && grep -Eq '^[[:space:]]*-[[:space:]]*iceoryx[[:space:]]*$' "${PROJECT_DIR}/req.yaml"; then
+if [[ -f "${PROJECT_DIR}/cfg/req.yaml" ]] && grep -Eq '^[[:space:]]*-[[:space:]]*iceoryx[[:space:]]*$' "${PROJECT_DIR}/cfg/req.yaml"; then
   IOX_ON=1
 fi
 
@@ -59,8 +59,8 @@ if [[ ! -f "${IOX_TOML}" ]]; then
   echo "${TAG} missing ${IOX_TOML} — compose first" >&2
   exit 1
 fi
-if [[ ! -f "${GF_PLATFORM_DIR}/exec.yaml" && ! -f "${GF_PLATFORM_DIR}/platform/exec.yaml" ]]; then
-  echo "${TAG} missing exec.yaml under ${GF_PLATFORM_DIR}" >&2
+if [[ ! -f "${GF_ARA_CFG_DIR}/exec.yaml" ]]; then
+  echo "${TAG} missing exec.yaml under ${GF_ARA_CFG_DIR}" >&2
   exit 1
 fi
 
@@ -89,7 +89,7 @@ fault_env() {
   fi
 }
 
-echo "${TAG} run_mainchain_verify platform=${GF_PLATFORM_DIR} traj=${TRAJ_COUNT} fault_ms=${FAULT_MS} target=${FAULT_TARGET}"
+echo "${TAG} run_mainchain_verify ara_cfg=${GF_ARA_CFG_DIR} traj=${TRAJ_COUNT} fault_ms=${FAULT_MS} target=${FAULT_TARGET}"
 echo "${TAG} RouDi → ${IOX_TOML}"
 "${ROUDI}" -c "${IOX_TOML}" >"${LOG_DIR}/roudi.log" 2>&1 &
 ROUDI_PID=$!

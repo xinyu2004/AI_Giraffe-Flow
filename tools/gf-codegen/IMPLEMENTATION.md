@@ -8,7 +8,7 @@
 
 ```bash
 pip install -e tools/gf-codegen
-gf-codegen compose --project projects/afc/project.yaml
+gf-codegen compose --project projects/afc/giraffe.yaml
 ```
 
 ---
@@ -109,12 +109,12 @@ pytest tools/gf-codegen/tests -q
 
 ```text
 gf-codegen lint <sor.json> [--schema tools/gf-codegen/schemas/gf.sor.schema.json]
-gf-codegen compose --project <project.yaml> [--out PATH] [--repo-root PATH]
-gf-codegen suggest wiring --project <project.yaml> [--write]
+gf-codegen compose --project <giraffe.yaml> [--out PATH] [--repo-root PATH]
+gf-codegen suggest wiring --project <giraffe.yaml> [--write]
 gf-codegen generate <sor.json> --out <dir>
 ```
 
-`--repo-root` 默认：从 `project.yaml` 向上找含 `tools/gf-codegen/` 与 `projects/` 的目录；测试里可显式传入。
+`--repo-root` 默认：从 `giraffe.yaml` 向上找含 `tools/gf-codegen/` 与 `projects/` 的目录；测试里可显式传入。
 
 ---
 
@@ -193,13 +193,13 @@ P0：按 `types[]` 生成 POD struct 头文件即可；Proxy/Skeleton 可先空�
 
 ### 4.1 路径解析
 
-`project.yaml` 内相对路径均相对 **project 文件所在目录**：
+`giraffe.yaml` 内相对路径均相对 **project 文件所在目录**：
 
 | project 字段 | afc 实际文件 |
 |--------------|----------------------|
 | `oem.dbc` | `oem/oem_import.dbc` |
 | `oem.manifest` | `oem/oem_import.yaml` |
-| `integration.wiring` | `integration/wiring.yaml` |
+| `integration.wiring` | `cfg/wiring.yaml` |
 | `delivery.req` | `req.yaml` |
 | `base` | 相对 **repo root**：`tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json` |
 | `out` | 默认写到 project 目录下 `gf.sor.json`（或 `--out`） |
@@ -355,7 +355,7 @@ adapter.vehicle_can_gateway ─EgoMotion─► sensing.uss ─UssZones─► per
 
 - [ ] `pip install -e tools/gf-codegen` 后 `gf-codegen --help` 可用  
 - [ ] `gf-codegen lint projects/adc/golden/gf.sor.json` 退出 0  
-- [ ] `gf-codegen compose --project projects/afc/project.yaml` 退出 0  
+- [ ] `gf-codegen compose --project projects/afc/giraffe.yaml` 退出 0  
 - [ ] 生成 `projects/afc/gf.sor.json`（或 `--out` 指定路径）  
 - [ ] 生成 `projects/afc/reports/signal_lineage_report.yaml`，`ok: true`  
 - [ ] `pytest tools/gf-codegen/tests` 全绿  

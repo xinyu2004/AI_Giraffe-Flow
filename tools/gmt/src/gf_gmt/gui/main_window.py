@@ -98,7 +98,7 @@ class GmtMainWindow(QMainWindow):
         row1 = QHBoxLayout()
         self._btn_proj = QPushButton(t("加载项目…"))
         self._btn_proj.setToolTip(
-            t("选择 project.yaml（与 gf-config / codegen 同一入口；SOR 在同目录）")
+            t("选择 giraffe.yaml（与 gf-config / codegen 同一入口；SOR 在同目录）")
         )
         self._btn_proj.clicked.connect(self._open_project)
         row1.addWidget(self._btn_proj)
@@ -190,7 +190,7 @@ class GmtMainWindow(QMainWindow):
         root.addLayout(row2)
 
         self._proj_banner = QLabel(
-            t("⚠ 请先「加载项目…」选择 project.yaml（回灌已禁用；Live 仍可旁观）")
+            t("⚠ 请先「加载项目…」选择 giraffe.yaml（回灌已禁用；Live 仍可旁观）")
         )
         self._proj_banner.setWordWrap(True)
         self._proj_banner.setStyleSheet(
@@ -315,7 +315,7 @@ class GmtMainWindow(QMainWindow):
         act_proj.triggered.connect(self._open_project)
         file_menu.addAction(act_proj)
         act_proj_dir = QAction(t("加载项目目录…"), self)
-        act_proj_dir.setToolTip(t("备选：直接选 SKU 目录（等价于该目录下的 project.yaml）"))
+        act_proj_dir.setToolTip(t("备选：直接选 SKU 目录（等价于该目录下的 giraffe.yaml）"))
         act_proj_dir.triggered.connect(self._open_project_dir)
         file_menu.addAction(act_proj_dir)
 
@@ -422,7 +422,7 @@ class GmtMainWindow(QMainWindow):
             self._btn_proj.setStyleSheet("font-weight:700;")
         else:
             self._proj_banner.setText(
-                t("⚠ 请先「加载项目…」选择 project.yaml（回灌 / OTA 已禁用；Live 仍可旁观）")
+                t("⚠ 请先「加载项目…」选择 giraffe.yaml（回灌 / OTA 已禁用；Live 仍可旁观）")
             )
             self._btn_proj.setText(t("加载项目…"))
             self._btn_proj.setStyleSheet("")
@@ -522,7 +522,7 @@ class GmtMainWindow(QMainWindow):
         self._btn_inject_connect.setEnabled(not inj_on and has_proj)
         self._btn_inject_disconnect.setEnabled(inj_on)
         if not has_proj:
-            self._btn_inject_connect.setToolTip(t("请先加载 project.yaml 后再连接回灌"))
+            self._btn_inject_connect.setToolTip(t("请先加载 giraffe.yaml 后再连接回灌"))
         else:
             self._btn_inject_connect.setToolTip(
                 t("连 playhead inject（TCP JSON）；需 GF_INJECT_MODE=playhead")
@@ -792,7 +792,7 @@ class GmtMainWindow(QMainWindow):
                 self,
                 "Live",
                 t("尚未加载项目（SOR / 动画 DAG / 变量轨对齐）。\n"
-                "是否现在打开 project.yaml？\n\n"
+                "是否现在打开 giraffe.yaml？\n\n"
                 "选「否」仍可旁观连接（无 DAG）。"),
             )
             if reply == QMessageBox.StandardButton.Yes:
@@ -910,7 +910,7 @@ class GmtMainWindow(QMainWindow):
             reply = QMessageBox.warning(
                 self,
                 t("回灌"),
-                t("回灌需要先加载 project.yaml（SOR / 事件对齐）。\n是否现在打开？"),
+                t("回灌需要先加载 giraffe.yaml（SOR / 事件对齐）。\n是否现在打开？"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
             )
@@ -1321,19 +1321,17 @@ class GmtMainWindow(QMainWindow):
     def load_project(
         self, project: Path, *, offer_session: bool = True
     ) -> None:
-        """Accept project.yaml or its parent SKU directory (same as CLI --project)."""
+        """Accept giraffe.yaml or its parent SKU directory (same as CLI --project)."""
         p = project.resolve()
-        if p.is_file() and p.name in {"project.yaml", "project.yml"}:
+        if p.is_file() and p.name == "giraffe.yaml":
             proj_dir = p.parent
         elif p.is_dir():
             proj_dir = p
-            if not (proj_dir / "project.yaml").is_file() and not (
-                proj_dir / "project.yml"
-            ).is_file():
+            if not (proj_dir / "giraffe.yaml").is_file():
                 QMessageBox.warning(
                     self,
                     t("项目"),
-                    t("{dir}\n下未找到 project.yaml\n请选 SKU 目录或其 project.yaml（与 gf-config 同一入口）。").format(
+                    t("{dir}\n下未找到 giraffe.yaml\n请选 SKU 目录或其 giraffe.yaml（与 gf-config 同一入口）。").format(
                         dir=proj_dir
                     ),
                 )
@@ -1342,7 +1340,7 @@ class GmtMainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 t("项目"),
-                t("请选择 project.yaml，而不是：\n{name}").format(name=p.name),
+                t("请选择 giraffe.yaml，而不是：\n{name}").format(name=p.name),
             )
             return
         else:
@@ -1457,12 +1455,12 @@ class GmtMainWindow(QMainWindow):
 
     def _open_project(self) -> None:
         start = self._project_dir or (Path.cwd() / "projects")
-        hint = start / "project.yaml"
+        hint = start / "giraffe.yaml"
         path, _ = QFileDialog.getOpenFileName(
             self,
-            t("打开 project.yaml"),
+            t("打开 giraffe.yaml"),
             str(hint if hint.is_file() else start),
-            "project.yaml (project.yaml);;YAML (*.yaml *.yml);;All (*)",
+            "giraffe.yaml (giraffe.yaml);;YAML (*.yaml *.yml);;All (*)",
         )
         if path:
             self.load_project(Path(path))

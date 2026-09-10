@@ -9,7 +9,7 @@ target_include_directories(gf_ara_exec PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(gf_ara_exec PUBLIC gf_ara::core gf::osal gf_ara::log)
+target_link_libraries(gf_ara_exec PUBLIC gf_ara::core gf::osal gf_ara::log gf_ara::sm)
 
 # SKU compose freezes Spawn table into deploy_config.hpp (product EM path).
 if(DEFINED GF_GENERATED_DIR AND EXISTS
@@ -37,4 +37,8 @@ if(GF_BUILD_TESTS)
   target_link_libraries(gf_em_daemon_smoke PRIVATE gf_ara::exec)
   add_dependencies(gf_em_daemon_smoke gf_em_child_stub)
   add_test(NAME gf_em_daemon_smoke COMMAND gf_em_daemon_smoke)
+  add_executable(gf_em_fg_setdiff_smoke testcases/smoke_em_fg_setdiff.cpp)
+  target_link_libraries(gf_em_fg_setdiff_smoke PRIVATE gf_ara::exec gf_ara::sm)
+  add_dependencies(gf_em_fg_setdiff_smoke gf_em_child_stub)
+  add_test(NAME gf_em_fg_setdiff_smoke COMMAND gf_em_fg_setdiff_smoke)
 endif()

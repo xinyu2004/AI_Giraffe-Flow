@@ -11,7 +11,7 @@
 | 标识 | 仓库路径 `AI_Giraffe-Flow`；revision = 证据生成时的 `git rev-parse HEAD` |
 | 运行环境 | SIL / HIL / BOARD；宿主 OS 经 OSAL |
 | 通信 | iceoryx / SOME/IP / DDS（SKU 裁剪） |
-| 配置入口 | gf-config → compose / codegen → SOR · `platform/*.yaml` |
+| 配置入口 | gf-config → compose / codegen → SOR · `cfg/gf_ara_cfg/*.yaml` |
 
 ## 在项内（安全相关边界）
 
@@ -42,7 +42,7 @@
 |------|------|------|
 | OSAL API | 项 → OS | 进程 / 时钟 / 睡眠；见 A-01 |
 | 服务名 pub/sub | Apps ↔ com | App 不硬绑进程；经 EM 拓扑拉起（A-03） |
-| `platform/em_launch.yaml` · `phm.yaml` | 配置 → EM/PHM | compose 产物；漂移需重跑证据（A-04） |
+| `cfg/gf_ara_cfg/em_launch.yaml` · `phm.yaml` | 配置 → EM/PHM | compose 产物；漂移需重跑证据（A-04） |
 | Collector ReportEvent | 平台 → local_store | 本地环；非 GMT |
 
 ## 相关工作产品

@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -21,8 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gf_codegen.compose.publish_policy import normalize_policy
 from gf_config.core import ProjectSession
+from gf_config.gui.editor_history import HistoryHooksMixin
 from gf_config.gui.field_ux import (
     COLORS_LIVE_MODE,
     COLORS_ON_OFF,
@@ -71,29 +70,6 @@ TAP_APP = "gmt_board/iox_obs_tap"
 INJECT_APP = "gmt_board/iox_obs_inject"
 _AUTO_APPS = frozenset({TAP_APP, INJECT_APP})
 
-_POLICY_SERVICES = (
-    "EgoMotion",
-    "Perception_In_St",
-    "VehicleBus",
-    "Perception_MESSAGE_Out_St",
-    "Trajectory",
-)
-_POLICY_CHANNELS = ("vehicle_cmd", "vehicle_state", "fake_perc")
-_POLICY_TRIGGERS = (
-    ("period", "周期"),
-    ("on_change", "变化时"),
-)
-_POLICY_DEFAULTS: dict[str, dict[str, int | str]] = {
-    "EgoMotion": {"trigger": "period", "period_ms": 10},
-    "Perception_In_St": {"trigger": "period", "period_ms": 10},
-    "VehicleBus": {"trigger": "period", "period_ms": 10},
-    "Perception_MESSAGE_Out_St": {"trigger": "on_change", "expect_fps": 20},
-    "Trajectory": {"trigger": "on_change"},
-    "vehicle_cmd": {"trigger": "period", "period_ms": 10},
-    "vehicle_state": {"trigger": "on_change"},
-    "fake_perc": {"trigger": "on_change"},
-}
-
 
 def _strip_tap_apps(values: list | None) -> list[str]:
     return [
@@ -103,24 +79,25 @@ def _strip_tap_apps(values: list | None) -> list[str]:
     ]
 
 
-class ReqEditor(QWidget):
+class ReqEditor(HistoryHooksMixin, QWidget):
     """Thin SKU fields for tab 1. Does not own runtime_modules or apps/capabilities UI."""
 
     changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._init_history_hooks()
         self._session: ProjectSession | None = None
         self._binding_boxes: dict[str, QCheckBox] = {}
         self._loading = False
-        self._checkpoint_fn: Callable[..., None] | None = None
-        self._end_edit_fn: Callable[[], None] | None = None
 
-        scroll = QScrollArea()
+        scroll = QScrollArea(self)
+        scroll.setObjectName("gf_req_scroll")
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        inner = QWidget()
+        inner = QWidget(scroll)
+        inner.setObjectName("gf_req_inner")
         inner.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         root = QVBoxLayout(inner)
         root.setContentsMargins(6, 6, 6, 6)
@@ -283,20 +260,6 @@ class ReqEditor(QWidget):
         acc_f.addRow(t("服务"), self._acc_svcs)
         root.addWidget(acc)
 
-        pub = QGroupBox(t("发布策略"))
-        tipify(pub, T.SKU_PUBLISH)
-        pub_l = QVBoxLayout(pub)
-        pub_l.setContentsMargins(4, 4, 4, 4)
-        pub_l.setSpacing(4)
-        self._policy_rows: dict[str, tuple[str, QComboBox, QSpinBox]] = {}
-        pub_l.addWidget(self._make_policy_grid(t("语义服务"), _POLICY_SERVICES, "service"))
-        pub_l.addWidget(self._make_policy_grid(t("通道"), _POLICY_CHANNELS, "channel"))
-        self._policy_hint = QLabel("")
-        self._policy_hint.setWordWrap(True)
-        self._policy_hint.setStyleSheet("color:#666; font-size:10px;")
-        pub_l.addWidget(self._policy_hint)
-        root.addWidget(pub)
-
         hint = QLabel(t("runtime_modules → 页 2"))
         hint.setStyleSheet("color:#888; font-size:10px;")
         root.addWidget(hint)
@@ -308,182 +271,10 @@ class ReqEditor(QWidget):
         outer.setSpacing(0)
         outer.addWidget(scroll)
 
-    def _make_policy_grid(self, title: str, names: tuple[str, ...], bucket: str) -> QWidget:
-        box = QGroupBox(title)
-        grid = QGridLayout(box)
-        grid.setContentsMargins(4, 4, 4, 4)
-        grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(2)
-        grid.addWidget(QLabel(t("触发")), 0, 1)
-        grid.addWidget(QLabel(t("ms / fps")), 0, 2)
-        for i, name in enumerate(names, start=1):
-            grid.addWidget(QLabel(name), i, 0)
-            trig = TintedComboBox()
-            tipify(trig, T.SKU_PUBLISH_TRIGGER)
-            for value, label in _POLICY_TRIGGERS:
-                trig.addItem(t(label), value)
-            trig.currentIndexChanged.connect(self._on_policy_trigger)
-            value_spin = QSpinBox()
-            tipify(value_spin, T.SKU_PUBLISH_VALUE)
-            value_spin.setRange(0, 1000)
-            value_spin.valueChanged.connect(self._on_any)
-            grid.addWidget(trig, i, 1)
-            grid.addWidget(value_spin, i, 2)
-            self._policy_rows[name] = (bucket, trig, value_spin)
-        return box
-
-    def _camera_fps(self) -> int:
-        if not self._session:
-            return 0
-        vals: list[int] = []
-        for s in self._session.camera_slots():
-            try:
-                n = int(s.get("fps") or 0)
-            except (TypeError, ValueError):
-                n = 0
-            if n > 0:
-                vals.append(n)
-        return min(vals) if vals else 0
-
-    def _style_value_spin(self, name: str, trig: QComboBox, spin: QSpinBox, *, reset: bool) -> None:
-        trigger = str(trig.currentData() or "")
-        default = _POLICY_DEFAULTS.get(name) or {}
-        if trigger == "period":
-            spin.setRange(1, 1000)
-            spin.setSuffix(" ms")
-            spin.setEnabled(True)
-            if reset:
-                spin.setValue(int(default.get("period_ms") or 10))
-        else:
-            spin.setRange(0, 120)
-            spin.setSuffix(" fps")
-            spin.setEnabled(True)
-            if reset:
-                spin.setValue(int(default.get("expect_fps") or 0))
-
-    def _refresh_policy_hint(self) -> None:
-        cam = self._camera_fps()
-        out_row = self._policy_rows.get("Perception_MESSAGE_Out_St")
-        out_fps = 0
-        out_tr = ""
-        if out_row:
-            _bucket, trig, spin = out_row
-            out_tr = str(trig.currentData() or "")
-            if out_tr == "on_change":
-                out_fps = int(spin.value())
-        if out_tr == "on_change" and out_fps > 0 and cam > 0 and out_fps > cam:
-            self._policy_hint.setText(
-                t("Out expect_fps 须 ≤ 相机 fps（{cam}）").format(cam=cam)
-            )
-            self._policy_hint.setStyleSheet("color:#a04000; font-size:10px;")
-        elif out_tr == "on_change" and out_fps > 0 and cam <= 0:
-            self._policy_hint.setText(t("请在 frame_ingest 通道填写相机 fps"))
-            self._policy_hint.setStyleSheet("color:#a04000; font-size:10px;")
-        else:
-            self._policy_hint.setText(
-                t("周期填 ms；变化时填 expect_fps（期望/告警带，不是发报钟）。须 ≤ 相机 fps。")
-            )
-            self._policy_hint.setStyleSheet("color:#666; font-size:10px;")
-
-    def _on_policy_trigger(self, *_args: object) -> None:
-        src = self.sender()
-        for name, (_bucket, trig, spin) in self._policy_rows.items():
-            if trig is src:
-                spin.blockSignals(True)
-                self._style_value_spin(name, trig, spin, reset=True)
-                spin.blockSignals(False)
-                break
-        self._refresh_policy_hint()
-        self._on_any()
-
-    def _load_publish_policy(self, req: dict) -> None:
-        policy = normalize_policy(req if isinstance(req, dict) else {})
-        for name, (_bucket, trig, spin) in self._policy_rows.items():
-            spec = policy["services"].get(name) if _bucket == "service" else policy["channels"].get(name)
-            default = _POLICY_DEFAULTS.get(name) or {}
-            trigger = str(default.get("trigger") or "on_change")
-            period_ms = int(default.get("period_ms") or 0)
-            expect_fps = int(default.get("expect_fps") or 0)
-            if isinstance(spec, dict):
-                trigger = str(spec.get("trigger") or trigger)
-                if trigger == "period":
-                    try:
-                        period_ms = int(spec.get("period_ms") or period_ms or 10)
-                    except (TypeError, ValueError):
-                        period_ms = int(default.get("period_ms") or 10)
-                else:
-                    try:
-                        expect_fps = int(
-                            spec.get("expect_fps")
-                            or spec.get("expect_hz")
-                            or expect_fps
-                            or 0
-                        )
-                    except (TypeError, ValueError):
-                        expect_fps = int(default.get("expect_fps") or 0)
-            idx = trig.findData(trigger)
-            if idx < 0:
-                trig.blockSignals(True)
-                trig.addItem(trigger, trigger)
-                trig.blockSignals(False)
-                idx = trig.findData(trigger)
-            trig.blockSignals(True)
-            trig.setCurrentIndex(max(0, idx))
-            trig.blockSignals(False)
-            spin.blockSignals(True)
-            self._style_value_spin(name, trig, spin, reset=False)
-            spin.setValue(period_ms if trigger == "period" else expect_fps)
-            spin.blockSignals(False)
-        self._refresh_policy_hint()
-
-    def _collect_publish_policy(self, req: dict) -> dict:
-        prev = req.get("publish_policy") if isinstance(req.get("publish_policy"), dict) else {}
-        services = dict(prev.get("services") or {}) if isinstance(prev.get("services"), dict) else {}
-        channels = dict(prev.get("channels") or {}) if isinstance(prev.get("channels"), dict) else {}
-        # Flatten leftover keys from old comment-style maps
-        if not services and not channels:
-            for k, v in prev.items():
-                if k in ("services", "channels") or not isinstance(v, dict):
-                    continue
-                if k in _POLICY_SERVICES:
-                    services[k] = dict(v)
-                elif k in _POLICY_CHANNELS:
-                    channels[k] = dict(v)
-        for name, (bucket, trig, spin) in self._policy_rows.items():
-            trigger = str(trig.currentData() or "on_change")
-            spec: dict = {"trigger": trigger}
-            if trigger == "period":
-                spec["period_ms"] = int(spin.value())
-            elif trigger == "on_change":
-                fps = int(spin.value())
-                if fps > 0:
-                    spec["expect_fps"] = fps
-            if bucket == "service":
-                services[name] = spec
-            else:
-                channels[name] = spec
-        return {"services": services, "channels": channels}
-
     def _service_candidates(self) -> list[str]:
         if not self._session:
             return []
         return self._session.wiring_service_names()
-
-    def set_history_hooks(
-        self,
-        checkpoint: Callable[..., None] | None,
-        end_edit: Callable[[], None] | None = None,
-    ) -> None:
-        self._checkpoint_fn = checkpoint
-        self._end_edit_fn = end_edit
-
-    def _checkpoint(self, *, coalesce: bool = False) -> None:
-        if self._checkpoint_fn is not None:
-            self._checkpoint_fn(coalesce=coalesce)
-
-    def _end_doc_edit(self) -> None:
-        if self._end_edit_fn is not None:
-            self._end_edit_fn()
 
     def set_session(self, session: ProjectSession | None) -> None:
         self._session = session
@@ -534,8 +325,6 @@ class ReqEditor(QWidget):
             self._acc_desc.clear()
             self._acc_lineage.setChecked(False)
             self._acc_svcs.set_selected([])
-
-        self._load_publish_policy(req)
 
         self._loading = False
         self._apply_profile_ui()
@@ -609,26 +398,11 @@ class ReqEditor(QWidget):
     def _on_any(self, *_args: object) -> None:
         if self._loading or not self._session:
             return
-        self._refresh_policy_hint()
         src = self.sender()
         coalesce = isinstance(src, (QLineEdit, QSpinBox))
         self._checkpoint(coalesce=coalesce)
-        req = self._session.req
         prof = self._profile.currentData()
-        req["profile"] = str(prof) if prof else "vehicle-debug"
-        req["variant"] = self._variant.text().strip()
-        topo = self._topology.currentData()
-        req["topology"] = str(topo) if topo else "ap_only"
-        if self._session.wiring.get("topology") != req["topology"]:
-            self._session.wiring["topology"] = req["topology"]
-            self._session.dirty_wiring = True
-        req["product"] = self._product.text().strip()
-        # capabilities / apps：无 GUI，保留 YAML 原值（仅清洗自动 tap 条目）
-        if "apps" in req:
-            req["apps"] = _strip_tap_apps(req.get("apps"))
-        # runtime_modules owned by PlatformEditor (tab 2)
-        req["bindings"] = [n for n, cb in self._binding_boxes.items() if cb.isChecked()]
-        live_on = self._live_en.isChecked() and req["profile"] == "vehicle-debug"
+        live_on = self._live_en.isChecked() and str(prof or "") == "vehicle-debug"
         live_mode = str(self._live_mode.currentData() or "explicit")
         live_block: dict = {
             "enabled": live_on,
@@ -636,23 +410,11 @@ class ReqEditor(QWidget):
         }
         if live_mode == "explicit":
             live_block["services"] = self._live_svcs.selected()
-        # trace_export removed (orphan — GMT owns VCD/export; not consumed by build).
-        req["observability"] = {
-            "live_tap": live_block,
-            "record": {
-                "mode": str(self._record_mode.currentData() or "minimal"),
-                "services": self._record_svcs.selected(),
-            },
-        }
-        prev_fi = (
-            req.get("frame_ingest")
-            if isinstance(req.get("frame_ingest"), dict)
+        prev_acc = (
+            self._session.req.get("acceptance")
+            if isinstance(self._session.req.get("acceptance"), dict)
             else {}
         )
-        # B-page owns frame_ingest; A-page Save must not clobber frame source/ego/slots.
-        if prev_fi:
-            req["frame_ingest"] = prev_fi
-        prev_acc = req.get("acceptance") if isinstance(req.get("acceptance"), dict) else {}
         acceptance: dict = {
             "description": self._acc_desc.text().strip(),
             "lineage_required": self._acc_lineage.isChecked(),
@@ -660,9 +422,25 @@ class ReqEditor(QWidget):
         }
         if prev_acc.get("sor_golden"):
             acceptance["sor_golden"] = prev_acc["sor_golden"]
-        req["acceptance"] = acceptance
-        req["publish_policy"] = self._collect_publish_policy(req)
-        self._session.dirty_req = True
+        apps = None
+        if "apps" in self._session.req:
+            apps = _strip_tap_apps(self._session.req.get("apps"))
+        self._session.apply_sku_update(
+            profile=str(prof) if prof else "vehicle-debug",
+            variant=self._variant.text().strip(),
+            topology=str(self._topology.currentData() or "ap_only"),
+            product=self._product.text().strip(),
+            bindings=[n for n, cb in self._binding_boxes.items() if cb.isChecked()],
+            observability={
+                "live_tap": live_block,
+                "record": {
+                    "mode": str(self._record_mode.currentData() or "minimal"),
+                    "services": self._record_svcs.selected(),
+                },
+            },
+            acceptance=acceptance,
+            apps=apps,
+        )
         self.changed.emit()
         if not coalesce:
             self._end_doc_edit()

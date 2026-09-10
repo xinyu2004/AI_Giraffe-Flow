@@ -28,7 +28,7 @@
 ① 薄 SKU（profile/bindings/观测…）  ┐
 ② com 拓扑（节点 + 连线）           ├─→ gf-config【1 · 信号与应用】（默认首页）
                                    ┘         wiring.yaml + req 薄字段
-③ runtime_modules + platform/*     ──→ gf-config【2 · 平台运行时】
+③ runtime_modules + cfg/gf_ara_cfg/*     ──→ gf-config【2 · 平台运行时】
                                               （含 Event Collector）
                                     │
                                     ▼
@@ -47,7 +47,7 @@
 | **① 开关（薄）** | 本 SKU 要不要 binding / 观测 / 剖面？ | `req.yaml` 薄字段 | **页 1** 顶栏/侧栏 |
 | **①′ 模块开关** | 要不要编进 exec/phm/…？ | `req.runtime_modules` | **页 2** 顶部（与平台表同页） |
 | **② 拓扑** | 谁 provide/require？边怎么走？ | `wiring.yaml` | **页 1** 画布（主战场） |
-| **③ 清单** | FG？Alive？DID？Collector？ | `platform/*.yaml` | **页 2** 子导航 |
+| **③ 清单** | FG？Alive？DID？Collector？ | `cfg/gf_ara_cfg/*.yaml` | **页 2** 子导航 |
 
 「要不要编模块」与「要了填什么」同属运行时，故 **runtime_modules 不再独占一页排在画图之前**。
 
@@ -110,7 +110,7 @@
 
 ### 3.4 `gf_ara::phm`
 
-| 完整 AP | 我们的 ③（`platform/phm.yaml`） |
+| 完整 AP | 我们的 ③（`cfg/gf_ara_cfg/phm.yaml`） |
 |---------|--------------------------------|
 | Alive / Deadline / Logical | **P2：** Alive + 可选 Deadline；**P3：** Logical + `notify_sm` / Collector |
 | 跨 ECU PHM | 有 CP 时经 Collector 转发，不做第二套跨域 PHM |
@@ -119,14 +119,14 @@
 
 ### 3.5 `gf_ara::log`
 
-载体：`platform/log.yaml`（`default_level`、`contexts[]`）。  
+载体：`cfg/gf_ara_cfg/log.yaml`（`default_level`、`contexts[]`）。  
 观测粗开关（live_tap/record）留在 **页 1 薄 SKU**，与 log 级别分工。
 
 **gf-config（页 2 · 日志）：** 默认级别 + 按模块覆盖表；新增行模块可空、级别默认 `INFO`；**行号选中**（行号/模块浅蓝，级别枚举色不变）；compose **拒绝重复 context id**。
 
 ### 3.6 `gf_ara::diag` — DoIP / UDS 子集（不是 Classic DEM）
 
-| 完整 AP | 我们的 ③（`platform/diag.yaml`） |
+| 完整 AP | 我们的 ③（`cfg/gf_ara_cfg/diag.yaml`） |
 |---------|--------------------------------|
 | DM、UDS、DoIP、DID/RID… | `standards`（14229 父 / 13400 子）+ `doip` + **`timing`** + **`ota_transfer`** + DID/RID 最小表 |
 | Classic DEM 全栈 | **不做**；事件见 §3.9 |
@@ -136,7 +136,7 @@
 **0x27 插件路径：** 不进 yaml；GMT 本地设置 + 板端 `GF_DIAG_SEC_PLUGIN`。
 
 ```yaml
-# platform/diag.yaml（节选）
+# cfg/gf_ara_cfg/diag.yaml（节选）
 standards:
   iso_14229_uds: true
   iso_13400_doip: true
@@ -181,7 +181,7 @@ per、tsync、nm、crypto/iam/idsm/fw、hal — 见模块总表；板级 hal 跟
 
 **无论有无 CP，都必须有收集机制。** DoIP 换的是总线，不是「可以没有事件管理」。
 
-**配置（③，建议 `platform/collector.yaml` 或并入 `diag.yaml`，实现时冻结一种）：**
+**配置（③，建议 `cfg/gf_ara_cfg/collector.yaml` 或并入 `diag.yaml`，实现时冻结一种）：**
 
 - 源：phm entity / 进程 / 通信错误码  
 - 转发：`forward: cp_dem | local_store | both`  
@@ -236,12 +236,12 @@ per、tsync、nm、crypto/iam/idsm/fw、hal — 见模块总表；板级 hal 跟
 | 子导航 | 执行/FG · PHM · 诊断 · 日志 · OTA(ucm) · **事件收集** ·（per/tsync：仅 runtime 勾选，暂无 YAML 子页） |
 | 进程下拉 | 只读自页 1 wiring（`external.*` 默认不进 exec/phm） |
 
-编辑：`req.runtime_modules` + `platform/*`。
+编辑：`req.runtime_modules` + `cfg/gf_ara_cfg/*`。
 
 ### 4.4 用户一天路径（P3）
 
 ```text
-打开 project.yaml
+打开 giraffe.yaml
   → 【1】画 gateway → sensing/perception → planning.*（行泊）
   → 【1】必要时改 bindings / live_tap
   → 【2】勾 runtime_modules → 填 FG / Alive / DoIP / Collector
@@ -277,9 +277,9 @@ per、tsync、nm、crypto/iam/idsm/fw、hal — 见模块总表；板级 hal 跟
 
 ```text
 projects/<oem>/<sku>/
-  project.yaml
+  giraffe.yaml
   req.yaml                      # ① 薄 SKU + runtime_modules
-  integration/wiring.yaml       # ②
+  cfg/wiring.yaml       # ②
   platform/
     exec.yaml                   # + function_groups（SM 极简/加深）
     phm.yaml
@@ -311,10 +311,10 @@ projects/<oem>/<sku>/
 
 ### 8.1–8.5
 
-`exec` / `phm` / `log` / `ucm` 字段与现网 `projects/**/platform/*.yaml` 对齐。  
+`exec` / `phm` / `log` / `ucm` 字段与现网 `projects/**/cfg/gf_ara_cfg/*.yaml` 对齐。  
 **`diag`：** 除 DoIP/DID/RID 外，P3-4 冻结 `timing` + `ota_transfer`（见 §3.6 与 [DOIP_OTA.md](DOIP_OTA.md)）。
 
-### 8.6 `platform/collector.yaml`（P3 草案 · 实现前可微调）
+### 8.6 `cfg/gf_ara_cfg/collector.yaml`（P3 草案 · 实现前可微调）
 
 ```yaml
 schema_version: "0.1"

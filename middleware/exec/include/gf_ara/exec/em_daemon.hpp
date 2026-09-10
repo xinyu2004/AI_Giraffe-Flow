@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace gf_ara::exec {
@@ -19,13 +20,19 @@ struct EmProcessSpec {
   std::vector<std::string> depends_on;
   bool restart_enabled{false};
   std::uint32_t max_restarts{3};
+  /// Function Group id (MachineFG / OEM ModeDeclaration FG).
+  std::string function_group{"MachineFG"};
+  /// ModeDeclaration membership: empty = always-on (machine / not in mode set-diff).
+  std::vector<std::string> active_in;
 };
 
 struct EmDaemonConfig {
-  std::string platform_dir;
+  std::string ara_cfg_dir;
   std::string build_dir;
   std::string log_dir;
   std::vector<EmProcessSpec> processes;
+  /// Mode FG id → freeze initial (seed FgStateStore before Mode App publishes).
+  std::unordered_map<std::string, std::string> mode_fg_initial;
 };
 
 /// OS-level Execution Management: OSAL Spawn/Wait + relaunch policy.
@@ -34,10 +41,10 @@ class EmDaemon {
   bool Configure(EmDaemonConfig cfg);
   /// Product path: load Spawn table from compose-frozen deploy_config.hpp.
   /// Requires GF_HAS_DEPLOY_CONFIG at compile time; otherwise returns false.
-  bool LoadFromDeployConfig(std::string_view platform_dir, std::string_view build_dir,
+  bool LoadFromDeployConfig(std::string_view ara_cfg_dir, std::string_view build_dir,
                             std::string_view log_dir);
   /// Opt-in / smoke: Load exec.yaml + em_launch.yaml + phm.yaml.
-  bool Load(std::string_view platform_dir, std::string_view launch_yaml,
+  bool Load(std::string_view ara_cfg_dir, std::string_view launch_yaml,
             std::string_view build_dir, std::string_view log_dir);
 
   bool StartAll();
@@ -62,9 +69,14 @@ class EmDaemon {
     std::uint32_t restarts{0};
     bool ever_started{false};
     bool terminal_exit{false};
+    /// Intentionally stopped for Mode FG set-difference (do not panic EM).
+    bool fg_held_off{false};
   };
 
   bool Spawn(Runtime& rt, bool is_relaunch);
+  void StopForFg(Runtime& rt);
+  void ApplyFgSetDiff();
+  [[nodiscard]] bool WantRunning(const EmProcessSpec& spec) const;
   static std::string ResolveBinary(const EmProcessSpec& spec, std::string_view build_dir);
   static bool TopoSort(std::vector<EmProcessSpec>& procs, std::string& err);
 

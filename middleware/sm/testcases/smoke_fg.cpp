@@ -1,6 +1,7 @@
 #include "gf_ara/sm/state_client.hpp"
 
 #include <iostream>
+#include <string>
 
 namespace {
 
@@ -54,6 +55,42 @@ int main() {
     return Fail("SM-05", "fault count");
   }
   Pass("SM-05", "NotifyHealthFault FaultCount");
+
+  // Generic ModeDeclaration FG (product names stay in Apps; smoke uses placeholders).
+  constexpr const char* kModeFg = "DemoModeFG";
+  constexpr const char* kStateA = "StateA";
+  constexpr const char* kStateB = "StateB";
+  StateClient::EnsureGroupNamed(kModeFg, kStateA);
+  if (StateClient::GetStateNamed(kModeFg) != kStateA) {
+    return Fail("SM-06", "Mode FG initial StateA");
+  }
+  if (!StateClient::RequestTransitionNamed(kModeFg, kStateB)) {
+    return Fail("SM-06", "StateA→StateB");
+  }
+  if (StateClient::GetStateNamed(kModeFg) != kStateB) {
+    return Fail("SM-06", "state StateB");
+  }
+  if (!StateClient::RequestTransitionNamed(kModeFg, kStateA)) {
+    return Fail("SM-06", "StateB→StateA");
+  }
+  Pass("SM-06", "ModeDeclaration named transitions");
+
+  if (!StateClient::PublishFgState("ChassisFG", "EmbActive")) {
+    return Fail("SM-07", "PublishFgState ChassisFG");
+  }
+  if (StateClient::ReadFgState("ChassisFG") != "EmbActive") {
+    return Fail("SM-07", "ReadFgState ChassisFG");
+  }
+  if (!StateClient::PublishFgState(kModeFg, kStateB)) {
+    return Fail("SM-07", "PublishFgState DemoModeFG");
+  }
+  if (StateClient::ReadFgState(kModeFg) != kStateB) {
+    return Fail("SM-07", "ReadFgState DemoModeFG");
+  }
+  if (StateClient::ReadFgState("ChassisFG") != "EmbActive") {
+    return Fail("SM-07", "ChassisFG state clobbered");
+  }
+  Pass("SM-07", "FgStateStore multi-FG Publish/Read");
 
   std::cout << "gf_sm_fg_smoke OK\n";
   return 0;

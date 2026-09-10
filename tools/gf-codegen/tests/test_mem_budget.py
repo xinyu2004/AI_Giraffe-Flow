@@ -13,6 +13,37 @@ from gf_codegen.compose.mem_budget import (
 )
 
 
+def test_gates_skip_disabled_modules() -> None:
+    plat = {
+        "log": {"sinks": ["file"], "file_max_bytes": 1_048_576, "contexts": [{"id": "a"}] * 10},
+        "collector": {"local": {"enabled": True, "max_entries": 256, "debounce_max_keys": 64, "store_max_bytes": 100}},
+        "bounds": {
+            "dlt": {"max_contexts": 4},
+            "com": {"queue_depth": 16, "max_topic_keys": 64, "avg_payload_bytes": 256},
+            "iceoryx": {"mgmt": {}, "mempools": [{"size": 256, "count": 1}]},
+        },
+    }
+    # Only com — no log/collector/iceoryx in estimate
+    est = estimate_mem_budget(
+        plat,
+        req={"runtime_modules": ["core", "com", "osal"], "bindings": []},
+    )
+    names = {ln["name"] for ln in est["lines"]}
+    assert names == {"com_loopback"}
+    assert est["errors"] == []  # log contexts over max not checked when log off
+    assert not est["iceoryx_enabled"]
+
+    est2 = estimate_mem_budget(
+        plat,
+        req={"runtime_modules": ["core", "com", "osal", "log"], "bindings": ["iceoryx"]},
+    )
+    names2 = {ln["name"] for ln in est2["lines"]}
+    assert "dlt_contexts" in names2
+    assert "log_files" in names2
+    assert "roudi_payload" in names2
+    assert any("max_contexts" in e for e in est2["errors"])
+
+
 def test_estimate_defaults_match_formulas() -> None:
     plat = {
         "log": {

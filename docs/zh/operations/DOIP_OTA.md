@@ -7,7 +7,7 @@
 
 | 项 | 口径 |
 |----|------|
-| 配置真源 | **gf-config** → `platform/diag.yaml` / `ucm.yaml`（GMT **不写**配置） |
+| 配置真源 | **gf-config** → `cfg/gf_ara_cfg/diag.yaml` / `ucm.yaml`（GMT **不写**配置） |
 | 操作面 | **GMT → OTA/UDS**：共用 DoIP；单选 **OTA / DEM / Collector**；按 yaml 模式发 UDS → UCM 编排 |
 | 下载 SID | 默认 **0x38** `request_file_transfer`；可选 **0x34** / SIL **0x31** 捷径 |
 | 传输 | ISO **14229** 父能力；ISO **13400** DoIP 为子传输（不可单独开） |
@@ -42,7 +42,7 @@ UdsDispatcher → UCM OtaOrchestrator → PackageManager →（stub）落盘/Act
 | `ota_transfer.require_*` | 是否强制 ProgrammingSession / SecurityAccess |
 | `ota_transfer.max_block_length` | 0x36 单块上限 |
 
-示例见 `projects/afc/platform/diag.yaml`。
+示例见 `projects/afc/cfg/gf_ara_cfg/diag.yaml`。
 
 ### 传输模式对照
 
@@ -83,7 +83,7 @@ UdsDispatcher → UCM OtaOrchestrator → PackageManager →（stub）落盘/Act
 # 2) DoIP 通路冒烟（ctest + session；**不**冒烟刷写本身）
 bash projects/afc/scripts/verify/smoke_doip_ota.sh
 
-# 3) 或开 GMT → 加载 project.yaml → OTA/UDS → 连接（测 DoIP/UDS，非真刷写）
+# 3) 或开 GMT → 加载 giraffe.yaml → OTA/UDS → 连接（测 DoIP/UDS，非真刷写）
 ```
 
 ### 观测演示（Collector / DEM）

@@ -5,8 +5,8 @@
 #include <gf_ara/log/logger.hpp>
 #include <gf_ara/per/key_value_storage.hpp>
 
-#if defined(GF_HAS_PLATFORM_TABLES)
-#include "gf_gen/platform_tables.hpp"
+#if defined(GF_HAS_ARA_CFG_TABLES)
+#include "gf_gen/ara_cfg_tables.hpp"
 #endif
 #if defined(GF_HAS_COLLECTOR_CONFIG)
 #include "gf_gen/collector_config.hpp"
@@ -79,46 +79,78 @@ const char* StatusName(gf_ara::phm::CheckpointStatus st) {
 
 }  // namespace
 
-std::string PlatformDir() {
-  if (const char* d = std::getenv("GF_PLATFORM_DIR"); d && *d) {
+std::string AraCfgDir() {
+  if (const char* d = std::getenv("GF_ARA_CFG_DIR"); d && *d) {
     std::string out{d};
     while (!out.empty() && out.back() == '/') {
       out.pop_back();
-    }
-    if (ReadFile(out + "/exec.yaml").empty() &&
-        !ReadFile(out + "/platform/exec.yaml").empty()) {
-      out += "/platform";
     }
     return out;
   }
   return {};
 }
 
+bool FgIsModeFromTables(std::string_view fg_id) {
+#if defined(GF_HAS_ARA_CFG_TABLES)
+  if (const auto* g = gf_gen::ara_cfg::FindFunctionGroup(fg_id)) {
+    return g->kind == gf_gen::ara_cfg::FgKind::kMode;
+  }
+#endif
+  (void)fg_id;
+  return false;
+}
+
+bool FgIsModeFromYaml(const std::string& exec_text, std::string_view fg_id) {
+  if (fg_id.empty() || fg_id == "MachineFG") {
+    return false;
+  }
+  const std::regex id_re(std::string(R"(-\s*id:\s*)") + std::string(fg_id) + R"(\b)");
+  std::smatch m;
+  if (!std::regex_search(exec_text, m, id_re)) {
+    // Unknown FG with non-Machine name → treat as mode (OEM ModeDeclaration).
+    return fg_id != "MachineFG";
+  }
+  const auto start = static_cast<std::size_t>(m.position(0));
+  const std::string window =
+      exec_text.substr(start, std::min<std::size_t>(400, exec_text.size() - start));
+  std::smatch km;
+  if (std::regex_search(window, km, std::regex(R"(kind:\s*(\S+))"))) {
+    return km[1].str() == "mode";
+  }
+  if (std::regex_search(window, km, std::regex(R"(initial:\s*(\S+))"))) {
+    const std::string init = km[1].str();
+    return !(init == "Off" || init == "Running" || init == "Updating");
+  }
+  return true;
+}
+
 ExecProcessConfig LoadExecProcess(std::string_view process_name) {
   ExecProcessConfig cfg;
-#if defined(GF_HAS_PLATFORM_TABLES)
-  if (const auto* row = gf_gen::platform::FindExec(process_name)) {
+#if defined(GF_HAS_ARA_CFG_TABLES)
+  if (const auto* row = gf_gen::ara_cfg::FindExec(process_name)) {
     cfg.found = true;
     cfg.function_group = row->function_group ? row->function_group : "MachineFG";
     cfg.execution_client = row->execution_client;
+    cfg.fg_is_mode = FgIsModeFromTables(cfg.function_group);
     return cfg;
   }
-  // Product path: tables are truth. YAML only when smoke sets GF_PLATFORM_DIR.
-  if (PlatformDir().empty()) {
+  // Product path: tables are truth. YAML only when smoke sets GF_ARA_CFG_DIR.
+  if (AraCfgDir().empty()) {
     return cfg;
   }
 #endif
-  const std::string dir = PlatformDir();
+  const std::string dir = AraCfgDir();
   if (dir.empty()) {
     cfg.found = true;
     cfg.execution_client = true;
     cfg.function_group = "MachineFG";
+    cfg.fg_is_mode = false;
     return cfg;
   }
   const std::string text = ReadFile(dir + "/exec.yaml");
   if (text.empty()) {
     gf_ara::log::Logger::Instance().Error(
-        "runtime", "cannot read " + dir + "/exec.yaml (and no platform_tables)");
+        "runtime", "cannot read " + dir + "/exec.yaml (and no ara_cfg_tables)");
     return cfg;
   }
 
@@ -142,13 +174,17 @@ ExecProcessConfig LoadExecProcess(std::string_view process_name) {
           std::regex(R"(execution_client:\s*(true|false))", std::regex::icase))) {
     cfg.execution_client = (km[1].str() != "false" && km[1].str() != "False");
   }
+  if (cfg.function_group.empty()) {
+    cfg.function_group = "MachineFG";
+  }
+  cfg.fg_is_mode = FgIsModeFromYaml(text, cfg.function_group);
   return cfg;
 }
 
 PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
   PhmEntityConfig cfg;
-#if defined(GF_HAS_PLATFORM_TABLES)
-  if (const auto* row = gf_gen::platform::FindPhm(process_name)) {
+#if defined(GF_HAS_ARA_CFG_TABLES)
+  if (const auto* row = gf_gen::ara_cfg::FindPhm(process_name)) {
     cfg.found = true;
     cfg.id = row->id ? row->id : (std::string(process_name) + "_alive");
     cfg.alive_period_ms = row->alive_period_ms;
@@ -156,18 +192,18 @@ PhmEntityConfig LoadPhmEntity(std::string_view process_name) {
     cfg.on_failure = row->on_failure ? row->on_failure : "log";
     return cfg;
   }
-  if (PlatformDir().empty()) {
+  if (AraCfgDir().empty()) {
     return cfg;  // no PHM entity for this process — OK
   }
 #endif
-  const std::string dir = PlatformDir();
+  const std::string dir = AraCfgDir();
   if (dir.empty()) {
     return cfg;
   }
   const std::string text = ReadFile(dir + "/phm.yaml");
   if (text.empty()) {
     gf_ara::log::Logger::Instance().Error(
-        "runtime", "cannot read " + dir + "/phm.yaml (and no platform_tables)");
+        "runtime", "cannot read " + dir + "/phm.yaml (and no ara_cfg_tables)");
     return cfg;
   }
 
@@ -245,8 +281,8 @@ void LoadCollectorConfig() {
           " sources=" + std::to_string(got.sources.size()) +
           " dtc_map=" + std::to_string(got.dtc_map.size()));
 #else
-  // Smoke / middleware-only: optional authoring YAML via GF_PLATFORM_DIR.
-  const std::string dir = PlatformDir();
+  // Smoke / middleware-only: optional authoring YAML via GF_ARA_CFG_DIR.
+  const std::string dir = AraCfgDir();
   if (dir.empty()) {
     return;
   }
@@ -268,8 +304,8 @@ void LoadCollectorConfig() {
 void LoadLogConfig() {
   auto& log = gf_ara::log::Logger::Instance();
   if (!log.ConfigureFromGenerated()) {
-    // Middleware-only / smoke: no log_config.hpp → authoring YAML via GF_PLATFORM_DIR.
-    const std::string dir = PlatformDir();
+    // Middleware-only / smoke: no log_config.hpp → authoring YAML via GF_ARA_CFG_DIR.
+    const std::string dir = AraCfgDir();
     if (!dir.empty()) {
       const std::string text = ReadFile(dir + "/log.yaml");
       if (!text.empty()) {
@@ -306,7 +342,7 @@ void LoadMemoryBounds() {
           " per_val=" + std::to_string(per_val) +
           (dlt_ctx ? " dlt_ctx=" + std::to_string(dlt_ctx) : ""));
 #else
-  const std::string dir = PlatformDir();
+  const std::string dir = AraCfgDir();
   if (dir.empty()) {
     return;
   }
@@ -363,12 +399,12 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
 
   const auto exec_cfg = LoadExecProcess(process_name);
   if (!exec_cfg.found) {
-    log.Error("runtime", "process not in platform_tables/exec.yaml: " + process_);
+    log.Error("runtime", "process not in ara_cfg_tables/exec.yaml: " + process_);
     return false;
   }
-#if !defined(GF_HAS_PLATFORM_TABLES)
-  if (PlatformDir().empty()) {
-    log.Warn("runtime", "GF_PLATFORM_DIR unset — using Offer defaults for " + process_);
+#if !defined(GF_HAS_ARA_CFG_TABLES)
+  if (AraCfgDir().empty()) {
+    log.Warn("runtime", "GF_ARA_CFG_DIR unset — using Offer defaults for " + process_);
   }
 #endif
   if (!exec_cfg.execution_client) {
@@ -378,14 +414,20 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
 
   function_group_ =
       exec_cfg.function_group.empty() ? "MachineFG" : exec_cfg.function_group;
+  fg_is_mode_ = exec_cfg.fg_is_mode;
 
   using gf_ara::sm::FunctionGroupState;
   using gf_ara::sm::StateClient;
-  log.Info("sm", "EnsureGroup " + function_group_ + " → Running");
-  StateClient::EnsureGroup(function_group_, FunctionGroupState::kRunning);
-  StateClient::RequestTransition(function_group_, FunctionGroupState::kRunning);
-  log.Info("sm", "state=" + std::string(gf_ara::sm::ToString(StateClient::GetState(function_group_))) +
-                     " fg=" + function_group_);
+  if (fg_is_mode_) {
+    // ModeDeclaration FG: Mode App owns EnsureGroupNamed / RequestTransitionNamed.
+    log.Info("sm", "skip EnsureGroup(Running) for mode FG=" + function_group_);
+  } else {
+    log.Info("sm", "EnsureGroup " + function_group_ + " → Running");
+    StateClient::EnsureGroup(function_group_, FunctionGroupState::kRunning);
+    StateClient::RequestTransition(function_group_, FunctionGroupState::kRunning);
+    log.Info("sm", "state=" + std::string(gf_ara::sm::ToString(StateClient::GetState(function_group_))) +
+                       " fg=" + function_group_);
+  }
 
   using gf_ara::exec::ExecutionClient;
   using gf_ara::exec::ExecutionManager;
@@ -401,9 +443,14 @@ bool ProcessSupervisor::Start(std::string_view process_name) {
     return false;
   }
   // Keep "Offer→Running" substring for SIL verify greps.
-  log.Info("runtime", "t_ms=" + std::to_string(MonoMs()) + " Offer→Running process=" + process_ +
-                          " fg=" + function_group_ + " sm=" +
-                          gf_ara::sm::ToString(StateClient::GetState(function_group_)));
+  if (fg_is_mode_) {
+    log.Info("runtime", "t_ms=" + std::to_string(MonoMs()) + " Offer→Running process=" +
+                            process_ + " fg=" + function_group_ + " sm=mode");
+  } else {
+    log.Info("runtime", "t_ms=" + std::to_string(MonoMs()) + " Offer→Running process=" + process_ +
+                            " fg=" + function_group_ + " sm=" +
+                            gf_ara::sm::ToString(StateClient::GetState(function_group_)));
+  }
 
   const auto phm_cfg = LoadPhmEntity(process_name);
   if (phm_cfg.found) {
@@ -491,6 +538,11 @@ void ProcessSupervisor::OnFault(gf_ara::phm::CheckpointStatus st) {
   }
 
   if (on_failure_ == "notify_sm") {
+    if (fg_is_mode_) {
+      log.Info("phm", "notify_sm skipped for mode FG=" + function_group_ +
+                          " entity=" + std::string(entity_->Name()) + " reason=" + reason);
+      return;
+    }
     const bool enter_upd = EnvFlag("GF_SM_ENTER_UPDATING_ON_FAULT");
     gf_ara::sm::StateClient::NotifyHealthFault(function_group_, entity_->Name(), reason,
                                                enter_upd);
@@ -507,8 +559,8 @@ void ProcessSupervisor::Tick() {
     return;
   }
 
-  // Resume Alive when SM left Updating
-  if (entity_->Paused()) {
+  // Resume Alive when SM left Updating (machine FG only).
+  if (entity_->Paused() && !fg_is_mode_) {
     using gf_ara::sm::FunctionGroupState;
     using gf_ara::sm::StateClient;
     if (StateClient::GetState(function_group_) != FunctionGroupState::kUpdating) {
