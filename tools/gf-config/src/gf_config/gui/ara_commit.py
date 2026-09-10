@@ -27,9 +27,9 @@ class AraCommitMixin:
     """Mixin: ``_on_*_changed`` writers for AraCfgEditor."""
 
     def _mark(self, key: str) -> None:
+        """Notify UI after an ara write. Dirty flags come from ``update_ara_doc``."""
         if self._loading or not self._session:
             return
-        self._session.mark_ara_cfg_dirty(key)
         self.changed.emit()
 
     def _on_exec_changed(self, *_a: object) -> None:

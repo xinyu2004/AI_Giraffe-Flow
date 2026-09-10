@@ -1,4 +1,4 @@
-"""Main window: 1 · 信号与应用 / 2 · 平台运行时."""
+"""Main window: 1 · 信号与应用 / 2 · 平台配置."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ class MainWindow(QMainWindow):
         self._signals_page: QWidget = signals_page
 
         self._tabs.addTab(self._signals_page, t("1 · 信号与应用"))
-        self._tabs.addTab(self._ara_cfg_ed, t("2 · 平台运行时"))
+        self._tabs.addTab(self._ara_cfg_ed, t("2 · 平台配置"))
         self.setCentralWidget(self._tabs)
 
         self._path_label = QLabel(t("未打开项目"), self)
@@ -187,20 +187,6 @@ class MainWindow(QMainWindow):
 
         view_menu = self.menuBar().addMenu(t("视图"))
 
-        act_tab1 = QAction(t("1 · 信号与应用"), self)
-        act_tab1.setShortcut("Ctrl+1")
-        act_tab1.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_tab1.triggered.connect(lambda: self._tabs.setCurrentWidget(self._signals_page))
-        view_menu.addAction(act_tab1)
-
-        act_tab2 = QAction(t("2 · 平台运行时"), self)
-        act_tab2.setShortcut("Ctrl+2")
-        act_tab2.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_tab2.triggered.connect(lambda: self._tabs.setCurrentWidget(self._ara_cfg_ed))
-        view_menu.addAction(act_tab2)
-
-        view_menu.addSeparator()
-
         act_fit = QAction(t("适应窗口"), self)
         act_fit.setShortcut("Ctrl+0")
         act_fit.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
@@ -241,9 +227,9 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
+        # Del/Backspace live on WiringGraph (WidgetWithChildren) so they don't
+        # fight this menu action or fire while editing tables on tab 2.
         act_del_edge = QAction(t("删除选中边"), self)
-        act_del_edge.setShortcut(QKeySequence.StandardKey.Delete)
-        act_del_edge.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         act_del_edge.triggered.connect(self._graph.delete_selection)
         view_menu.addAction(act_del_edge)
 
@@ -283,7 +269,10 @@ class MainWindow(QMainWindow):
                     return
                 if reply == QMessageBox.StandardButton.Save:
                     try:
-                        result = self._session.save_all(require_valid=True)
+                        result = save_validated(
+                            self._session,
+                            flush_canvas=self._graph.flush_canvas,
+                        )
                     except Exception as exc:  # noqa: BLE001
                         QMessageBox.critical(self, t("保存失败"), str(exc))
                         return

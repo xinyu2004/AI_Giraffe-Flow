@@ -14,7 +14,8 @@ _EN: dict[str, str] = {
     "gf-config — Giraffe Flow（信号与应用 / 平台）": "gf-config — Giraffe Flow (Signals & Apps / Platform)",
     "未打开项目": "No project open",
     "1 · 信号与应用": "1 · Signals & apps",
-    "2 · 平台运行时": "2 · Platform runtime",
+    "2 · 平台配置": "2 · Platform config",
+    "2 · 平台运行时": "2 · Platform config",  # legacy tip / history key
     "A · SKU": "A · SKU",
     "B · 信号链接": "B · Signal graph",
     "C · 平台": "C · Platform",
@@ -135,7 +136,8 @@ _EN: dict[str, str] = {
     "已重做": "Redone",
     "已重做（信号图）": "Redone (graph)",
     "平台": "Platform",
-    "平台运行时": "Platform runtime",
+    "平台配置": "Platform config",
+    "平台运行时": "Platform config",  # legacy
     "信号连线 / 部署": "Signal wiring / deploy",
     "SKU / 需求": "SKU / requirements",
     "文档": "Document",
@@ -182,7 +184,7 @@ _EN: dict[str, str] = {
     "将编入 tap；run_sil 自动接 Foxglove。": "Will build tap; run_sil starts Foxglove.",
     "live 关 → 不编 tap": "live off → no tap",
     "record=off → services 灰调": "record=off → services disabled",
-    # Platform runtime (tab 2)
+    # Platform config (tab 2)
     "runtime_modules（编进镜像 · 勾选后下方出现对应清单）": (
         "runtime_modules (built into image · check to unlock pages below)"
     ),

@@ -156,7 +156,7 @@ def locate_doc_change(
         if changed:
             labels = "、".join(t(_PLATFORM_LABELS.get(k, k)) for k in changed[:3])
             return "ara_cfg", changed[0], f"{t('平台')} · {labels}"
-        return "ara_cfg", None, t("平台运行时")
+        return "ara_cfg", None, t("平台配置")
 
     req_diff = (before.get("req") or {}) != (after.get("req") or {})
     wir_diff = (before.get("wiring") or {}) != (after.get("wiring") or {})

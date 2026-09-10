@@ -144,7 +144,7 @@ def rebuild_wiring_graph(
         for slot in channel_ins.get(name, []):
             if not any(normalize_channel_slot(str(r)) == slot for r in requires):
                 requires.append(slot)
-        ui = view._session.node_ui(name)
+        ui = view._session.get_node_ui(name)
         kind = str(ui.get("kind") or "")
         if is_external_node(kind=kind, process=name) and not kind:
             kind = "external"
@@ -199,7 +199,7 @@ def rebuild_wiring_graph(
         ]
         if not outs and active != "none":
             outs = [ProjectSession.gf_channel_slot_name("front")]
-        ui = view._session.node_ui(ingest_name)
+        ui = view._session.get_node_ui(ingest_name)
         if ingest_name in view._layout_pos:
             x, y = view._layout_pos[ingest_name]
         elif "x" in ui and "y" in ui:
@@ -393,7 +393,7 @@ def rebuild_wiring_graph(
         if view._session:
             ignored = {
                 str(x)
-                for x in (view._session.node_ui(cons_name).get("ignore_missing") or [])
+                for x in (view._session.get_node_ui(cons_name).get("ignore_missing") or [])
             }
         for req in card.requires:
             if is_channel_svc(req):

@@ -92,11 +92,6 @@ def is_frame_ingest_node(*, kind: str = "", process: str = "") -> bool:
     return ProjectSession.is_frame_ingest_process(kind=kind, process=process)
 
 
-def is_camera_source(*, kind: str = "", process: str = "") -> bool:
-    """Compat alias for frame_ingest / legacy camera.* canvas nodes."""
-    return is_frame_ingest_node(kind=kind, process=process)
-
-
 def port_label(svc: str) -> str:
     """Display name: keep full gf.channel.* slot; SOA uses short service."""
     ch = normalize_channel_slot(svc or "")
@@ -1155,9 +1150,8 @@ class EdgeCurve(QGraphicsPathItem):
             "mid_dx": round(scene_pos.x() - default_mid.x(), 1),
             "mid_dy": round(scene_pos.y() - default_mid.y(), 1),
         }
-        if self.graph is not None and self.graph._session is not None:
-            self.graph._session.set_flow_route(self.flow, self.flow["route"])
-            self.graph.changed.emit()
+        if self.graph is not None:
+            self.graph.note_flow_route(self.flow, self.flow["route"])
         self.update_path()
 
     def remove_label(self) -> None:

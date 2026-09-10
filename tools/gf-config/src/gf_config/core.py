@@ -1,7 +1,9 @@
-"""ProjectSession: load/save, mutate YAML via APIs, validate, compose.
+"""Load/save project inputs and run compose.
 
-GUI must not write ``req`` / ``wiring`` / ``dirty_*`` directly — call methods here.
-Naming helpers live in ``gf_config.names`` (re-exported below for compat).
+Layers (do not reverse dependencies):
+  names → validate → ProjectSession (sole YAML + dirty_* writer) →
+  gui/pipeline (flush→validate→save/compose) → gui widgets (session APIs only).
+  Rebuild/paint paths must not migrate or seed YAML.
 """
 
 from __future__ import annotations
@@ -125,18 +127,22 @@ class ProjectSession:
         doc = self.ara_cfg.get(key)
         return dict(doc) if isinstance(doc, dict) else {}
 
-    def update_ara_doc(self, key: str, **fields: Any) -> None:
-        """Merge top-level fields into ara_cfg[key] and mark that slice dirty.
+    def update_ara_doc(self, key: str, **fields: Any) -> bool:
+        """Merge top-level fields into ara_cfg[key] and mark dirty if changed.
 
         ``None`` values remove the key. Ensures ``schema_version`` exists.
+        Returns True if the document changed.
         """
         doc = self.ara_cfg.get(key)
         if not isinstance(doc, dict):
             doc = {"schema_version": "0.1"}
             self.ara_cfg[key] = doc
+            changed = True
+        else:
+            changed = False
         if not doc.get("schema_version"):
             doc["schema_version"] = "0.1"
-        changed = False
+            changed = True
         for k, v in fields.items():
             if v is None:
                 if k in doc:
@@ -147,6 +153,7 @@ class ProjectSession:
                 changed = True
         if changed:
             self.mark_ara_cfg_dirty(key)
+        return changed
 
     def is_dirty(self) -> bool:
         assert self.dirty_ara_cfg is not None

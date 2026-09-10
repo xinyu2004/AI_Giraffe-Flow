@@ -67,9 +67,10 @@ def test_update_ara_doc_marks_only_that_key() -> None:
     s = _session()
     s.ara_cfg = {}
     s.dirty_ara_cfg = set()
-    s.update_ara_doc("log", default_level="DEBUG", sinks=["console"])
+    assert s.update_ara_doc("log", default_level="DEBUG", sinks=["console"]) is True
     assert s.get_ara_doc("log")["default_level"] == "DEBUG"
     assert s.get_ara_doc("log")["schema_version"] == "0.1"
     assert s.dirty_ara_cfg == {"log"}
-    s.update_ara_doc("log", default_level="DEBUG")  # no-op
-    assert s.dirty_ara_cfg == {"log"}
+    s.dirty_ara_cfg.clear()
+    assert s.update_ara_doc("log", default_level="DEBUG", sinks=["console"]) is False
+    assert s.dirty_ara_cfg == set()
