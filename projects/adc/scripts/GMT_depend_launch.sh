@@ -199,7 +199,7 @@ gf_start_obs_sidechannel() {
   echo "${TAG} live services=${GF_OBS_LIVE_SERVICES}"
   echo "${TAG} listen Foxglove bind=0.0.0.0:${PORT}  Studio same-host: ws://127.0.0.1:${PORT}"
   if [[ "${GF_SYNTH_BEV:-1}" != "0" ]]; then
-    echo "${TAG} Foxglove BEV ← C 400x800 (GF_SYNTH_BEV=0 to disable)"
+    echo "${TAG} Foxglove BEV ← C from live samples (GF_SYNTH_BEV=0 to disable; empty state silent)"
   fi
   if [[ "${GF_CAMERA_PUBLISH:-1}" != "0" ]]; then
     if [[ -n "${GF_CAMERA_FRAME:-}" ]]; then

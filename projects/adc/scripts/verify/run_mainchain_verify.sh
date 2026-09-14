@@ -32,7 +32,7 @@ ROUDI="${BUILD}/iox-roudi"
 IOX_TOML="${PROJECT_DIR}/generated/iox_roudi.toml"
 GW="${BUILD}/apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway"
 FCM="${BUILD}/apps/perception/fcm/gf_perception_fcm"
-PLAN="${BUILD}/apps/planning/driving/gf_planning_driving"
+PLAN="${BUILD}/apps/planning/driving_plus/gf_planning_driving_plus"
 
 IOX_ON=0
 if [[ -f "${PROJECT_DIR}/cfg/req.yaml" ]] && grep -Eq '^[[:space:]]*-[[:space:]]*iceoryx[[:space:]]*$' "${PROJECT_DIR}/cfg/req.yaml"; then
@@ -141,7 +141,7 @@ assert_log() {
 }
 
 assert_log "${LOG_DIR}/gateway.log" "Offer→Running process=adapter.vehicle_can_gateway" "gateway offer"
-assert_log "${LOG_DIR}/planning.log" "Offer→Running process=planning.driving" "planning offer"
+assert_log "${LOG_DIR}/planning.log" "Offer→Running process=planning.driving_plus" "planning offer"
 assert_log "${LOG_DIR}/fcm.log" "Offer→Running process=perception.fcm" "fcm offer"
 assert_log "${LOG_DIR}/gateway.log" "Trajectory#" "trajectory e2e"
 

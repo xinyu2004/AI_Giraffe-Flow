@@ -29,8 +29,8 @@ processes:
     binary: bin/gf_mode_drive_park
     args: ["0"]
     max_restarts: 3
-  - name: planning.driving
-    binary: bin/gf_planning_driving
+  - name: planning.driving_plus
+    binary: bin/gf_planning_driving_plus
     args: ["0"]
     max_restarts: 2
   - name: planning.parking

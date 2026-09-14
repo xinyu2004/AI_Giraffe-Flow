@@ -179,9 +179,10 @@ using gf_octave_planning::kParkTrajPoints;
 
 /** Corresponds to octave_planning/parking/m_park_tick.m */
 inline ParkTickOut m_park_tick(float slot_x, float slot_y, float slot_yaw, float slot_len,
-                               float slot_wid, bool free, bool confirmed) {
+                               float slot_wid, bool free, bool confirmed,
+                               const float* d_occ_m = nullptr) {
   return gf_octave_planning::m_park_tick(slot_x, slot_y, slot_yaw, slot_len, slot_wid, free,
-                                         confirmed);
+                                         confirmed, d_occ_m);
 }
 
 }  // namespace oct_gen
@@ -192,14 +193,19 @@ inline ParkTickOut m_park_tick(float slot_x, float slot_y, float slot_yaw, float
 def generate_sku(*, repo_root: Path, sku: str, force: bool = False) -> int:
     m_common = repo_root / "octave_planning" / "common"
     m_sku = repo_root / "octave_planning" / sku
+    drive_app = "driving_plus" if sku == "adc" else "driving"
     oct_gen = (
-        repo_root / "projects" / sku / "apps" / "planning" / "driving" / "oct_gen"
+        repo_root / "projects" / sku / "apps" / "planning" / drive_app / "oct_gen"
     )
     if not m_sku.is_dir():
         print(f"[gf-octavecoder] missing {m_sku}", flush=True)
         return 1
 
+    m_afc = repo_root / "octave_planning" / "afc"
     sources = sorted(m_common.glob("*.m")) + sorted(m_sku.glob("*.m"))
+    if sku == "adc" and m_afc.is_dir():
+        # driving_plus reuses AFC plan tick capability pack (not SKU inheritance).
+        sources = sources + sorted(m_afc.glob("m_*.m"))
     if not sources:
         print(f"[gf-octavecoder] no .m under {m_common} / {m_sku}", flush=True)
         return 1
@@ -221,14 +227,16 @@ def generate_sku(*, repo_root: Path, sku: str, force: bool = False) -> int:
             (oct_gen / "gf_clamp.hpp").write_text(_emit_gf_clamp_hpp(), encoding="utf-8")
             print(f"[gf-octavecoder] wrote {oct_gen / 'gf_clamp.hpp'}", flush=True)
 
-        if sku == "afc":
+        emit_plan = sku in ("afc", "adc")
+        plan_src_root = m_sku if sku == "afc" else m_afc
+        if emit_plan:
             for name, emit in (
                 ("m_lon_acc_aeb.m", _emit_afc_lon_hpp),
                 ("m_lat_lka.m", _emit_afc_lat_lka_hpp),
                 ("m_lat_traj.m", _emit_afc_lat_traj_hpp),
                 ("m_plan_tick.m", _emit_afc_plan_tick_hpp),
             ):
-                src = m_sku / name
+                src = plan_src_root / name
                 if src.is_file():
                     out = oct_gen / (src.stem + ".hpp")
                     out.write_text(emit(), encoding="utf-8")

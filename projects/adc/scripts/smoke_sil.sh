@@ -12,14 +12,14 @@ BUILD="${BUILD_SIL}"
 RUNTIME="${BUILD}/runtime"
 GW="${RUNTIME}/bin/gf_vehicle_can_gateway"
 FCM="${RUNTIME}/bin/gf_perception_fcm"
-PLAN="${RUNTIME}/bin/gf_planning_driving"
+PLAN="${RUNTIME}/bin/gf_planning_driving_plus"
 
 if [[ ! -x "${GW}" || ! -x "${FCM}" || ! -x "${PLAN}" ]]; then
   echo "${TAG} smoke_sil: staged binaries missing → compile_sil first"
   bash "${SCRIPT_DIR}/compile_sil.sh"
   GW="${RUNTIME}/bin/gf_vehicle_can_gateway"
   FCM="${RUNTIME}/bin/gf_perception_fcm"
-  PLAN="${RUNTIME}/bin/gf_planning_driving"
+  PLAN="${RUNTIME}/bin/gf_planning_driving_plus"
 fi
 
 # Avoid re-running full cmake inside the timed window (timeout would interrupt build).

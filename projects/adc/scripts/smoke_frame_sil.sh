@@ -9,7 +9,7 @@ source "${SCRIPT_DIR}/_common.sh"
 gf_project_env
 BUILD="${BUILD_SIL}"
 FCM="${BUILD}/apps/perception/fcm/gf_perception_fcm"
-PLAN="${BUILD}/apps/planning/driving/gf_planning_driving"
+PLAN="${BUILD}/apps/planning/driving_plus/gf_planning_driving_plus"
 GW="${BUILD}/apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway"
 
 if [[ ! -x "${FCM}" || ! -x "${PLAN}" || ! -x "${GW}" ]]; then
@@ -34,7 +34,7 @@ if [[ "${rc}" -ne 0 && "${rc}" -ne 124 && "${rc}" -ne 137 ]]; then
 fi
 
 RUNTIME="${BUILD}/runtime"
-for bin in "${RUNTIME}/bin/gf_perception_fcm" "${RUNTIME}/bin/gf_planning_driving"; do
+for bin in "${RUNTIME}/bin/gf_perception_fcm" "${RUNTIME}/bin/gf_planning_driving_plus"; do
   if [[ ! -x "${bin}" ]]; then
     echo "${TAG} ERROR: missing ${bin}" >&2
     exit 1

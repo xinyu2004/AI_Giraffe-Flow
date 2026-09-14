@@ -24,7 +24,7 @@ function_groups:
     states: [DrivingActive, ParkingActive]
     initial: DrivingActive
 processes:
-  - name: planning.driving
+  - name: planning.driving   # ADC: planning.driving_plus
     function_group: DriveParkFG
     active_in: [DrivingActive]
   - name: planning.parking
@@ -39,7 +39,7 @@ processes:
 | 进程 | FG | active_in |
 |------|----|-----------|
 | perception.* / mode / gateway | MachineFG | （空＝常驻） |
-| planning.driving | DriveParkFG | DrivingActive |
+| planning.driving / planning.driving_plus | DriveParkFG | DrivingActive |
 | planning.parking | DriveParkFG | ParkingActive |
 
 Mode Manager（`mode.drive_park`）持有产品常量，调用：

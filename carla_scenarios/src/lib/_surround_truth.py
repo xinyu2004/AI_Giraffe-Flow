@@ -1,12 +1,14 @@
-"""CARLA actors → ego-frame surround objects + synthetic parking slots.
+"""CARLA actors → ego-frame surround objects (+ real slots only).
 
-Unlike fake_perc dyn (front FOV wedge), surround keeps side/rear targets.
+Envelope (not invent):
+  - rear 周视: x in [-40, 0], |y| <= 12
+  - side 环视: |y| in (0.8, 10], |x| <= 10
+  - forward long-range is FCM / fake_perc — not synthesized here
 """
 
 from __future__ import annotations
 
 import math
-import os
 from typing import Any
 
 from _objects_truth import (
@@ -22,22 +24,30 @@ from _objects_truth import (
 )
 
 _MAX_OBJ = 16
-_RADIUS_M = 40.0
+_REAR_M = 40.0
+_SIDE_M = 10.0
+_SIDE_X_M = 10.0
+_REAR_Y_M = 12.0
 
 
-def _slot_demo_on() -> bool:
-    v = (os.environ.get("GF_SURROUND_SLOT_DEMO") or "1").strip().lower()
-    return v not in ("0", "off", "false", "no")
+def in_surround_envelope(x: float, y: float) -> bool:
+    """True if (x,y) ego-frame is in rear 周视 or side 环视 near field."""
+    ax = float(x)
+    ay = float(y)
+    if ax <= 0.0:
+        return ax >= -_REAR_M and abs(ay) <= _REAR_Y_M
+    if abs(ay) > 0.8:
+        return abs(ay) <= _SIDE_M and ax <= _SIDE_X_M
+    return False
 
 
 def collect_surround_world(
     ego: Any,
     world: Any,
     *,
-    radius_m: float = _RADIUS_M,
     max_n: int = _MAX_OBJ,
 ) -> dict[str, Any]:
-    """Nearby vehicles/walkers (full azimuth) + optional free right slot."""
+    """Nearby vehicles/walkers in surround envelope. Slots: only if provided later (none invented)."""
     out: dict[str, Any] = {"objects": [], "slots": [], "n_obj": 0, "n_slot": 0}
     if ego is None or world is None:
         return out
@@ -67,7 +77,8 @@ def collect_surround_world(
     else:
         ego_spd = 0.0
 
-    r2 = (float(radius_m) * 1.15) ** 2
+    r_max = max(_REAR_M, _SIDE_M, _SIDE_X_M) * 1.15
+    r2 = r_max * r_max
     _bind_cache(world, ego_id)
     snap_ids = _iter_snap_ids(snap)
     items: list[dict[str, Any]] = []
@@ -89,7 +100,7 @@ def collect_surround_world(
             if dxw * dxw + dyw * dyw > r2:
                 return
             x, y = _xy_to_ego(ex, ey, c, s, float(loc.x), float(loc.y))
-            if abs(x) > radius_m or abs(y) > radius_m:
+            if not in_surround_envelope(x, y):
                 return
             cls = map_carla_class(typ, is_walker=is_walker)
             rel_v = 0.0
@@ -145,7 +156,6 @@ def collect_surround_world(
                 vel=vel,
             )
 
-    # Prefer nearer; keep rear/side (no FOV cut).
     items.sort(key=lambda it: (abs(it["long_m"]) + abs(it["lat_m"]), abs(it["lat_m"])))
     items = items[: max(0, min(max_n, _MAX_OBJ))]
     objects: list[dict[str, Any]] = []
@@ -161,31 +171,8 @@ def collect_surround_world(
             }
         )
 
-    slots: list[dict[str, Any]] = []
-    if _slot_demo_on():
-        # Stage P: synthetic free right bay unless a vehicle occupies that footprint.
-        cx, cy = 6.0, -3.2
-        occupied = False
-        for o in objects:
-            dx = float(o["long_dist_m"]) - cx
-            dy = float(o["lat_dist_m"]) - cy
-            if dx * dx + dy * dy < (2.5**2):
-                occupied = True
-                break
-        slots.append(
-            {
-                "slot_id": 1,
-                "free": 0 if occupied else 1,
-                "center_x_m": cx,
-                "center_y_m": cy,
-                "yaw_rad": 0.0,
-                "length_m": 5.0,
-                "width_m": 2.4,
-            }
-        )
-
     out["objects"] = objects
-    out["slots"] = slots
+    out["slots"] = []  # no invented parking bays
     out["n_obj"] = len(objects)
-    out["n_slot"] = len(slots)
+    out["n_slot"] = 0
     return out

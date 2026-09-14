@@ -350,8 +350,10 @@ PROC_TO_APP = {
     "fcm": "fcm",
     "gf_perception_fcm": "fcm",
     "planning.driving": "planning",
+    "planning.driving_plus": "planning",
     "planning": "planning",
     "gf_planning_driving": "planning",
+    "gf_planning_driving_plus": "planning",
 }
 # inject MVP can publish these short names
 INJECTABLE = {"EgoMotion"}
@@ -450,7 +452,11 @@ fi
 ROUDI="${RUNTIME}/bin/iox-roudi"
 GW="${RUNTIME}/bin/gf_vehicle_can_gateway"
 FCM="${RUNTIME}/bin/gf_perception_fcm"
+# AFC: gf_planning_driving; ADC: gf_planning_driving_plus
 PLAN="${RUNTIME}/bin/gf_planning_driving"
+if [[ ! -x "${PLAN}" && -x "${RUNTIME}/bin/gf_planning_driving_plus" ]]; then
+  PLAN="${RUNTIME}/bin/gf_planning_driving_plus"
+fi
 TAP="${RUNTIME}/bin/gf_iox_obs_tap"
 FOX="${RUNTIME}/bin/gf_foxglove_ws"
 INJ="${RUNTIME}/bin/gf_iox_obs_inject"
@@ -635,8 +641,8 @@ for _i in $(seq 1 50); do
     cat "${LOG_DIR}/em_daemon.stdout" >&2 || true
     exit 1
   fi
-  if grep -q 'em_daemon: spawned name=planning.driving' "${LOG_DIR}/em_daemon.stdout" 2>/dev/null \
-    || grep -q 'em_daemon: spawned name=planning.driving' "${GF_EM_LOG_DIR}/giraffe_modules.log" 2>/dev/null; then
+  if grep -qE 'em_daemon: spawned name=planning\.driving(_plus)?' "${LOG_DIR}/em_daemon.stdout" 2>/dev/null \
+    || grep -qE 'em_daemon: spawned name=planning\.driving(_plus)?' "${GF_EM_LOG_DIR}/giraffe_modules.log" 2>/dev/null; then
     _em_ready=1
     break
   fi

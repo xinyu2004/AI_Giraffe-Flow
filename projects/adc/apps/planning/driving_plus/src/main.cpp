@@ -2,11 +2,13 @@
 #include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/proxy/ego_motion_proxy.hpp"
 #include "gf_gen/proxy/perception_message__out__st_proxy.hpp"
+#include "gf_gen/proxy/freespace_near_proxy.hpp"
 #include "gf_gen/skeleton/trajectory_skeleton.hpp"
 
 #include "gf_app/frame_watch.hpp"
 
 #include "m_plan_tick.hpp"
+#include "fuse_driving_fs.hpp"
 
 #include "gf_octave_planning/plan_cal.hpp"
 
@@ -25,7 +27,7 @@
 
 namespace {
 
-constexpr const char* kProcess = "planning.driving";
+constexpr const char* kProcess = "planning.driving_plus";
 constexpr int kDynCap = 13;
 constexpr float kObjDMaxM = 130.0f;
 
@@ -396,16 +398,18 @@ int main() {
 
   gf_ara::runtime::ProcessSupervisor supervisor;
   if (!supervisor.Start(kProcess)) {
-    std::cerr << "[ERROR] planning.driving: ProcessSupervisor.Start failed\n";
+    std::cerr << "[ERROR] planning.driving_plus: ProcessSupervisor.Start failed\n";
     return EXIT_FAILURE;
   }
 
   gf_gen::Perception_MESSAGE_Out_StProxy perc_sub{};
   gf_gen::EgoMotionProxy ego_sub{};
+  gf_gen::FreespaceNearProxy fs_sub{};
   gf_gen::TrajectorySkeleton traj_pub{};
 
   std::optional<gf_gen::EgoMotion> last_ego;
   std::optional<gf_gen::Perception_MESSAGE_Out_St> last_perc;
+  std::optional<gf_gen::FreespaceNear> last_fs;
   float D_see_prev = 0.0f;
   float T_plan_prev = 0.0f;
   std::uint64_t seq = 0;
@@ -420,6 +424,8 @@ int main() {
   float last_log_thr = 0.0f;
   float last_log_brk = 0.0f;
   float last_log_st = 0.0f;
+  float last_log_fs_fwd = 0.0f;
+  bool last_log_lc = false;
   gf_app::EnsureDiagLogSinks();
   gf_app::FrameWatch rx_ego;
   gf_app::FrameWatch rx_perc;
@@ -434,7 +440,8 @@ int main() {
   std::uint64_t last_perc_ts = 0;
   bool have_planned = false;
 
-  std::cout << "gf-planning-driving: start (v4 m_plan_tick; perc-triggered; ego cached"
+  std::cout << "gf-planning-driving_plus: start (v4 m_plan_tick; fuse FreespaceNear; "
+               "perc-triggered; ego cached"
             << "; stdout=on-change+/" << log_every
             << "; frame_watch=identity+budget perc[" << rx_perc.PolicyHint()
             << "] ego[" << rx_ego.PolicyHint() << "])\n";
@@ -451,6 +458,9 @@ int main() {
     }
     if (auto t = perc_sub.Take(); t && t.Value().has_value()) {
       last_perc = *t.Value();
+    }
+    if (auto t = fs_sub.Take(); t && t.Value().has_value()) {
+      last_fs = *t.Value();
     }
 
     if (!last_perc || !last_ego) {
@@ -470,12 +480,30 @@ int main() {
     const auto t0 = std::chrono::steady_clock::now();
     const PercView view = ExtractPerc(*last_perc);
     last_perc.reset();
+
+    float lead_d = 120.0f;
+    bool has_lead = false;
+    for (int i = 0; i < view.nobj; ++i) {
+      if (view.obj[i].d > 0.5f && view.obj[i].d < lead_d) {
+        lead_d = view.obj[i].d;
+        has_lead = true;
+      }
+    }
+    const float fwd = gf_plan_fs::ForwardClearanceFromLead(has_lead, lead_d, 120.0f);
+    const gf_plan_fs::FsDriving fs_drv =
+        gf_plan_fs::FuseDrivingFs(fwd, last_fs ? &*last_fs : nullptr);
+    // P0: fuse enters D_see via x_end clamp (D_vr). Do not steer on LC stub.
+    float x_end_use = view.lane.x_end;
+    if (view.lane.valid && fs_drv.d_front_m > 0.5f) {
+      x_end_use = std::min(x_end_use, fs_drv.d_front_m);
+    }
+
     const float v_sign_max =
         view.v_sign_max_mps > 0.5f ? view.v_sign_max_mps : 1.0e6f;
     const float v_sign_min = view.v_sign_min_mps;
     const auto tick = oct_gen::m_plan_tick(
         ego.speed_mps, ego.steer_angle_deg, view.lane.valid, view.lane.e_y, view.lane.c0,
-        view.lane.c1, view.lane.c2, view.lane.c3, view.lane.x_end, view.lane.conf,
+        view.lane.c1, view.lane.c2, view.lane.c3, x_end_use, view.lane.conf,
         view.lane.lane_count, view.nobj ? view.obj : nullptr, view.nobj, D_see_prev, T_plan_prev,
         v_sign_max, v_sign_min);
     D_see_prev = tick.D_see;
@@ -483,6 +511,9 @@ int main() {
 
     gf_gen::Trajectory traj{};
     ApplyTick(tick, ego, view, traj);
+    // Intent only (P2 thin): no steer change — gear_shift_second bit0 = LC candidate.
+    traj.gear_shift_second =
+        static_cast<std::uint8_t>(fs_drv.lane_change_candidate ? 1 : 0);
     traj.timestamp_ns = now_ns();
     const auto tick_ms = std::chrono::duration<double, std::milli>(
                              std::chrono::steady_clock::now() - t0)
@@ -501,7 +532,9 @@ int main() {
           FMoved(tick.a_req, last_log_areq, 0.2f) ||
           FMoved(traj.throttle, last_log_thr, 0.02f) ||
           FMoved(traj.brake, last_log_brk, 0.02f) ||
-          FMoved(traj.steer, last_log_st, 0.02f);
+          FMoved(traj.steer, last_log_st, 0.02f) ||
+          FMoved(fs_drv.d_front_m, last_log_fs_fwd, 0.5f) ||
+          (fs_drv.lane_change_candidate != last_log_lc);
       if (log_every <= 1 || changed ||
           (seq % static_cast<std::uint64_t>(log_every) == 0)) {
         std::cout << "[perf][planning] tick_ms=" << tick_ms << " seq=" << seq
@@ -510,7 +543,10 @@ int main() {
                   << " e_y=" << view.lane.e_y << " lh=" << view.lh_n
                   << " lane=" << lane_ok << " dyn=" << view.dyn_raw
                   << " nobj=" << view.nobj << " mode=" << tick.mode
-                  << " D_see=" << tick.D_see << " a_req=" << tick.a_req
+                  << " D_see=" << tick.D_see << " fs_fwd=" << fs_drv.d_front_m
+                  << " x_end=" << x_end_use
+                  << " lc=" << (fs_drv.lane_change_candidate ? 1 : 0)
+                  << " a_req=" << tick.a_req
                   << " thr=" << traj.throttle << " brk=" << traj.brake
                   << " st=" << traj.steer << std::endl;
         last_log_mode = tick.mode;
@@ -523,6 +559,8 @@ int main() {
         last_log_thr = traj.throttle;
         last_log_brk = traj.brake;
         last_log_st = traj.steer;
+        last_log_fs_fwd = fs_drv.d_front_m;
+        last_log_lc = fs_drv.lane_change_candidate;
       }
       ++seq;
     }

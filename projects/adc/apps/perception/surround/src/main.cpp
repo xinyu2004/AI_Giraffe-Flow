@@ -1,8 +1,10 @@
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/skeleton/surround_world_skeleton.hpp"
+#include "gf_gen/skeleton/freespace_near_skeleton.hpp"
 #include "gf_channel/gf_channel.h"
 #include "gf_channel/boundary_pods.h"
+#include "freespace_near.hpp"
 
 #include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"
 
@@ -55,22 +57,19 @@ bool ReadSurroundPod(GfChannel* ch, std::uint64_t* last_seq, gf_gen::SurroundWor
   return true;
 }
 
-void FillSilDemo(gf_gen::SurroundWorld* out) {
-  // Stage P SIL: one rear-side vehicle + one free right slot (CARLA channel later).
-  out->n_obj = 1;
-  out->objects[0].object_id = 1;
-  out->objects[0].object_class = 1;
-  out->objects[0].long_dist_m = -8.0f;
-  out->objects[0].lat_dist_m = -3.5f;
-  out->objects[0].rel_vel_long_mps = 0.0f;
-  out->n_slot = 1;
-  out->slots[0].slot_id = 1;
-  out->slots[0].center_x_m = 6.0f;
-  out->slots[0].center_y_m = -3.2f;
-  out->slots[0].yaw_rad = 0.0f;
-  out->slots[0].length_m = 5.0f;
-  out->slots[0].width_m = 2.4f;
-  out->slots[0].free = 1;
+void PublishWorldAndFs(gf_gen::SurroundWorldSkeleton& world,
+                       gf_gen::FreespaceNearSkeleton& fs_skel,
+                       const gf_gen::SurroundWorld& out) {
+  (void)world.Send(out);
+  gf_surround::ObjSample samples[16]{};
+  const int n = out.n_obj > 16 ? 16 : static_cast<int>(out.n_obj);
+  for (int i = 0; i < n; ++i) {
+    samples[i].long_dist_m = out.objects[i].long_dist_m;
+    samples[i].lat_dist_m = out.objects[i].lat_dist_m;
+  }
+  gf_gen::FreespaceNear fs{};
+  gf_surround::ComputeFreespaceNear(samples, n, out.timestamp_ns, &fs);
+  (void)fs_skel.Send(fs);
 }
 
 }  // namespace
@@ -89,16 +88,13 @@ int main() {
     slot = kSlot;
   }
   GfChannel* ch = gf_channel_open(slot);
-  const bool demo = []() {
-    const char* v = std::getenv("GF_SURROUND_SIL_DEMO");
-    return !v || v[0] != '0';  // default on for stage P
-  }();
 
   gf_gen::SurroundWorldSkeleton world;
+  gf_gen::FreespaceNearSkeleton fs_skel;
   std::uint64_t last_seq = 0;
   std::cout << "gf-perception-surround: slot=" << slot
             << " channel=" << (ch ? "open" : "missing")
-            << " sil_demo=" << (demo ? 1 : 0) << '\n';
+            << " (no SIL invent; publish only on valid pod)\n";
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
@@ -109,20 +105,10 @@ int main() {
       ch = gf_channel_open(slot);
     }
     gf_gen::SurroundWorld out{};
-    out.timestamp_ns = static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count());
-    if (!ReadSurroundPod(ch, &last_seq, &out)) {
-      if (demo) {
-        FillSilDemo(&out);
-        out.timestamp_ns = static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now().time_since_epoch())
-                .count());
-      }
+    // Prefer silence over invented objects/slots.
+    if (ReadSurroundPod(ch, &last_seq, &out)) {
+      PublishWorldAndFs(world, fs_skel, out);
     }
-    (void)world.Send(out);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
   if (ch) {

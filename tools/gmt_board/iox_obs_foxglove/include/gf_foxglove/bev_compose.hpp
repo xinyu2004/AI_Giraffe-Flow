@@ -9,11 +9,17 @@ namespace gf_foxglove {
 
 constexpr float kDWorkM = 120.0f;
 constexpr float kDBevM = 130.0f;
+constexpr float kAdcXMinM = -40.0f;
+constexpr float kAdcXMaxM = 120.0f;
 constexpr int kBevW = 400;
 constexpr int kBevH = 800;
 constexpr float kBevCamBackM = 22.0f;
 constexpr float kBevCamHeightM = 40.0f;
 constexpr float kBevCamLookM = 60.0f;
+// ADC multi-cam: see rear 40 m + front 120 m (ego ~ lower quarter).
+constexpr float kAdcCamBackM = 55.0f;
+constexpr float kAdcCamHeightM = 48.0f;
+constexpr float kAdcCamLookM = 40.0f;
 constexpr float kDashOnM = 6.0f;
 constexpr float kDashGapM = 9.0f;
 constexpr float kDashPeriodM = kDashOnM + kDashGapM;
@@ -22,7 +28,16 @@ constexpr float kSeeFovDeg = 50.0f;
 constexpr int kMaxHostLanes = 2;
 constexpr int kMaxAdjLanes = 4;
 constexpr int kMaxDynObj = 13;
+constexpr int kMaxSurroundObj = 16;
+constexpr int kMaxParkingSlots = 8;
+constexpr int kFsNearSectors = 36;
 constexpr int kMaxTrajPts = 60;
+
+// Single meter-window for paint/camera (SKU). Forward VR / D_see stay on +x.
+struct BevWindow {
+  float x_min = 0.0f;
+  float x_max = kDBevM;
+};
 
 struct Rgb {
   std::uint8_t r, g, b;
@@ -57,6 +72,15 @@ struct BevDynObj {
   float length_m = 4.5f;
   float width_m = 1.8f;
   float heading_rad = 0;
+};
+
+struct BevParkingSlot {
+  float x_m = 0;
+  float y_m = 0;
+  float yaw_rad = 0;
+  float length_m = 5.0f;
+  float width_m = 2.5f;
+  bool free = true;
 };
 
 struct LiveBevState {
@@ -96,10 +120,21 @@ struct LiveBevState {
   float lane_width_m = 3.5f;
   BevDynObj perc_objects[kMaxDynObj];
   int n_obj = 0;
+  BevDynObj surround_objects[kMaxSurroundObj];
+  int n_surround = 0;
+  BevParkingSlot parking_slots[kMaxParkingSlots];
+  int n_slot = 0;
   int cipv_id = 0;
   float lead_dist_m = 0;
   float cipo_x_m = 0;
   float cipo_y_m = 0;
+  // Near-field drivability (SurroundWorld companion). Not FailSafe; not cyan wash.
+  bool has_fs_near = false;
+  float fs_d_occ_m[kFsNearSectors]{};
+  float fs_d_front_m = 0;
+  float fs_d_rear_m = 0;
+  float fs_d_left_m = 0;
+  float fs_d_right_m = 0;
 };
 
 bool dash_lit_m(float s_m, float scroll_m = 0.0f);
@@ -110,6 +145,10 @@ float driving_see_m(const LiveBevState& st, float host_vr_m);
 void advance_odom(LiveBevState& st, std::uint64_t t_ns, float speed_mps);
 
 // Portrait 400×800 PNG. Gold paint for SIL gf_foxglove_ws and Host gf_host_bev_ws.
+// GF_BEV_SKU=adc → x∈[-40,+120]; default/afc → forward-biased AFC frame.
 std::string render_ego_bev_png(const LiveBevState& st, int width = kBevW, int height = kBevH);
+
+bool bev_sku_is_adc();
+BevWindow bev_window();
 
 }  // namespace gf_foxglove

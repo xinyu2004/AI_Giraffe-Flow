@@ -1,6 +1,6 @@
 """Wall-clock stages for CARLA host fps diagnosis (iGPU-friendly).
 
-Enable: GF_PERF=1 (default). Off: GF_PERF=0.
+Enable: GF_PERF=1. Off: GF_PERF=0 (default — quieter host logs).
 Period: GF_PERF_PERIOD_S (default 2).
 
 Read a line as: hz = how often THIS process stepped; *ms = mean stage time.
@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 
 def perf_enabled() -> bool:
-    v = (os.environ.get("GF_PERF") or "1").strip().lower()
+    v = (os.environ.get("GF_PERF") or "0").strip().lower()
     return v not in ("0", "off", "false", "no")
 
 

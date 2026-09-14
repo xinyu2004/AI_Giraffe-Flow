@@ -25,7 +25,7 @@ EM="${BUILD}/middleware/exec/gf_em_daemon"
 for bin in "${ROUDI}" "${EM}" \
   "${BUILD}/apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway" \
   "${BUILD}/apps/perception/fcm/gf_perception_fcm" \
-  "${BUILD}/apps/planning/driving/gf_planning_driving"
+  "${BUILD}/apps/planning/driving_plus/gf_planning_driving_plus"
 do
   if [[ ! -x "${bin}" ]]; then
     echo "${TAG} missing: ${bin}" >&2
@@ -108,8 +108,8 @@ assert_log() {
   fi
 }
 
-assert_log "${GF_EM_LOG_DIR}/em_daemon.stdout" "em_daemon: spawned name=planning.driving" "spawn planning"
-assert_log "${GF_EM_LOG_DIR}/em_daemon.stdout" "em_daemon: relaunch name=planning.driving|restart#" "relaunch planning"
+assert_log "${GF_EM_LOG_DIR}/em_daemon.stdout" "em_daemon: spawned name=planning.driving_plus" "spawn planning"
+assert_log "${GF_EM_LOG_DIR}/em_daemon.stdout" "em_daemon: relaunch name=planning.driving_plus|restart#" "relaunch planning"
 assert_log "${GF_EM_LOG_DIR}/planning_driving.log" "em os_restart_exit|AliveMissed|DeadlineMissed" "planning fault→os restart"
 assert_log "${GF_EM_LOG_DIR}/adapter_vehicle_can_gateway.log" "Trajectory#" "gateway got traj"
 

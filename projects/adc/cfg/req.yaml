@@ -79,7 +79,7 @@ apps:
 - adapters/vehicle_can_gateway
 - perception/fcm
 - perception/surround
-- planning/driving
+- planning/driving_plus
 - planning/parking
 - mode/drive_park
 - frame_ingest
@@ -115,6 +115,8 @@ publish_policy:
     VehicleMode:
       trigger: on_change
     SurroundWorld:
+      trigger: on_change
+    FreespaceNear:
       trigger: on_change
     ParkingTrajectory:
       trigger: on_change

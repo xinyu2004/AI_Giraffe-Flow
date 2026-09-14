@@ -340,7 +340,11 @@ void apply_dyn(LiveBevState& st, const char* dyn_b, const char* dyn_e) {
     get_number(ob, oe, "m_OBJ_Width", &wid);
     get_number(ob, oe, "m_OBJ_Heading", &hdg);
     const int id = static_cast<int>(oid);
-    if (id > 0 && dist > 0.5 && dist <= kDBevM) {
+    const float dist_f = static_cast<float>(dist);
+    const BevWindow w = bev_window();
+    const bool in_win = dist_f >= w.x_min && dist_f <= w.x_max &&
+                        (bev_sku_is_adc() ? std::fabs(dist_f) >= 0.3f : dist_f > 0.5f);
+    if (id > 0 && in_win) {
       BevDynObj o;
       o.obj_id = id;
       o.x_m = static_cast<float>(dist);

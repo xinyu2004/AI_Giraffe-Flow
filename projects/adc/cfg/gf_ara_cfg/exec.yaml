@@ -46,11 +46,12 @@ processes:
     depends_on:
       - adapter.vehicle_can_gateway
     execution_client: true
-  - name: planning.driving
+  - name: planning.driving_plus
     function_group: DriveParkFG
     active_in: [DrivingActive]
     depends_on:
       - perception.fcm
+      - perception.surround
       - mode.drive_park
     execution_client: true
   - name: planning.parking

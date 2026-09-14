@@ -24,7 +24,7 @@
 #   GF_WS_PORT       default 8765
 #   GF_LIVE_PORT     default 8766 (GMT GUI live bridge)
 #   GF_OBS_OUT       GMT Record / MCAP root (default build-sil/observability — never under runtime/)
-#   GF_SYNTH_BEV       default 1 — Foxglove live bridge composes BEV from EgoMotion/Trajectory
+#   GF_SYNTH_BEV       default 0 in binary; run_sil sets 1 — compose BEV only from live samples (no empty invent)
 #   GF_SKIP_COMPILE=1     skip compile_sil (assume already built)
 #   GF_FORCE_COMPILE=1    wipe runtime + cmake sentinel, then compile_sil (run only)
 #   GF_INJECT_SESSION  continuous 必填；playhead 可选（GMT stream，可不设）
@@ -75,6 +75,9 @@ BUILD="${GF_BUILD_DIR:-${BUILD_SIL}}"
 RUNTIME="${GF_RUNTIME_DIR:-${BUILD}/runtime}"
 export GF_RUNTIME_DIR="${RUNTIME}"
 export GF_PROJECT_DIR="${PROJECT_DIR}"
+export GF_BEV_SKU="${GF_BEV_SKU:-adc}"
+# Compose BEV from live iceoryx only (binary default off; empty state does not publish).
+export GF_SYNTH_BEV="${GF_SYNTH_BEV:-1}"
 HOST="${GF_WS_HOST:-0.0.0.0}"
 PORT="${GF_WS_PORT:-8765}"
 # Product path: hpp-only (no default GF_ARA_CFG_DIR). Smoke may export GF_ARA_CFG_DIR explicitly.
@@ -382,9 +385,9 @@ PROC_TO_APP = {
     "perception.fcm": "fcm",
     "fcm": "fcm",
     "gf_perception_fcm": "fcm",
-    "planning.driving": "planning",
+    "planning.driving_plus": "planning",
     "planning": "planning",
-    "gf_planning_driving": "planning",
+    "gf_planning_driving_plus": "planning",
 }
 # inject MVP can publish these short names
 INJECTABLE = {"EgoMotion"}
@@ -483,7 +486,7 @@ fi
 ROUDI="${RUNTIME}/bin/iox-roudi"
 GW="${RUNTIME}/bin/gf_vehicle_can_gateway"
 FCM="${RUNTIME}/bin/gf_perception_fcm"
-PLAN="${RUNTIME}/bin/gf_planning_driving"
+PLAN="${RUNTIME}/bin/gf_planning_driving_plus"
 TAP="${RUNTIME}/bin/gf_iox_obs_tap"
 FOX="${RUNTIME}/bin/gf_foxglove_ws"
 INJ="${RUNTIME}/bin/gf_iox_obs_inject"
@@ -652,7 +655,7 @@ fi
 # Inherit console: EM + children stdout/stderr on this TTY; structured logs → DLT.
 "${EM_BIN}" "${_EM_ARGS[@]}" &
 EM_PID=$!
-# Wait until gf_planning_driving is up (or timeout)
+# Wait until gf_planning_driving_plus is up (or timeout)
 _em_ready=0
 for _i in $(seq 1 50); do
   if ! kill -0 "${EM_PID}" 2>/dev/null; then
@@ -667,7 +670,7 @@ for _i in $(seq 1 50); do
   sleep 0.2
 done
 if [[ "${_em_ready}" != "1" ]]; then
-  host_info "EM spawn timeout (gf_planning_driving not seen)"
+  host_info "EM spawn timeout (gf_planning_driving_plus not seen)"
   echo "${TAG} EM spawn timeout; verify via console/DLT" >&2
   exit 1
 fi

@@ -5,13 +5,35 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace gf_foxglove {
+
+bool bev_sku_is_adc() {
+  if (const char* v = std::getenv("GF_BEV_SKU")) {
+    if (std::strcmp(v, "adc") == 0 || std::strcmp(v, "ADC") == 0) {
+      return true;
+    }
+    if (std::strcmp(v, "afc") == 0 || std::strcmp(v, "AFC") == 0) {
+      return false;
+    }
+  }
+  if (const char* p = std::getenv("GF_PROJECT_DIR")) {
+    return std::strstr(p, "/adc") != nullptr || std::strstr(p, "\\adc") != nullptr;
+  }
+  return false;
+}
+
+BevWindow bev_window() {
+  if (bev_sku_is_adc()) return {kAdcXMinM, kAdcXMaxM};
+  return {0.0f, kDBevM};
+}
+
 namespace {
 
 using Buf = std::vector<std::uint8_t>;
@@ -53,6 +75,51 @@ void draw_line(Buf& buf, int w, int h, int x0, int y0, int x1, int y1, Rgb rgb, 
       err += dx;
       y += sy;
     }
+  }
+}
+
+void blend_pixel(Buf& buf, int w, int h, int x, int y, Rgb rgb, float a) {
+  if (x < 0 || y < 0 || x >= w || y >= h) return;
+  const float b = 1.0f - a;
+  const std::size_t i = (static_cast<std::size_t>(y) * w + x) * 3;
+  buf[i] = static_cast<std::uint8_t>(buf[i] * b + rgb.r * a);
+  buf[i + 1] = static_cast<std::uint8_t>(buf[i + 1] * b + rgb.g * a);
+  buf[i + 2] = static_cast<std::uint8_t>(buf[i + 2] * b + rgb.b * a);
+}
+
+void fill_convex_poly_blend(Buf& buf, int w, int h, const std::vector<std::pair<int, int>>& pts,
+                            Rgb fill, float alpha, int y_clip0) {
+  const int n = static_cast<int>(pts.size());
+  if (n < 3 || alpha <= 0.01f) return;
+  std::vector<std::vector<float>> xs_at(h);
+  for (int i = 0; i < n; ++i) {
+    int x0 = pts[i].first, y0 = pts[i].second;
+    int x1 = pts[(i + 1) % n].first, y1 = pts[(i + 1) % n].second;
+    if (y0 == y1) continue;
+    if (y0 > y1) {
+      std::swap(x0, x1);
+      std::swap(y0, y1);
+    }
+    const int y_lo = std::max(y_clip0, y0);
+    const int y_hi = std::min(h - 1, y1);
+    if (y_hi < y_lo) continue;
+    const float dy = static_cast<float>(y1 - y0);
+    for (int y = y_lo; y <= y_hi; ++y) {
+      float t = (static_cast<float>(y) - y0) / dy;
+      t = std::max(0.0f, std::min(1.0f, t));
+      xs_at[y].push_back(x0 + t * (x1 - x0));
+    }
+  }
+  for (int y = 0; y < h; ++y) {
+    if (xs_at[y].empty()) continue;
+    float mn = xs_at[y][0], mx = xs_at[y][0];
+    for (float x : xs_at[y]) {
+      mn = std::min(mn, x);
+      mx = std::max(mx, x);
+    }
+    const int xa = std::max(0, static_cast<int>(std::floor(mn)));
+    const int xb = std::min(w - 1, static_cast<int>(std::ceil(mx)));
+    for (int x = xa; x <= xb; ++x) blend_pixel(buf, w, h, x, y, fill, alpha);
   }
 }
 
@@ -142,8 +209,10 @@ struct BevCam {
 };
 
 void cam_basis(Vec3* cpos, Vec3* right, Vec3* up, Vec3* fwd) {
-  *cpos = {-kBevCamBackM, 0.0f, kBevCamHeightM};
-  const Vec3 tgt{kBevCamLookM, 0.0f, 0.0f};
+  const bool adc = bev_sku_is_adc();
+  *cpos = {adc ? -kAdcCamBackM : -kBevCamBackM, 0.0f,
+           adc ? kAdcCamHeightM : kBevCamHeightM};
+  const Vec3 tgt{adc ? kAdcCamLookM : kBevCamLookM, 0.0f, 0.0f};
   *fwd = vnorm(vsub(tgt, *cpos));
   *right = vnorm(vcross(*fwd, {0, 0, 1}));
   if (std::fabs(vdot(*right, *right)) < 1e-8f) *right = {0, -1, 0};
@@ -151,9 +220,13 @@ void cam_basis(Vec3* cpos, Vec3* right, Vec3* up, Vec3* fwd) {
 }
 
 BevCam make_bev_cam(int width, int height) {
+  const bool adc = bev_sku_is_adc();
   const float ox = static_cast<float>(width) * 0.5f;
-  const float oy_ego = static_cast<float>(height) - 44.0f;
-  const float y_far = 32.0f;
+  // AFC: ego near bottom; ADC: ~lower quarter (see rear 40 m).
+  const float oy_ego =
+      adc ? static_cast<float>(height) * 0.75f : static_cast<float>(height) - 44.0f;
+  const float y_far = adc ? 28.0f : 32.0f;
+  const float x_far = adc ? kAdcXMaxM : kDBevM;
   Vec3 cpos, right, up, fwd;
   cam_basis(&cpos, &right, &up, &fwd);
   auto yz = [&](float x, float y, float z) {
@@ -161,7 +234,7 @@ BevCam make_bev_cam(int width, int height) {
     return std::pair<float, float>{vdot(rel, up), std::max(0.85f, vdot(rel, fwd))};
   };
   const auto a0p = yz(0, 0, 0);
-  const auto a1p = yz(kDBevM, 0, 0);
+  const auto a1p = yz(x_far, 0, 0);
   const float a0 = a0p.first / a0p.second;
   const float a1 = a1p.first / a1p.second;
   const float den = a0 - a1;
@@ -486,8 +559,11 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     return side == 'l' ? half : -half;
   };
 
+  const BevWindow win = bev_window();
   std::vector<float> y_road_samples;
-  for (float xe_s : {0.0f, 2.0f, 5.0f}) {
+  const float x_span_samples[] = {win.x_min, win.x_min * 0.5f, 0.0f, 2.0f, 5.0f, 20.0f};
+  for (float xe_s : x_span_samples) {
+    if (xe_s < win.x_min - 1e-3f || xe_s > win.x_max + 1e-3f) continue;
     for (char side : {'l', 'r'}) {
       y_road_samples.push_back(ego_to_road(xe_s, host_y_ego(xe_s, side)).second);
     }
@@ -504,13 +580,14 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   const float y_mid = 0.5f * (y_span_min + y_span_max);
   const float scroll = std::fmod(st.odom_m, kDashPeriodM);
 
-  float host_vr = kDBevM;
+  // Forward grey mark extent = VR_End (lane quality). Frame may extend rearward of ego.
+  float host_vr = win.x_max;
   if (st.n_host > 0) {
-    host_vr = kDBevM;
+    host_vr = win.x_max;
     for (int i = 0; i < st.n_host; ++i) host_vr = std::min(host_vr, st.host_lanes[i].x1);
-    host_vr = std::min(kDBevM, host_vr);
   }
-  const float x_draw = std::max(0.0f, host_vr);
+  host_vr = std::max(0.0f, std::min(win.x_max, host_vr));
+  const float x_fwd = host_vr;
   const float tick_stub_m = 0.55f;
 
   auto e2p_road = [&](float xr, float yr, float zr = 0.0f) {
@@ -521,9 +598,11 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     return e2p_road(rr.first, rr.second, zr);
   };
 
+  // Lane geometry over full frame [x_min, x_fwd]; extrapolate polys behind ego.
+  // Driving cyan / D_see stay on +x only (see opening / see-cap below).
   auto draw_poly = [&](auto&& poly, Rgb color, int thick, bool dashed) {
-    const float x_hi = std::min(poly.x1, x_draw);
-    const float x_lo = std::max(0.0f, poly.x0);
+    const float x_hi = std::min(poly.x1, x_fwd);
+    const float x_lo = win.x_min;
     if (x_hi <= x_lo + 0.25f) return;
     int px = 0, py = 0;
     bool have_prev = false, prev_lit = false;
@@ -531,10 +610,10 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     const int steps = std::max(48, static_cast<int>(span * 2) + 1);
     for (int i = 0; i <= steps; ++i) {
       const float xe = x_lo + span * static_cast<float>(i) / static_cast<float>(steps);
-      if (xe > poly.x1 + 1e-3f) break;
+      if (xe > x_hi + 1e-3f) break;
       const float ye = poly.y_at(xe);
       const auto rr = ego_to_road(xe, ye);
-      if (rr.first < -2.0f || rr.first > x_draw + 5.0f) {
+      if (rr.first < win.x_min - 2.0f || rr.first > x_fwd + 5.0f) {
         have_prev = false;
         continue;
       }
@@ -568,21 +647,46 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   for (int i = 0; i < st.n_adj; ++i)
     draw_poly(st.adj_lanes[i], la_c, 2, st.adj_lanes[i].is_dashed());
 
-  if (x_draw > 0.5f && st.n_host > 0) {
+  // Near-field FS outline (sectors only). No axis stubs to 40 m — those look like FOV fakes.
+  if (st.has_fs_near) {
+    const Rgb fs_c{90, 140, 150};
+    int px = 0, py = 0;
+    bool have = false;
+    for (int i = 0; i <= kFsNearSectors; ++i) {
+      const int sec = i % kFsNearSectors;
+      const float ang = (static_cast<float>(sec) + 0.5f) * (6.2831853f / kFsNearSectors);
+      float r = st.fs_d_occ_m[sec];
+      if (r < 0.5f) r = 0.5f;
+      if (r > 40.0f) r = 40.0f;
+      const float xe = r * std::cos(ang);
+      const float ye = r * std::sin(ang);
+      if (xe < win.x_min - 1.0f || xe > win.x_max + 1.0f) {
+        have = false;
+        continue;
+      }
+      const auto pt = e2p_ego(xe, ye);
+      if (have) draw_line(buf, width, height, px, py, pt.first, pt.second, fs_c, 2);
+      px = pt.first;
+      py = pt.second;
+      have = true;
+    }
+  }
+
+  if (x_fwd > win.x_min + 0.5f && st.n_host > 0) {
     const float y_host_mid_e = 0.5f * (host_y_ego(0.0f, 'l') + host_y_ego(0.0f, 'r'));
     auto pt_at_road_x = [&](float xr) {
       const float xe = xr * c_psi;
       const float ye = 0.5f * (host_y_ego(xe, 'l') + host_y_ego(xe, 'r'));
       return e2p_ego(xe, ye);
     };
-    const int k0 = static_cast<int>(std::floor((-kDashPeriodM - scroll) / kDashPeriodM));
-    const int k1 = static_cast<int>(std::ceil((x_draw + kDashPeriodM - scroll) / kDashPeriodM));
+    const int k0 = static_cast<int>(std::floor((win.x_min - kDashPeriodM - scroll) / kDashPeriodM));
+    const int k1 = static_cast<int>(std::ceil((x_fwd + kDashPeriodM - scroll) / kDashPeriodM));
     for (int k = k0; k <= k1; ++k) {
       const float x0 = static_cast<float>(k) * kDashPeriodM - scroll;
       const float x1 = x0 + kDashOnM;
-      if (x1 < 0.0f || x0 > x_draw) continue;
-      const auto p0 = pt_at_road_x(std::max(0.0f, x0));
-      const auto p1 = pt_at_road_x(std::min(x_draw, x1));
+      if (x1 < win.x_min || x0 > x_fwd) continue;
+      const auto p0 = pt_at_road_x(std::max(win.x_min, x0));
+      const auto p1 = pt_at_road_x(std::min(x_fwd, x1));
       draw_line(buf, width, height, p0.first, p0.second, p1.first, p1.second, dash_c, 2);
     }
 
@@ -595,11 +699,10 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
       }
       std::vector<float> ys;
       for (int i = 0; i < st.n_host; ++i) {
-        ys.push_back(
-            ego_to_road(xe, st.host_lanes[i].y_at(std::min(xe, st.host_lanes[i].x1))).second);
+        ys.push_back(ego_to_road(xe, st.host_lanes[i].y_at(xe)).second);
       }
       for (int i = 0; i < st.n_adj; ++i) {
-        ys.push_back(ego_to_road(xe, st.adj_lanes[i].y_at(std::min(xe, st.adj_lanes[i].x1))).second);
+        ys.push_back(ego_to_road(xe, st.adj_lanes[i].y_at(xe)).second);
       }
       if (ys.empty()) {
         ys.push_back(ego_to_road(xe, host_y_ego(xe, 'l')).second);
@@ -611,9 +714,12 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     const auto y0s = corridor_yr(0.0f);
     const float yr_host = ego_to_road(0.0f, y_host_mid_e).second;
     const bool use_left_outer = std::fabs(y0s.second - yr_host) <= std::fabs(y0s.first - yr_host);
-    for (int k = 0; k <= static_cast<int>(x_draw) / 20; ++k) {
+    const int k_tick0 = static_cast<int>(std::ceil(win.x_min / 20.0f));
+    const int k_tick1 = static_cast<int>(std::floor(x_fwd / 20.0f));
+    for (int k = k_tick0; k <= k_tick1; ++k) {
+      if (k == 0) continue;
       const float xr = static_cast<float>(k * 20);
-      if (xr <= 0.0f || xr > x_draw) continue;
+      if (xr < win.x_min || xr > x_fwd) continue;
       const auto ys = corridor_yr(xr);
       float y_edge, y_tip;
       if (use_left_outer) {
@@ -640,8 +746,8 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     }
     const Rgb fallback_c = traj_color_for_lon(st);
     const int fallback_th = traj_thickness_for_lon(st);
-    // Path only inside driving see (Trajectory D_see when ingested).
-    const float x_hi = opening > 0.5f ? opening : (occupy_open > 0.5f ? occupy_open : x_draw);
+    // Path only inside driving see (Trajectory D_see when ingested). Forward only.
+    const float x_hi = opening > 0.5f ? opening : (occupy_open > 0.5f ? occupy_open : x_fwd);
     for (int i = 0; i < nseg; ++i) {
       float x0 = st.traj_x[i], y0 = st.traj_y[i];
       float x1 = st.traj_x[i + 1], y1 = st.traj_y[i + 1];
@@ -707,12 +813,25 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   for (int i = 0; i < n_paint; ++i) {
     const auto& obj = st.perc_objects[i];
     const float xr = ego_to_road(obj.x_m, obj.y_m).first;
-    if (obj.x_m < -2.0f || xr > kDBevM + 5.0f) continue;
+    if (obj.x_m < win.x_min - 1.0f || xr > win.x_max + 5.0f) continue;
     Rgb fill = color_for_obj_id(obj.obj_id);
     if (obj.obj_class == 5) fill = {220, 160, 80};
     const Rgb* ol = obj.is_cipv ? &cipv_outline : nullptr;
     paint_box(obj.x_m, obj.y_m, obj.length_m, obj.width_m, obj.heading_rad, fill, ol,
               obj_height_m(obj.obj_class));
+  }
+  for (int i = 0; i < st.n_surround; ++i) {
+    const auto& obj = st.surround_objects[i];
+    if (obj.x_m < win.x_min - 1.0f || obj.x_m > win.x_max + 5.0f) continue;
+    Rgb fill = color_for_obj_id(obj.obj_id ? obj.obj_id : 40 + i);
+    paint_box(obj.x_m, obj.y_m, obj.length_m, obj.width_m, obj.heading_rad, fill, nullptr,
+              obj_height_m(obj.obj_class));
+  }
+  for (int i = 0; i < st.n_slot; ++i) {
+    const auto& sl = st.parking_slots[i];
+    if (sl.x_m < win.x_min - 2.0f || sl.x_m > win.x_max + 2.0f) continue;
+    const Rgb slot_c = sl.free ? Rgb{70, 120, 90} : Rgb{110, 70, 70};
+    paint_box(sl.x_m, sl.y_m, sl.length_m, sl.width_m, sl.yaw_rad, slot_c, nullptr, 0.15f);
   }
   if (n_paint == 0 && (st.has_perc_lead || st.lead_dist_m > 0.5f)) {
     paint_box(st.cipo_x_m > 0.5f ? st.cipo_x_m : st.lead_dist_m, st.cipo_y_m, 4.5f, 1.8f, 0.0f,
@@ -720,6 +839,23 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   }
 
   paint_box(0.0f, 0.0f, 4.5f, 1.8f, 0.0f, ego_c, nullptr, 1.5f);
+
+  // Cyan wash: host lane corridor from ego to D_see (forward only). Not FOV cone.
+  if (opening > 1.0f && st.n_host >= 1) {
+    std::vector<std::pair<int, int>> wash;
+    const int steps = std::max(8, static_cast<int>(opening / 2.0f) + 1);
+    for (int i = 0; i <= steps; ++i) {
+      const float xe = opening * static_cast<float>(i) / static_cast<float>(steps);
+      const auto p = e2p_ego(xe, host_y_ego(xe, 'l'));
+      wash.push_back(p);
+    }
+    for (int i = steps; i >= 0; --i) {
+      const float xe = opening * static_cast<float>(i) / static_cast<float>(steps);
+      const auto p = e2p_ego(xe, host_y_ego(xe, 'r'));
+      wash.push_back(p);
+    }
+    fill_convex_poly_blend(buf, width, height, wash, {60, 200, 210}, 0.28f, kHudH);
+  }
 
   // Solid see-cap bar across host lane at driving D (cyan). Not a FOV cone.
   if (opening > 1.0f && st.n_host >= 1) {
@@ -772,6 +908,21 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     fill_circle(buf, width, height, lamp_cx, lamp_cy, lamp_r, light_c, false);
   }
   blit_text(buf, width, height, lamp_cx + lamp_r + 6, 10, light, light_c, kHudScale);
+
+  // Center HUD: D_see + LC intent (visible = planning同源).
+  char mid[48];
+  if (opening > 0.5f) {
+    if (st.allow_lc) {
+      std::snprintf(mid, sizeof(mid), "D%.0f LC", static_cast<double>(opening));
+    } else {
+      std::snprintf(mid, sizeof(mid), "D%.0f", static_cast<double>(opening));
+    }
+  } else {
+    std::snprintf(mid, sizeof(mid), "D--");
+  }
+  const Rgb mid_c = st.allow_lc ? Rgb{90, 210, 180} : Rgb{60, 200, 210};
+  const int mid_w = static_cast<int>(std::strlen(mid)) * ((5 + 1) * kHudScale);
+  blit_text(buf, width, height, std::max(8, (width - mid_w) / 2), 10, mid, mid_c, kHudScale);
 
   char right[64];
   int lim_hi = -1;

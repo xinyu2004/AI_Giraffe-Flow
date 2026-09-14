@@ -12,7 +12,7 @@ modules:
   package: customer/fcm-perception
 - id: perception.surround
   hpp: projects/adc/interfaces/perception_surround/io_types.hpp
-- id: planning.driving
+- id: planning.driving_plus
   hpp: projects/adc/interfaces/planning_driving/io_types.hpp
   package: customer/planning-driving
 - id: planning.parking
@@ -47,17 +47,17 @@ deployments:
   compute_domain: ap_linux
   provides:
   - services.semantic.SurroundWorld
+  - services.semantic.FreespaceNear
   requires:
   - services.semantic.EgoMotion
-- process: planning.driving
+- process: planning.driving_plus
   compute_domain: ap_linux
   provides:
   - services.semantic.Trajectory
   requires:
   - services.semantic.EgoMotion
-  - services.semantic.VehicleMode
-  - services.semantic.SurroundWorld
   - services.semantic.Perception_MESSAGE_Out_St
+  - services.semantic.FreespaceNear
 - process: planning.parking
   compute_domain: ap_linux
   provides:
@@ -104,16 +104,16 @@ bindings:
   outputs:
   - service: semantic.SurroundWorld
     type: SurroundWorld
-- module: planning.driving
+  - service: semantic.FreespaceNear
+    type: FreespaceNear
+- module: planning.driving_plus
   inputs:
   - service: semantic.Perception_MESSAGE_Out_St
     type: Perception_MESSAGE_Out_St
   - service: semantic.EgoMotion
     type: EgoMotion
-  - service: semantic.VehicleMode
-    type: VehicleMode
-  - service: semantic.SurroundWorld
-    type: SurroundWorld
+  - service: semantic.FreespaceNear
+    type: FreespaceNear
   outputs:
   - service: semantic.Trajectory
     type: Trajectory
@@ -121,6 +121,8 @@ bindings:
   inputs:
   - service: semantic.SurroundWorld
     type: SurroundWorld
+  - service: semantic.FreespaceNear
+    type: FreespaceNear
   - service: semantic.EgoMotion
     type: EgoMotion
   - service: semantic.VehicleMode
@@ -144,10 +146,10 @@ dataflows:
   to: perception.fcm
 - from: perception.fcm
   service: services.semantic.Perception_MESSAGE_Out_St
-  to: planning.driving
+  to: planning.driving_plus
 - from: adapter.vehicle_can_gateway
   service: services.semantic.EgoMotion
-  to: planning.driving
+  to: planning.driving_plus
 - from: adapter.vehicle_can_gateway
   service: services.semantic.EgoMotion
   to: mode.drive_park
@@ -162,17 +164,17 @@ dataflows:
   to: adapter.vehicle_can_gateway
 - from: mode.drive_park
   service: services.semantic.VehicleMode
-  to: planning.driving
-- from: mode.drive_park
-  service: services.semantic.VehicleMode
+  to: planning.parking
+- from: perception.surround
+  service: services.semantic.FreespaceNear
+  to: planning.driving_plus
+- from: perception.surround
+  service: services.semantic.FreespaceNear
   to: planning.parking
 - from: perception.surround
   service: services.semantic.SurroundWorld
-  to: planning.driving
-- from: perception.surround
-  service: services.semantic.SurroundWorld
   to: planning.parking
-- from: planning.driving
+- from: planning.driving_plus
   service: services.semantic.Trajectory
   to: adapter.vehicle_can_gateway
 - from: planning.parking
@@ -273,33 +275,34 @@ canvas:
         in:gf.channel.rl: top
         in:gf.channel.rr: top
         out:SurroundWorld: bottom
+        out:FreespaceNear: bottom
       port_slot_order:
         left:
         - in:EgoMotion
         bottom:
         - out:SurroundWorld
+        - out:FreespaceNear
         top:
         - in:gf.channel.fl
         - in:gf.channel.fr
         - in:gf.channel.rl
         - in:gf.channel.rr
-    planning.driving:
+    planning.driving_plus:
       x: 12263.1
       y: 66.7
       out_side: right
       in_side: left
       port_sides:
         in:Perception_MESSAGE_Out_St: top
-        in:SurroundWorld: top
+        in:FreespaceNear: top
         out:Trajectory: bottom
       port_slot_order:
         left:
         - in:EgoMotion
-        - in:VehicleMode
         bottom:
         - out:Trajectory
         top:
-        - in:SurroundWorld
+        - in:FreespaceNear
         - in:Perception_MESSAGE_Out_St
     planning.parking:
       x: 11878.3

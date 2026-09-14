@@ -1,8 +1,13 @@
-"""Pygame scenario window: toggle scene chase ↔ windshield.
+"""Pygame scenario window: toggle chase modes.
 
 Lab HMI only. Product camera stays on carla_bridge — view mode never moves camera.
 
-ChaseCam (carla.env): 1=windshield (default), 2=scene.
+ChaseCam (carla.env):
+  1 = windshield (default)
+  2 = scene (short rear gap + longer forward; not −40 m 1:1 with BEV)
+  3 = overhead (parking BEV-like)
+
+GF_CHASE_GHOST_OCCLUDERS: Cam2/3 hide Bridge/Roads blocking ego (pose fixed).
 """
 
 from __future__ import annotations
@@ -12,11 +17,18 @@ import os
 from typing import Any, Callable, Optional
 
 from _instrument import ClusterState, draw_cluster
-from _camera_mount import CameraMount, load_camera_mount, scene_chase_pose
+from _camera_mount import (
+    CameraMount,
+    load_camera_mount,
+    overhead_chase_pose,
+    scene_chase_pose,
+)
+from _chase_ghost import ChaseGhostOccluders
 from _perf import PerfAgg
 
 MODE_SCENE = "2"
 MODE_WINDSHIELD = "1"
+MODE_OVERHEAD = "3"
 
 
 def scenario_view_wanted(snap: Any = None) -> bool:
@@ -28,7 +40,7 @@ def scenario_view_wanted(snap: Any = None) -> bool:
 
 
 def resolve_chase_cam_mode(raw: Optional[str] = None) -> str:
-    """ChaseCam: 1=windshield (default), 2=scene. Pass raw from Snapshot."""
+    """ChaseCam: 1=windshield, 2=scene, 3=overhead. Pass raw from Snapshot."""
     if raw is None:
         raw = os.environ.get("ChaseCam") or "1"
     v = str(raw).strip().lower()
@@ -36,6 +48,8 @@ def resolve_chase_cam_mode(raw: Optional[str] = None) -> str:
         return MODE_WINDSHIELD
     if v in ("2", "scene", "chase", MODE_SCENE):
         return MODE_SCENE
+    if v in ("3", "overhead", "bev", "parking", MODE_OVERHEAD):
+        return MODE_OVERHEAD
     return MODE_WINDSHIELD
 
 
@@ -67,7 +81,11 @@ class ScenarioView:
         mode_src = initial_mode if initial_mode is not None else chase_cam
         mode = resolve_chase_cam_mode(mode_src)
         self._mode = mode
-        self._surfaces: dict[str, Any] = {MODE_SCENE: None, MODE_WINDSHIELD: None}
+        self._surfaces: dict[str, Any] = {
+            MODE_SCENE: None,
+            MODE_WINDSHIELD: None,
+            MODE_OVERHEAD: None,
+        }
         self._hud_lines: list[str] = []
         self._cluster: Optional[ClusterState] = None
         self._cameras: dict[str, Any] = {}
@@ -91,11 +109,12 @@ class ScenarioView:
         }
         self._clock = pygame.time.Clock()
         self._perf = PerfAgg("pygame")
+        self._ghost = ChaseGhostOccluders(world, carla)
 
         self._ensure_cam(self._mode)
         self._sync_spectator()
         print(
-            f"[view] pygame ChaseCam mode={self._mode} (1 cam, V spawns the other) "
+            f"[view] pygame ChaseCam mode={self._mode} (V cycles 1/2/3) "
             f"mount_ref={self._mount.describe()} (camera owned by bridge)",
             flush=True,
         )
@@ -106,6 +125,17 @@ class ScenarioView:
         carla = self._carla
         if mode == MODE_SCENE:
             cx, cz, cpitch, cyaw, cfov = scene_chase_pose()
+            self._cameras[mode] = self._spawn_cam(
+                fov=cfov,
+                transform=carla.Transform(
+                    carla.Location(x=cx, z=cz),
+                    carla.Rotation(pitch=cpitch, yaw=cyaw),
+                ),
+                mode=mode,
+            )
+            return
+        if mode == MODE_OVERHEAD:
+            cx, cz, cpitch, cyaw, cfov = overhead_chase_pose()
             self._cameras[mode] = self._spawn_cam(
                 fov=cfov,
                 transform=carla.Transform(
@@ -171,8 +201,14 @@ class ScenarioView:
             except Exception:  # noqa: BLE001
                 pass
         self._cameras.clear()
-        self._surfaces = {MODE_SCENE: None, MODE_WINDSHIELD: None}
+        self._surfaces = {
+            MODE_SCENE: None,
+            MODE_WINDSHIELD: None,
+            MODE_OVERHEAD: None,
+        }
         self._vehicle = vehicle
+        # Ghost catalog is process-once; do not restore_all on case retarget
+        # (T_clear fades old ids — avoids flash + catalog rebuild stutter).
         self._ensure_cam(self._mode)
         self._sync_spectator()
         print(
@@ -188,9 +224,16 @@ class ScenarioView:
         return self._mount
 
     def toggle_mode(self) -> str:
-        nxt = MODE_WINDSHIELD if self._mode == MODE_SCENE else MODE_SCENE
+        order = (MODE_WINDSHIELD, MODE_SCENE, MODE_OVERHEAD)
+        try:
+            i = order.index(self._mode)
+        except ValueError:
+            i = 0
+        nxt = order[(i + 1) % len(order)]
         self._ensure_cam(nxt)
         self._mode = nxt
+        if self._mode == MODE_WINDSHIELD:
+            self._ghost.restore_all()
         self._sync_spectator()
         print(f"[view] display={self._mode} (perception camera unchanged)", flush=True)
         return self._mode
@@ -254,6 +297,11 @@ class ScenarioView:
                     self.toggle_mode()
 
         self._sync_spectator()
+        self._ghost.pump(
+            mode=self._mode,
+            camera=self._cameras.get(self._mode),
+            vehicle=self._vehicle,
+        )
         self._display.fill((0, 0, 0))
         surface = self._surfaces.get(self._mode)
         if surface is not None:
@@ -284,6 +332,10 @@ class ScenarioView:
         return True
 
     def destroy(self) -> None:
+        try:
+            self._ghost.destroy()
+        except Exception:  # noqa: BLE001
+            pass
         for cam in self._cameras.values():
             try:
                 cam.stop()

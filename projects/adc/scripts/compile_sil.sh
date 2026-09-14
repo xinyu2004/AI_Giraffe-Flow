@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SIL: host compile for afc
+# SIL: host compile for adc
 #   bootstrap → require generated/ (gf-config) → cmake → build(Ninja/Make 增量) → ctest(可选) → sync runtime
 #
 # 无内容 SHA stamp。差异编译交给构建系统（mtime + depfile）；sync 只盖比 runtime 新的产物。
@@ -29,7 +29,7 @@ export GF_BUILD_DIR="${BUILD_SIL}"
 
 gf_ensure_bootstrap
 gf_require_generated
-gf_octavecoder_sync afc
+gf_octavecoder_sync adc
 
 SIL_CMAKE_ARGS=()
 gf_sil_cmake_compiler_args SIL_CMAKE_ARGS

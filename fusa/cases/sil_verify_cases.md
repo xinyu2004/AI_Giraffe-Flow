@@ -94,7 +94,7 @@
 - 库级: `ctest -R gf_em_daemon_smoke`（EMD-01…04）；进程原语 `ctest -R gf_osal_process_smoke`
 - SIL: `projects/afc/scripts/verify/smoke_sil_em_daemon.sh`
 - 配置: `cfg/gf_ara_cfg/em_launch.yaml` + `phm.yaml`（planning → `restart`）
-- 期望: daemon 日志 `relaunch name=planning.driving`；子进程 `em os_restart_exit`；gateway 仍收到 Trajectory
+- 期望: daemon 日志 `relaunch name=planning.driving`（ADC：`planning.driving_plus`）；子进程 `em os_restart_exit`；gateway 仍收到 Trajectory
 - 机制: 子进程 exit **75** → `waitpid` → `fork/exec`；relaunch 时清 `GF_PHM_FAULT_MS`
 - 状态: active
 - 最近: **PASS**（2026-07-31）

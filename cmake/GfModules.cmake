@@ -164,6 +164,7 @@ if(DEFINED GF_APPS)
       if(_gf_app STREQUAL "adapters/vehicle_can_gateway"
          OR _gf_app STREQUAL "perception/fcm"
          OR _gf_app STREQUAL "planning/driving"
+         OR _gf_app STREQUAL "planning/driving_plus"
          OR _gf_app MATCHES "^gmt_board/")
         message(STATUS "Giraffe Flow: skip app '${_gf_app}' (needs GF_WITH_ICEORYX)")
         continue()

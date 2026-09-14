@@ -21,7 +21,7 @@ mkdir -p "${LOG_DIR}" "${GF_PER_DIR}"
 
 EM="${BUILD}/middleware/exec/gf_em_daemon"
 MODE="${BUILD}/apps/mode/drive_park/gf_mode_drive_park"
-DRV="${BUILD}/apps/planning/driving/gf_planning_driving"
+DRV="${BUILD}/apps/planning/driving_plus/gf_planning_driving_plus"
 PRK="${BUILD}/apps/planning/parking/gf_planning_parking"
 
 for b in "${EM}" "${MODE}" "${DRV}" "${PRK}"; do

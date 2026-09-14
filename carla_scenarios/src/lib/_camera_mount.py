@@ -205,7 +205,21 @@ def load_camera_mount() -> CameraMount:
 
 
 def scene_chase_pose() -> Tuple[float, float, float, float, float]:
-    return (-6.5, 3.0, -12.0, 0.0, 90.0)
+    """ChaseCam=2 spectator (lab only).
+
+    Match BEV *front/rear relationship* (more road ahead than behind), not the
+    meter window 1:1. Too far/high (−52/24/−38) stretches the rear and pinches
+    the forward horizon — keep a short rear gap + longer look-ahead.
+
+    Returns (x_m, z_m, pitch_deg, yaw_deg, fov_deg) in vehicle frame.
+    """
+    # ~22 m behind, moderate height, milder pitch, FOV so forward still reads long.
+    return (-22.0, 12.0, -26.0, 0.0, 78.0)
+
+
+def overhead_chase_pose() -> Tuple[float, float, float, float, float]:
+    # High nadir-ish view for parking / side-ring check (lab spectator only).
+    return (-5.0, 32.0, -88.0, 0.0, 90.0)
 
 
 def host_cameras_path() -> Optional[Path]:
@@ -221,4 +235,5 @@ __all__ = [
     "load_host_cameras",
     "reset_camera_contract_cache",
     "scene_chase_pose",
+    "overhead_chase_pose",
 ]

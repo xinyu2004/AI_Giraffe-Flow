@@ -50,7 +50,7 @@ EgoMotion ──► sensing.uss ──► UssZones ──► perception.parking 
 | `perception_driving` | `perception.driving.nullmax` | SOA App | 旧 demo / 可作行车备选 |
 | `mcu_cp_gateway` | `adapter.mcu_cp_gateway` | Adapter | 有 MCU 的项目 |
 | （无 hpp，平台 adapter） | `adapter.vehicle_can_gateway` | Adapter | 凡有车身 CAN |
-| （外仓） | `planning.driving` / `planning.parking` | SOA App | 按 SKU |
+| （外仓） | `planning.driving` / `planning.driving_plus` / `planning.parking` | SOA App | 按 SKU（ADC 行车为 driving_plus） |
 
 规划模块本仓暂无 `io_types.hpp` 示例，在 wiring 里用 `package:` 指向外仓即可。
 

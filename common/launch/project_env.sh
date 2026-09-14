@@ -160,7 +160,8 @@ gf_sil_sync_runtime() {
     apps/frame_ingest/gf_frame_ingest \
     apps/perception/fcm/gf_perception_fcm \
     apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway \
-    apps/planning/driving/gf_planning_driving
+    apps/planning/driving/gf_planning_driving \
+    apps/planning/driving_plus/gf_planning_driving_plus
   do
     src="${build}/${rel}"
     [[ -f "${src}" ]] && gf_sil_sync_file "${src}" "${rt}/bin/$(basename "${src}")" || true

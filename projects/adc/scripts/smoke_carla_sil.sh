@@ -12,7 +12,7 @@ BUILD="${BUILD_SIL}"
 for bin in \
   "${BUILD}/apps/adapters/vehicle_can_gateway/gf_vehicle_can_gateway" \
   "${BUILD}/apps/perception/fcm/gf_perception_fcm" \
-  "${BUILD}/apps/planning/driving/gf_planning_driving" \
+  "${BUILD}/apps/planning/driving_plus/gf_planning_driving_plus" \
   "${BUILD}/apps/carla_io/gf_carla_io" \
   "${BUILD}/apps/frame_ingest/gf_frame_ingest"; do
   if [[ ! -x "${bin}" ]]; then

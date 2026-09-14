@@ -1,6 +1,7 @@
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/proxy/surround_world_proxy.hpp"
+#include "gf_gen/proxy/freespace_near_proxy.hpp"
 #include "gf_gen/skeleton/parking_trajectory_skeleton.hpp"
 
 #include "m_park_tick.hpp"
@@ -12,6 +13,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <thread>
 
 namespace {
@@ -29,12 +31,20 @@ int main() {
 
   // Process only runs while DriveParkFG=ParkingActive (EM set-difference).
   gf_gen::SurroundWorldProxy surround;
+  gf_gen::FreespaceNearProxy fs_near;
   gf_gen::ParkingTrajectorySkeleton traj;
+  std::optional<gf_gen::FreespaceNear> last_fs;
+
+  std::cout << "gf-planning-parking: start (m_park_tick + FreespaceNear clip)\n";
 
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
     if (supervisor.ExitForEmRestart()) {
       return gf_ara::exec::kEmRestartExitCode;
+    }
+
+    if (auto t = fs_near.Take(); t.HasValue() && t.Value().has_value()) {
+      last_fs = *t.Value();
     }
 
     float sx = 6.0f, sy = -3.2f, syaw = 0.0f, slen = 5.0f, swid = 2.4f;
@@ -62,7 +72,12 @@ int main() {
     out.valid = 0;
     out.n_points = 0;
 
-    const auto tick = oct_gen::m_park_tick(sx, sy, syaw, slen, swid, free, /*confirmed=*/1);
+    const float* d_occ = nullptr;
+    if (last_fs && last_fs->valid) {
+      d_occ = last_fs->d_occ_m;
+    }
+    const auto tick =
+        oct_gen::m_park_tick(sx, sy, syaw, slen, swid, free, /*confirmed=*/1, d_occ);
     if (tick.valid && tick.n > 0) {
       out.valid = 1;
       out.n_points = std::min<std::uint8_t>(tick.n, 32);

@@ -1,6 +1,7 @@
 #include "gf_foxglove/bev_ingest.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #if __has_include("gf_gen/types/ego_motion.hpp")
@@ -25,6 +26,14 @@
 #include "gf_gen/types/perception_message_out_st.hpp"
 #define GF_HAS_PERC 1
 #endif
+#if __has_include("gf_gen/types/freespace_near.hpp")
+#include "gf_gen/types/freespace_near.hpp"
+#define GF_HAS_FS_NEAR 1
+#endif
+#if __has_include("gf_gen/types/surround_world.hpp")
+#include "gf_gen/types/surround_world.hpp"
+#define GF_HAS_SURROUND 1
+#endif
 
 namespace gf_foxglove {
 namespace {
@@ -32,6 +41,15 @@ namespace {
 bool lane_ok(float conf, int avail, bool has_avail) {
   if (!has_avail) avail = conf >= 0.15f ? 2 : 0;
   return avail != 0 && conf >= 0.15f;
+}
+
+bool dyn_in_window(float dist) {
+  const BevWindow w = bev_window();
+  if (dist < w.x_min || dist > w.x_max) return false;
+  // AFC keeps legacy forward-only near cut; ADC keeps rear objects in frame.
+  if (!bev_sku_is_adc() && dist <= 0.5f) return false;
+  if (bev_sku_is_adc() && std::fabs(dist) < 0.3f) return false;
+  return true;
 }
 
 }  // namespace
@@ -69,6 +87,8 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
     st.traj_s_stop_m = s.s_stop_m;
     st.v_sign_max_mps = s.v_sign_max_mps;
     st.v_sign_min_mps = s.v_sign_min_mps;
+    // P2 thin: LC intent bit on gear_shift_second (no steer).
+    st.allow_lc = (s.gear_shift_second & 0x1) != 0;
     // Prefer Trajectory CIPV long when set (semantic), not Obj[0].
     if (s.cipv_long_m > 0.5f) {
       st.has_perc_lead = true;
@@ -83,6 +103,59 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
   if (std::strcmp(short_name, "UssZones") == 0) {
     const auto& s = *static_cast<const gf_gen::UssZones*>(sample);
     st.nearest_cm = static_cast<float>(s.nearest_cm);
+    return;
+  }
+#endif
+#ifdef GF_HAS_FS_NEAR
+  if (std::strcmp(short_name, "FreespaceNear") == 0) {
+    const auto& s = *static_cast<const gf_gen::FreespaceNear*>(sample);
+    if (!s.valid) {
+      st.has_fs_near = false;
+      return;
+    }
+    st.has_fs_near = true;
+    for (int i = 0; i < kFsNearSectors; ++i) st.fs_d_occ_m[i] = s.d_occ_m[i];
+    st.fs_d_front_m = s.d_front_m;
+    st.fs_d_rear_m = s.d_rear_m;
+    st.fs_d_left_m = s.d_left_m;
+    st.fs_d_right_m = s.d_right_m;
+    if (s.timestamp_ns) st.t_ns = s.timestamp_ns;
+    return;
+  }
+#endif
+#ifdef GF_HAS_SURROUND
+  if (std::strcmp(short_name, "SurroundWorld") == 0) {
+    const auto& s = *static_cast<const gf_gen::SurroundWorld*>(sample);
+    const int no = std::min(static_cast<int>(s.n_obj), kMaxSurroundObj);
+    st.n_surround = 0;
+    for (int i = 0; i < no; ++i) {
+      const auto& it = s.objects[i];
+      const float dist = it.long_dist_m;
+      if (!dyn_in_window(dist)) continue;
+      BevDynObj o;
+      o.obj_id = static_cast<int>(it.object_id);
+      o.x_m = dist;
+      o.y_m = it.lat_dist_m;
+      o.obj_class = static_cast<int>(it.object_class);
+      o.length_m = 4.5f;
+      o.width_m = 1.8f;
+      o.heading_rad = 0.0f;
+      st.surround_objects[st.n_surround++] = o;
+    }
+    const int ns = std::min(static_cast<int>(s.n_slot), kMaxParkingSlots);
+    st.n_slot = 0;
+    for (int i = 0; i < ns; ++i) {
+      const auto& it = s.slots[i];
+      BevParkingSlot sl;
+      sl.x_m = it.center_x_m;
+      sl.y_m = it.center_y_m;
+      sl.yaw_rad = it.yaw_rad;
+      sl.length_m = it.length_m > 0.5f ? it.length_m : 5.0f;
+      sl.width_m = it.width_m > 0.5f ? it.width_m : 2.5f;
+      sl.free = it.free != 0;
+      st.parking_slots[st.n_slot++] = sl;
+    }
+    if (s.timestamp_ns) st.t_ns = s.timestamp_ns;
     return;
   }
 #endif
@@ -148,7 +221,7 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
       const auto& it = dyn.m_Obj_item[i];
       const int oid = static_cast<int>(it.m_OBJ_ID);
       const float dist = it.m_OBJ_Long_Distance;
-      if (oid <= 0 || dist <= 0.5f || dist > kDBevM) continue;
+      if (oid <= 0 || !dyn_in_window(dist)) continue;
       BevDynObj o;
       o.obj_id = oid;
       o.x_m = dist;
