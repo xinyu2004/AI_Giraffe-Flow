@@ -96,6 +96,17 @@ def test_live_tap_wiring_all() -> None:
     )
 
 
+def test_wiring_all_includes_deployment_provides() -> None:
+    assert services_from_wiring(
+        {
+            "deployments": [
+                {"provides": ["services.semantic.Freespace"], "requires": []}
+            ],
+            "dataflows": [],
+        }
+    ) == ["Freespace"]
+
+
 def test_wiring_all_empty_dataflows_fails() -> None:
     req = {
         "profile": "vehicle-debug",

@@ -15,11 +15,43 @@ def _adc_giraffe() -> Path:
     return Path(__file__).resolve().parents[3] / "projects" / "adc" / "giraffe.yaml"
 
 
+def _afc_giraffe() -> Path:
+    return Path(__file__).resolve().parents[3] / "projects" / "afc" / "giraffe.yaml"
+
+
 @pytest.mark.skipif(not _adc_giraffe().is_file(), reason="adc project missing")
 def test_adc_validate_ok_and_open_not_dirty() -> None:
     sess = ProjectSession.open(_adc_giraffe())
     assert sess.validate().ok
     assert not sess.is_dirty()
+
+
+@pytest.mark.skipif(not _afc_giraffe().is_file(), reason="afc project missing")
+def test_afc_validate_ok() -> None:
+    sess = ProjectSession.open(_afc_giraffe())
+    assert sess.validate().ok
+
+
+@pytest.mark.skipif(not _adc_giraffe().is_file(), reason="adc project missing")
+def test_dataflow_without_require_fails_validate() -> None:
+    """Regression: dataflow + binding without deployments.require → stacked canvas ports."""
+    sess = ProjectSession.open(_adc_giraffe())
+    for d in sess.wiring.get("deployments") or []:
+        if str(d.get("process") or "") != "planning.parking":
+            continue
+        d["requires"] = [
+            x
+            for x in (d.get("requires") or [])
+            if not str(x).endswith("FreespaceNear")
+        ]
+        break
+    result = validate_project(sess.req, sess.wiring, sess.ara_cfg)
+    assert not result.ok
+    assert any("FreespaceNear" in e and "requires" in e for e in result.errors)
+    assert any(
+        c.get("id") == "wiring_port_consistency" and c.get("status") == "fail"
+        for c in result.checks
+    )
 
 
 @pytest.mark.skipif(not _adc_giraffe().is_file(), reason="adc project missing")

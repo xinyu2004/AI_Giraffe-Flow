@@ -11,18 +11,13 @@ from typing import Any
 from PySide6.QtCore import QEvent, QRectF, QTimer, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QApplication,
+    QDialog,
+    QDialogButtonBox,
     QGraphicsLineItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QListWidget,
-    QSizePolicy,
-    QTabWidget,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -32,7 +27,6 @@ from gf_config.gui.editor_history import HistoryHooksMixin
 from gf_config.gui.lineage_view import LineageView
 from gf_config.gui.wiring_graph_items import (
     ChannelEdge,
-    DeselectableListWidget,
     EdgeCurve,
     MissingEdge,
     McuPeerLink,
@@ -73,85 +67,28 @@ class WiringGraphView(
         self._app_cursor_pushed = False
         # process_name -> (x, y); survives rebuild so edits don't reset layout
         self._layout_pos: dict[str, tuple[float, float]] = {}
+        # process_name -> QColor; filled each rebuild (anti-adjacent hues)
+        self._process_color_map: dict[str, Any] = {}
         # 打开项目时 Tab 可能尚未显示，viewport=0 → fitInView 无效；显示后再 fit
         self._need_fit_on_show = False
         self._fit_scheduled = False
         self._batch_depth = 0
         self._undo_suppress = False
         self._drag_undo_armed = False
+        # Mid-edge signal name size (pt); synced from wiring.canvas.edge_label_font_pt
+        self._signal_label_pt = ProjectSession.DEFAULT_EDGE_LABEL_FONT_PT
+        self._lineage_report_text = ""
+        self._lineage_placeholder = t("尚无 lineage。菜单：文件 → Verify（Ctrl+R）")
 
         self._scene = QGraphicsScene(self)
         self._view = ZoomGraphicsView(self._scene, self)
         self._scene.selectionChanged.connect(self._on_selection_changed)
 
-        self._flow_list = DeselectableListWidget(self)
-        self._flow_list.setMinimumWidth(340)
-        self._flow_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-
-        self._search = QLineEdit(self)
-        self._search.setPlaceholderText(t("搜索信号（模糊匹配名 / 进程）…"))
-        self._search.textChanged.connect(self._on_search_text)
-        self._search_hits = QListWidget(self)
-        self._search_hits.setMaximumHeight(140)
-        self._search_hits.itemClicked.connect(self._on_search_hit_clicked)
-        self._search_hits.setVisible(False)
-
-        self._legend = QLabel(
-            t(
-                "Out=绿 · In=橙 · !=未连\n"
-                "线色=源模块（同卡扇出同色）· 蓝点划线=GfChannel\n"
-                "拖拽连线 · Ctrl+拖改边/同边调序 · Ctrl+Z/Y 撤销"
-            ),
-            self,
-        )
-        self._legend.setWordWrap(True)
-        self._legend.setStyleSheet("color: #a9cfc0; font-size: 11px;")
-
-        flows_page = QWidget(self)
-        flows_page.setObjectName("gf_flows_page")
-        flows_l = QVBoxLayout(flows_page)
-        flows_l.setContentsMargins(4, 4, 4, 4)
-        flows_l.addWidget(self._legend)
-        flows_l.addWidget(self._search)
-        flows_l.addWidget(self._search_hits)
-        flows_l.addWidget(QLabel(t("dataflows / channel_flows")))
-        flows_l.addWidget(self._flow_list)
-
-        self._lineage = LineageView(self)
-        self._lineage.set_placeholder(t("尚无 lineage。菜单：文件 → Verify（Ctrl+R）"))
-
-        self._right_tabs = QTabWidget(self)
-        self._right_tabs.addTab(flows_page, t("连线"))
-        self._right_tabs.addTab(self._lineage, t("Lineage"))
-
-        self._right_panel = QWidget(self)
-        self._right_panel.setObjectName("gf_right_panel")
-        right = QVBoxLayout(self._right_panel)
-        right.setContentsMargins(0, 0, 0, 0)
-        right.addWidget(self._right_tabs)
-        self._right_panel.setMinimumWidth(280)
-        self._right_panel.setMaximumWidth(420)
-        self._right_panel.setSizePolicy(
-            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
-        )
-
-        self._btn_toggle_right = QToolButton(self)
-        # 面板在右：展开时 ▶=收起；收起后 ◀=展开。默认收起，画布优先。
-        self._btn_toggle_right.setText("◀")
-        self._btn_toggle_right.setToolTip(t("折叠 / 展开右侧面板（连线 + Lineage）"))
-        self._btn_toggle_right.setFixedWidth(22)
-        self._btn_toggle_right.clicked.connect(self._toggle_right_panel)
-        self._right_collapsed = True
-        self._right_panel.setVisible(False)
-
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self._view, stretch=1)
-        layout.addWidget(self._btn_toggle_right, stretch=0)
-        layout.addWidget(self._right_panel, stretch=0)
 
-        self._flow_list.currentRowChanged.connect(self._highlight_list_edge)
         # Ctrl 按下/松开即时切光标（不依赖 view 焦点、不必先挪鼠标）
         app = QApplication.instance()
         if app is not None:
@@ -176,9 +113,6 @@ class WiringGraphView(
 
     def fit_in_window(self) -> None:
         self._fit_and_remember()
-
-    def toggle_right_panel(self) -> None:
-        self._toggle_right_panel()
 
     def delete_selection(self) -> None:
         self._delete_selection()
@@ -206,10 +140,46 @@ class WiringGraphView(
                 for name, ui in nodes.items():
                     if isinstance(ui, dict) and "x" in ui and "y" in ui:
                         self._layout_pos[str(name)] = (float(ui["x"]), float(ui["y"]))
+            self._sync_signal_label_font_from_session()
             self.rebuild(fit_view=False, keep_layout_pos=True)
         finally:
             self._undo_suppress = False
             self._drag_undo_armed = False
+
+    def signal_label_font_pt(self) -> int:
+        """Point size for mid-edge signal name labels."""
+        return int(self._signal_label_pt)
+
+    def _sync_signal_label_font_from_session(self) -> None:
+        pt = ProjectSession.DEFAULT_EDGE_LABEL_FONT_PT
+        if self._session is not None:
+            pt = self._session.get_edge_label_font_pt()
+        self._signal_label_pt = pt
+
+    def bump_signal_label_font(self, delta: int) -> None:
+        """Increase/decrease mid-edge label size by ``delta`` pt (one undo step)."""
+        if self._session is None or self._undo_suppress:
+            return
+        pt_i = max(7, min(18, int(self._signal_label_pt) + int(delta)))
+        if pt_i == self._signal_label_pt:
+            return
+        self._push_undo()
+        self._signal_label_pt = pt_i
+        self._session.set_edge_label_font_pt(pt_i)
+        self._apply_edge_label_fonts()
+        self.relayout_edge_labels()
+        self.changed.emit()
+        self._end_doc_edit()
+
+    def _apply_edge_label_fonts(self) -> None:
+        """Refresh live edge/peer/missing labels without full rebuild."""
+        from gf_config.gui.wiring_graph_items import _edge_label_font
+
+        font = _edge_label_font(self)
+        for e in (*self._edges, *self._channel_edges, *self._missing, *self._peers):
+            lab = getattr(e, "_label", None)
+            if lab is not None and _qt_alive(lab):
+                lab.setFont(font)
 
     def clear_undo_history(self) -> None:
         self._drag_undo_armed = False
@@ -297,35 +267,40 @@ class WiringGraphView(
             return
         self._fit_and_remember()
 
-    def _toggle_right_panel(self) -> None:
-        self._right_collapsed = not self._right_collapsed
-        self._right_panel.setVisible(not self._right_collapsed)
-        self._btn_toggle_right.setText("◀" if self._right_collapsed else "▶")
-
-    def ensure_right_panel(self) -> None:
-        if self._right_collapsed:
-            self._toggle_right_panel()
-
     def set_lineage_report(self, text: str) -> None:
-        self._lineage.set_report_text(text or "")
+        self._lineage_report_text = text or ""
 
     def set_lineage_placeholder(self, text: str) -> None:
-        self._lineage.set_placeholder(text)
+        self._lineage_placeholder = text or ""
 
     def focus_lineage(self) -> None:
-        """Verify/Generate 后切到右侧 Lineage 页。"""
-        self.ensure_right_panel()
-        self._right_tabs.setCurrentWidget(self._lineage)
-
-    def focus_flows(self) -> None:
-        self.ensure_right_panel()
-        self._right_tabs.setCurrentIndex(0)
+        """Show lineage report in a dialog (no docked right panel)."""
+        dlg = QDialog(self.window())
+        dlg.setWindowTitle(t("Lineage"))
+        dlg.resize(720, 520)
+        lay = QVBoxLayout(dlg)
+        view = LineageView(dlg)
+        if self._lineage_report_text.strip():
+            view.set_report_text(self._lineage_report_text)
+        else:
+            view.set_placeholder(
+                self._lineage_placeholder
+                or t("尚无 lineage。菜单：文件 → Verify（Ctrl+R）")
+            )
+        lay.addWidget(view)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dlg.reject)
+        buttons.accepted.connect(dlg.accept)
+        buttons.clicked.connect(dlg.accept)
+        lay.addWidget(buttons)
+        dlg.exec()
 
     def set_session(self, session: ProjectSession | None) -> None:
         self._session = session
         self._layout_pos.clear()
         self.clear_undo_history()
         self._last_topo: str | None = None
+        self._sync_signal_label_font_from_session()
         # Rebuild without fit; open_project batch / quiet boot fits once.
         self.rebuild(fit_view=False)
         if self._batch_depth == 0:
@@ -382,6 +357,8 @@ class WiringGraphView(
         self._end_doc_edit()
         # Drop ScrollHandDrag "closed hand" residual after item drag.
         self._view.viewport().unsetCursor()
+        # Release can re-fire selection styling (update_path); keep labels apart.
+        self.relayout_edge_labels()
 
     def _nodes_content_rect(self) -> QRectF:
         """以模块卡片为准算包围盒（含负坐标 MCU，不依赖细线 path）。"""
@@ -467,6 +444,13 @@ class WiringGraphView(
         for p in list(self._peers):
             if _qt_alive(p):
                 p.set_visual_state(highlight=False, dimmed=False)
+        self.relayout_edge_labels()
+
+    def relayout_edge_labels(self) -> None:
+        """Re-run label deconflict after any path refresh that resets anchors."""
+        from gf_config.gui.wiring_graph_items import deconflict_edge_labels
+
+        deconflict_edge_labels([*self._edges, *self._channel_edges])
 
     def _on_selection_changed(self) -> None:
         # During rebuild/scene.clear, wrappers may outlive C++ objects.
@@ -572,6 +556,9 @@ class WiringGraphView(
             hit = m.src is focus or m.dst is focus
             m.set_visual_state(highlight=hit, dimmed=not hit)
 
+        # set_visual_state → update_path resets labels; re-separate after batch.
+        self.relayout_edge_labels()
+
     # --- wiring drag ---
 
     def eventFilter(self, obj, event) -> bool:  # type: ignore[no-untyped-def]
@@ -611,31 +598,5 @@ class WiringGraphView(
             if not changed:
                 break
         return depth
-
-    def _highlight_list_edge(self, row: int) -> None:
-        if row < 0:
-            self._scene.blockSignals(True)
-            self._scene.clearSelection()
-            self._scene.blockSignals(False)
-            self._clear_visual_emphasis()
-            return
-        item = self._flow_list.item(row)
-        if item is None:
-            return
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if not data:
-            # legacy fallback for solid edges only
-            if row < len(self._edges):
-                self._focus_edge(self._edges[row])
-            return
-        kind, idx = data
-        if kind == "edge" and 0 <= idx < len(self._edges):
-            self._focus_edge(self._edges[idx])
-        elif kind == "channel" and 0 <= idx < len(self._channel_edges):
-            self._focus_channel_edge(self._channel_edges[idx])
-        elif kind == "missing" and 0 <= idx < len(self._missing):
-            self._focus_missing(self._missing[idx])
-        elif kind == "peer" and 0 <= idx < len(self._peers):
-            self._focus_peer(self._peers[idx])
 
 # ProcessCard / PortItem refer to WiringGraphView via from __future__ annotations

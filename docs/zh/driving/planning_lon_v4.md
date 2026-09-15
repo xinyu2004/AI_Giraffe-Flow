@@ -45,7 +45,7 @@
 ```text
 D_vr   = FCM 本车道 min(L,R) VR_End     （标线尺；规划只消费，不回写）
 D_occ  = 本车道 occupy 近端面
-D_fov  = 光学楔：沿 poly |atan2(y,x)| 出 see_fov_deg（相机 100° 内 50°）
+D_fov  = 光学楔：沿 poly |atan2(y,x)| 出 see_fov_deg（= camera_contract front.fov，默认 100°）
 D_wx   = 天气占位（SIL = cap）
 D_see  = slew(min(D_vr, D_occ, D_fov, D_wx, cap))
 T_plan = min( T_base,  D_see / max(v, v_floor) )

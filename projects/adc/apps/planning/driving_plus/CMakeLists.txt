@@ -1,4 +1,4 @@
-# planning.driving_plus — multi-cam driving (FCM Out + FreespaceNear fuse)
+# planning.driving_plus — FCM Out + FreespaceNear fuse → Freespace + Trajectory
 
 set(_GF_PLAN_SOURCES src/main.cpp)
 

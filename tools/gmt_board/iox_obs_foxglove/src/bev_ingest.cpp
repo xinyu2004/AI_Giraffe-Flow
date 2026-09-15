@@ -30,6 +30,10 @@
 #include "gf_gen/types/freespace_near.hpp"
 #define GF_HAS_FS_NEAR 1
 #endif
+#if __has_include("gf_gen/types/freespace.hpp")
+#include "gf_gen/types/freespace.hpp"
+#define GF_HAS_FS 1
+#endif
 #if __has_include("gf_gen/types/surround_world.hpp")
 #include "gf_gen/types/surround_world.hpp"
 #define GF_HAS_SURROUND 1
@@ -106,8 +110,26 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
     return;
   }
 #endif
+#ifdef GF_HAS_FS
+  if (std::strcmp(short_name, "Freespace") == 0) {
+    const auto& s = *static_cast<const gf_gen::Freespace*>(sample);
+    if (!s.valid) {
+      st.has_fs_plan = false;
+      return;
+    }
+    st.has_fs_plan = true;
+    for (int i = 0; i < kFsNearSectors; ++i) st.fs_d_occ_m[i] = s.d_occ_m[i];
+    st.fs_d_front_m = s.d_front_m;
+    st.fs_d_rear_m = s.d_rear_m;
+    st.fs_d_left_m = s.d_left_m;
+    st.fs_d_right_m = s.d_right_m;
+    if (s.timestamp_ns) st.t_ns = s.timestamp_ns;
+    return;
+  }
+#endif
 #ifdef GF_HAS_FS_NEAR
   if (std::strcmp(short_name, "FreespaceNear") == 0) {
+    if (st.has_fs_plan) return;  // driving fused FS owns the contour
     const auto& s = *static_cast<const gf_gen::FreespaceNear*>(sample);
     if (!s.valid) {
       st.has_fs_near = false;

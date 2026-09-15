@@ -15,8 +15,135 @@ from gf_codegen.compose.merge_platform import (
 )
 from gf_codegen.compose.observability import validate_observability
 
+from gf_config.names import is_channel_svc, short_service
+
 # CMake always-on modules — must be authored in req.runtime_modules (no silent fill).
 ALWAYS_ON_MODULES = frozenset({"core", "com", "osal"})
+
+
+def _soa_short_set(items: list[Any] | None) -> set[str]:
+    out: set[str] = set()
+    for x in items or []:
+        s = str(x or "").strip()
+        if not s or is_channel_svc(s):
+            continue
+        sk = short_service(s)
+        if sk:
+            out.add(sk)
+    return out
+
+
+def _check_wiring_port_consistency(
+    wiring: dict[str, Any],
+    *,
+    errors: list[str],
+    warnings: list[str],
+    checks: list[dict[str, Any]],
+) -> None:
+    """dataflow / bindings must match deployments provides|requires.
+
+    Canvas builds In/Out circles from deployments only. A dataflow (or binding)
+    for a service the process does not declare causes edges to share one port
+    (GUI used to fall back to ports[0]) — catch that at Verify, not by eye.
+    """
+    dep_map: dict[str, dict[str, Any]] = {}
+    for d in wiring.get("deployments") or []:
+        if not isinstance(d, dict):
+            continue
+        name = str(d.get("process") or "").strip()
+        if name:
+            dep_map[name] = d
+
+    detail: list[str] = []
+
+    for fl in wiring.get("dataflows") or []:
+        if not isinstance(fl, dict):
+            continue
+        frm = str(fl.get("from") or "").strip()
+        to = str(fl.get("to") or "").strip()
+        svc_raw = str(fl.get("service") or "").strip()
+        if not frm or not to or not svc_raw or is_channel_svc(svc_raw):
+            continue
+        svc = short_service(svc_raw)
+        if not svc:
+            continue
+        src = dep_map.get(frm)
+        dst = dep_map.get(to)
+        if src is None:
+            msg = f"dataflow {svc}: from={frm} has no deployments[] row"
+            errors.append(msg)
+            detail.append(msg)
+            continue
+        if dst is None:
+            msg = f"dataflow {svc}: to={to} has no deployments[] row"
+            errors.append(msg)
+            detail.append(msg)
+            continue
+        if svc not in _soa_short_set(src.get("provides")):
+            msg = (
+                f"dataflow {svc}: {frm} → {to} but {frm} deployments.provides "
+                f"does not list {svc}"
+            )
+            errors.append(msg)
+            detail.append(msg)
+        if svc not in _soa_short_set(dst.get("requires")):
+            msg = (
+                f"dataflow {svc}: {frm} → {to} but {to} deployments.requires "
+                f"does not list {svc} (canvas will lack a distinct In port)"
+            )
+            errors.append(msg)
+            detail.append(msg)
+
+    for b in wiring.get("bindings") or []:
+        if not isinstance(b, dict):
+            continue
+        mod = str(b.get("module") or "").strip()
+        if not mod:
+            continue
+        dep = dep_map.get(mod)
+        if dep is None:
+            # Module may be declared only under modules[] without a process row.
+            warnings.append(
+                f"bindings module={mod}: no matching deployments.process "
+                "(skip provide/require cross-check)"
+            )
+            continue
+        prov = _soa_short_set(dep.get("provides"))
+        req = _soa_short_set(dep.get("requires"))
+        for inp in b.get("inputs") or []:
+            if not isinstance(inp, dict):
+                continue
+            svc = short_service(str(inp.get("service") or ""))
+            if not svc or is_channel_svc(str(inp.get("service") or "")):
+                continue
+            if svc not in req:
+                msg = (
+                    f"bindings {mod} input {svc} missing from "
+                    f"deployments.requires (add require or drop binding)"
+                )
+                errors.append(msg)
+                detail.append(msg)
+        for out in b.get("outputs") or []:
+            if not isinstance(out, dict):
+                continue
+            svc = short_service(str(out.get("service") or ""))
+            if not svc or is_channel_svc(str(out.get("service") or "")):
+                continue
+            if svc not in prov:
+                msg = (
+                    f"bindings {mod} output {svc} missing from "
+                    f"deployments.provides (add provide or drop binding)"
+                )
+                errors.append(msg)
+                detail.append(msg)
+
+    checks.append(
+        {
+            "id": "wiring_port_consistency",
+            "status": "fail" if detail else "pass",
+            "detail": detail,
+        }
+    )
 
 
 @dataclass
@@ -175,5 +302,12 @@ def validate_project(
     result.errors.extend(o_err)
     result.warnings.extend(o_warn)
     result.checks.extend(o_checks)
+
+    _check_wiring_port_consistency(
+        wiring,
+        errors=result.errors,
+        warnings=result.warnings,
+        checks=result.checks,
+    )
 
     return result

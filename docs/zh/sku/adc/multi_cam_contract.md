@@ -1,7 +1,9 @@
 # ADC 多摄合同（冻结）
 
 > 通信层通用；paint/金源按 SKU（afc/adc）分叉。  
-> **FS 与 `D_see` 同级要求（可见 + 进规划）** 的阶段方案见 [freespace_and_dsee_plan.md](./freespace_and_dsee_plan.md)。
+> **FS 与 `D_see` 同级要求（可见 + 进规划）** 的阶段方案见 [freespace_and_dsee_plan.md](./freespace_and_dsee_plan.md)。  
+> **FOV / 距离唯一源 + BEV 画法** 见 [fs_fov_bev_scheme.md](./fs_fov_bev_scheme.md)。  
+> **gf-config / 数据流（Near vs Freespace）** 见 [freespace_wiring_plan.md](./freespace_wiring_plan.md)。
 
 ## 尺子
 
@@ -18,9 +20,9 @@
 
 | 方位 | 概念 | 默认 envelope |
 |------|------|----------------|
-| 后向 | 周视 | x∈[−40,0] m，\|y\|≤12 |
-| 左/右 | 环视近场 | \|y\|≤10 m 且 x∈(0,10]（AVM 近障文献常 ~5–6 m；先取 10） |
-| 前向远距 | FCM | surround **不**合成前向远目标；Near 前向 cap 仅 ~15 m |
+| 后向 | 周视 | 纵深 **35 m**（与 Chase/BEV 互验）；**FOV cal 120°**（非整后半球） |
+| 左/右 | 环视近场 | \|y\|≤5.25 m（~1.5×3.5 m 车道）且 x∈(0,10] |
+| 前向远距 | FCM | FOV = **合同 front.fov（默认 100°）**；Near 前 cap ~15；空路融合前向跟 `D_see`（可到 120） |
 
 **禁止** channel 空时 FillSilDemo / `SLOT_DEMO` 合成车位。无 valid pod → **不发** SurroundWorld / FreespaceNear。
 
@@ -29,7 +31,7 @@
 ```text
 FCM → Out
 surround → SurroundWorld + FreespaceNear   # 仅真 pod
-planning.driving_plus → fuse → 钳 D_see → tick → Trajectory
+planning.driving_plus → fuse → Freespace + Trajectory
 parking → FreespaceNear + SurroundWorld（不算 120 m 融合）
 ```
 
@@ -38,9 +40,9 @@ parking → FreespaceNear + SurroundWorld（不算 120 m 融合）
 
 ## 观测
 
-- Foxglove adc：BEV **同一米窗** x∈[−40,+120]；灰=`VR_End`；青洗/`D` 只在 +x
-- 仅 ingest 真样本；FS 扇区按方位 cap（后 40 / 侧 10）；**无轴 stub**
-- ChaseCam：1 风挡 · 2 chase（抽检 BEV 前向）· 3 俯视（验侧后）；旁观 ≠ 产品槽
+- Foxglove adc：BEV 米窗 x∈[**−35**,+120]（身后可读 ~35 m，与 ChaseCam=2 互验）；**验规划融合 FS**（前空→`D_see`）；有 Near 时**不画**单独青洗/`D` 走廊
+- 仅 ingest 真样本；FS：后 **35 m @ FOV 120°** / 侧 5.25；**无轴 stub**；空前向 Near cap **不钳** `D_see`
+- ChaseCam：1 风挡 · 2 chase（~35 m 后）· 3 俯视；旁观 ≠ 产品槽
 - `GF_SYNTH_BEV`：二进制默认关；SIL 可开；**空 LiveBevState 不发 BEV 图**
 
 ## 风格

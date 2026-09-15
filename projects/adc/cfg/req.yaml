@@ -33,9 +33,11 @@ observability:
     - services.semantic.EgoMotion
     - services.semantic.Perception_MESSAGE_Out_St
     - services.semantic.Trajectory
+    - services.semantic.Freespace
+    - services.semantic.FreespaceNear
     - services.semantic.VehicleMode
 frame_ingest:
-  frame_source: carla_file
+  frame_source: none
   pixel_format: nv12
   ego_source: carla
   frame_w: 640
@@ -118,13 +120,17 @@ publish_policy:
       trigger: on_change
     FreespaceNear:
       trigger: on_change
+    Freespace:
+      trigger: on_change
     ParkingTrajectory:
       trigger: on_change
   channels:
+    vehicle_state:
+      trigger: on_change
     vehicle_cmd:
       trigger: period
       period_ms: 10
-    vehicle_state:
-      trigger: on_change
     fake_perc:
+      trigger: on_change
+    surround_world:
       trigger: on_change

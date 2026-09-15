@@ -29,4 +29,16 @@ struct Trajectory {
   float v_sign_min_mps;
 };
 
+// Driving fused drivability (front+rear+surround). Planning space = BEV space.
+// Not FreespaceNear (surround raw) and not FailSafe Perception_FS_Out.
+struct Freespace {
+  uint64_t timestamp_ns;
+  float d_occ_m[36];
+  float d_front_m;
+  float d_rear_m;
+  float d_left_m;
+  float d_right_m;
+  uint8_t valid;
+};
+
 }  // namespace gf::demo::planning_driving

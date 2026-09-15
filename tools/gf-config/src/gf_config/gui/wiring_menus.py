@@ -1,4 +1,4 @@
-"""Context menus, search, and edge focus for the wiring canvas."""
+"""Context menus and edge focus for the wiring canvas."""
 
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGraphicsItem,
     QLabel,
-    QLineEdit,
-    QListWidgetItem,
     QMenu,
     QMessageBox,
 )
@@ -30,7 +28,7 @@ from gf_config.i18n import t
 
 
 class WiringMenusMixin:
-    """Mixin: canvas/card/edge menus, fuzzy search, focus helpers."""
+    """Mixin: canvas/card/edge menus and focus helpers."""
 
     def _on_view_context_menu(self, pos) -> None:  # type: ignore[no-untyped-def]
         scene_pos = self._view.mapToScene(pos)
@@ -180,11 +178,7 @@ class WiringMenusMixin:
         # 确保品红路径点出现（选中态 + 已入 scene）
         if _qt_alive(edge):
             edge.update_path()
-        if edge in self._edges:
-            idx = self._edges.index(edge)
-            self._flow_list.blockSignals(True)
-            self._flow_list.setCurrentRow(idx)
-            self._flow_list.blockSignals(False)
+        self.relayout_edge_labels()
         if center:
             self._view.centerOn(edge)
 
@@ -209,11 +203,7 @@ class WiringMenusMixin:
         for card in self._nodes.values():
             hit = card is edge.src or card is edge.dst
             card.set_visual_state(emphasis=hit, dimmed=not hit)
-        if edge in self._channel_edges:
-            idx = len(self._edges) + self._channel_edges.index(edge)
-            self._flow_list.blockSignals(True)
-            self._flow_list.setCurrentRow(idx)
-            self._flow_list.blockSignals(False)
+        self.relayout_edge_labels()
         if center:
             self._view.centerOn(edge)
 
@@ -232,17 +222,6 @@ class WiringMenusMixin:
         for card in self._nodes.values():
             hit = card is miss.src or card is miss.dst
             card.set_visual_state(emphasis=hit, dimmed=not hit)
-        if miss in self._missing:
-            for i in range(self._flow_list.count()):
-                it = self._flow_list.item(i)
-                if it is None:
-                    continue
-                data = it.data(Qt.ItemDataRole.UserRole)
-                if data and data[0] == "missing" and data[1] == self._missing.index(miss):
-                    self._flow_list.blockSignals(True)
-                    self._flow_list.setCurrentRow(i)
-                    self._flow_list.blockSignals(False)
-                    break
         if center:
             self._view.centerOn(miss)
 
@@ -277,140 +256,6 @@ class WiringMenusMixin:
         elif chosen is act_focus_gw:
             self._scene.clearSelection()
             peer.gateway.setSelected(True)
-
-    @staticmethod
-    def _fuzzy_match(query: str, *parts: str) -> bool:
-        hay = " ".join(parts).lower()
-        q = query.lower().strip()
-        if not q:
-            return True
-        if q in hay:
-            return True
-        # subsequence fuzzy: characters of query appear in order
-        i = 0
-        for ch in hay:
-            if i < len(q) and ch == q[i]:
-                i += 1
-        if i == len(q):
-            return True
-        return all(tok in hay for tok in q.split())
-
-    def _on_search_text(self, text: str) -> None:
-        self._search_hits.clear()
-        q = text.strip()
-        if not q:
-            self._search_hits.setVisible(False)
-            return
-        hits: list[tuple[str, str, int]] = []  # label, kind, index
-        for i, e in enumerate(self._edges):
-            if self._fuzzy_match(
-                q, short_service(e.service), e.src.process_name, e.dst.process_name, e.service
-            ):
-                hits.append(
-                    (
-                        f"{short_service(e.service)}:  {e.src.process_name}  →  {e.dst.process_name}",
-                        "edge",
-                        i,
-                    )
-                )
-        for i, e in enumerate(self._channel_edges):
-            if self._fuzzy_match(
-                q, e.slot, e.src.process_name, e.dst.process_name
-            ):
-                hits.append(
-                    (
-                        f"[GfChannel] {e.slot}:  {e.src.process_name}  →  {e.dst.process_name}",
-                        "channel",
-                        i,
-                    )
-                )
-        for i, m in enumerate(self._missing):
-            if self._fuzzy_match(
-                q, short_service(m.service), m.src.process_name, m.dst.process_name, m.service
-            ):
-                hits.append(
-                    (
-                        f"[缺失] {short_service(m.service)}:  {m.src.process_name}  →  {m.dst.process_name}",
-                        "missing",
-                        i,
-                    )
-                )
-        if not hits:
-            item = QListWidgetItem("（无匹配）")
-            item.setFlags(Qt.ItemFlag.NoItemFlags)
-            self._search_hits.addItem(item)
-        else:
-            for label, kind, idx in hits[:50]:
-                item = QListWidgetItem(label)
-                item.setData(Qt.ItemDataRole.UserRole, (kind, idx))
-                self._search_hits.addItem(item)
-        self._search_hits.setVisible(True)
-
-    def _on_search_hit_clicked(self, item: QListWidgetItem) -> None:
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if not data:
-            return
-        kind, idx = data
-        if kind == "edge" and 0 <= idx < len(self._edges):
-            self._focus_edge(self._edges[idx])
-        elif kind == "channel" and 0 <= idx < len(self._channel_edges):
-            self._focus_channel_edge(self._channel_edges[idx])
-        elif kind == "missing" and 0 <= idx < len(self._missing):
-            self._focus_missing(self._missing[idx])
-        elif kind == "peer" and 0 <= idx < len(self._peers):
-            self._focus_peer(self._peers[idx])
-
-    def edit_edge(self, edge: EdgeCurve) -> None:
-        if not self._session:
-            return
-        dlg = QDialog(self)
-        dlg.setWindowTitle(t("编辑信号"))
-        form = QFormLayout(dlg)
-        form.addRow(t("源"), QLabel(edge.src.process_name))
-        form.addRow(t("目的"), QLabel(edge.dst.process_name))
-        svc = QLineEdit(edge.service)
-        form.addRow("service", svc)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-        form.addRow(buttons)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        new_svc = canon_service(svc.text())
-        if not new_svc:
-            return
-        old_short = short_service(edge.service)
-        frm = edge.src.process_name
-        to = edge.dst.process_name
-        flows = self._session.dataflows()
-        for f in flows:
-            if (
-                str(f.get("from")) == frm
-                and str(f.get("to")) == to
-                and short_service(str(f.get("service") or "")) == old_short
-            ):
-                f["service"] = new_svc
-        self._session.set_dataflows(flows)
-        new_prov = [
-            new_svc if short_service(p) == old_short else p for p in edge.src.provides
-        ]
-        new_req = [
-            new_svc if short_service(r) == old_short else r for r in edge.dst.requires
-        ]
-        self._session.upsert_deployment(
-            frm,
-            provides=[canon_service(x) for x in new_prov],
-            requires=[canon_service(x) for x in edge.src.requires],
-        )
-        self._session.upsert_deployment(
-            to,
-            provides=[canon_service(x) for x in edge.dst.provides],
-            requires=[canon_service(x) for x in new_req],
-        )
-        self.rebuild()
-        self.changed.emit()
 
     def _remove_edge(self, edge: EdgeCurve) -> None:
         if not self._session:
@@ -453,46 +298,39 @@ class WiringMenusMixin:
         cards = [i for i in self._scene.selectedItems() if isinstance(i, ProcessCard)]
         if cards:
             self.delete_node(cards[0])
-            return
-        row = self._flow_list.currentRow()
-        item = self._flow_list.item(row) if row >= 0 else None
-        if item is not None:
-            data = item.data(Qt.ItemDataRole.UserRole)
-            if data and data[0] == "edge" and 0 <= data[1] < len(self._edges):
-                self._remove_edge(self._edges[data[1]])
-                return
-            if data and data[0] == "channel" and 0 <= data[1] < len(self._channel_edges):
-                self._remove_channel_edge(self._channel_edges[data[1]])
-                return
-            if data and data[0] == "missing" and 0 <= data[1] < len(self._missing):
-                self.ignore_missing_edge(self._missing[data[1]])
-                return
-        if 0 <= row < len(self._edges):
-            self._remove_edge(self._edges[row])
 
     def show_card_menu(self, card: ProcessCard, global_pos) -> None:  # type: ignore[no-untyped-def]
         menu = QMenu(self)
         if card.is_external():
+            act_color = menu.addAction(t("节点颜色…"))
             act_del = menu.addAction(t("Delete external MCU"))
             chosen = menu.exec(global_pos)
-            if chosen is act_del:
+            if chosen is act_color:
+                self.edit_node_color(card)
+            elif chosen is act_del:
                 self.delete_node(card)
             return
         if card.is_frame_ingest():
+            act_color = menu.addAction(t("节点颜色…"))
             act_edit = menu.addAction(t("编辑 frame_ingest…"))
             act_del = menu.addAction(t("删除 frame_ingest"))
             chosen = menu.exec(global_pos)
-            if chosen is act_edit:
+            if chosen is act_color:
+                self.edit_node_color(card)
+            elif chosen is act_edit:
                 self.edit_frame_ingest(card)
             elif chosen is act_del:
                 self.delete_node(card)
             return
+        act_color = menu.addAction(t("节点颜色…"))
         act_edit = menu.addAction(t("编辑端口…"))
         act_import = menu.addAction(t("从此模块导入 hpp…"))
         menu.addSeparator()
         act_del = menu.addAction(t("删除模块"))
         chosen = menu.exec(global_pos)
-        if chosen is act_edit:
+        if chosen is act_color:
+            self.edit_node_color(card)
+        elif chosen is act_edit:
             self.edit_ports(card)
         elif chosen is act_import:
             self.import_hpp(default_process=card.process_name)

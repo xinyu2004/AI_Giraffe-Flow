@@ -1,7 +1,6 @@
 schema_version: '0.1'
 project_id: adc
 variant: adc_drive_park
-topology: ap_only
 modules:
 - id: adapter.vehicle_can_gateway
   hpp: projects/adc/interfaces/vehicle_gateway/io_types.hpp
@@ -33,10 +32,10 @@ deployments:
   - services.semantic.Trajectory
   - services.semantic.EgoMotion
   requires:
-  - services.semantic.ParkingTrajectory
-  - services.semantic.Trajectory
-  - services.semantic.VehicleMode
   - services.semantic.VehicleBus
+  - services.semantic.VehicleMode
+  - services.semantic.Trajectory
+  - services.semantic.ParkingTrajectory
 - process: perception.fcm
   compute_domain: ap_linux
   provides:
@@ -54,6 +53,7 @@ deployments:
   compute_domain: ap_linux
   provides:
   - services.semantic.Trajectory
+  - services.semantic.Freespace
   requires:
   - services.semantic.EgoMotion
   - services.semantic.Perception_MESSAGE_Out_St
@@ -65,7 +65,7 @@ deployments:
   requires:
   - services.semantic.EgoMotion
   - services.semantic.SurroundWorld
-  - services.semantic.VehicleMode
+  - services.semantic.FreespaceNear
 - process: mode.drive_park
   compute_domain: ap_linux
   provides:
@@ -117,6 +117,8 @@ bindings:
   outputs:
   - service: semantic.Trajectory
     type: Trajectory
+  - service: semantic.Freespace
+    type: Freespace
 - module: planning.parking
   inputs:
   - service: semantic.SurroundWorld
@@ -125,8 +127,6 @@ bindings:
     type: FreespaceNear
   - service: semantic.EgoMotion
     type: EgoMotion
-  - service: semantic.VehicleMode
-    type: VehicleMode
   outputs:
   - service: semantic.ParkingTrajectory
     type: ParkingTrajectory
@@ -162,9 +162,6 @@ dataflows:
 - from: mode.drive_park
   service: services.semantic.VehicleMode
   to: adapter.vehicle_can_gateway
-- from: mode.drive_park
-  service: services.semantic.VehicleMode
-  to: planning.parking
 - from: perception.surround
   service: services.semantic.FreespaceNear
   to: planning.driving_plus
@@ -226,6 +223,8 @@ canvas:
         out:gf.channel.fr: left
         out:gf.channel.rl: left
         out:gf.channel.rr: left
+      color: '#aaffff'
+      color_user: true
     external.vehicle_mcu: {}
     adapter.vehicle_can_gateway:
       x: 11203.8
@@ -234,21 +233,22 @@ canvas:
       in_side: left
       port_sides:
         out:EgoMotion: right
-        in:ParkingTrajectory: right
+        in:ParkingTrajectory: bottom
         in:VehicleMode: bottom
         in:Trajectory: bottom
         in:VehicleBus: top
       port_slot_order:
         bottom:
-        - in:Trajectory
         - in:VehicleMode
+        - in:Trajectory
+        - in:ParkingTrajectory
         top:
         - in:VehicleBus
         right:
         - out:Perception_In_St
         - out:Trajectory
         - out:EgoMotion
-        - in:ParkingTrajectory
+      color: '#f1c40f'
     perception.fcm:
       x: 12363.5
       y: -343.3
@@ -264,6 +264,7 @@ canvas:
         - out:Perception_MESSAGE_Out_St
         top:
         - in:gf.channel.front
+      color: '#8bc34a'
     perception.surround:
       x: 11807.8
       y: -508.2
@@ -287,6 +288,7 @@ canvas:
         - in:gf.channel.fr
         - in:gf.channel.rl
         - in:gf.channel.rr
+      color: '#3498db'
     planning.driving_plus:
       x: 12263.1
       y: 66.7
@@ -296,42 +298,48 @@ canvas:
         in:Perception_MESSAGE_Out_St: top
         in:FreespaceNear: top
         out:Trajectory: bottom
+        out:Freespace: bottom
       port_slot_order:
         left:
         - in:EgoMotion
         bottom:
         - out:Trajectory
+        - out:Freespace
         top:
         - in:FreespaceNear
         - in:Perception_MESSAGE_Out_St
+      color: '#9b59b6'
     planning.parking:
-      x: 11878.3
-      y: -155.7
+      x: 11876.7
+      y: -120.9
       out_side: right
       in_side: left
       port_sides:
-        out:ParkingTrajectory: left
+        out:ParkingTrajectory: bottom
         in:SurroundWorld: top
-        in:VehicleMode: bottom
+        in:FreespaceNear: top
         in:EgoMotion: left
       port_slot_order:
         left:
         - in:EgoMotion
-        - out:ParkingTrajectory
-        bottom:
-        - in:VehicleMode
         top:
         - in:SurroundWorld
+        - in:FreespaceNear
+        bottom:
+        - out:ParkingTrajectory
+      color: '#e91e63'
     mode.drive_park:
       x: 11957.0
       y: 432.2
       out_side: right
       in_side: left
       port_sides:
-        out:VehicleMode: top
-        in:EgoMotion: left
+        out:VehicleMode: left
+        in:EgoMotion: top
       port_slot_order:
-        left:
-        - in:EgoMotion
         top:
+        - in:EgoMotion
+        left:
         - out:VehicleMode
+      color: '#1abc9c'
+  edge_label_font_pt: 13

@@ -515,6 +515,28 @@ class ProjectSession:
             c["nodes"] = {}
         return c
 
+    # Default edge/mid-line signal label size (QFont pointSize). Absent key = this.
+    DEFAULT_EDGE_LABEL_FONT_PT = 9
+
+    def get_edge_label_font_pt(self) -> int:
+        """Canvas preference: mid-edge signal name size. Default 9 if unset."""
+        c = self.wiring.get("canvas")
+        if not isinstance(c, dict):
+            return self.DEFAULT_EDGE_LABEL_FONT_PT
+        v = c.get("edge_label_font_pt")
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return self.DEFAULT_EDGE_LABEL_FONT_PT
+        return max(7, min(18, int(v)))
+
+    def set_edge_label_font_pt(self, pt: int) -> None:
+        """Persist user edge-label size under wiring.canvas (undo via DocHistory)."""
+        pt_i = max(7, min(18, int(pt)))
+        c = self.canvas()
+        if c.get("edge_label_font_pt") == pt_i:
+            return
+        c["edge_label_font_pt"] = pt_i
+        self.mark_wiring_dirty()
+
     def get_node_ui(self, process: str) -> dict[str, Any]:
         """Read-only copy of canvas node UI. Never creates entries."""
         c = self.wiring.get("canvas")

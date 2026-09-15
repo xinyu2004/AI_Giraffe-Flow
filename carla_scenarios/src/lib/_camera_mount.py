@@ -207,14 +207,14 @@ def load_camera_mount() -> CameraMount:
 def scene_chase_pose() -> Tuple[float, float, float, float, float]:
     """ChaseCam=2 spectator (lab only).
 
-    Match BEV *front/rear relationship* (more road ahead than behind), not the
-    meter window 1:1. Too far/high (−52/24/−38) stretches the rear and pinches
-    the forward horizon — keep a short rear gap + longer look-ahead.
+    Rear ~35 m aligns with BEV CamBack for mutual check only (not coupled to
+    D_see). Slightly higher + milder pitch so forward horizon stays readable
+    after the longer rear gap.
 
     Returns (x_m, z_m, pitch_deg, yaw_deg, fov_deg) in vehicle frame.
     """
-    # ~22 m behind, moderate height, milder pitch, FOV so forward still reads long.
-    return (-22.0, 12.0, -26.0, 0.0, 78.0)
+    # x=-35 (vs BEV CamBack); z↑ / pitch milder → see farther ahead.
+    return (-35.0, 14.5, -19.0, 0.0, 78.0)
 
 
 def overhead_chase_pose() -> Tuple[float, float, float, float, float]:

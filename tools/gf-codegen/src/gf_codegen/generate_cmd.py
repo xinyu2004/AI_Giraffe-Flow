@@ -909,7 +909,7 @@ def _write_obs_foxglove(sor: dict[str, Any], out_dir: Path) -> int:
         "    if (synth_bev && now - last_bev >= std::chrono::milliseconds(33)) {",
         "      last_bev = now;",
         "      const bool have_bev = bev.has_perc_lanes || bev.n_obj > 0 || bev.n_surround > 0 ||",
-        "                            bev.has_fs_near || bev.n_traj >= 2 || bev.traj_d_see_m > 0.5f;",
+        "                            bev.has_fs_near || bev.has_fs_plan || bev.n_traj >= 2 || bev.traj_d_see_m > 0.5f;",
         "      if (have_bev) {",
         "        const auto png = gf_foxglove::render_ego_bev_png(bev);",
         "        const std::uint64_t t = bev.t_ns ? bev.t_ns : now_ns();",

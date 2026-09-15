@@ -40,7 +40,7 @@
 ```text
 D_vr         ← FCM host VR_End（标线质量门+cap。前车/弯/雾不写进这个字段）
 D_occ        ← 本车道 occupy 近端面（邻道无重叠不砍）
-D_fov        ← 光学：沿本车道 |atan2(y,x)| 超过驾驶楔 see_fov_deg（相机 100° 的内 50°）
+D_fov        ← 光学：沿本车道 |atan2(y,x)| 超过驾驶楔 see_fov_deg（= camera_contract front.fov，默认 100°）
 D_wx         ← 天气占位；SIL 先等于 cap
 D_see        ← slew(min(D_vr, D_occ, D_fov, D_wx, cap))   ← 驾驶尺，内部，不是 FCM
 T_plan       ← min(T_base≈10s, D_see / max(v, v_floor))

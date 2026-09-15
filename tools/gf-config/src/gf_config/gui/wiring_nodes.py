@@ -12,6 +12,7 @@ from gf_config.gui.wiring_dialogs import (
     AddNodeDialog,
     FrameIngestDialog,
     ImportPortsDialog,
+    NodeColorDialog,
     PortEditDialog,
 )
 from gf_config.gui.wiring_graph_items import ProcessCard, _qt_alive
@@ -80,12 +81,16 @@ class WiringNodesMixin:
             return
         fi = dict(self._session.frame_ingest_cfg())
         slots = list(self._session.camera_slots())
+        name = ProjectSession.FRAME_INGEST_PROCESS
+        ui = self._session.get_node_ui(name)
         dlg = FrameIngestDialog(
             fi,
             slots,
             parent=self,
             channel_policies=self._session.publish_policy_channels(),
             channel_names=self._session.channel_policy_names(),
+            color_hex=str(ui.get("color") or ""),
+            color_user=bool(ui.get("color_user")),
         )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
@@ -93,6 +98,11 @@ class WiringNodesMixin:
         fields, new_slots = dlg.result_config()
         self._apply_frame_ingest(fields, new_slots, seed_fcm=False)
         self._session.apply_channel_publish_policies(dlg.result_channel_policies())
+        action, hex_c = dlg.result_color_action()
+        if action == "auto":
+            self._session.clear_node_ui_keys(name, "color", "color_user")
+        elif action == "user":
+            self._session.set_node_ui(name, color=hex_c, color_user=True)
         self.rebuild()
         self.changed.emit()
 
@@ -296,6 +306,38 @@ class WiringNodesMixin:
                     names.append(short)
         return names
 
+    def edit_node_color(self, card: ProcessCard) -> None:
+        """Context menu / external double-click: colour only."""
+        if not self._session:
+            return
+        name = card.process_name
+        ui = self._session.get_node_ui(name)
+        dlg = NodeColorDialog(
+            name,
+            str(ui.get("color") or ""),
+            color_user=bool(ui.get("color_user")),
+            parent=self,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        if not self._apply_color_action(name, dlg.result_action()):
+            return
+        self.rebuild()
+        self.changed.emit()
+
+    def _apply_color_action(self, name: str, action_hex: tuple[str, str | None]) -> bool:
+        """Apply colour bar result. Returns False if nothing to write (keep)."""
+        assert self._session is not None
+        action, hex_c = action_hex
+        if action == "keep":
+            return False
+        self._push_undo()
+        if action == "auto":
+            self._session.clear_node_ui_keys(name, "color", "color_user")
+        else:
+            self._session.set_node_ui(name, color=hex_c, color_user=True)
+        return True
+
     def edit_ports(self, card: ProcessCard) -> None:
         if not self._session:
             return
@@ -311,6 +353,7 @@ class WiringNodesMixin:
             return
         soa_prov = [p for p in card.provides if not is_channel_svc(p)]
         soa_req = [r for r in card.requires if not is_channel_svc(r)]
+        ui = self._session.get_node_ui(card.process_name)
         dlg = PortEditDialog(
             card.process_name,
             soa_prov,
@@ -318,6 +361,8 @@ class WiringNodesMixin:
             self._port_candidates(card.process_name),
             self,
             out_policies=self._session.publish_policy_services(),
+            color_hex=str(ui.get("color") or ""),
+            color_user=bool(ui.get("color_user")),
         )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
@@ -326,6 +371,15 @@ class WiringNodesMixin:
         self._session.set_ports(card.process_name, provides, requires)
         self._session.apply_out_publish_policies(dlg.result_out_policies())
         self._session.prune_orphan_publish_policies()
+        action, hex_c = dlg.result_color_action()
+        if action == "auto":
+            self._session.clear_node_ui_keys(
+                card.process_name, "color", "color_user"
+            )
+        elif action == "user":
+            self._session.set_node_ui(
+                card.process_name, color=hex_c, color_user=True
+            )
         self.rebuild()
         self.changed.emit()
 

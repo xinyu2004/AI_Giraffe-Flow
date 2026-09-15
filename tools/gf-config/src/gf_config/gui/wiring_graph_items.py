@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsPathItem,
     QGraphicsSimpleTextItem,
-    QListWidget,
     QMenu,
 )
 
@@ -52,32 +51,302 @@ def _qt_alive(obj: Any) -> bool:
         return False
 
 
-# Distinct hues for “line color = source process” (dark canvas).
+# Hue-spread palette for dark canvas (one green / one cyan — avoid green pile-up).
 _PROCESS_PALETTE = (
-    "#5dade2",
-    "#58d68d",
-    "#f5b041",
-    "#af7ac5",
-    "#76d7c4",
-    "#f1948a",
-    "#f7dc6f",
-    "#85c1e9",
-    "#e59866",
-    "#a9cce3",
-    "#d5a6e6",
-    "#7dcea0",
+    "#5dade2",  # blue
+    "#e74c3c",  # red
+    "#f5b041",  # amber
+    "#9b59b6",  # purple
+    "#1abc9c",  # teal
+    "#e67e22",  # orange
+    "#3498db",  # sky
+    "#f1c40f",  # yellow
+    "#e91e63",  # pink
+    "#00bcd4",  # cyan
+    "#8bc34a",  # lime (sole green)
+    "#ff7043",  # deep orange
 )
 
+# Absolute floor for spatial neighbours; also each card links to K nearest others
+# (canvas coords are often 10k+, so a fixed px alone is not enough).
+_COLOR_NEAR_PX = 500.0
+_COLOR_K_NEAREST = 2
 
-def process_color(process: str) -> QColor:
-    """Stable theme color per process (edge color follows Out card)."""
-    name = (process or "").strip() or "?"
+
+def _name_hash(process: str) -> int:
     h = 0
-    for ch in name:
+    for ch in process:
         h = (h * 131 + ord(ch)) & 0xFFFFFFFF
-    return QColor(_PROCESS_PALETTE[h % len(_PROCESS_PALETTE)])
+    return int(h)
 
 
+def _hue_dist(a: QColor, b: QColor) -> float:
+    """Circular hue distance in [0, 0.5]; achromatic falls back to lightness."""
+    ha, hb = a.hueF(), b.hueF()
+    if ha < 0.0 or hb < 0.0:
+        return abs(a.lightnessF() - b.lightnessF())
+    d = abs(ha - hb)
+    return min(d, 1.0 - d)
+
+
+def _color_key(c: QColor) -> str:
+    return c.name().lower()
+
+
+def parse_canvas_color(value: Any) -> QColor | None:
+    """Parse ``#rgb`` / ``#rrggbb`` / bare hex from node_ui; None if invalid."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    if not s.startswith("#"):
+        s = "#" + s
+    c = QColor(s)
+    return c if c.isValid() else None
+
+
+def assign_process_colors(
+    names: list[str],
+    adjacency: dict[str, set[str]],
+    *,
+    locked: dict[str, QColor] | None = None,
+    preferred: dict[str, QColor] | None = None,
+) -> dict[str, QColor]:
+    """Assign card/edge theme colours.
+
+    Single pass, three layers (no re-checks elsewhere):
+    1. ``locked`` — user picks; always kept (allocator never steals these hues).
+    2. ``preferred`` — sticky auto from disk; kept only if still free vs locked/used
+       and not an exact neighbour clash.
+    3. Fresh palette pick for the rest (unique when board ≤ palette size).
+    """
+    uniq = sorted({(n or "").strip() or "?" for n in names})
+    palette = [QColor(c) for c in _PROCESS_PALETTE]
+    want_unique = len(uniq) <= len(palette)
+    locked = {k: v for k, v in (locked or {}).items() if k in uniq and v.isValid()}
+    preferred = {
+        k: v for k, v in (preferred or {}).items() if k in uniq and v.isValid()
+    }
+    assigned: dict[str, QColor] = {}
+    used_keys: set[str] = set()
+    order = sorted(uniq, key=lambda n: (-len(adjacency.get(n, ())), n))
+
+    def _nbr_clash(name: str, c: QColor) -> bool:
+        key = _color_key(c)
+        return any(
+            n in assigned and _color_key(assigned[n]) == key
+            for n in adjacency.get(name, ())
+        )
+
+    def _place(name: str, c: QColor) -> None:
+        assigned[name] = c
+        used_keys.add(_color_key(c))
+
+    for name in order:
+        c = locked.get(name)
+        if c is not None:
+            _place(name, c)
+
+    for name in order:
+        if name in assigned:
+            continue
+        c = preferred.get(name)
+        if c is None:
+            continue
+        if want_unique and _color_key(c) in used_keys:
+            continue
+        if _nbr_clash(name, c):
+            continue
+        _place(name, c)
+
+    def _pick(name: str, *, force_unique: bool) -> QColor:
+        nbrs = [assigned[n] for n in adjacency.get(name, ()) if n in assigned]
+        others = list(assigned.values())
+        start = _name_hash(name) % len(palette)
+        rotated = palette[start:] + palette[:start]
+        best: QColor | None = None
+        best_score = -1.0
+        for c in rotated:
+            if force_unique and _color_key(c) in used_keys:
+                continue
+            if any(_color_key(c) == _color_key(u) for u in nbrs):
+                continue
+            ref = nbrs if nbrs else others
+            score = min((_hue_dist(c, u) for u in ref), default=1.0)
+            if score > best_score + 1e-9:
+                best_score = score
+                best = c
+            elif abs(score - best_score) <= 1e-9 and best is not None:
+                avg = sum(_hue_dist(c, u) for u in ref) / len(ref) if ref else 1.0
+                avg_best = (
+                    sum(_hue_dist(best, u) for u in ref) / len(ref) if ref else 1.0
+                )
+                if avg > avg_best:
+                    best = c
+        if best is None and force_unique:
+            return _pick(name, force_unique=False)
+        if best is None:
+            best = max(
+                rotated,
+                key=lambda c: min((_hue_dist(c, u) for u in nbrs), default=0.0),
+            )
+        return best
+
+    for name in order:
+        if name in assigned:
+            continue
+        _place(name, _pick(name, force_unique=want_unique))
+    return assigned
+
+
+def build_process_color_adjacency(
+    names: list[str],
+    *,
+    flows: list[dict[str, Any]],
+    positions: dict[str, tuple[float, float]],
+    near_px: float = _COLOR_NEAR_PX,
+    k_nearest: int = _COLOR_K_NEAREST,
+) -> dict[str, set[str]]:
+    """Conflict graph: dataflow endpoints + near / k-nearest cards on canvas."""
+    name_set = {(n or "").strip() for n in names if (n or "").strip()}
+    adj: dict[str, set[str]] = {n: set() for n in name_set}
+
+    def _link(a: str, b: str) -> None:
+        if a == b or a not in adj or b not in adj:
+            return
+        adj[a].add(b)
+        adj[b].add(a)
+
+    for fl in flows:
+        if not isinstance(fl, dict):
+            continue
+        _link(str(fl.get("from") or "").strip(), str(fl.get("to") or "").strip())
+
+    items = [(n, positions[n]) for n in name_set if n in positions]
+    near2 = near_px * near_px
+    for i, (na, (xa, ya)) in enumerate(items):
+        dists: list[tuple[float, str]] = []
+        for nb, (xb, yb) in items:
+            if na == nb:
+                continue
+            dx, dy = xa - xb, ya - yb
+            d2 = dx * dx + dy * dy
+            if d2 <= near2:
+                _link(na, nb)
+            dists.append((d2, nb))
+        if k_nearest > 0 and dists:
+            dists.sort(key=lambda t: t[0])
+            for _, nb in dists[:k_nearest]:
+                _link(na, nb)
+    return adj
+
+
+def process_color(process: str, graph: Any | None = None) -> QColor:
+    """Theme colour for a process (SOA / GfChannel edge colour follows Out card).
+
+    When ``graph._process_color_map`` is set (rebuild), uses anti-adjacent
+    assignment; otherwise falls back to stable name hash into the palette.
+    """
+    name = (process or "").strip() or "?"
+    if graph is not None:
+        m = getattr(graph, "_process_color_map", None)
+        if isinstance(m, dict) and name in m:
+            c = m[name]
+            return c if isinstance(c, QColor) else QColor(c)
+    return QColor(_PROCESS_PALETTE[_name_hash(name) % len(_PROCESS_PALETTE)])
+
+
+def deconflict_edge_labels(edges: list[Any], *, pad: float = 3.0) -> None:
+    """Nudge edge labels so axis-aligned boxes do not overlap."""
+    alive: list[Any] = []
+    for e in edges:
+        if e is None or not hasattr(e, "_label") or not hasattr(e, "service"):
+            continue
+        src = getattr(e, "src", None)
+        dst = getattr(e, "dst", None)
+        if src is None or dst is None:
+            continue
+        if not _qt_alive(e._label):
+            continue
+        # Real QGraphicsPathItem edges: skip if C++ already deleted.
+        if hasattr(e, "scene") and not _qt_alive(e):
+            continue
+        alive.append(e)
+    alive.sort(
+        key=lambda e: (
+            getattr(getattr(e, "src", None), "process_name", ""),
+            getattr(getattr(e, "dst", None), "process_name", ""),
+            short_service(getattr(e, "service", "") or ""),
+        )
+    )
+    placed: list[QRectF] = []
+
+    def _overlaps(r: QRectF) -> bool:
+        for p in placed:
+            if r.intersects(p):
+                return True
+        return False
+
+    for e in alive:
+        br = e._label.boundingRect()
+        anchor = getattr(e, "_label_anchor", None)
+        if not isinstance(anchor, QPointF):
+            anchor = e._label.pos()
+        # Spiral offsets: keep near curve, separate stacked parallel edges.
+        offsets: list[tuple[float, float]] = [(0.0, 0.0)]
+        for step in range(1, 12):
+            d = 12.0 * step
+            offsets.extend(
+                (
+                    (0.0, -d),
+                    (0.0, d),
+                    (-d * 0.6, -d * 0.5),
+                    (d * 0.6, -d * 0.5),
+                    (-d * 0.6, d * 0.5),
+                    (d * 0.6, d * 0.5),
+                )
+            )
+        chosen = QPointF(anchor.x(), anchor.y())
+        for ox, oy in offsets:
+            pos = QPointF(anchor.x() + ox, anchor.y() + oy)
+            rect = QRectF(pos.x(), pos.y(), br.width(), br.height()).adjusted(
+                -pad, -pad, pad, pad
+            )
+            if not _overlaps(rect):
+                chosen = pos
+                placed.append(rect)
+                break
+        else:
+            # Last resort: stack below previous
+            if placed:
+                last = placed[-1]
+                chosen = QPointF(anchor.x(), last.bottom() + pad + 2.0)
+            rect = QRectF(chosen.x(), chosen.y(), br.width(), br.height()).adjusted(
+                -pad, -pad, pad, pad
+            )
+            placed.append(rect)
+        e._label.setPos(chosen)
+
+
+
+
+def _edge_label_font(graph: Any | None = None) -> QFont:
+    """Bold font for mid-edge signal names; size from view preference (default 9)."""
+    pt = 9
+    if graph is not None:
+        getter = getattr(graph, "signal_label_font_pt", None)
+        if callable(getter):
+            try:
+                pt = int(getter())
+            except (TypeError, ValueError):
+                pt = 9
+        elif isinstance(getter, int):
+            pt = getter
+    font = QFont()
+    font.setPointSize(max(7, min(18, pt)))
+    font.setBold(True)
+    return font
 
 
 _PORT_SIDES = ("left", "right", "top", "bottom")
@@ -114,18 +383,6 @@ def _norm_side(side: str | None, default: str) -> str:
 
 def _qpoint(x: float, y: float) -> QPointF:
     return QPointF(x, y)
-
-
-class DeselectableListWidget(QListWidget):
-    """Click empty area → clear current row (no sticky last selection)."""
-
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        if self.itemAt(event.position().toPoint()) is None:
-            self.clearSelection()
-            self.setCurrentRow(-1)
-            event.accept()
-            return
-        super().mousePressEvent(event)
 
 
 def cubic_bezier_point(p0: QPointF, p1: QPointF, p2: QPointF, p3: QPointF, t: float) -> QPointF:
@@ -345,7 +602,7 @@ class ProcessCard(QGraphicsItem):
     EXT_WIDTH = 180
     EXT_HEIGHT = 56
     LINE = 16
-    HEADER = 28  # title only
+    HEADER = 30  # title only (11pt name)
 
     def __init__(
         self,
@@ -650,30 +907,39 @@ class ProcessCard(QGraphicsItem):
         return slots
 
     def out_port_for_service(self, service: str) -> PortItem | None:
+        """Exact Out match only — never fall back to another service's port.
+
+        Falling back to ports[0] stacked unrelated dataflows on one circle
+        when deployments.requires/provides lagged behind dataflows/bindings.
+        """
         key = port_link_key(service)
         for p in self._out_ports:
             if port_link_key(p.service) == key:
                 return p
-        return self._out_ports[0] if self._out_ports else None
+        return None
 
     def in_port_for_service(self, service: str) -> PortItem | None:
+        """Exact In match only — never fall back to another service's port."""
         key = port_link_key(service)
         for p in self._in_ports:
             if port_link_key(p.service) == key:
                 return p
-        return self._in_ports[0] if self._in_ports else None
+        return None
 
     def out_anchor(self, service: str) -> QPointF:
         port = self.out_port_for_service(service)
         if port:
             return port.scene_center()
-        return self.scenePos() + QPointF(self.card_width, self._height / 2)
+        # No matching Out: use declared side mid-edge (do not steal another port).
+        side = self.port_side_for(service, "out")
+        return self.mapToScene(self._place_on_side(side, 0, 1))
 
     def in_anchor(self, service: str) -> QPointF:
         port = self.in_port_for_service(service)
         if port:
             return port.scene_center()
-        return self.scenePos() + QPointF(0, self._height / 2)
+        side = self.port_side_for(service, "in")
+        return self.mapToScene(self._place_on_side(side, 0, 1))
 
     def peer_anchor(self, toward: ProcessCard) -> QPointF:
         """MCU↔gateway 边界连线锚点（模块中心朝向对端一侧）。"""
@@ -733,10 +999,10 @@ class ProcessCard(QGraphicsItem):
                 border = QColor("#c9a227")
             elif camera:
                 fill = QColor("#152832")
-                border = process_color(self.process_name)
+                border = process_color(self.process_name, self.graph)
             else:
                 fill = QColor("#15352c")
-                border = process_color(self.process_name)
+                border = process_color(self.process_name, self.graph)
             border_w = 2
 
         painter.setBrush(QBrush(fill))
@@ -756,13 +1022,13 @@ class ProcessCard(QGraphicsItem):
 
         y = 8
         font_title = QFont()
-        font_title.setPointSize(10)
+        font_title.setPointSize(11)
         font_title.setBold(True)
         painter.setFont(font_title)
         painter.setPen(title_c)
         title = self.label or self.process_name
         painter.drawText(
-            QRectF(8, y, w - 16, 20),
+            QRectF(8, y, w - 16, 22),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
             title,
         )
@@ -845,6 +1111,13 @@ class ProcessCard(QGraphicsItem):
                             ):
                                 sib.update_path()
                                 touched.append(sib)
+                    if self.graph is not None:
+                        deconflict_edge_labels(
+                            [
+                                *(getattr(self.graph, "_edges", None) or []),
+                                *(getattr(self.graph, "_channel_edges", None) or []),
+                            ]
+                        )
                 finally:
                     self._updating_links = False
             if self.graph is not None:
@@ -872,7 +1145,9 @@ class ProcessCard(QGraphicsItem):
 
     def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if self.graph is not None:
-            if self.is_frame_ingest():
+            if self.is_external():
+                self.graph.edit_node_color(self)
+            elif self.is_frame_ingest():
                 self.graph.edit_frame_ingest(self)
             else:
                 self.graph.edit_ports(self)
@@ -939,11 +1214,12 @@ class EdgeCurve(QGraphicsPathItem):
         self.fan_index = fan_index
         self.fan_count = fan_count
         self.graph = graph
-        self._base_color = process_color(src.process_name)
+        self._base_color = process_color(src.process_name, graph)
         self._highlight = False
         self._dimmed = False
         self._role = ""  # "" | "out" | "in" — 相对选中节点的进出
         self._handle: RouteHandle | None = None
+        self._label_anchor = QPointF(0.0, 0.0)
         self.setZValue(-1)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         # PathItem 默认裁剪子项到线形；关掉才能看见路径点
@@ -954,10 +1230,7 @@ class EdgeCurve(QGraphicsPathItem):
         dst._edges.append(self)
 
         self._label = QGraphicsSimpleTextItem(short_service(service))
-        font = QFont()
-        font.setPointSize(9)
-        font.setBold(True)
-        self._label.setFont(font)
+        self._label.setFont(_edge_label_font(graph))
         self._apply_style()
         self.update_path()
 
@@ -1066,6 +1339,49 @@ class EdgeCurve(QGraphicsPathItem):
             n = len(siblings)
         return (idx - (n - 1) / 2.0) * 28.0
 
+    def _label_stagger(self) -> QPointF:
+        """Stable label offset so update_path alone does not stack parallel edges.
+
+        Selection / style refresh calls update_path and used to wipe deconflict
+        offsets — bake a deterministic stagger for same src→dst corridors (and
+        same-service fan-out) so labels stay apart without a post-pass.
+        """
+        corridor = [
+            e
+            for e in self.src._edges
+            if isinstance(e, EdgeCurve)
+            and _qt_alive(e)
+            and e.src is self.src
+            and e.dst is self.dst
+        ]
+        if len(corridor) > 1:
+            corridor.sort(key=lambda e: short_service(e.service))
+            try:
+                idx = corridor.index(self)
+            except ValueError:
+                return QPointF(0.0, 0.0)
+            t = idx - (len(corridor) - 1) / 2.0
+            # Short vertical links: spread sideways + slight vertical.
+            return QPointF(t * 88.0, t * 18.0)
+
+        fan = [
+            e
+            for e in self.src._edges
+            if isinstance(e, EdgeCurve)
+            and _qt_alive(e)
+            and e.src is self.src
+            and short_service(e.service) == short_service(self.service)
+        ]
+        if len(fan) > 1:
+            fan.sort(key=lambda e: e.dst.process_name)
+            try:
+                idx = fan.index(self)
+            except ValueError:
+                return QPointF(0.0, 0.0)
+            t = idx - (len(fan) - 1) / 2.0
+            return QPointF(t * 24.0, t * 16.0)
+        return QPointF(0.0, 0.0)
+
     def update_path(self) -> None:
         p0 = self.src.out_anchor(self.service)
         p3 = self.dst.in_anchor(self.service)
@@ -1106,7 +1422,12 @@ class EdgeCurve(QGraphicsPathItem):
         if self.scene() and self._label.scene() is None:
             self.scene().addItem(self._label)
         self._label.setText(short_service(self.service))
-        self._label.setPos(label_pt.x() - 20, label_pt.y() - 18)
+        stagger = self._label_stagger()
+        self._label_anchor = QPointF(
+            label_pt.x() - 20.0 + stagger.x(),
+            label_pt.y() - 18.0 + stagger.y(),
+        )
+        self._label.setPos(self._label_anchor)
         self._label.setZValue(2 if (self._highlight or self.isSelected()) else 1)
         self.setZValue(1 if self.isSelected() else (0 if self._highlight else -1))
 
@@ -1208,6 +1529,7 @@ class MissingEdge(QGraphicsPathItem):
         src._edges.append(self)
         dst._edges.append(self)
         self._label = QGraphicsSimpleTextItem(f"? {short_service(service)}")
+        self._label.setFont(_edge_label_font(graph))
         self._label.setBrush(QBrush(QColor("#f5b7b1")))
         self._apply_style()
         self.update_path()
@@ -1334,10 +1656,7 @@ class McuPeerLink(QGraphicsPathItem):
             shorts = sorted({short_service(s) for s in services})
             label = " / ".join(shorts[:3])
         self._label = QGraphicsSimpleTextItem(label)
-        font = QFont()
-        font.setPointSize(9)
-        font.setBold(True)
-        self._label.setFont(font)
+        self._label.setFont(_edge_label_font(graph))
         self._apply_style()
         self.update_path()
 
@@ -1433,10 +1752,11 @@ class ChannelEdge(QGraphicsPathItem):
         self.flow = flow
         self.service = self.slot  # PortItem/anchor helpers reuse service name
         self.graph = graph
-        self._base_color = QColor("#5dade2")
+        self._base_color = process_color(src.process_name, graph)
         self._highlight = False
         self._dimmed = False
         self._role = ""
+        self._label_anchor = QPointF(0.0, 0.0)
         self.setZValue(-1)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, False)
@@ -1445,10 +1765,7 @@ class ChannelEdge(QGraphicsPathItem):
         src._edges.append(self)
         dst._edges.append(self)
         self._label = QGraphicsSimpleTextItem(self.slot)
-        font = QFont()
-        font.setPointSize(9)
-        font.setBold(True)
-        self._label.setFont(font)
+        self._label.setFont(_edge_label_font(graph))
         self._apply_style()
         self.update_path()
 
@@ -1533,7 +1850,8 @@ class ChannelEdge(QGraphicsPathItem):
         if self.scene() and self._label.scene() is None:
             self.scene().addItem(self._label)
         self._label.setText(self.slot)
-        self._label.setPos(label_pt.x() - 28, label_pt.y() - 18)
+        self._label_anchor = QPointF(label_pt.x() - 28, label_pt.y() - 18)
+        self._label.setPos(self._label_anchor)
         self._label.setZValue(2 if (self._highlight or self.isSelected()) else 1)
         self.setZValue(1 if self.isSelected() else (0 if self._highlight else -1))
 

@@ -163,10 +163,11 @@ _EN: dict[str, str] = {
         "Rows come from module Outs (also editable via canvas double-click). "
         "Fan-out shares one topic policy."
     ),
-    "语义话题：画布双击模块 → Out 表改触发。"
+    "语义话题：画布双击模块 → Out 表改触发（同对话框可改节点颜色）。"
     "通道话题：双击 frame_ingest 改触发。"
     "一发多收共享同一话题策略；Signals 页不再编辑发布表。": (
-        "Semantic topics: canvas double-click → Out table. "
+        "Semantic topics: canvas double-click → Out table "
+        "(same dialog also edits node color). "
         "Channel topics: double-click frame_ingest. "
         "Fan-out shares one topic policy; Signals page no longer edits the table."
     ),
@@ -810,6 +811,24 @@ _EN: dict[str, str] = {
         "(behavior is compile-frozen; do not hand-edit camera JSON)"
     ),
     # Canvas / port / frame_ingest (wiring_dialogs + wiring_graph)
+    "节点颜色 — {process}": "Node color — {process}",
+    "节点颜色…": "Node color…",
+    "节点颜色（边框 / 出边，落盘 wiring.canvas）": (
+        "Node color (border / outgoing edges, saved in wiring.canvas)"
+    ),
+    "色谱选择会写入色值；自动配色避开其他节点已占用颜色。": (
+        "Spectrum fills the hex field; auto colors avoid hues already in use."
+    ),
+    "边框 / 出边颜色（落盘到 wiring.canvas）": (
+        "Border / outgoing-edge color (saved in wiring.canvas)"
+    ),
+    "打开色谱": "Open color picker",
+    "色谱…": "Spectrum…",
+    "恢复自动配色": "Restore auto color",
+    "选择颜色": "Choose color",
+    "色谱选择会写入上方色值；自动配色会避开其他节点已占用的颜色。": (
+        "Spectrum choice fills the hex field; auto colors avoid hues already in use."
+    ),
     "编辑端口 — {process}": "Edit ports — {process}",
     "Out（服务）": "Out (service)",
     "触发": "Trigger",
@@ -889,11 +908,36 @@ _EN: dict[str, str] = {
     "计算域": "Compute domain",
     "搜索信号（模糊匹配名 / 进程）…": "Search signals (fuzzy name / process)…",
     "Out=绿 · In=橙 · !=未连\n"
-    "线色=源模块（同卡扇出同色）· 蓝点划线=GfChannel\n"
+    "线色=源模块（同卡扇出同色）· 点划线=GfChannel\n"
     "拖拽连线 · Ctrl+拖改边/同边调序 · Ctrl+Z/Y 撤销": (
         "Out=green · In=orange · !=unwired\n"
-        "Edge color=source module (fan-out same color) · blue dots=GfChannel\n"
+        "Edge color=source module (fan-out same color) · dash-dot=GfChannel\n"
         "Drag to wire · Ctrl+drag move/reorder · Ctrl+Z/Y undo"
+    ),
+    "信号字号加大": "Increase signal font",
+    "信号字号减小": "Decrease signal font",
+    "线上信号名字号（中间标签）。新项目默认 9；改后写入 wiring 并支持撤销。": (
+        "Font size for mid-edge signal names. Default 9 for new projects; "
+        "saved in wiring.yaml and undoable. Ctrl+Up / Ctrl+Down."
+    ),
+    "Verify OK — 作者态完成（见 Lineage 窗口）。需要 C++ API 时再 Generate (Ctrl+G)；然后 compile_sil": (
+        "Verify OK — authoring done (see Lineage dialog). "
+        "Generate (Ctrl+G) for C++ APIs if needed; then compile_sil"
+    ),
+    "成功。请查看 Lineage 窗口。\n\n"
+    "拓扑图见页 1 画布；评审附件可用「文件 → 导出 Graphviz」。\n"
+    "运行时序/回放请用 GMT GUI。\n\n"
+    "若要生成 Proxy/Skeleton：文件 → Generate 或 Ctrl+G。": (
+        "Success. See the Lineage dialog.\n\n"
+        "Topology is on tab-1 canvas; use File → Export Graphviz for review attachments.\n"
+        "Use GMT GUI for runtime timing/replay.\n\n"
+        "For Proxy/Skeleton: File → Generate or Ctrl+G."
+    ),
+    "Verify 退出码 {rc} — 见 Lineage 红项": (
+        "Verify exit {rc} — see red items in Lineage"
+    ),
+    "退出码 {rc}。请查看 Lineage 红项。": (
+        "Exit {rc}. Check red items in the Lineage dialog."
     ),
     "尚无 lineage。菜单：文件 → Verify（Ctrl+R）": (
         "No lineage yet. Menu: File → Verify (Ctrl+R)"
@@ -914,10 +958,11 @@ _EN: dict[str, str] = {
     "勾选要加入的名称（struct / broadcast / method / interface）：": (
         "Check names to add (struct / broadcast / method / interface):"
     ),
-    "语义话题：画布双击模块 → Out 表改触发。"
+    "语义话题：画布双击模块 → Out 表改触发（同对话框可改节点颜色）。"
     "通道话题：双击 frame_ingest 改触发。"
     "一发多收共享同一话题策略；Signals 页不再编辑发布表。": (
-        "Semantic topics: canvas double-click → Out table. "
+        "Semantic topics: canvas double-click → Out table "
+        "(same dialog also edits node color). "
         "Channel topics: double-click frame_ingest. "
         "Fan-out shares one topic policy; Signals page no longer edits the table."
     ),

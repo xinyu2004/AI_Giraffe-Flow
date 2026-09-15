@@ -56,7 +56,7 @@ class MainWindow(QMainWindow):
         self._graph = WiringGraphView(self)
         self._ara_cfg_ed = AraCfgEditor(self)
 
-        # 页 1：左 SKU（默认展开）| 箭头 | 画布（右侧连线默认收起）
+        # 页 1：左 SKU（可折叠）| 箭头 | 画布
         self._sku_panel = QWidget(self)
         sku_l = QVBoxLayout(self._sku_panel)
         sku_l.setContentsMargins(0, 0, 0, 0)
@@ -207,23 +207,17 @@ class MainWindow(QMainWindow):
 
         view_menu.addSeparator()
 
-        act_flows = QAction(t("右侧 · 连线列表"), self)
-        act_flows.triggered.connect(self._show_flows_panel)
-        view_menu.addAction(act_flows)
+        act_font_up = QAction(t("信号字号加大"), self)
+        act_font_up.setShortcut("Ctrl+Up")
+        act_font_up.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_font_up.triggered.connect(lambda: self._graph.bump_signal_label_font(1))
+        view_menu.addAction(act_font_up)
 
-        act_lineage = QAction(t("右侧 · Lineage 报告"), self)
-        act_lineage.setShortcut("Ctrl+L")
-        act_lineage.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
-        act_lineage.triggered.connect(self._show_lineage_panel)
-        view_menu.addAction(act_lineage)
-
-        act_toggle_sku = QAction(t("折叠/展开左侧 SKU"), self)
-        act_toggle_sku.triggered.connect(self._toggle_sku_panel)
-        view_menu.addAction(act_toggle_sku)
-
-        act_toggle_right = QAction(t("折叠/展开右侧面板"), self)
-        act_toggle_right.triggered.connect(self._graph.toggle_right_panel)
-        view_menu.addAction(act_toggle_right)
+        act_font_down = QAction(t("信号字号减小"), self)
+        act_font_down.setShortcut("Ctrl+Down")
+        act_font_down.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        act_font_down.triggered.connect(lambda: self._graph.bump_signal_label_font(-1))
+        view_menu.addAction(act_font_down)
 
         view_menu.addSeparator()
 
@@ -354,7 +348,7 @@ class MainWindow(QMainWindow):
     def _toggle_sku_panel(self) -> None:
         self._sku_collapsed = not self._sku_collapsed
         self._sku_panel.setVisible(not self._sku_collapsed)
-        # 收起 ▶ / 展开 ◀（与右侧 ▶收起 / ◀展开 对称）
+        # 收起 ▶ / 展开 ◀
         self._btn_toggle_sku.setText("▶" if self._sku_collapsed else "◀")
 
     def _fit_graph(self) -> None:
@@ -413,14 +407,6 @@ class MainWindow(QMainWindow):
         finally:
             self._history.suppress = False
             self._history.end_edit()
-
-    def _show_flows_panel(self) -> None:
-        self._tabs.setCurrentWidget(self._signals_page)
-        self._graph.focus_flows()
-
-    def _show_lineage_panel(self) -> None:
-        self._tabs.setCurrentWidget(self._signals_page)
-        self._graph.focus_lineage()
 
     def _browse_open(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -683,7 +669,7 @@ class MainWindow(QMainWindow):
         if rc == 0:
             self.statusBar().showMessage(
                 t(
-                    "Verify OK — 作者态完成（见右侧 Lineage）。"
+                    "Verify OK — 作者态完成（见 Lineage 窗口）。"
                     "需要 C++ API 时再 Generate (Ctrl+G)；然后 compile_sil"
                 ),
                 8000,
@@ -693,7 +679,7 @@ class MainWindow(QMainWindow):
                     self,
                     t("Verify"),
                     t(
-                        "成功。请查看右侧「Lineage」。\n\n"
+                        "成功。请查看 Lineage 窗口。\n\n"
                         "拓扑图见页 1 画布；评审附件可用「文件 → 导出 Graphviz」。\n"
                         "运行时序/回放请用 GMT GUI。\n\n"
                         "若要生成 Proxy/Skeleton：文件 → Generate 或 Ctrl+G。"
@@ -701,10 +687,10 @@ class MainWindow(QMainWindow):
                 )
             return True
         self.statusBar().showMessage(
-            t("Verify 退出码 {rc} — 见右侧 Lineage 红项").format(rc=rc), 8000
+            t("Verify 退出码 {rc} — 见 Lineage 红项").format(rc=rc), 8000
         )
         QMessageBox.warning(
-            self, t("Verify"), t("退出码 {rc}。请查看右侧 Lineage 红项。").format(rc=rc)
+            self, t("Verify"), t("退出码 {rc}。请查看 Lineage 红项。").format(rc=rc)
         )
         return False
 
@@ -737,7 +723,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Generate",
-                f"Verify/Generate 失败（码 {rc}）。请先修好右侧 Lineage。",
+                f"Verify/Generate 失败（码 {rc}）。请先修好 Lineage。",
             )
             return
         self.statusBar().showMessage(

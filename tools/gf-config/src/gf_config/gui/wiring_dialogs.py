@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -38,6 +40,140 @@ from gf_config.core import (
     short_service,
 )
 from gf_config.i18n import t
+
+
+def _parse_hex_color(text: str) -> QColor | None:
+    s = (text or "").strip()
+    if not s:
+        return None
+    if not s.startswith("#"):
+        s = "#" + s
+    c = QColor(s)
+    return c if c.isValid() else None
+
+
+class NodeColorBar(QWidget):
+    """Compact colour row: swatch + hex + spectrum + restore-auto."""
+
+    def __init__(
+        self,
+        color_hex: str = "",
+        *,
+        color_user: bool = False,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._auto = not color_user
+        self._restore_auto = False
+        self._color = _parse_hex_color(color_hex) or QColor("#5dade2")
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(QLabel(t("节点颜色（边框 / 出边，落盘 wiring.canvas）")))
+
+        row = QHBoxLayout()
+        self._swatch = QPushButton()
+        self._swatch.setFixedSize(40, 28)
+        self._swatch.setToolTip(t("打开色谱"))
+        self._swatch.clicked.connect(self._pick_spectrum)
+        row.addWidget(self._swatch)
+
+        self._hex = QLineEdit()
+        self._hex.setPlaceholderText("#rrggbb")
+        self._hex.setMaximumWidth(120)
+        self._hex.textEdited.connect(self._on_hex_edited)
+        row.addWidget(self._hex)
+
+        btn_spectrum = QPushButton(t("色谱…"))
+        btn_spectrum.clicked.connect(self._pick_spectrum)
+        btn_auto = QPushButton(t("恢复自动配色"))
+        btn_auto.clicked.connect(self._set_auto)
+        row.addWidget(btn_spectrum)
+        row.addWidget(btn_auto)
+        row.addStretch(1)
+        root.addLayout(row)
+
+        hint = QLabel(t("色谱选择会写入色值；自动配色避开其他节点已占用颜色。"))
+        hint.setStyleSheet("color:#888;font-size:11px;")
+        root.addWidget(hint)
+        self._sync_ui()
+
+    def _sync_ui(self) -> None:
+        hex_c = self._color.name()
+        self._hex.blockSignals(True)
+        self._hex.setText(hex_c)
+        self._hex.blockSignals(False)
+        self._hex.setEnabled(not self._auto)
+        self._swatch.setStyleSheet(
+            f"background:{hex_c}; border:1px solid #888; border-radius:4px;"
+        )
+
+    def _pick_spectrum(self) -> None:
+        chosen = QColorDialog.getColor(
+            self._color,
+            self,
+            t("选择颜色"),
+            QColorDialog.ColorDialogOption.DontUseNativeDialog,
+        )
+        if not chosen.isValid():
+            return
+        self._restore_auto = False
+        self._auto = False
+        self._color = chosen
+        self._sync_ui()
+
+    def _on_hex_edited(self, text: str) -> None:
+        c = _parse_hex_color(text)
+        if c is None:
+            return
+        self._restore_auto = False
+        self._auto = False
+        self._color = c
+        self._swatch.setStyleSheet(
+            f"background:{c.name()}; border:1px solid #888; border-radius:4px;"
+        )
+
+    def _set_auto(self) -> None:
+        self._restore_auto = True
+        self._auto = True
+        self._sync_ui()
+
+    def result_action(self) -> tuple[str, str | None]:
+        """``("keep"|"auto"|"user", hex|None)``."""
+        if self._restore_auto:
+            return "auto", None
+        if self._auto:
+            return "keep", None
+        c = _parse_hex_color(self._hex.text()) or self._color
+        return "user", c.name()
+
+
+class NodeColorDialog(QDialog):
+    """Standalone colour picker (external MCU / context menu)."""
+
+    def __init__(
+        self,
+        process: str,
+        color_hex: str = "",
+        *,
+        color_user: bool = False,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(t("节点颜色 — {process}").format(process=process))
+        root = QVBoxLayout(self)
+        self._bar = NodeColorBar(color_hex, color_user=color_user, parent=self)
+        root.addWidget(self._bar)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def result_action(self) -> tuple[str, str | None]:
+        return self._bar.result_action()
+
 
 _TRIGGERS = (
     ("period", "周期"),
@@ -79,7 +215,7 @@ def _read_policy_row(trig: QComboBox, spin: QSpinBox) -> dict[str, Any]:
 
 
 class PortEditDialog(QDialog):
-    """Double-click block: In/Out ports + per-Out publish trigger (topic policy)."""
+    """Double-click block: colour + In/Out ports + per-Out publish trigger."""
 
     def __init__(
         self,
@@ -90,10 +226,12 @@ class PortEditDialog(QDialog):
         parent: QWidget | None = None,
         *,
         out_policies: dict[str, dict[str, Any]] | None = None,
+        color_hex: str = "",
+        color_user: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(t("编辑端口 — {process}").format(process=process))
-        self.resize(560, 520)
+        self.resize(560, 560)
         self._active_in = True
         self._policies = {
             short_service(k): dict(v)
@@ -129,6 +267,8 @@ class PortEditDialog(QDialog):
             self._svc.addItem("services.semantic.")
 
         layout = QVBoxLayout(self)
+        self._color_bar = NodeColorBar(color_hex, color_user=color_user, parent=self)
+        layout.addWidget(self._color_bar)
         layout.addWidget(QLabel(t("In（requires）")))
         layout.addWidget(self._requires)
         layout.addWidget(
@@ -288,6 +428,9 @@ class PortEditDialog(QDialog):
         requires = [self._requires.item(i).text() for i in range(self._requires.count())]
         return provides, requires
 
+    def result_color_action(self) -> tuple[str, str | None]:
+        return self._color_bar.result_action()
+
     def result_out_policies(self) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
         for i in range(self._outs.rowCount()):
@@ -400,12 +543,16 @@ class FrameIngestDialog(QDialog):
         parent: QWidget | None = None,
         channel_policies: dict[str, dict[str, Any]] | None = None,
         channel_names: list[str] | None = None,
+        color_hex: str = "",
+        color_user: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(t("frame_ingest · 视频契约"))
         self.setMinimumWidth(520)
         self._rows: list[dict[str, Any]] = []
         root = QVBoxLayout(self)
+        self._color_bar = NodeColorBar(color_hex, color_user=color_user, parent=self)
+        root.addWidget(self._color_bar)
         hint = QLabel(
             t(
                 "每路 = 一个 Out（gf.channel.{id}）→ 拖到消费方。\n"
@@ -729,6 +876,9 @@ class FrameIngestDialog(QDialog):
             return
         self._fi_channels = new_map
         self.accept()
+
+    def result_color_action(self) -> tuple[str, str | None]:
+        return self._color_bar.result_action()
 
     def result_config(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Freeze SOP default isp; SIL overrides via GF_FRAME_SOURCE."""

@@ -8,9 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QListWidgetItem
-
 from gf_config.core import ProjectSession, is_channel_svc, normalize_channel_slot, short_service
 from gf_config.gui.wiring_graph_items import (
     ChannelEdge,
@@ -19,8 +16,13 @@ from gf_config.gui.wiring_graph_items import (
     MissingEdge,
     ProcessCard,
     _qt_alive,
+    assign_process_colors,
+    build_process_color_adjacency,
+    deconflict_edge_labels,
     is_external_node,
+    parse_canvas_color,
 )
+
 
 def rebuild_wiring_graph(
     view: Any,
@@ -43,7 +45,6 @@ def rebuild_wiring_graph(
     # Block selectionChanged while tearing down — scene.clear() deletes C++ items
     # while Python still briefly holds ProcessCard/EdgeCurve wrappers.
     view._scene.blockSignals(True)
-    view._flow_list.blockSignals(True)
     try:
         for e in view._edges:
             if _qt_alive(e):
@@ -63,10 +64,8 @@ def rebuild_wiring_graph(
         view._missing.clear()
         view._peers.clear()
         view._scene.clear()
-        view._flow_list.clear()
     finally:
         view._scene.blockSignals(False)
-        view._flow_list.blockSignals(False)
 
     if not view._session:
         return
@@ -129,6 +128,66 @@ def rebuild_wiring_graph(
             continue
         if slot and slot not in channel_ins.setdefault(dst, []):
             channel_ins[dst].append(slot)
+
+    # Colour map before cards/edges: anti-adjacent hues (dataflow + spatial).
+    color_names: list[str] = []
+    color_pos: dict[str, tuple[float, float]] = {}
+    for name in ordered:
+        if ProjectSession.is_frame_ingest_process(process=name):
+            continue
+        ui0 = view._session.get_node_ui(name)
+        kind0 = str(ui0.get("kind") or "")
+        if is_external_node(kind=kind0, process=name) and not show_mcu:
+            continue
+        if name in view._layout_pos:
+            cx, cy = view._layout_pos[name]
+        elif "x" in ui0 and "y" in ui0:
+            cx, cy = float(ui0["x"]), float(ui0["y"])
+        else:
+            cx, cy = auto_slots.get(name, (40.0, 40.0))
+        color_names.append(name)
+        color_pos[name] = (cx, cy)
+    if need_ingest:
+        color_names.append(ingest_name)
+        if ingest_name in view._layout_pos:
+            color_pos[ingest_name] = view._layout_pos[ingest_name]
+        else:
+            # ingest card position resolved below; seed near auto slot
+            color_pos[ingest_name] = auto_slots.get(ingest_name, (40.0, -80.0))
+
+    locked: dict[str, Any] = {}
+    preferred: dict[str, Any] = {}
+    for name in color_names:
+        ui_c = view._session.get_node_ui(name)
+        qc = parse_canvas_color(ui_c.get("color"))
+        if qc is None:
+            continue
+        if ui_c.get("color_user"):
+            locked[name] = qc
+        else:
+            preferred[name] = qc
+    view._process_color_map = assign_process_colors(
+        color_names,
+        build_process_color_adjacency(
+            color_names,
+            flows=list(view._session.dataflows()),
+            positions=color_pos,
+        ),
+        locked=locked,
+        preferred=preferred,
+    )
+    # Persist auto colours (never overwrite color_user locks).
+    for name, qc in view._process_color_map.items():
+        if name in locked:
+            continue
+        hex_c = qc.name()
+        ui_c = view._session.get_node_ui(name)
+        same = str(ui_c.get("color") or "").lower() == hex_c.lower()
+        if same and not ui_c.get("color_user"):
+            continue
+        view._session.set_node_ui(name, color=hex_c)
+        if ui_c.get("color_user"):
+            view._session.clear_node_ui_keys(name, "color_user")
 
     for name in ordered:
         if ProjectSession.is_frame_ingest_process(process=name):
@@ -274,9 +333,6 @@ def rebuild_wiring_graph(
             view._scene.addItem(edge)
             edge.update_path()  # 入景后再挂路径控制点
             view._edges.append(edge)
-            item = QListWidgetItem(f"{short_service(svc)}:  {src}  →  {dst}")
-            item.setData(Qt.ItemDataRole.UserRole, ("edge", len(view._edges) - 1))
-            view._flow_list.addItem(item)
 
     for fl in view._session.channel_flows():
         src = str(fl.get("from") or "")
@@ -294,11 +350,6 @@ def rebuild_wiring_graph(
         view._scene.addItem(cedge)
         cedge.update_path()
         view._channel_edges.append(cedge)
-        item = QListWidgetItem(f"[GfChannel] {slot}:  {src}  →  {dst}")
-        item.setData(
-            Qt.ItemDataRole.UserRole, ("channel", len(view._channel_edges) - 1)
-        )
-        view._flow_list.addItem(item)
 
     # gateway 上仅面向 MCU 的端口：画布隐藏（保留 planning→Trajectory In 等）
     hide_out: dict[str, set[str]] = {}
@@ -369,11 +420,6 @@ def rebuild_wiring_graph(
         view._scene.addItem(peer)
         peer.update_path()
         view._peers.append(peer)
-        pitem = QListWidgetItem(f"[boundary] {mcu_name} ↔ {gw_name}")
-        pitem.setData(
-            Qt.ItemDataRole.UserRole, ("peer", len(view._peers) - 1)
-        )
-        view._flow_list.addItem(pitem)
 
     provided_by: dict[str, list[str]] = {}
     for name, card in view._nodes.items():
@@ -408,10 +454,7 @@ def rebuild_wiring_graph(
                 continue
             providers = provided_by.get(svc_s) or []
             if not providers:
-                # 无提供方：仍在列表提示，不画到虚构节点
-                mitem = QListWidgetItem(f"[缺失] {svc_s}:  (无 Provide)  →  {cons_name}")
-                mitem.setData(Qt.ItemDataRole.UserRole, ("missing_orphan", svc_s))
-                view._flow_list.addItem(mitem)
+                # 无提供方：不画到虚构节点（画布不再维护侧栏列表）
                 continue
             for prov in providers:
                 key = f"{prov}|{svc_s}|{cons_name}"
@@ -423,14 +466,9 @@ def rebuild_wiring_graph(
                 miss = MissingEdge(src_n, card, req, graph=view)
                 view._scene.addItem(miss)
                 view._missing.append(miss)
-                mitem = QListWidgetItem(f"[缺失] {svc_s}:  {prov}  →  {cons_name}")
-                mitem.setData(
-                    Qt.ItemDataRole.UserRole, ("missing", len(view._missing) - 1)
-                )
-                view._flow_list.addItem(mitem)
 
-    if view._search.text().strip():
-        view._on_search_text(view._search.text())
+    deconflict_edge_labels([*view._edges, *view._channel_edges])
+
     view._refresh_scene_rect()
     if fit_view:
         view._fit_and_remember()

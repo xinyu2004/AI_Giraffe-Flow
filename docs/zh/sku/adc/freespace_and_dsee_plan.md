@@ -17,7 +17,7 @@
 ```text
 行车最终「敢开」的前向尺 = D_see（内部）
   ← 仍含 D_vr / D_occ / D_fov / D_wx
-  ← 加上 fuse 后的前向 FS 分量 D_fs_fwd（来自 FreespaceNear ∩ 前视）
+  ← 加上 fuse 后的前向 FS 分量 D_fs_fwd（**仅真实前向近障**；空 Near 前向 cap≠砍 D_see）
 
 周向/泊车敢开的包络 = FreespaceNear（+ SurroundWorld 槽/障碍）
   ← 不上 Trajectory 整网；泊车进程内直接订

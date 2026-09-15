@@ -30,7 +30,7 @@ CAL = {
     "t_base_s": 10.0,
     "t_plan_min_s": 1.0,
     "d_cal_cap_m": 120.0,
-    "see_fov_deg": 50.0,
+    "see_fov_deg": 100.0,
     "d_fov_conf_m": 120.0,
     "d_see_lane_bad_m": 12.0,
     "vis_up_alpha": 0.08,
@@ -547,7 +547,7 @@ def test_d_fov_straight_keeps_cap() -> None:
 
 def test_d_fov_curve_bearing_cuts() -> None:
     D_fov = plan_d_fov(0.0, 0.0, 0.02, 0.0, 120.0)
-    assert 10.0 <= D_fov <= 50.0
+    assert 10.0 <= D_fov <= 80.0
     D_see, _ = plan_horizon(12.0, True, 0.0, 0.0, 120.0, D_fov=D_fov)
     assert abs(D_see - D_fov) < 1e-6
 

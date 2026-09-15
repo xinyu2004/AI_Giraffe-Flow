@@ -17,7 +17,7 @@ CLS_TWO_WHEELER = 9
 
 _MAX_DYN = 13
 _RADIUS_M = 90.0
-SEE_FOV_DEG = 50.0
+SEE_FOV_DEG = 100.0  # camera_contract front.fov (gf-config)
 _HOST_LANE_HALF_M = 1.75
 _OCC_PAD_M = 2.0
 
@@ -73,7 +73,7 @@ def _xy_to_ego(ex: float, ey: float, c: float, s: float, wx: float, wy: float) -
 
 
 def optic_in_wedge(x: float, y: float, *, fov_deg: float = SEE_FOV_DEG) -> bool:
-    """Forward driving wedge: x>0 and |atan2(y,x)| ≤ half of see_fov_deg (50°)."""
+    """Forward windshield wedge: x>0 and |atan2(y,x)| ≤ half of front.fov."""
     if float(x) <= 0.0:
         return False
     half = 0.5 * float(fov_deg) * math.pi / 180.0

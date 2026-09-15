@@ -25,7 +25,7 @@ struct PlanCal {
   float t_base_s{10.0f};
   float t_plan_min_s{1.0f};
   float d_cal_cap_m{120.0f};
-  float see_fov_deg{50.0f};  // driving wedge; camera 100°, inner 50. 1:1 gf_plan_cal.m
+  float see_fov_deg{100.0f};  // = camera_contract front.fov (gf-config). 1:1 gf_plan_cal.m
   float d_fov_conf_m{120.0f};
   float d_fov_conf_min{0.20f};
   float d_see_lane_bad_m{12.0f};

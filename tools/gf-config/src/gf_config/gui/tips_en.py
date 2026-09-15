@@ -561,11 +561,12 @@ TIP_EN: dict[str, str] = {
         "Services that must appear (required_services); "
         "compose/lineage checks the canvas covers them."
     ),
-    "语义话题：画布双击模块 → Out 表改触发。"
+    "语义话题：画布双击模块 → Out 表改触发（同对话框可改节点颜色）。"
     "通道话题：双击 frame_ingest 改触发。"
     "写入 req.publish_policy；compose → SOR / publish_policy.hpp。"
     "一发多收共享同一话题策略。Signals 页不编辑发布表。": (
-        "Semantic topics: canvas double-click module → Out table for trigger. "
+        "Semantic topics: canvas double-click → Out table for trigger "
+        "(same dialog also edits node color). "
         "Channel topics: double-click frame_ingest. "
         "Written to req.publish_policy; compose → SOR / publish_policy.hpp. "
         "Fan-out shares one topic policy. Signals page no longer edits the table."

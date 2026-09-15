@@ -7,10 +7,14 @@
 namespace gf_surround {
 
 inline constexpr int kFsSectors = 36;
-// Envelope (ADC truth / near FS): rear 周视, side 环视; front is FCM-owned.
-inline constexpr float kFsRearCapM = 40.0f;
-inline constexpr float kFsSideCapM = 10.0f;
-inline constexpr float kFsFwdCapM = 15.0f;  // near-only overlap; not 120 m front
+// Envelope (ADC): rear/side Near; front far = FCM + fused D_see within FOV.
+// Distances / FOV: docs/zh/sku/adc/fs_fov_bev_scheme.md (gf-config unique).
+inline constexpr float kFsRearCapM = 35.0f;
+inline constexpr float kFsRearFovDeg = 120.0f;  // rear cal until dedicated rear mount
+// Front optical wedge = camera_contract front.fov (default 100°).
+inline constexpr float kFsFwdFovDeg = 100.0f;
+inline constexpr float kFsSideCapM = 5.25f;  // ~1.5 × 3.5 m lane
+inline constexpr float kFsFwdCapM = 15.0f;   // near-only; empty ≠ cut D_see
 inline constexpr float kObjHalfW = 0.9f;
 
 struct ObjSample {
@@ -18,19 +22,43 @@ struct ObjSample {
   float lat_dist_m;
 };
 
+inline float WrapPi(float a) {
+  constexpr float pi = 3.14159265f;
+  constexpr float twopi = 6.2831853f;
+  while (a > pi) {
+    a -= twopi;
+  }
+  while (a < -pi) {
+    a += twopi;
+  }
+  return a;
+}
+
+/** Rear 周视 wedge centered on −x. */
+inline bool InRearFov(float ang_rad) {
+  constexpr float pi = 3.14159265f;
+  const float half = 0.5f * kFsRearFovDeg * (pi / 180.0f);
+  return std::fabs(WrapPi(ang_rad - pi)) <= half;
+}
+
+/** Front windshield wedge centered on +x (= contract front.fov). */
+inline bool InFrontFov(float ang_rad) {
+  constexpr float pi = 3.14159265f;
+  const float half = 0.5f * kFsFwdFovDeg * (pi / 180.0f);
+  return std::fabs(WrapPi(ang_rad)) <= half;
+}
+
 /** Cap for sector mid-angle: +x forward, +y left. */
 inline float SectorCapM(int sec) {
   const float twopi = 6.2831853f;
   const float ang = (static_cast<float>(sec) + 0.5f) * (twopi / kFsSectors);
-  const float c = std::cos(ang);
-  const float s = std::sin(ang);
-  if (c < -0.15f) {
-    return kFsRearCapM;  // rearward 周视
+  if (InFrontFov(ang)) {
+    return kFsFwdCapM;  // near overlap only; paint/fuse extends with D_see
   }
-  if (std::fabs(s) > 0.55f) {
-    return kFsSideCapM;  // left/right 环视
+  if (InRearFov(ang)) {
+    return kFsRearCapM;
   }
-  return kFsFwdCapM;
+  return kFsSideCapM;
 }
 
 // Near-field FS from object samples (vehicle frame: +x fwd, +y left).
@@ -71,7 +99,7 @@ inline void ComputeFreespaceNear(const ObjSample* objs, int n_obj, std::uint64_t
     if (x >= 0.0f && std::fabs(y) < 2.0f) {
       fs->d_front_m = std::min(fs->d_front_m, clear);
     }
-    if (x < 0.0f && std::fabs(y) < 2.0f) {
+    if (x < 0.0f && std::fabs(y) < 2.0f && InRearFov(a)) {
       fs->d_rear_m = std::min(fs->d_rear_m, clear);
     }
     if (y >= 0.0f && std::fabs(x) < 4.0f) {

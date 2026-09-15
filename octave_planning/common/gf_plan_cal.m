@@ -26,9 +26,9 @@ function p = gf_plan_cal()
   p.t_base_s = 10.0;
   p.t_plan_min_s = 1.0;
   p.d_cal_cap_m = 120.0;
-  % Driving optical wedge (deg, full). Camera contract front fov=100; inner 50 is
-  % the cone we dare treat as clear. Bearing from ego +x, not poly heading.
-  p.see_fov_deg = 50.0;
+  % Optical wedge (deg, full) = camera_contract front.mount.fov (gf-config).
+  % Default 100° windshield; not a separate "inner half" cone.
+  p.see_fov_deg = 100.0;
   p.d_fov_conf_m = 120.0;
   p.d_fov_conf_min = 0.20;
   p.d_see_lane_bad_m = 12.0;

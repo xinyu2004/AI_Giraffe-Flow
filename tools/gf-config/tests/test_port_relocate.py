@@ -87,3 +87,16 @@ def test_port_relocate_persists_side(qapp: QApplication) -> None:
     assert port2.side == "left"
     ui = (sess.wiring.get("canvas") or {}).get("nodes", {}).get("adapter.demo") or {}
     assert ui.get("port_sides", {}).get("out:EgoMotion") == "left"
+
+
+def test_port_lookup_no_cross_service_fallback(qapp: QApplication) -> None:
+    """Missing service must not resolve to ports[0] (stacked-edge bug)."""
+    sess = _session_with_ports()
+    w = WiringGraphView()
+    w.set_session(sess)
+    w.rebuild(fit_view=True)
+    card = w._nodes["adapter.demo"]
+    assert card.in_port_for_service("FreespaceNear") is None
+    assert card.out_port_for_service("FreespaceNear") is None
+    assert card.out_port_for_service("EgoMotion") is not None
+    assert short_service(card.out_port_for_service("EgoMotion").service) == "EgoMotion"

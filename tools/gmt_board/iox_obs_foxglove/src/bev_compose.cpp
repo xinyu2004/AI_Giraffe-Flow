@@ -222,9 +222,9 @@ void cam_basis(Vec3* cpos, Vec3* right, Vec3* up, Vec3* fwd) {
 BevCam make_bev_cam(int width, int height) {
   const bool adc = bev_sku_is_adc();
   const float ox = static_cast<float>(width) * 0.5f;
-  // AFC: ego near bottom; ADC: ~lower quarter (see rear 40 m).
+  // AFC: ego near bottom; ADC: leave more pixels below ego for ~35 m rear.
   const float oy_ego =
-      adc ? static_cast<float>(height) * 0.75f : static_cast<float>(height) - 44.0f;
+      adc ? static_cast<float>(height) * 0.62f : static_cast<float>(height) - 44.0f;
   const float y_far = adc ? 28.0f : 32.0f;
   const float x_far = adc ? kAdcXMaxM : kDBevM;
   Vec3 cpos, right, up, fwd;
@@ -647,28 +647,49 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   for (int i = 0; i < st.n_adj; ++i)
     draw_poly(st.adj_lanes[i], la_c, 2, st.adj_lanes[i].is_dashed());
 
-  // Near-field FS outline (sectors only). No axis stubs to 40 m — those look like FOV fakes.
-  if (st.has_fs_near) {
-    const Rgb fs_c{90, 140, 150};
-    int px = 0, py = 0;
-    bool have = false;
-    for (int i = 0; i <= kFsNearSectors; ++i) {
-      const int sec = i % kFsNearSectors;
-      const float ang = (static_cast<float>(sec) + 0.5f) * (6.2831853f / kFsNearSectors);
-      float r = st.fs_d_occ_m[sec];
-      if (r < 0.5f) r = 0.5f;
-      if (r > 40.0f) r = 40.0f;
-      const float xe = r * std::cos(ang);
-      const float ye = r * std::sin(ang);
-      if (xe < win.x_min - 1.0f || xe > win.x_max + 1.0f) {
-        have = false;
-        continue;
+  // Planning Freespace (ADC) or surround Near (parking / fallback).
+  // Closed sector loop — do not drop segments at window edges (breaks the door).
+  if (st.has_fs_plan || st.has_fs_near) {
+    const bool fused = st.has_fs_plan;
+    const bool adc = bev_sku_is_adc();
+    const Rgb fs_c = (fused || adc) ? Rgb{70, 190, 200} : Rgb{90, 140, 150};
+    const int fs_w = (fused || adc) ? 3 : 2;
+    constexpr float kNearFwdEnv = 15.0f;
+    const float half_fwd = 0.5f * kSeeFovDeg * 3.14159265358979323846f / 180.0f;
+    std::pair<int, int> pts[kFsNearSectors];
+    for (int i = 0; i < kFsNearSectors; ++i) {
+      const float ang = (static_cast<float>(i) + 0.5f) * (6.2831853f / kFsNearSectors);
+      float bearing = ang;
+      if (bearing > 3.14159265f) bearing -= 6.2831853f;
+      const bool in_front = std::fabs(bearing) <= half_fwd;
+      float r = st.fs_d_occ_m[i];
+      // Only stretch Near (parking/raw). Fused Freespace is already planning space.
+      if (!fused && adc && opening > 0.5f && in_front) {
+        if (r + 0.25f >= kNearFwdEnv) {
+          r = opening;
+        } else {
+          r = std::min(r, opening);
+        }
       }
-      const auto pt = e2p_ego(xe, ye);
-      if (have) draw_line(buf, width, height, px, py, pt.first, pt.second, fs_c, 2);
-      px = pt.first;
-      py = pt.second;
-      have = true;
+      if (r < 0.5f) r = 0.5f;
+      if (r > kAdcXMaxM) r = kAdcXMaxM;
+      pts[i] = e2p_ego(r * std::cos(ang), r * std::sin(ang));
+    }
+    for (int i = 0; i < kFsNearSectors; ++i) {
+      const auto& a = pts[i];
+      const auto& b = pts[(i + 1) % kFsNearSectors];
+      draw_line(buf, width, height, a.first, a.second, b.first, b.second, fs_c, fs_w);
+    }
+    if (fused || adc) {
+      const float ray_r = st.fs_d_front_m > 1.0f ? st.fs_d_front_m : opening;
+      if (ray_r > 1.0f) {
+        const Rgb ray_c{50, 140, 150};
+        const auto o = e2p_ego(0.0f, 0.0f);
+        const auto pl = e2p_ego(ray_r * std::cos(-half_fwd), ray_r * std::sin(-half_fwd));
+        const auto pr = e2p_ego(ray_r * std::cos(half_fwd), ray_r * std::sin(half_fwd));
+        draw_line(buf, width, height, o.first, o.second, pl.first, pl.second, ray_c, 1);
+        draw_line(buf, width, height, o.first, o.second, pr.first, pr.second, ray_c, 1);
+      }
     }
   }
 
@@ -840,8 +861,9 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
 
   paint_box(0.0f, 0.0f, 4.5f, 1.8f, 0.0f, ego_c, nullptr, 1.5f);
 
-  // Cyan wash: host lane corridor from ego to D_see (forward only). Not FOV cone.
-  if (opening > 1.0f && st.n_host >= 1) {
+  // Cyan wash / see-cap = FCM D_see corridor (AFC). ADC: validate fused FS only — skip.
+  const bool adc_fs_only = bev_sku_is_adc() && (st.has_fs_plan || st.has_fs_near);
+  if (!adc_fs_only && opening > 1.0f && st.n_host >= 1) {
     std::vector<std::pair<int, int>> wash;
     const int steps = std::max(8, static_cast<int>(opening / 2.0f) + 1);
     for (int i = 0; i <= steps; ++i) {
@@ -858,7 +880,7 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   }
 
   // Solid see-cap bar across host lane at driving D (cyan). Not a FOV cone.
-  if (opening > 1.0f && st.n_host >= 1) {
+  if (!adc_fs_only && opening > 1.0f && st.n_host >= 1) {
     const float yl = host_y_ego(opening, 'l');
     const float yr = host_y_ego(opening, 'r');
     const auto pl = e2p_ego(opening, yl);

@@ -9,22 +9,22 @@ namespace gf_foxglove {
 
 constexpr float kDWorkM = 120.0f;
 constexpr float kDBevM = 130.0f;
-constexpr float kAdcXMinM = -40.0f;
+constexpr float kAdcXMinM = -35.0f;  // see ~35 m rear (mutual check with ChaseCam=2)
 constexpr float kAdcXMaxM = 120.0f;
 constexpr int kBevW = 400;
 constexpr int kBevH = 800;
-constexpr float kBevCamBackM = 22.0f;
+constexpr float kBevCamBackM = 35.0f;  // match ChaseCam=2 rear; front window unchanged
 constexpr float kBevCamHeightM = 40.0f;
 constexpr float kBevCamLookM = 60.0f;
-// ADC multi-cam: see rear 40 m + front 120 m (ego ~ lower quarter).
-constexpr float kAdcCamBackM = 55.0f;
+// ADC CamBack=35: camera at rear edge of meter window (see 35 m behind ego).
+constexpr float kAdcCamBackM = 35.0f;
 constexpr float kAdcCamHeightM = 48.0f;
 constexpr float kAdcCamLookM = 40.0f;
 constexpr float kDashOnM = 6.0f;
 constexpr float kDashGapM = 9.0f;
 constexpr float kDashPeriodM = kDashOnM + kDashGapM;
 constexpr float kSeeHostLatM = 1.5f;
-constexpr float kSeeFovDeg = 50.0f;
+constexpr float kSeeFovDeg = 100.0f;  // = camera_contract front.fov (gf-config)
 constexpr int kMaxHostLanes = 2;
 constexpr int kMaxAdjLanes = 4;
 constexpr int kMaxDynObj = 13;
@@ -128,7 +128,8 @@ struct LiveBevState {
   float lead_dist_m = 0;
   float cipo_x_m = 0;
   float cipo_y_m = 0;
-  // Near-field drivability (SurroundWorld companion). Not FailSafe; not cyan wash.
+  // Driving fused Freespace (planning) preferred over surround Near.
+  bool has_fs_plan = false;
   bool has_fs_near = false;
   float fs_d_occ_m[kFsNearSectors]{};
   float fs_d_front_m = 0;
@@ -145,7 +146,7 @@ float driving_see_m(const LiveBevState& st, float host_vr_m);
 void advance_odom(LiveBevState& st, std::uint64_t t_ns, float speed_mps);
 
 // Portrait 400×800 PNG. Gold paint for SIL gf_foxglove_ws and Host gf_host_bev_ws.
-// GF_BEV_SKU=adc → x∈[-40,+120]; default/afc → forward-biased AFC frame.
+// GF_BEV_SKU=adc → x∈[-35,+120]; default/afc → forward-biased AFC frame.
 std::string render_ego_bev_png(const LiveBevState& st, int width = kBevW, int height = kBevH);
 
 bool bev_sku_is_adc();

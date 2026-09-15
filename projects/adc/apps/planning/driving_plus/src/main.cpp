@@ -4,6 +4,7 @@
 #include "gf_gen/proxy/perception_message__out__st_proxy.hpp"
 #include "gf_gen/proxy/freespace_near_proxy.hpp"
 #include "gf_gen/skeleton/trajectory_skeleton.hpp"
+#include "gf_gen/skeleton/freespace_skeleton.hpp"
 
 #include "gf_app/frame_watch.hpp"
 
@@ -391,6 +392,15 @@ void ApplyTick(const oct_gen::PlanTickOut& tick, const gf_gen::EgoMotion& ego,
   traj.v_sign_min_mps = view.v_sign_min_mps;
 }
 
+void ClipPathToFront(gf_gen::Trajectory& traj, float d_front) {
+  const float cap = std::max(1.0f, d_front);
+  int n = static_cast<int>(traj.point_count);
+  while (n > 2 && traj.points_x_m[n - 1] > cap + 0.05f) {
+    --n;
+  }
+  traj.point_count = static_cast<std::uint8_t>(n);
+}
+
 }  // namespace
 
 int main() {
@@ -406,6 +416,7 @@ int main() {
   gf_gen::EgoMotionProxy ego_sub{};
   gf_gen::FreespaceNearProxy fs_sub{};
   gf_gen::TrajectorySkeleton traj_pub{};
+  gf_gen::FreespaceSkeleton fs_pub{};
 
   std::optional<gf_gen::EgoMotion> last_ego;
   std::optional<gf_gen::Perception_MESSAGE_Out_St> last_perc;
@@ -440,7 +451,7 @@ int main() {
   std::uint64_t last_perc_ts = 0;
   bool have_planned = false;
 
-  std::cout << "gf-planning-driving_plus: start (v4 m_plan_tick; fuse FreespaceNear; "
+  std::cout << "gf-planning-driving_plus: start (v4 m_plan_tick; publish Freespace; "
                "perc-triggered; ego cached"
             << "; stdout=on-change+/" << log_every
             << "; frame_watch=identity+budget perc[" << rx_perc.PolicyHint()
@@ -509,16 +520,24 @@ int main() {
     D_see_prev = tick.D_see;
     T_plan_prev = tick.T_plan;
 
+    gf_gen::Freespace fs_out{};
+    gf_plan_fs::ComposeFreespace(tick.D_see, last_fs ? &*last_fs : nullptr, now_ns(),
+                                 &fs_out);
+
     gf_gen::Trajectory traj{};
     ApplyTick(tick, ego, view, traj);
+    traj.D_see_m = fs_out.d_front_m;  // derived HUD only; planning space is Freespace
+    ClipPathToFront(traj, fs_out.d_front_m);
     // Intent only (P2 thin): no steer change — gear_shift_second bit0 = LC candidate.
     traj.gear_shift_second =
         static_cast<std::uint8_t>(fs_drv.lane_change_candidate ? 1 : 0);
     traj.timestamp_ns = now_ns();
+    fs_out.timestamp_ns = traj.timestamp_ns;
     const auto tick_ms = std::chrono::duration<double, std::milli>(
                              std::chrono::steady_clock::now() - t0)
                              .count();
 
+    const bool sent_fs = static_cast<bool>(fs_pub.Send(fs_out));
     if (static_cast<bool>(traj_pub.Send(traj))) {
       tx_traj.Observe(seq, traj.timestamp_ns);
       last_perc_ts = perc_ts;
@@ -533,7 +552,7 @@ int main() {
           FMoved(traj.throttle, last_log_thr, 0.02f) ||
           FMoved(traj.brake, last_log_brk, 0.02f) ||
           FMoved(traj.steer, last_log_st, 0.02f) ||
-          FMoved(fs_drv.d_front_m, last_log_fs_fwd, 0.5f) ||
+          FMoved(fs_out.d_front_m, last_log_fs_fwd, 0.5f) ||
           (fs_drv.lane_change_candidate != last_log_lc);
       if (log_every <= 1 || changed ||
           (seq % static_cast<std::uint64_t>(log_every) == 0)) {
@@ -543,8 +562,9 @@ int main() {
                   << " e_y=" << view.lane.e_y << " lh=" << view.lh_n
                   << " lane=" << lane_ok << " dyn=" << view.dyn_raw
                   << " nobj=" << view.nobj << " mode=" << tick.mode
-                  << " D_see=" << tick.D_see << " fs_fwd=" << fs_drv.d_front_m
+                  << " D_see=" << tick.D_see << " fs_fwd=" << fs_out.d_front_m
                   << " x_end=" << x_end_use
+                  << " fs_pub=" << (sent_fs ? 1 : 0)
                   << " lc=" << (fs_drv.lane_change_candidate ? 1 : 0)
                   << " a_req=" << tick.a_req
                   << " thr=" << traj.throttle << " brk=" << traj.brake
@@ -559,7 +579,7 @@ int main() {
         last_log_thr = traj.throttle;
         last_log_brk = traj.brake;
         last_log_st = traj.steer;
-        last_log_fs_fwd = fs_drv.d_front_m;
+        last_log_fs_fwd = fs_out.d_front_m;
         last_log_lc = fs_drv.lane_change_candidate;
       }
       ++seq;

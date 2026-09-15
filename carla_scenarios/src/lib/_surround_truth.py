@@ -1,8 +1,8 @@
 """CARLA actors → ego-frame surround objects (+ real slots only).
 
 Envelope (not invent):
-  - rear 周视: x in [-40, 0], |y| <= 12
-  - side 环视: |y| in (0.8, 10], |x| <= 10
+  - rear 周视: x in [-35, 0], |y| <= 12  (BEV readable ~35 m; FOV cal in C Near)
+  - side 环视: |y| in (0.8, 5.25], |x| <= 10  (~1.5 lane)
   - forward long-range is FCM / fake_perc — not synthesized here
 """
 
@@ -24,8 +24,8 @@ from _objects_truth import (
 )
 
 _MAX_OBJ = 16
-_REAR_M = 40.0
-_SIDE_M = 10.0
+_REAR_M = 35.0  # mutual check with ChaseCam / BEV window rear
+_SIDE_M = 5.25  # ~1.5 × 3.5 m lane; match surround kFsSideCapM
 _SIDE_X_M = 10.0
 _REAR_Y_M = 12.0
 

@@ -13,7 +13,7 @@ FOX_APP = "gmt_board/iox_obs_foxglove"
 
 # live_tap.mode
 MODE_EXPLICIT = "explicit"  # req whitelist
-MODE_WIRING_ALL = "wiring_all"  # all services appearing in wiring dataflows
+MODE_WIRING_ALL = "wiring_all"  # all services in wiring dataflows + deployments
 VALID_LIVE_MODES = frozenset({MODE_EXPLICIT, MODE_WIRING_ALL})
 
 
@@ -40,18 +40,34 @@ def live_tap_mode(req: dict[str, Any]) -> str:
 
 
 def services_from_wiring(wiring: dict[str, Any] | None) -> list[str]:
-    """Unique short service names from wiring.dataflows (order preserved)."""
+    """Unique short service names from dataflows + deployments (order preserved)."""
     if not isinstance(wiring, dict):
         return []
     seen: set[str] = set()
     out: list[str] = []
-    for flow in wiring.get("dataflows") or []:
-        if not isinstance(flow, dict):
-            continue
-        s = _short(str(flow.get("service") or ""))
+
+    def _add(raw: Any) -> None:
+        s = _short(str(raw or ""))
         if s and s not in seen:
             seen.add(s)
             out.append(s)
+
+    for flow in wiring.get("dataflows") or []:
+        if isinstance(flow, dict):
+            _add(flow.get("service"))
+    for dep in wiring.get("deployments") or []:
+        if not isinstance(dep, dict):
+            continue
+        for key in ("provides", "requires"):
+            for item in dep.get(key) or []:
+                _add(item)
+    for bind in wiring.get("bindings") or []:
+        if not isinstance(bind, dict):
+            continue
+        for key in ("inputs", "outputs"):
+            for item in bind.get(key) or []:
+                if isinstance(item, dict):
+                    _add(item.get("service"))
     return out
 
 
@@ -72,7 +88,7 @@ def live_tap_config(
 ) -> tuple[bool, list[str]]:
     """Return (enabled_effective, short_service_names).
 
-    mode=wiring_all → services from wiring dataflows (ceiling for GMT filter).
+    mode=wiring_all → services from wiring dataflows + deployments (ceiling for GMT filter).
     mode=explicit → services from live_tap.services whitelist.
     """
     profile = normalize_profile(req)
