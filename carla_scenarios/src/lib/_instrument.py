@@ -90,7 +90,7 @@ class ClusterState:
     ped: Optional[str] = None
     ped_m: Optional[float] = None
 
-    # ChaseCam: "1"=windshield, "2"=scene (ScenarioView.pump fills this)
+    # ChaseCam: "1"=windshield "2"=bev_afc "3"=bev_adc "4"=overhead
     cam_mode: str = "1"
 
     # Wall time for CTRL blink (set by view each frame); None → time.time()

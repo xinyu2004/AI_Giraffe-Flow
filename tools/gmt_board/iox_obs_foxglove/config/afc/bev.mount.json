@@ -1,0 +1,17 @@
+{
+  "name": "bev_afc",
+  "carla_env_id": 2,
+  "note": "Paint AFC BEV observer (= carla.env #2). Legacy CamBack=35 Height=40 Look=60.",
+  "x": -35.0,
+  "y": 0.0,
+  "z": 40.0,
+  "pitch": -28.0,
+  "yaw": 0.0,
+  "roll": 0.0,
+  "fov": 60.0,
+  "w": 400,
+  "h": 800,
+  "look_x": 60.0,
+  "oy_ego_frac": -1.0,
+  "y_far_px": 32.0
+}

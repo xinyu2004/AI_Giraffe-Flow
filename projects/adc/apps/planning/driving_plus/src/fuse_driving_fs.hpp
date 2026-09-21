@@ -1,51 +1,27 @@
 #pragma once
 
+// Facade: LC gate + FuseDrivingFs + Empty180 compose orch.
+
+#include "fs/fs_types.hpp"
+#include "fs/fs_lane_clear.hpp"
+#include "fs/fs_lane_env.hpp"
+#include "fs/fs_empty180.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 
 namespace gf_plan_fs {
 
-inline constexpr int kFsSectors = 36;
-inline constexpr float kFwdFovDeg = 100.0f;   // camera_contract front.fov
-inline constexpr float kRearFovDeg = 120.0f;
-inline constexpr float kRearCapM = 35.0f;
-inline constexpr float kSideCapM = 5.25f;
-inline constexpr float kNearFwdEnvelopeM = 15.0f;
-inline constexpr float kFwdCapM = 120.0f;
-
 struct FsDriving {
-  float d_front_m{120.0f};
-  float d_rear_m{35.0f};
-  float d_left_m{5.25f};
-  float d_right_m{5.25f};
-  bool rear_left_free{true};
-  bool rear_right_free{true};
+  float d_front_m{kFsFrontFarCapM};
+  float d_rear_m{gf_fs_envelope::kFsRearCapM};
+  float d_left_m{gf_fs_envelope::kFsSideCapM};
+  float d_right_m{gf_fs_envelope::kFsSideCapM};
+  bool rear_left_free{false};
+  bool rear_right_free{false};
   bool lane_change_candidate{false};
 };
-
-inline float WrapPi(float a) {
-  constexpr float pi = 3.14159265f;
-  constexpr float twopi = 6.2831853f;
-  while (a > pi) {
-    a -= twopi;
-  }
-  while (a < -pi) {
-    a += twopi;
-  }
-  return a;
-}
-
-inline bool InFrontFov(float ang_rad) {
-  const float half = 0.5f * kFwdFovDeg * (3.14159265f / 180.0f);
-  return std::fabs(WrapPi(ang_rad)) <= half;
-}
-
-inline bool InRearFov(float ang_rad) {
-  constexpr float pi = 3.14159265f;
-  const float half = 0.5f * kRearFovDeg * (pi / 180.0f);
-  return std::fabs(WrapPi(ang_rad - pi)) <= half;
-}
 
 inline float ForwardClearanceFromLead(bool has_lead, float lead_long_m, float cap_m) {
   if (!has_lead || lead_long_m < 0.5f) {
@@ -61,71 +37,81 @@ inline FsDriving FuseDrivingFs(float forward_clear_m, const NearFs* near) {
   if (!near || !near->valid) {
     return out;
   }
-  out.d_rear_m = std::min(kRearCapM, near->d_rear_m > 0.5f ? near->d_rear_m : kRearCapM);
-  out.d_left_m = near->d_left_m > 0.5f ? near->d_left_m : kSideCapM;
-  out.d_right_m = near->d_right_m > 0.5f ? near->d_right_m : kSideCapM;
+  FsEmpty180 a{};
+  a.valid = true;
+  for (int i = 0; i < kFsEmptyN; ++i) {
+    a.r[i] = near->d_r_m[i];
+    a.type[i] = near->type[i];
+  }
+  const float df = FsDfsFwdFromActive(a);
+  out.d_rear_m = std::min(gf_fs_envelope::RearCapM(), FsAxisClear(a, -0.85f, 0.0f, true));
+  out.d_left_m = FsLatClear(a, true);
+  out.d_right_m = FsLatClear(a, false);
+  if (df > 0.5f && df + 0.25f < kFsNearFrontCapM) {
+    out.d_front_m = std::min(out.d_front_m, df);
+  }
   out.rear_left_free = out.d_rear_m > 6.0f && out.d_left_m > 3.0f;
   out.rear_right_free = out.d_rear_m > 6.0f && out.d_right_m > 3.0f;
   out.lane_change_candidate = out.rear_left_free || out.rear_right_free;
-  if (near->d_front_m > 0.5f && near->d_front_m + 0.25f < kNearFwdEnvelopeM) {
-    out.d_front_m = std::min(out.d_front_m, near->d_front_m);
-  }
   return out;
 }
 
-// Three-segment driving Freespace. Empty Near front cap does not stay at 15 m.
-template <typename NearFs, typename FsOut>
-inline void ComposeFreespace(float d_front_m, const NearFs* near, std::uint64_t ts_ns,
-                             FsOut* fs) {
-  if (!fs) {
+struct LcGate {
+  bool ego_ok{false};
+  bool near_ok{false};
+  bool rcm_ok{false};
+  bool corridor_ready{false};
+  bool inhibit{true};
+
+  const char* Reason() const {
+    if (!ego_ok) {
+      return "ego";
+    }
+    if (!near_ok) {
+      return "near";
+    }
+    if (!rcm_ok) {
+      return "rcm";
+    }
+    if (!corridor_ready) {
+      return "corridor";
+    }
+    return "ok";
+  }
+};
+
+inline LcGate MakeLcGate(bool ego_ok, bool near_ok, bool rcm_ok, bool corridor_ready = false) {
+  LcGate g;
+  g.ego_ok = ego_ok;
+  g.near_ok = near_ok;
+  g.rcm_ok = rcm_ok;
+  g.corridor_ready = corridor_ready;
+  g.inhibit = !(ego_ok && near_ok && rcm_ok && corridor_ready);
+  return g;
+}
+
+inline void ApplyLcInhibit(FsDriving* fs, const LcGate& gate) {
+  if (!fs || !gate.inhibit) {
     return;
   }
-  *fs = {};
-  fs->timestamp_ns = ts_ns;
-  fs->valid = 1;
-  const float d_front = std::max(0.5f, std::min(kFwdCapM, d_front_m));
-  const float twopi = 6.2831853f;
-  float d_rear = kRearCapM;
-  float d_left = kSideCapM;
-  float d_right = kSideCapM;
-  if (near && near->valid) {
-    if (near->d_rear_m > 0.5f) {
-      d_rear = std::min(kRearCapM, near->d_rear_m);
-    }
-    if (near->d_left_m > 0.5f) {
-      d_left = near->d_left_m;
-    }
-    if (near->d_right_m > 0.5f) {
-      d_right = near->d_right_m;
-    }
-  }
-  fs->d_front_m = d_front;
-  fs->d_rear_m = d_rear;
-  fs->d_left_m = d_left;
-  fs->d_right_m = d_right;
+  fs->rear_left_free = false;
+  fs->rear_right_free = false;
+  fs->lane_change_candidate = false;
+}
 
-  for (int i = 0; i < kFsSectors; ++i) {
-    const float ang = (static_cast<float>(i) + 0.5f) * (twopi / kFsSectors);
-    float r = kSideCapM;
-    if (InFrontFov(ang)) {
-      r = d_front;
-    } else if (InRearFov(ang)) {
-      r = d_rear;
-    }
-    if (near && near->valid) {
-      const float nr = near->d_occ_m[i];
-      if (nr > 0.5f) {
-        if (InFrontFov(ang)) {
-          if (nr + 0.25f < kNearFwdEnvelopeM) {
-            r = std::min(r, nr);
-          }
-        } else {
-          r = std::min(r, nr);
-        }
-      }
-    }
-    fs->d_occ_m[i] = std::max(0.5f, r);
-  }
+template <typename NearFs, typename FsOut>
+inline void ComposeFreespace(float d_empty_cap_m, float /*lane_width_m*/, const NearFs* near,
+                             const FsOccSample* objs, int n_obj, std::uint64_t ts_ns, FsOut* fs,
+                             const FrontCamMount& /*cam*/ = FrontCamMount{},
+                             const RoadEdgePoly& road_left = RoadEdgePoly{},
+                             const RoadEdgePoly& road_right = RoadEdgePoly{},
+                             const RoadEdgePoly* hard_walls = nullptr, int n_hard_walls = 0,
+                             const LaneBands& /*bands*/ = LaneBands{},
+                             const LaneClearFwd* lane_clear = nullptr,
+                             LaneEnvMode /*env_mode*/ = LaneEnvMode::UnionAll,
+                             const LcCorridor* /*lc*/ = nullptr) {
+  FsComposeEmpty180(d_empty_cap_m, near, objs, n_obj, ts_ns, fs, road_left, road_right, hard_walls,
+                    n_hard_walls, lane_clear);
 }
 
 }  // namespace gf_plan_fs

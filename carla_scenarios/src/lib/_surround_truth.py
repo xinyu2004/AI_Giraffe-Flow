@@ -2,7 +2,7 @@
 
 Envelope (not invent):
   - rear 周视: x in [-35, 0], |y| <= 12  (BEV readable ~35 m; FOV cal in C Near)
-  - side 环视: |y| in (0.8, 5.25], |x| <= 10  (~1.5 lane)
+  - side 环视: |y| in (0.8, 7.0], |x| <= 10  (~2 lane)
   - forward long-range is FCM / fake_perc — not synthesized here
 """
 
@@ -11,7 +11,9 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from _lane_truth import _wrap_pi
 from _objects_truth import (
+    _bbox_lw,
     _bind_cache,
     _iter_snap_ids,
     _refresh_cache,
@@ -25,7 +27,7 @@ from _objects_truth import (
 
 _MAX_OBJ = 16
 _REAR_M = 35.0  # mutual check with ChaseCam / BEV window rear
-_SIDE_M = 5.25  # ~1.5 × 3.5 m lane; match surround kFsSideCapM
+_SIDE_M = 7.0  # ~2 × 3.5 m lane; match surround kFsSideCapM
 _SIDE_X_M = 10.0
 _REAR_Y_M = 12.0
 
@@ -90,6 +92,8 @@ def collect_surround_world(
         typ: str,
         tf: Any,
         vel: Any,
+        length_m: float,
+        width_m: float,
     ) -> None:
         try:
             if aid == ego_id:
@@ -103,6 +107,11 @@ def collect_surround_world(
             if not in_surround_envelope(x, y):
                 return
             cls = map_carla_class(typ, is_walker=is_walker)
+            try:
+                # Same sign as FCM dyn: ego +x forward, +y left.
+                heading = _wrap_pi(yaw - math.radians(float(tf.rotation.yaw)))
+            except Exception:  # noqa: BLE001
+                heading = 0.0
             rel_v = 0.0
             try:
                 af = c * float(vel.x) + s * float(vel.y)
@@ -116,6 +125,9 @@ def collect_surround_world(
                     "long_m": float(x),
                     "lat_m": float(y),
                     "rel_v": float(rel_v),
+                    "heading_rad": float(heading),
+                    "length_m": float(length_m),
+                    "width_m": float(width_m),
                 }
             )
         except Exception:  # noqa: BLE001
@@ -139,6 +151,8 @@ def collect_surround_world(
                 typ=str(meta["type_id"]),
                 tf=tf,
                 vel=vel,
+                length_m=float(meta["length_m"]),
+                width_m=float(meta["width_m"]),
             )
     else:
         for actor in _traffic_actors(world):
@@ -148,12 +162,19 @@ def collect_surround_world(
                 vel = actor.get_velocity()
             except Exception:  # noqa: BLE001
                 continue
+            is_walker = tid.startswith("walker")
+            if is_walker:
+                length_m, width_m = 0.6, 0.6
+            else:
+                length_m, width_m = _bbox_lw(actor, 4.5, 1.8)
             _append(
                 int(actor.id),
-                is_walker=tid.startswith("walker"),
+                is_walker=is_walker,
                 typ=tid,
                 tf=tf,
                 vel=vel,
+                length_m=length_m,
+                width_m=width_m,
             )
 
     items.sort(key=lambda it: (abs(it["long_m"]) + abs(it["lat_m"]), abs(it["lat_m"])))
@@ -168,6 +189,9 @@ def collect_surround_world(
                 "long_dist_m": float(it["long_m"]),
                 "lat_dist_m": float(it["lat_m"]),
                 "rel_vel_long_mps": float(it["rel_v"]),
+                "length_m": float(it["length_m"]),
+                "width_m": float(it["width_m"]),
+                "heading_rad": float(it["heading_rad"]),
             }
         )
 

@@ -112,14 +112,14 @@ def _attach_tm(client: Any, port: int) -> Any:
         return cached
     try:
         tm = client.get_trafficmanager(port)
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(
-            f"Traffic Manager bind failed on port {port} "
+    except Exception:  # noqa: BLE001
+        print(
+            f"[tm] port {port} occupied "
             f"(GF_TM_PORT from {env_source('GF_TM_PORT')}). "
-            "On Windows with empty netstat: check "
-            "`netsh interface ipv4 show excludedportrange protocol=tcp` "
-            "and set GF_TM_PORT to a free port outside those ranges."
-        ) from exc
+            "Stop the leftover run_cases/python or change GF_TM_PORT.",
+            flush=True,
+        )
+        raise SystemExit(0)
     _TM_BY_PORT[port] = tm
     if port not in _TM_LOGGED:
         _TM_LOGGED.add(port)
@@ -191,6 +191,7 @@ def load_snapshot(*, force: bool = False) -> CarlaSnapshot:
         tm_port = max(1, int(raw_tm))
     except ValueError:
         tm_port = 8000
+    chase_cam = (os.environ.get("ChaseCam") or "3").strip() or "3"
     _SNAPSHOT = CarlaSnapshot(
         host=(os.environ.get("CARLA_HOST") or "127.0.0.1").strip(),
         port=int(os.environ.get("CARLA_PORT") or "2000"),
@@ -200,7 +201,7 @@ def load_snapshot(*, force: bool = False) -> CarlaSnapshot:
         view=_env_bool("GF_SCENARIO_VIEW", True),
         view_w=max(160, _env_int("GF_SCENARIO_VIEW_W", 960)),
         view_h=max(120, _env_int("GF_SCENARIO_VIEW_H", 540)),
-        chase_cam=(os.environ.get("ChaseCam") or "1").strip() or "1",
+        chase_cam=chase_cam,
         traffic_number=max(0, _env_int("GF_TRAFFIC_NUMBER", 18)),
         traffic_maintain_s=max(0.5, _env_float("GF_TRAFFIC_MAINTAIN_S", 2.0)),
         duration_s=max(1.0, _env_float("GF_SCENARIO_DURATION_S", 8.0)),

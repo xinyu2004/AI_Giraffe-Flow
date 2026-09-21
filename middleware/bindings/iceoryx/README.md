@@ -11,6 +11,10 @@ ctest --test-dir build -R 'gf_iox_' --output-on-failure
 bash middleware/bindings/iceoryx/testcases/run_iox_pubsub.sh
 ```
 
-API: `gf_ara::com::binding::iceoryx::{InitRuntime,EventPublisher,EventSubscriber}`
+API: `gf_ara::com::binding::iceoryx::{InitRuntime,EventPublisher,EventSubscriber,EventWaitSet,PeriodTimer}`
+
+- **EventWaitSet** — attach Proxy/Subscriber `HAS_DATA` (+ UserTrigger); apps `TimedWaitMs` / `Wait` instead of private `sleep`.
+- **PeriodTimer** — middleware period wake for `publish_policy: period` (gateway).
 
 Parent: [../README.md](../README.md)
+

@@ -77,9 +77,12 @@ def test_pack_size_and_magic() -> None:
     assert len(blob) == _FP_SIZE
     magic, ver, _res, ts, seq = struct.unpack_from("<IHHQQ", blob, 0)
     assert magic == 0x47465043
-    assert ver == 2
+    assert ver == 3
     assert ts == 123
     assert seq == 7
+    # v3 LRE tail at offset 740
+    lre_n, lre_mask = struct.unpack_from("<BB", blob, 740)
+    assert lre_n == 2 and (lre_mask & 3) == 3
     # lane_count @ offset after header QQ + start of BBBB valid,lead,lane,ego
     # offset: 4+2+2+8+8 = 24 → BBBB
     valid, lead_v, lane_n, ego_i = struct.unpack_from("<BBBB", blob, 24)

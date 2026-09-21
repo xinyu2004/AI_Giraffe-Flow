@@ -1,21 +1,55 @@
 # Host/SIL Foxglove BEV. Debug only — not for production profile.
 # Prefer codegen (${GF_GENERATED_DIR}/src/obs_foxglove_main.cpp) for iceoryx path.
+#
+# Layout: common/ (prims) + afc/ + adc/ paint entries. Mounts live under afc/ and adc/.
 
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 
-# Paint + WS only (no iceoryx / GfChannel). Gold BEV lives here.
-add_library(gf_foxglove_paint STATIC
+set(_GF_FOX_INC
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../../projects/adc/interfaces"
+)
+
+# Shared prims: PNG + WS + NDJSON (no SKU policy).
+add_library(gf_foxglove_common STATIC
   src/png.cpp
   src/ws_hub.cpp
-  src/bev_compose.cpp
   src/bev_ndjson.cpp
 )
-target_include_directories(gf_foxglove_paint PUBLIC
-  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+target_include_directories(gf_foxglove_common PUBLIC ${_GF_FOX_INC})
+target_link_libraries(gf_foxglove_common PUBLIC ZLIB::ZLIB)
+if(TARGET gf_ara::log)
+  target_link_libraries(gf_foxglove_common PRIVATE gf_ara::log)
+  target_compile_definitions(gf_foxglove_common PRIVATE GF_PAINT_HAS_ARA_LOG=1)
+endif()
+set_target_properties(gf_foxglove_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Shared compose engine (lanes/traj/FS stitch draw). SKU forced by paint_adc / paint_afc.
+add_library(gf_foxglove_compose STATIC
+  src/bev_compose.cpp
 )
-target_link_libraries(gf_foxglove_paint PUBLIC ZLIB::ZLIB)
-set_target_properties(gf_foxglove_paint PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(gf_foxglove_compose PUBLIC ${_GF_FOX_INC})
+target_link_libraries(gf_foxglove_compose PUBLIC gf_foxglove_common)
+if(TARGET gf_ara::log)
+  target_link_libraries(gf_foxglove_compose PRIVATE gf_ara::log)
+  target_compile_definitions(gf_foxglove_compose PRIVATE GF_PAINT_HAS_ARA_LOG=1)
+endif()
+set_target_properties(gf_foxglove_compose PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_library(gf_foxglove_adc STATIC adc/paint_adc.cpp)
+target_include_directories(gf_foxglove_adc PUBLIC ${_GF_FOX_INC})
+target_link_libraries(gf_foxglove_adc PUBLIC gf_foxglove_compose)
+set_target_properties(gf_foxglove_adc PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_library(gf_foxglove_afc STATIC afc/paint_afc.cpp)
+target_include_directories(gf_foxglove_afc PUBLIC ${_GF_FOX_INC})
+target_link_libraries(gf_foxglove_afc PUBLIC gf_foxglove_compose)
+set_target_properties(gf_foxglove_afc PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Umbrella for existing link lines (host / core / tests).
+add_library(gf_foxglove_paint INTERFACE)
+target_link_libraries(gf_foxglove_paint INTERFACE gf_foxglove_adc gf_foxglove_afc gf_foxglove_compose)
 
 # Host octave standalone: NDJSON stdin → paint → Foxglove (no RouDi).
 add_executable(gf_host_bev_ws src/host_bev_main.cpp)

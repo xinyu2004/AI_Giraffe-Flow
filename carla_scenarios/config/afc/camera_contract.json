@@ -4,17 +4,18 @@
   "active_source": "isp",
   "ego_source": "carla",
   "camera_transport": "shm",
+  "note": "Front only ≈3MP (2048x1536); same windshield mount as ADC front.",
   "slots": [
     {
       "id": "front",
       "slot_name": "gf.channel.front",
-      "w": 640,
-      "h": 480,
+      "w": 2048,
+      "h": 1536,
       "pixel_format": "nv12",
       "buffers": 2,
       "fps": 30,
       "mount": {
-        "id": "1",
+        "id": "front",
         "x": 0.55,
         "y": 0.0,
         "z": 1.35,

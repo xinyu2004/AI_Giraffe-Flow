@@ -1,4 +1,5 @@
-# planning.driving_plus — FCM Out + FreespaceNear fuse → Freespace + Trajectory
+# planning.driving_plus — empty cones → CarveEars → Stitch → Freespace + Trajectory
+# FCM owns forward lane_clear; RCM/Surround occupy only (ears).
 
 set(_GF_PLAN_SOURCES src/main.cpp)
 
@@ -27,5 +28,6 @@ target_include_directories(gf_planning_driving_plus PRIVATE
   "${GF_GENERATED_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/src"
   "${CMAKE_CURRENT_SOURCE_DIR}/../../common/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../../interfaces"
 )
 target_compile_definitions(gf_planning_driving_plus PRIVATE GF_USE_GENERATED=1)

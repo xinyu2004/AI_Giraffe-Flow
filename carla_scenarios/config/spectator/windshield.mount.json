@@ -1,0 +1,12 @@
+{
+  "name": "windshield",
+  "carla_env_id": 1,
+  "note": "CARLA spectator #1. Align product front (camera_contract); fallback if contract missing.",
+  "x": 0.55,
+  "y": 0.0,
+  "z": 1.35,
+  "pitch": -5.0,
+  "yaw": 0.0,
+  "roll": 0.0,
+  "fov": 100.0
+}

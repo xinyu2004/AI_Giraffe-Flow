@@ -152,12 +152,6 @@ _CAMS_CACHE: dict[str, List[HostCamera]] = {}
 _MOUNT_CACHE: dict[str, CameraMount] = {}
 
 
-def reset_camera_contract_cache() -> None:
-    """Tests only: drop memo so the next load hits disk."""
-    _CAMS_CACHE.clear()
-    _MOUNT_CACHE.clear()
-
-
 def load_host_cameras(*, enabled_only: bool = True) -> List[HostCamera]:
     """All slots from camera_contract (N 路由 compose 决定). Cached per path."""
     path = camera_contract_path()
@@ -204,36 +198,108 @@ def load_camera_mount() -> CameraMount:
     return front.mount
 
 
+# ---- CARLA spectator mounts (env ChaseCam 1/2/3/4) ----
+# Files: config/spectator/{windshield,bev_afc,bev_adc,overhead}.mount.json
+# Paint BEV lives under tools/.../iox_obs_foxglove/config/{afc,adc}/bev.mount.json
+
+_SPECTATOR_CACHE: dict[str, CameraMount] = {}
+
+_SPECTATOR_DEFAULTS: dict[str, CameraMount] = {
+    "windshield": CameraMount("windshield", 0.55, 0.0, 1.35, -5.0, 0.0, 0.0, 100.0),
+    "bev_afc": CameraMount("bev_afc", -35.0, 0.0, 40.0, -33.0, 0.0, 0.0, 60.0),
+    "bev_adc": CameraMount("bev_adc", -60.0, 0.0, 62.0, -44.0, 0.0, 0.0, 72.0),
+    "overhead": CameraMount("overhead", -5.0, 0.0, 32.0, -88.0, 0.0, 0.0, 90.0),
+}
+
+# env id → semantic filename stem
+SPECTATOR_BY_ENV: dict[str, str] = {
+    "1": "windshield",
+    "2": "bev_afc",
+    "3": "bev_adc",
+    "4": "overhead",
+}
+
+
+def spectator_mount_path(name: str) -> Path | None:
+    """Resolve config/spectator/<name>.mount.json under scenarios root or cwd."""
+    rel = f"config/spectator/{name}.mount.json"
+    return _resolve_under_bases(rel)
+
+
+def load_spectator_mount(name: str) -> CameraMount:
+    """Load one spectator mount by semantic name (windshield / bev_afc / …)."""
+    key = name.strip().lower()
+    hit = _SPECTATOR_CACHE.get(key)
+    if hit is not None:
+        return hit
+    path = spectator_mount_path(key)
+    if path is None:
+        m = _SPECTATOR_DEFAULTS.get(key)
+        if m is None:
+            raise SystemExit(f"[ERROR] unknown spectator mount {name!r}")
+        print(f"[spectator] {m.describe()} <- default (no file)", flush=True)
+        _SPECTATOR_CACHE[key] = m
+        return m
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise SystemExit(f"[ERROR] spectator mount: cannot read {path}: {e}") from e
+    if not isinstance(data, dict):
+        raise SystemExit(f"[ERROR] spectator mount: not an object ({path})")
+    m = CameraMount(
+        name=str(data.get("name") or key),
+        x=float(data.get("x", 0.0)),
+        y=float(data.get("y", 0.0)),
+        z=float(data.get("z", 1.2)),
+        pitch=float(data.get("pitch", 0.0)),
+        yaw=float(data.get("yaw", 0.0)),
+        roll=float(data.get("roll", 0.0)),
+        fov=float(data.get("fov", 90.0)),
+    )
+    print(f"[spectator] {m.describe()} <- {path}", flush=True)
+    _SPECTATOR_CACHE[key] = m
+    return m
+
+
+def spectator_pose(name: str) -> Tuple[float, float, float, float, float]:
+    """(x_m, z_m, pitch_deg, yaw_deg, fov_deg) for CARLA attach (y unused = 0)."""
+    m = load_spectator_mount(name)
+    return (m.x, m.z, m.pitch, m.yaw, m.fov)
+
+
 def scene_chase_pose() -> Tuple[float, float, float, float, float]:
-    """ChaseCam=2 spectator (lab only).
-
-    Rear ~35 m aligns with BEV CamBack for mutual check only (not coupled to
-    D_see). Slightly higher + milder pitch so forward horizon stays readable
-    after the longer rear gap.
-
-    Returns (x_m, z_m, pitch_deg, yaw_deg, fov_deg) in vehicle frame.
-    """
-    # x=-35 (vs BEV CamBack); z↑ / pitch milder → see farther ahead.
-    return (-35.0, 14.5, -19.0, 0.0, 78.0)
+    """Compat: ChaseCam=2 → bev_afc."""
+    return spectator_pose("bev_afc")
 
 
 def overhead_chase_pose() -> Tuple[float, float, float, float, float]:
-    # High nadir-ish view for parking / side-ring check (lab spectator only).
-    return (-5.0, 32.0, -88.0, 0.0, 90.0)
+    """Compat: ChaseCam=4 → overhead."""
+    return spectator_pose("overhead")
 
 
 def host_cameras_path() -> Optional[Path]:
     return camera_contract_path()
 
 
+def reset_camera_contract_cache() -> None:
+    """Tests only: drop memo so the next load hits disk."""
+    _CAMS_CACHE.clear()
+    _MOUNT_CACHE.clear()
+    _SPECTATOR_CACHE.clear()
+
+
 __all__ = [
     "CameraMount",
     "HostCamera",
+    "SPECTATOR_BY_ENV",
     "camera_contract_path",
     "host_cameras_path",
     "load_camera_mount",
     "load_host_cameras",
+    "load_spectator_mount",
     "reset_camera_contract_cache",
     "scene_chase_pose",
     "overhead_chase_pose",
+    "spectator_mount_path",
+    "spectator_pose",
 ]

@@ -10,34 +10,29 @@ struct Trajectory {
   uint8_t point_count;
   float points_x_m[60];
   float points_y_m[60];
-  float points_v_mps[60];  // v4 plan speed along path (BEV); 0 if unused
+  float points_v_mps[60];
   uint8_t gear_shift_first;
   uint8_t gear_shift_second;
-  // Actuator command co-published with path (iceoryx; no planning_ctrl.json).
   float throttle;
   float brake;
   float steer;
   float target_speed_mps;
-  uint8_t ctrl_mode;  // 0=cruise 1=acc 2=aeb (label only; v4 not a state machine)
-  // Process curves (ME semantics) — Live plots these, not Sign_Name[0] / Obj[0].
+  uint8_t ctrl_mode;
   float D_see_m;
   float s_stop_m;
   float cipv_long_m;
   float cipv_rel_v;
-  // Active Relevant DSTSR speed limits (mps). 0 = none. Not vis v_cap.
   float v_sign_max_mps;
   float v_sign_min_mps;
 };
 
-// Driving fused drivability (front+rear+surround). Planning space = BEV space.
-// Not FreespaceNear (surround raw) and not FailSafe Perception_FS_Out.
+// Driving fused drivability. Acceptance = Empty180 Pack (≤180 rim points).
 struct Freespace {
   uint64_t timestamp_ns;
-  float d_occ_m[36];
-  float d_front_m;
-  float d_rear_m;
-  float d_left_m;
-  float d_right_m;
+  float d_lane_fwd_m[3];
+  uint8_t n_poly;
+  float poly_x_m[180];
+  float poly_y_m[180];
   uint8_t valid;
 };
 

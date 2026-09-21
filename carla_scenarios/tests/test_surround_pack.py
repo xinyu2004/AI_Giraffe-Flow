@@ -12,6 +12,7 @@ sys.path.insert(0, str(_LIB))
 from _surround_pack import (  # noqa: E402
     GF_CH_MODE_HINT_MAGIC,
     GF_CH_SURROUND_MAGIC,
+    GF_CH_SURROUND_VERSION,
     _HINT,
     _SW_SIZE,
     pack_mode_hint_pod,
@@ -28,6 +29,9 @@ def test_pack_surround_world_size_and_magic() -> None:
                 "long_dist_m": -8.0,
                 "lat_dist_m": -3.5,
                 "rel_vel_long_mps": 0.1,
+                "length_m": 4.6,
+                "width_m": 1.9,
+                "heading_rad": 0.35,
             }
         ],
         slots=[
@@ -45,20 +49,26 @@ def test_pack_surround_world_size_and_magic() -> None:
         timestamp_ns=99,
     )
     assert len(blob) == _SW_SIZE
+    assert _SW_SIZE == 668
     magic, ver, _res, ts, seq, valid, n_obj, n_slot, _pad = struct.unpack_from(
         "<IHHQQBBBB", blob, 0
     )
     assert magic == GF_CH_SURROUND_MAGIC
-    assert ver == 1
+    assert ver == GF_CH_SURROUND_VERSION == 2
     assert ts == 99
     assert seq == 3
     assert valid == 1
     assert n_obj == 1
     assert n_slot == 1
-    oid, ocls, long_m, lat_m, rel = struct.unpack_from("<BB2x3f", blob, 28)
+    oid, ocls, long_m, lat_m, rel, length_m, width_m, hdg = struct.unpack_from(
+        "<BB2x6f", blob, 28
+    )
     assert oid == 7 and ocls == 1
     assert abs(long_m + 8.0) < 1e-5
     assert abs(lat_m + 3.5) < 1e-5
+    assert abs(length_m - 4.6) < 1e-5
+    assert abs(width_m - 1.9) < 1e-5
+    assert abs(hdg - 0.35) < 1e-5
 
 
 def test_pack_mode_hint() -> None:

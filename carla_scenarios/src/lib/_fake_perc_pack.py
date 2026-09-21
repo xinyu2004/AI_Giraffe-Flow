@@ -11,7 +11,7 @@ from typing import Any, Mapping
 
 GF_CH_FAKE_PERC_MAGIC = 0x47465043
 GF_CH_POD_VERSION = 1
-GF_CH_FAKE_PERC_VERSION = 2
+GF_CH_FAKE_PERC_VERSION = 3
 _MAX_OBJ = 13
 _MAX_ADJ = 4
 _MAX_TSR = 6
@@ -48,8 +48,13 @@ _STAT = struct.Struct("<BBBB5f")
 assert _STAT.size == 24
 _TAIL_HEAD = struct.Struct("<BB2x")
 assert _TAIL_HEAD.size == 4
-_FP_SIZE = _FP_V1_SIZE + _TAIL_HEAD.size + _MAX_TSR * _TSR.size + _MAX_STAT * _STAT.size
-assert _FP_SIZE == 740
+_FP_V2_SIZE = _FP_V1_SIZE + _TAIL_HEAD.size + _MAX_TSR * _TSR.size + _MAX_STAT * _STAT.size
+assert _FP_V2_SIZE == 740
+# lre_n, lre_mask, pad2[2], left c0/c1/c2/vr, right c0/c1/c2/vr
+_LRE_TAIL = struct.Struct("<BB2x8f")
+assert _LRE_TAIL.size == 36
+_FP_SIZE = _FP_V2_SIZE + _LRE_TAIL.size
+assert _FP_SIZE == 776
 
 
 def _u8(v: Any, default: int = 0) -> int:
@@ -74,7 +79,7 @@ def pack_fake_perc_pod(
     seq: int = 0,
     timestamp_ns: int | None = None,
 ) -> bytes:
-    """Build full fake_perc blob from lane + dyn + optional TSR/STATIC (v2)."""
+    """Build full fake_perc blob from lane + dyn + optional TSR/STATIC (v3)."""
     ts = int(timestamp_ns if timestamp_ns is not None else time.time_ns())
 
     lead_long = _f(dyn.get("lead_from_dyn_long"), 0.0)
@@ -229,5 +234,45 @@ def pack_fake_perc_pod(
             _f(extra.get(f"stat{i}_wid"), 0.6),
         )
         buf[stat_off + i * _STAT.size : stat_off + (i + 1) * _STAT.size] = rec
+
+    # v3 LRE: explicit road edges, else host corridor outer (never adj as neighbor).
+    lre_n = min(2, max(0, _u8(lane.get("lre_n"), 0)))
+    ll_c0 = _f(lane.get("lre_left_c0"), hl_c0)
+    ll_c1 = _f(lane.get("lre_left_c1"), hl_c1)
+    ll_c2 = _f(lane.get("lre_left_c2"), hl_c2)
+    ll_vr = _f(lane.get("lre_left_vr_m"), lane_vr)
+    rr_c0 = _f(lane.get("lre_right_c0"), hr_c0)
+    rr_c1 = _f(lane.get("lre_right_c1"), hr_c1)
+    rr_c2 = _f(lane.get("lre_right_c2"), hr_c2)
+    rr_vr = _f(lane.get("lre_right_vr_m"), lane_vr)
+    if lre_n == 0 and lane_count > 0:
+        lre_n = 2
+        ll_c0, ll_c1, ll_c2, ll_vr = hl_c0, hl_c1, hl_c2, lane_vr
+        rr_c0, rr_c1, rr_c2, rr_vr = hr_c0, hr_c1, hr_c2, lane_vr
+        # Widen with corridor outers already in adj (topology edges, not "邻道" role).
+        for i in range(adj_n):
+            side = adj_side[i]
+            if side in (1, 6) and adj_c0[i] > ll_c0:
+                ll_c0, ll_c1, ll_c2 = adj_c0[i], adj_c1[i], adj_c2[i]
+            if side in (4, 5) and adj_c0[i] < rr_c0:
+                rr_c0, rr_c1, rr_c2 = adj_c0[i], adj_c1[i], adj_c2[i]
+    lre_mask = 0
+    if lre_n >= 1:
+        lre_mask |= 1
+    if lre_n >= 2:
+        lre_mask |= 2
+    lre_off = _FP_V2_SIZE
+    buf[lre_off : lre_off + _LRE_TAIL.size] = _LRE_TAIL.pack(
+        lre_n,
+        lre_mask,
+        ll_c0,
+        ll_c1,
+        ll_c2,
+        ll_vr,
+        rr_c0,
+        rr_c1,
+        rr_c2,
+        rr_vr,
+    )
 
     return bytes(buf)

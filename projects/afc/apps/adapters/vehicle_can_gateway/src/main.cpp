@@ -2,6 +2,8 @@
 // SIL egress: Trajectory → GfChannel vehicle_cmd (not locked to CAN).
 
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
+#include "gf_ara/com/binding/iceoryx/wait_set.hpp"
+#include "gf_ara/com/binding/iceoryx/period_timer.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/proxy/trajectory_proxy.hpp"
 #include "gf_gen/skeleton/ego_motion_skeleton.hpp"
@@ -311,9 +313,30 @@ int main(int argc, char** argv) {
             << " ingest_timeout_ms=" << ingest_timeout_ms
             << " cmd period_ms=" << cmd_period_ms
             << " hold-last after first Traj + Traj-edge extra tick"
+            << "; EventWaitSet+PeriodTimer (no private 1ms sleep)"
             << "; stdout=on-change+/" << log_every
             << "; frame_watch=identity+budget ego[" << tx_ego.PolicyHint()
             << "] cmd[" << tx_cmd.PolicyHint() << "])\n";
+
+  constexpr std::uint64_t kIdTraj = 1;
+  constexpr std::uint64_t kIdPeriod = 2;
+  gf_ara::com::binding::iceoryx::EventWaitSet<4> waitset;
+  if (!waitset.AttachProxy(traj_sub, kIdTraj)) {
+    std::cerr << "[ERROR] vehicle_can_gateway: EventWaitSet attach failed\n";
+    return EXIT_FAILURE;
+  }
+  std::uint32_t period_tick_ms = ego_period_ms ? ego_period_ms : 10u;
+  if (in_period_ms && in_period_ms < period_tick_ms) {
+    period_tick_ms = in_period_ms;
+  }
+  if (cmd_period_ms && cmd_period_ms < period_tick_ms) {
+    period_tick_ms = cmd_period_ms;
+  }
+  gf_ara::com::binding::iceoryx::PeriodTimer period_timer;
+  if (!period_timer.Start(waitset, kIdPeriod, period_tick_ms)) {
+    std::cerr << "[ERROR] vehicle_can_gateway: PeriodTimer start failed\n";
+    return EXIT_FAILURE;
+  }
 
   auto publish_ego = [&](std::uint64_t now) {
     gf_gen::EgoMotion ego{};
@@ -350,8 +373,12 @@ int main(int argc, char** argv) {
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
     if (supervisor.ExitForEmRestart()) {
+      period_timer.Stop();
+      waitset.MarkForDestruction();
       return gf_ara::exec::kEmRestartExitCode;
     }
+
+    (void)waitset.TimedWaitMs(period_tick_ms);
 
     if (want_channel && !state_ch) {
       state_ch = gf_channel_open(kSlotVehicleState);
@@ -392,7 +419,6 @@ int main(int argc, char** argv) {
     }
 
     if (!state.valid) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
 
@@ -443,6 +469,8 @@ int main(int argc, char** argv) {
       if (max_traj > 0 && got_traj >= max_traj) {
         std::cout << "gf-vehicle-can-gateway: received " << got_traj
                   << " Trajectory sample(s), exiting OK\n";
+        period_timer.Stop();
+        waitset.MarkForDestruction();
         if (cmd_ch) {
           gf_channel_close(cmd_ch);
         }
@@ -454,10 +482,10 @@ int main(int argc, char** argv) {
     } else if (PeriodDue(last_cmd_pub_ns, cmd_period_ms, now)) {
       publish_cmd();
     }
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
+  period_timer.Stop();
+  waitset.MarkForDestruction();
   if (cmd_ch) {
     gf_channel_close(cmd_ch);
   }

@@ -322,13 +322,17 @@ struct FrameWatch {
     }
     if (have_ts && ts_ns != 0 && last_ts != 0 && ts_ns == last_ts) {
       ++n_stale_ts;
-      defensive = true;
       if (oss.tellp() > 0) {
         oss << " ";
       }
       oss << "same_ts_ns=" << ts_ns;
       if (have_seq && seq != last_seq) {
         oss << " seq=" << last_seq << "->" << seq;
+        // Period hold-last: new sample id, same payload time — warn, not identity Error.
+        Warn(oss.str());
+      } else {
+        // True re-Observe of the same sample (hold-last misuse or dup).
+        defensive = true;
       }
     }
     if (defensive) {

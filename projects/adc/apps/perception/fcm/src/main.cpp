@@ -2,9 +2,11 @@
 #include "frame_source.hpp"
 
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
+#include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/log/logger.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/proxy/perception__in__st_proxy.hpp"
+#include "gf_gen/proxy/ego_motion_proxy.hpp"
 #include "gf_gen/skeleton/perception_message__out__st_skeleton.hpp"
 
 #if __has_include("gf_gen/frame_ingest_config.hpp")
@@ -40,18 +42,6 @@ std::uint32_t EnvU32(const char* key, std::uint32_t def) {
   }
   return static_cast<std::uint32_t>(std::strtoul(v, nullptr, 10));
 }
-
-// 1 = every Out; N = on-change + every Nth (default 40 ≈ 2s at 20 Hz).
-int LogEvery() {
-  const char* v = std::getenv("GF_APP_LOG_EVERY");
-  if (!v || !v[0]) {
-    return 40;
-  }
-  const int n = std::atoi(v);
-  return n < 1 ? 1 : n;
-}
-
-bool FMoved(float a, float b, float eps) { return std::fabs(a - b) > eps; }
 
 const char* FrameSourceLabel() {
   const char* v = std::getenv("GF_FRAME_SOURCE");
@@ -144,6 +134,17 @@ struct TruthSnapshot {
   float stat_heading[6]{};
   float stat_len[6]{};
   float stat_wid[6]{};
+  // Road edges (LRE) — physical curb/corridor outer; not LA neighbor lanes.
+  std::uint8_t lre_n{0};
+  std::uint8_t lre_mask{0};
+  float lre_left_c0{0.0f};
+  float lre_left_c1{0.0f};
+  float lre_left_c2{0.0f};
+  float lre_left_vr_m{0.0f};
+  float lre_right_c0{0.0f};
+  float lre_right_c1{0.0f};
+  float lre_right_c2{0.0f};
+  float lre_right_vr_m{0.0f};
 };
 
 bool KeepAdjLine(std::uint8_t side) {
@@ -156,7 +157,7 @@ TruthSnapshot FromFakePercPod(const GfFakePercPod& p) {
   if (p.magic != GF_CH_FAKE_PERC_MAGIC || !p.valid) {
     return t;
   }
-  if (p.version != 1 && p.version != GF_CH_FAKE_PERC_VERSION) {
+  if (p.version != 1 && p.version != 2 && p.version != GF_CH_FAKE_PERC_VERSION) {
     return t;
   }
   t.file_ok = true;
@@ -232,6 +233,18 @@ TruthSnapshot FromFakePercPod(const GfFakePercPod& p) {
       t.stat_len[i] = p.stat[i].len_m;
       t.stat_wid[i] = p.stat[i].wid_m;
     }
+  }
+  if (p.version >= 3) {
+    t.lre_n = std::min<std::uint8_t>(p.lre_n, 2);
+    t.lre_mask = p.lre_mask;
+    t.lre_left_c0 = p.lre_left_c0;
+    t.lre_left_c1 = p.lre_left_c1;
+    t.lre_left_c2 = p.lre_left_c2;
+    t.lre_left_vr_m = p.lre_left_vr_m;
+    t.lre_right_c0 = p.lre_right_c0;
+    t.lre_right_c1 = p.lre_right_c1;
+    t.lre_right_c2 = p.lre_right_c2;
+    t.lre_right_vr_m = p.lre_right_vr_m;
   }
   return t;
 }
@@ -365,12 +378,99 @@ void FillLanesFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
   la.m_adj_line_num = adj_out;
 }
 
+/** Fill Perception_LRE_Out from SIL road edges. Never copy LA neighbor lanes as LRE. */
+void FillLreFromTruth(gf_gen::Perception_MESSAGE_Out_St& out, const TruthSnapshot& truth,
+                      std::uint64_t timestamp_ns, std::uint32_t frame_id) {
+  auto& lre = out.Perception_LRE_Out;
+  lre.m_frame_id = frame_id;
+  lre.m_time_stamp = timestamp_ns / 1000ULL;
+  lre.m_roadedge_num = 0;
+
+  float lc0 = truth.lre_left_c0;
+  float lc1 = truth.lre_left_c1;
+  float lc2 = truth.lre_left_c2;
+  float lvr = truth.lre_left_vr_m > 0.5f ? truth.lre_left_vr_m : truth.lane_vr_end_m;
+  float rc0 = truth.lre_right_c0;
+  float rc1 = truth.lre_right_c1;
+  float rc2 = truth.lre_right_c2;
+  float rvr = truth.lre_right_vr_m > 0.5f ? truth.lre_right_vr_m : truth.lane_vr_end_m;
+  bool have_l = (truth.lre_mask & 1u) != 0 || truth.lre_n >= 1;
+  bool have_r = (truth.lre_mask & 2u) != 0 || truth.lre_n >= 2;
+
+  // v1/v2 fallback: corridor outer from host (+ adj topology outers). Not "邻道".
+  if (!have_l || !have_r) {
+    if (truth.lane_count > 0 && truth.lane_avail != 0) {
+      if (!have_l) {
+        lc0 = truth.host_left_c0;
+        lc1 = truth.host_left_c1 != 0.0f ? truth.host_left_c1 : truth.host_c1;
+        lc2 = truth.host_left_c2 != 0.0f ? truth.host_left_c2 : truth.host_c2;
+        lvr = truth.lane_vr_end_m;
+        have_l = true;
+      }
+      if (!have_r) {
+        rc0 = truth.host_right_c0;
+        rc1 = truth.host_right_c1 != 0.0f ? truth.host_right_c1 : truth.host_c1;
+        rc2 = truth.host_right_c2 != 0.0f ? truth.host_right_c2 : truth.host_c2;
+        rvr = truth.lane_vr_end_m;
+        have_r = true;
+      }
+      for (std::uint8_t i = 0; i < truth.adj_n && i < 4; ++i) {
+        const std::uint8_t side = truth.adj_side[i];
+        // Sides 1/6 = left corridor outer; 4/5 = right. Geometry only — LA stays separate.
+        if ((side == 1 || side == 6) && truth.adj_c0[i] > lc0) {
+          lc0 = truth.adj_c0[i];
+          lc1 = truth.adj_c1[i];
+          lc2 = truth.adj_c2[i];
+        }
+        if ((side == 4 || side == 5) && truth.adj_c0[i] < rc0) {
+          rc0 = truth.adj_c0[i];
+          rc1 = truth.adj_c1[i];
+          rc2 = truth.adj_c2[i];
+        }
+      }
+    }
+  }
+
+  if (lvr > 130.0f) {
+    lvr = 130.0f;
+  }
+  if (rvr > 130.0f) {
+    rvr = 130.0f;
+  }
+  const float conf = truth.lane_conf > 0.1f ? truth.lane_conf : 0.85f;
+  const std::uint8_t avail = (truth.lane_avail == 0) ? 0 : 2;  // DETECTED
+
+  auto fill_edge = [&](gf_gen::LRE_Line_St& line, std::uint8_t side, float c0, float c1, float c2,
+                       float vr, std::uint8_t track) {
+    line.LRE_Track_ID = track;
+    line.m_LRE_Confidence = conf;
+    line.m_LRE_Availability_State = avail;
+    line.m_LRE_View_Range_Start = 0.0f;
+    line.m_LRE_View_Range_End = (avail == 0) ? 0.0f : vr;
+    line.m_LRE_Line_C3 = 0.0f;
+    line.m_LRE_Line_C2 = (avail == 0) ? 0.0f : c2;
+    line.m_LRE_Line_C1 = (avail == 0) ? 0.0f : c1;
+    line.m_LRE_Line_C0 = (avail == 0) ? 0.0f : c0;
+    line.m_LRE_Side = side;
+  };
+
+  std::uint8_t n = 0;
+  if (have_l && avail != 0 && lvr > 0.5f) {
+    fill_edge(lre.m_roadedge_line[n++], 1, lc0, lc1, lc2, lvr, 1);  // LEFT
+  }
+  if (have_r && avail != 0 && rvr > 0.5f && n < 2) {
+    fill_edge(lre.m_roadedge_line[n++], 2, rc0, rc1, rc2, rvr, 2);  // RIGHT
+  }
+  lre.m_roadedge_num = n;
+}
+
 void FillOutFromTruth(gf_gen::Perception_MESSAGE_Out_St& out,
                       const TruthSnapshot& truth,
                       std::uint64_t timestamp_ns,
                       std::uint32_t frame_id) {
   ClearOut(out);
   FillLanesFromTruth(out, truth, timestamp_ns, frame_id);
+  FillLreFromTruth(out, truth, timestamp_ns, frame_id);
   auto& dyn = out.Perception_DYN_OBJ_Out;
   dyn.m_frame_id = frame_id;
   dyn.m_time_stamp = timestamp_ns / 1000ULL;
@@ -503,13 +603,19 @@ int main() {
 
   gf_fcm::FrameSource frames(frame_kind);
   gf_gen::Perception_In_StProxy in_sub{};
+  gf_gen::EgoMotionProxy ego_sub{};
   gf_gen::Perception_MESSAGE_Out_StSkeleton out_pub{};
+  gf_ara::com::binding::iceoryx::EventWaitSet<4> waitset;
+  if (!waitset.AttachProxy(in_sub, 1) || !waitset.AttachProxy(ego_sub, 2)) {
+    std::cerr << "[ERROR] perception.fcm: EventWaitSet attach failed\n";
+    return EXIT_FAILURE;
+  }
 
   GfChannel* fake_ch = nullptr;
   std::uint64_t fake_seq = 0;
-  float last_in_speed = -1.0f;
   std::optional<std::uint32_t> last_in_frame;
   std::optional<std::uint64_t> last_in_ts;
+  std::optional<gf_gen::EgoMotion> last_ego;
 
   std::uint64_t out_seq = 0;
   std::uint64_t last_keep_ns = 0;
@@ -520,7 +626,6 @@ int main() {
   std::uint64_t last_truth_ts = 0;
   int last_truth_lanes = 0;
   int last_truth_ego_lane = 0;
-  const int log_every = LogEvery();
   gf_app::EnsureDiagLogSinks();
   gf_app::FrameWatch rx_fake;
   gf_app::FrameWatch rx_in;
@@ -532,17 +637,6 @@ int main() {
   tx_out.Init("fcm", "tx.out");
   tx_out.BindService("Perception_MESSAGE_Out_St");
   tx_out.BindCameraCeiling();
-  const char* last_log_mode = "";
-  int last_log_vd = -1;
-  int last_log_cipv = -1;
-  int last_log_lh = -1;
-  int last_log_lanes = -1;
-  int last_log_ego_lane = -1;
-  float last_log_lead = 0.0f;
-  float last_log_lat = 0.0f;
-  float last_log_rel_v = 0.0f;
-  float last_log_speed = -1.0f;
-  bool last_log_had_lead = false;
 
   std::cout << "gf-perception-fcm: start frame_source=" << FrameSourceLabel()
             << " kind=" << KindName(frame_kind)
@@ -555,8 +649,7 @@ int main() {
   } else {
     std::cout << " out=on-change (no freeze keepalive)";
   }
-  std::cout << " stdout=on-change+/" << log_every
-            << " m_frame_id=camera-only out_seq=update-only"
+  std::cout << " m_frame_id=camera-only out_seq=update-only"
             << " frame_watch=identity+budget"
             << " out[" << tx_out.PolicyHint() << "]"
             << " in[" << rx_in.PolicyHint() << "]" << std::endl;
@@ -564,11 +657,18 @@ int main() {
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
     if (supervisor.ExitForEmRestart()) {
+      waitset.MarkForDestruction();
       return gf_ara::exec::kEmRestartExitCode;
     }
 
     if (!fake_ch) {
       fake_ch = gf_channel_open(FakePercSlot());
+    }
+    // Wake on In/Ego or fake_perc seq; slice is supervisor/camera poll only.
+    if (fake_ch) {
+      (void)gf_channel_wait_seq(fake_ch, fake_seq, 5);
+    } else {
+      (void)waitset.TimedWaitMs(5);
     }
 
     {
@@ -576,8 +676,13 @@ int main() {
       if (taken && taken.Value().has_value()) {
         last_in_frame = taken.Value()->ipc_frame_counter;
         last_in_ts = taken.Value()->timestamp_ns;
-        last_in_speed = taken.Value()->vehicle_speed;
         rx_in.Observe(*last_in_frame, *last_in_ts);
+      }
+    }
+    if (auto t = ego_sub.Take(); t && t.Value().has_value()) {
+      last_ego = *t.Value();
+      if (!last_in_ts || *last_in_ts == 0) {
+        last_in_ts = last_ego->timestamp_ns;
       }
     }
 
@@ -627,60 +732,6 @@ int main() {
         ++out_seq;
         tx_out.Observe(out_seq, ts);
       }
-      const auto& dyn = out.Perception_DYN_OBJ_Out;
-      const auto& lh = out.Perception_LH_Out;
-      const auto& la = out.Perception_LA_Out;
-      const int vd = static_cast<int>(dyn.m_OBJ_VD_Count);
-      const int cipv = static_cast<int>(dyn.m_OBJ_VD_CIPV_ID);
-      const int lh_n = static_cast<int>(lh.m_hostline_num);
-      const int lanes = (std::strcmp(mode, "update") == 0)
-                            ? static_cast<int>(truth.lane_count)
-                            : last_truth_lanes;
-      const int ego_lane = (std::strcmp(mode, "update") == 0)
-                               ? static_cast<int>(truth.ego_lane_index_from_left)
-                               : last_truth_ego_lane;
-      const bool had_lead = vd > 0;
-      const float lead = had_lead ? dyn.m_Obj_item[0].m_OBJ_Long_Distance : 0.0f;
-      const float lat = had_lead ? dyn.m_Obj_item[0].m_OBJ_Lat_Distance : 0.0f;
-      const float rel_v =
-          had_lead ? dyn.m_Obj_item[0].m_OBJ_Relative_Long_Velocity : 0.0f;
-      const bool changed =
-          std::strcmp(mode, last_log_mode) != 0 || vd != last_log_vd ||
-          cipv != last_log_cipv || lh_n != last_log_lh || lanes != last_log_lanes ||
-          ego_lane != last_log_ego_lane || had_lead != last_log_had_lead ||
-          (had_lead && (FMoved(lead, last_log_lead, 0.5f) ||
-                        FMoved(lat, last_log_lat, 0.5f) ||
-                        FMoved(rel_v, last_log_rel_v, 0.2f))) ||
-          (last_in_speed >= 0.0f && FMoved(last_in_speed, last_log_speed, 0.2f));
-      if (log_every <= 1 || changed ||
-          (out_seq % static_cast<std::uint64_t>(log_every) == 0)) {
-        std::cout << "gf-perception-fcm: out#" << out_seq << " mode=" << mode
-                  << " vd=" << vd << " ped=" << static_cast<int>(dyn.m_OBJ_Ped_Count)
-                  << " cipv=" << cipv << " lh=" << lh_n
-                  << " la=" << static_cast<int>(la.m_adj_line_num)
-                  << " lanes=" << lanes << " ego_lane=" << ego_lane;
-        if (had_lead) {
-          std::cout << " lead=" << lead << " lat=" << lat << " rel_v=" << rel_v;
-        }
-        if (last_in_frame) {
-          std::cout << " in_frame=" << *last_in_frame;
-        }
-        if (last_in_speed >= 0.0f) {
-          std::cout << " in_speed=" << last_in_speed;
-        }
-        std::cout << std::endl;
-        last_log_mode = mode;
-        last_log_vd = vd;
-        last_log_cipv = cipv;
-        last_log_lh = lh_n;
-        last_log_lanes = lanes;
-        last_log_ego_lane = ego_lane;
-        last_log_had_lead = had_lead;
-        last_log_lead = lead;
-        last_log_lat = lat;
-        last_log_rel_v = rel_v;
-        last_log_speed = last_in_speed;
-      }
     };
 
     const auto keep_due = [&]() {
@@ -711,7 +762,6 @@ int main() {
             (frame_kind == gf_fcm::FrameSourceKind::None) ? 0u : last_image_frame_id;
         publish_out(ts, img);
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
 
@@ -729,7 +779,6 @@ int main() {
         last_keep_ns = gf_fcm::FrameSource::NowNs();
         publish_out(last_keep_ns, 0);
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
 
@@ -755,8 +804,8 @@ int main() {
       publish_out(last_keep_ns, 0);
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
+  waitset.MarkForDestruction();
   if (fake_ch) {
     gf_channel_close(fake_ch);
   }

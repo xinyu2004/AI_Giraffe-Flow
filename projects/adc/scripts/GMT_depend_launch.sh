@@ -216,13 +216,19 @@ gf_start_obs_sidechannel() {
     echo "${TAG} ERROR: gf_foxglove_ws missing (${fox})" >&2
     return 1
   fi
-  : >"${LOG_DIR}/foxglove_ws.log"
+  echo "${TAG} foxglove_ws exe=${fox} md5=$(md5sum "${fox}" | awk '{print $1}') region=${GF_FS_DEBUG_REGION:-all}"
+  # Inherit SIL TTY: console + DLT (no foxglove_ws.log / no /tmp diag files).
   if command -v stdbuf >/dev/null 2>&1; then
-    stdbuf -oL -eL "${fox}" >>"${LOG_DIR}/foxglove_ws.log" 2>&1 &
+    stdbuf -oL -eL "${fox}" &
   else
-    "${fox}" >>"${LOG_DIR}/foxglove_ws.log" 2>&1 &
+    "${fox}" &
   fi
   FOX_PID=$!
+  echo "${TAG} foxglove_ws pid=${FOX_PID} (console+DLT; no log file)"
+  # Prove paint binary has RAW red overlay strings.
+  if ! strings "${fox}" 2>/dev/null | grep -q 'RAW REAR RED'; then
+    echo "${TAG} WARN: foxglove_ws missing RAW REAR RED — rebuild/sync foxglove" >&2
+  fi
   local live_session="${GF_LIVE_SESSION:-$(gf_obs_dir)/session_live.jsonl}"
   local live_tee="${GF_LIVE_TEE:-1}"
   if [[ "${live_tee}" == "1" ]]; then

@@ -1,4 +1,5 @@
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
+#include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/proxy/ego_motion_proxy.hpp"
 #include "gf_gen/proxy/perception_message__out__st_proxy.hpp"
@@ -21,24 +22,15 @@
 #include <iostream>
 #include <optional>
 #include <string>
-#include <thread>
 
 namespace {
 
 constexpr const char* kProcess = "planning.driving";
 constexpr int kDynCap = 13;
 constexpr float kObjDMaxM = 130.0f;
-
-int LogEvery() {
-  const char* v = std::getenv("GF_APP_LOG_EVERY");
-  if (!v || !v[0]) {
-    return 40;
-  }
-  const int n = std::atoi(v);
-  return n < 1 ? 1 : n;
-}
-
-bool FMoved(float a, float b, float eps) { return std::fabs(a - b) > eps; }
+constexpr std::uint32_t kWaitSliceMs = 10;
+constexpr std::uint64_t kIdEgo = 1;
+constexpr std::uint64_t kIdPerc = 2;
 
 struct HostLaneGeom {
   bool valid{false};
@@ -409,17 +401,6 @@ int main() {
   float D_see_prev = 0.0f;
   float T_plan_prev = 0.0f;
   std::uint64_t seq = 0;
-  const int log_every = LogEvery();
-  const char* last_log_mode = "";
-  int last_log_nobj = -1;
-  int last_log_lane = -1;
-  int last_log_lh = -1;
-  float last_log_ey = 0.0f;
-  float last_log_dsee = 0.0f;
-  float last_log_areq = 0.0f;
-  float last_log_thr = 0.0f;
-  float last_log_brk = 0.0f;
-  float last_log_st = 0.0f;
   gf_app::EnsureDiagLogSinks();
   gf_app::FrameWatch rx_ego;
   gf_app::FrameWatch rx_perc;
@@ -433,9 +414,15 @@ int main() {
   tx_traj.BindService("Trajectory");
   std::uint64_t last_perc_ts = 0;
   bool have_planned = false;
+  bool perc_edge = false;
 
-  std::cout << "gf-planning-driving: start (v4 m_plan_tick; perc-triggered; ego cached"
-            << "; stdout=on-change+/" << log_every
+  gf_ara::com::binding::iceoryx::EventWaitSet<4> waitset;
+  if (!waitset.AttachProxy(ego_sub, kIdEgo) || !waitset.AttachProxy(perc_sub, kIdPerc)) {
+    std::cerr << "[ERROR] planning.driving: EventWaitSet attach failed\n";
+    return EXIT_FAILURE;
+  }
+
+  std::cout << "gf-planning-driving: start (v4 m_plan_tick; EventWaitSet; Traj=perc edge"
             << "; frame_watch=identity+budget perc[" << rx_perc.PolicyHint()
             << "] ego[" << rx_ego.PolicyHint() << "])\n";
 
@@ -445,31 +432,41 @@ int main() {
       return gf_ara::exec::kEmRestartExitCode;
     }
 
-    if (auto t = ego_sub.Take(); t && t.Value().has_value()) {
+    (void)waitset.TimedWaitMs(kWaitSliceMs);
+
+    for (;;) {
+      auto t = ego_sub.Take();
+      if (!t || !t.Value().has_value()) {
+        break;
+      }
       last_ego = *t.Value();
       rx_ego.Observe(0, last_ego->timestamp_ns, false, true);
     }
-    if (auto t = perc_sub.Take(); t && t.Value().has_value()) {
+    for (;;) {
+      auto t = perc_sub.Take();
+      if (!t || !t.Value().has_value()) {
+        break;
+      }
       last_perc = *t.Value();
+      perc_edge = true;
     }
 
     if (!last_perc || !last_ego) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
 
     const auto& ego = *last_ego;
     const std::uint64_t perc_ts =
         last_perc->Perception_DYN_OBJ_Out.m_time_stamp * 1000ULL;
-    rx_perc.Observe(0, perc_ts, false, true);
-    if (have_planned && perc_ts == last_perc_ts) {
-      last_perc.reset();
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (perc_edge) {
+      rx_perc.Observe(0, perc_ts, false, true);
+    }
+    const bool need_traj = perc_edge && (!have_planned || perc_ts != last_perc_ts);
+    perc_edge = false;
+    if (!need_traj) {
       continue;
     }
-    const auto t0 = std::chrono::steady_clock::now();
     const PercView view = ExtractPerc(*last_perc);
-    last_perc.reset();
     const float v_sign_max =
         view.v_sign_max_mps > 0.5f ? view.v_sign_max_mps : 1.0e6f;
     const float v_sign_min = view.v_sign_min_mps;
@@ -483,49 +480,15 @@ int main() {
 
     gf_gen::Trajectory traj{};
     ApplyTick(tick, ego, view, traj);
-    traj.timestamp_ns = now_ns();
-    const auto tick_ms = std::chrono::duration<double, std::milli>(
-                             std::chrono::steady_clock::now() - t0)
-                             .count();
+    traj.timestamp_ns = perc_ts;
 
     if (static_cast<bool>(traj_pub.Send(traj))) {
       tx_traj.Observe(seq, traj.timestamp_ns);
       last_perc_ts = perc_ts;
       have_planned = true;
-      const int lane_ok = view.lane.valid ? 1 : 0;
-      const bool changed =
-          std::strcmp(tick.mode, last_log_mode) != 0 || view.nobj != last_log_nobj ||
-          lane_ok != last_log_lane || view.lh_n != last_log_lh ||
-          FMoved(view.lane.e_y, last_log_ey, 0.25f) ||
-          FMoved(tick.D_see, last_log_dsee, 0.5f) ||
-          FMoved(tick.a_req, last_log_areq, 0.2f) ||
-          FMoved(traj.throttle, last_log_thr, 0.02f) ||
-          FMoved(traj.brake, last_log_brk, 0.02f) ||
-          FMoved(traj.steer, last_log_st, 0.02f);
-      if (log_every <= 1 || changed ||
-          (seq % static_cast<std::uint64_t>(log_every) == 0)) {
-        std::cout << "[perf][planning] tick_ms=" << tick_ms << " seq=" << seq
-                  << " pts=" << static_cast<int>(traj.point_count)
-                  << " y_end=" << traj.points_y_m[traj.point_count - 1]
-                  << " e_y=" << view.lane.e_y << " lh=" << view.lh_n
-                  << " lane=" << lane_ok << " dyn=" << view.dyn_raw
-                  << " nobj=" << view.nobj << " mode=" << tick.mode
-                  << " D_see=" << tick.D_see << " a_req=" << tick.a_req
-                  << " thr=" << traj.throttle << " brk=" << traj.brake
-                  << " st=" << traj.steer << std::endl;
-        last_log_mode = tick.mode;
-        last_log_nobj = view.nobj;
-        last_log_lane = lane_ok;
-        last_log_lh = view.lh_n;
-        last_log_ey = view.lane.e_y;
-        last_log_dsee = tick.D_see;
-        last_log_areq = tick.a_req;
-        last_log_thr = traj.throttle;
-        last_log_brk = traj.brake;
-        last_log_st = traj.steer;
-      }
       ++seq;
     }
   }
+  waitset.MarkForDestruction();
   return EXIT_SUCCESS;
 }

@@ -1,0 +1,12 @@
+{
+  "name": "bev_adc",
+  "carla_env_id": 3,
+  "note": "Lab ChaseCam=3: full ego + more rear than #2. Not Foxglove canvas.",
+  "x": -60.0,
+  "y": 0.0,
+  "z": 62.0,
+  "pitch": -44.0,
+  "yaw": 0.0,
+  "roll": 0.0,
+  "fov": 72.0
+}

@@ -3,6 +3,8 @@
 // (DriveParkFG set-diff: only one planner process is alive).
 
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
+#include "gf_ara/com/binding/iceoryx/wait_set.hpp"
+#include "gf_ara/com/binding/iceoryx/period_timer.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_gen/proxy/parking_trajectory_proxy.hpp"
 #include "gf_gen/proxy/trajectory_proxy.hpp"
@@ -31,17 +33,6 @@
 namespace {
 
 constexpr const char* kProcess = "adapter.vehicle_can_gateway";
-
-int LogEvery() {
-  const char* v = std::getenv("GF_APP_LOG_EVERY");
-  if (!v || !v[0]) {
-    return 40;
-  }
-  const int n = std::atoi(v);
-  return n < 1 ? 1 : n;
-}
-
-bool FMoved(float a, float b, float eps) { return std::fabs(a - b) > eps; }
 
 constexpr const char* kSlotVehicleState = "gf.channel.vehicle_state";
 constexpr const char* kSlotVehicleCmd = "gf.channel.vehicle_cmd";
@@ -283,12 +274,6 @@ int main(int argc, char** argv) {
     const std::uint32_t t = p * 10u;
     return t < 100u ? 100u : t;
   }();
-  const int log_every = LogEvery();
-  int last_log_mode = -1;
-  float last_log_thr = 0.0f;
-  float last_log_brk = 0.0f;
-  float last_log_st = 0.0f;
-  float last_log_y = 0.0f;
   gf_app::EnsureDiagLogSinks();
   gf_app::FrameWatch rx_state;
   gf_app::FrameWatch rx_traj;
@@ -315,9 +300,30 @@ int main(int argc, char** argv) {
             << " ingest_timeout_ms=" << ingest_timeout_ms
             << " cmd period_ms=" << cmd_period_ms
             << " traj forward=DriveParkFG set-diff (no VehicleMode mux)"
-            << "; stdout=on-change+/" << log_every
+            << "; EventWaitSet+PeriodTimer (no private 1ms sleep)"
             << "; frame_watch=identity+budget ego[" << tx_ego.PolicyHint()
             << "] cmd[" << tx_cmd.PolicyHint() << "])\n";
+
+  constexpr std::uint64_t kIdTraj = 1;
+  constexpr std::uint64_t kIdPark = 2;
+  constexpr std::uint64_t kIdPeriod = 3;
+  gf_ara::com::binding::iceoryx::EventWaitSet<8> waitset;
+  if (!waitset.AttachProxy(traj_sub, kIdTraj) || !waitset.AttachProxy(park_traj_sub, kIdPark)) {
+    std::cerr << "[ERROR] vehicle_can_gateway: EventWaitSet attach failed\n";
+    return EXIT_FAILURE;
+  }
+  std::uint32_t period_tick_ms = ego_period_ms ? ego_period_ms : 10u;
+  if (in_period_ms && in_period_ms < period_tick_ms) {
+    period_tick_ms = in_period_ms;
+  }
+  if (cmd_period_ms && cmd_period_ms < period_tick_ms) {
+    period_tick_ms = cmd_period_ms;
+  }
+  gf_ara::com::binding::iceoryx::PeriodTimer period_timer;
+  if (!period_timer.Start(waitset, kIdPeriod, period_tick_ms)) {
+    std::cerr << "[ERROR] vehicle_can_gateway: PeriodTimer start failed\n";
+    return EXIT_FAILURE;
+  }
 
   auto publish_ego = [&](std::uint64_t now) {
     gf_gen::EgoMotion ego{};
@@ -354,8 +360,12 @@ int main(int argc, char** argv) {
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
     if (supervisor.ExitForEmRestart()) {
+      period_timer.Stop();
+      waitset.MarkForDestruction();
       return gf_ara::exec::kEmRestartExitCode;
     }
+
+    (void)waitset.TimedWaitMs(period_tick_ms);
 
     if (want_channel && !state_ch) {
       state_ch = gf_channel_open(kSlotVehicleState);
@@ -396,7 +406,6 @@ int main(int argc, char** argv) {
     }
 
     if (!state.valid) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
 
@@ -429,11 +438,6 @@ int main(int argc, char** argv) {
       last_ctrl.ctrl_mode = 0;
       last_ctrl.has = true;
       last_lane = "parking";
-      if (log_every <= 1 || ((got_traj - 1) % log_every == 0)) {
-        std::cout << "gf-vehicle-can-gateway: ParkingTrajectory#" << got_traj
-                  << " points=" << static_cast<int>(p.n_points)
-                  << " valid=1 ts_ns=" << p.timestamp_ns << std::endl;
-      }
       applied = true;
     } else if (drive_taken && drive_taken.Value().has_value()) {
       const auto& t = *drive_taken.Value();
@@ -452,24 +456,6 @@ int main(int argc, char** argv) {
         lane = LaneFromYEnd(y_end);
         last_lane = lane;
       }
-      const bool changed =
-          static_cast<int>(t.ctrl_mode) != last_log_mode ||
-          FMoved(t.throttle, last_log_thr, 0.02f) ||
-          FMoved(t.brake, last_log_brk, 0.02f) ||
-          FMoved(t.steer, last_log_st, 0.02f) || FMoved(y_end, last_log_y, 0.25f);
-      if (log_every <= 1 || changed || ((got_traj - 1) % log_every == 0)) {
-        std::cout << "gf-vehicle-can-gateway: Trajectory#" << got_traj
-                  << " points=" << static_cast<int>(t.point_count)
-                  << " y_end=" << y_end << " lane=" << lane
-                  << " thr=" << t.throttle << " brk=" << t.brake
-                  << " st=" << t.steer << " mode=" << CtrlModeName(t.ctrl_mode)
-                  << " ts_ns=" << t.timestamp_ns << std::endl;
-        last_log_mode = static_cast<int>(t.ctrl_mode);
-        last_log_thr = t.throttle;
-        last_log_brk = t.brake;
-        last_log_st = t.steer;
-        last_log_y = y_end;
-      }
       applied = true;
     }
 
@@ -478,6 +464,8 @@ int main(int argc, char** argv) {
       if (max_traj > 0 && got_traj >= max_traj) {
         std::cout << "gf-vehicle-can-gateway: received " << got_traj
                   << " selected traj sample(s), exiting OK\n";
+        period_timer.Stop();
+        waitset.MarkForDestruction();
         if (cmd_ch) {
           gf_channel_close(cmd_ch);
         }
@@ -489,10 +477,10 @@ int main(int argc, char** argv) {
     } else if (PeriodDue(last_cmd_pub_ns, cmd_period_ms, now)) {
       publish_cmd();
     }
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
+  period_timer.Stop();
+  waitset.MarkForDestruction();
   if (cmd_ch) {
     gf_channel_close(cmd_ch);
   }

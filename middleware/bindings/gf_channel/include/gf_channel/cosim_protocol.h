@@ -26,6 +26,7 @@ enum {
   GF_COSIM_MSG_CAMERA_NV12 = 12,
   GF_COSIM_MSG_SURROUND_WORLD = 13,
   GF_COSIM_MSG_MODE_HINT = 14,
+  GF_COSIM_MSG_RCM_TRUTH = 15, /* GfRcmTruthPod → gf.channel.rcm_truth */
   GF_COSIM_MSG_VEHICLE_CMD = 20,
 };
 

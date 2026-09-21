@@ -1,6 +1,6 @@
 // gf_carla_io — board/SIL cosim endpoint (C++).
 // Listens for giraffe_client; publishes vehicle_state / fake_perc /
-// surround_world / mode_hint / camera to GfChannel; reads vehicle_cmd.
+// surround_world / rcm_truth / mode_hint / camera to GfChannel; reads vehicle_cmd.
 
 #include "gf_channel/gf_channel.h"
 #include "gf_channel/boundary_pods.h"
@@ -210,6 +210,7 @@ int main() {
   const char* vs_slot = EnvOr("GF_VEHICLE_STATE_SLOT", "gf.channel.vehicle_state");
   const char* fp_slot = EnvOr("GF_FAKE_PERC_SLOT", "gf.channel.fake_perc");
   const char* sw_slot = EnvOr("GF_SURROUND_SLOT", "gf.channel.surround_world");
+  const char* rcm_slot = EnvOr("GF_RCM_TRUTH_SLOT", "gf.channel.rcm_truth");
   const char* hint_slot = EnvOr("GF_MODE_HINT_SLOT", "gf.channel.mode_hint");
   const char* cmd_slot = EnvOr("GF_VEHICLE_CMD_SLOT", "gf.channel.vehicle_cmd");
   const int port = EnvInt("GF_COSIM_PORT", static_cast<int>(GF_COSIM_DEFAULT_PORT));
@@ -234,6 +235,7 @@ int main() {
   GfChannel* vs = gf_channel_create_blob(vs_slot, sizeof(GfVehicleStatePod), 2);
   GfChannel* fp = gf_channel_create_blob(fp_slot, sizeof(GfFakePercPod), 2);
   GfChannel* sw = gf_channel_create_blob(sw_slot, sizeof(GfSurroundWorldPod), 2);
+  GfChannel* rcm = gf_channel_create_blob(rcm_slot, sizeof(GfRcmTruthPod), 2);
   GfChannel* hint = gf_channel_create_blob(hint_slot, sizeof(GfModeHintPod), 2);
   if (!vs || !fp) {
     std::cerr << "[ERROR] gf_carla_io: create vehicle_state/fake_perc failed\n";
@@ -241,6 +243,9 @@ int main() {
   }
   if (!sw) {
     std::cerr << "[WARN] gf_carla_io: create surround_world failed (ADC parking path)\n";
+  }
+  if (!rcm) {
+    std::cerr << "[WARN] gf_carla_io: create rcm_truth failed (ADC rear path)\n";
   }
   if (!hint) {
     std::cerr << "[WARN] gf_carla_io: create mode_hint failed\n";
@@ -265,6 +270,7 @@ int main() {
   gf_app::FrameWatch rx_state;
   gf_app::FrameWatch rx_perc;
   gf_app::FrameWatch rx_sw;
+  gf_app::FrameWatch rx_rcm;
   gf_app::FrameWatch tx_cmd;
   rx_state.Init("cio", "rx.tcp.state");
   rx_state.BindChannel("vehicle_state");
@@ -272,13 +278,19 @@ int main() {
   rx_perc.BindChannel("fake_perc");
   rx_sw.Init("cio", "rx.tcp.surround");
   rx_sw.BindChannel("surround_world");
+  rx_rcm.Init("cio", "rx.tcp.rcm");
+  rx_rcm.BindChannel("rcm_truth");
   tx_cmd.Init("cio", "tx.tcp.cmd");
   tx_cmd.BindChannel("vehicle_cmd");
   tx_cmd.EnablePeriodSilence();
 
   std::cout << "gf_carla_io: listen 0.0.0.0:" << port
             << " multi-cam (slot_id→gf.channel.<id>) vs=" << vs_slot << " fp=" << fp_slot
-            << " sw=" << sw_slot << " hint=" << hint_slot << " cmd=" << cmd_slot << "\n";
+            << " sw=" << sw_slot << " rcm=" << rcm_slot << " hint=" << hint_slot
+            << " cmd=" << cmd_slot << "\n";
+  std::cout << "gf_carla_io: surround_pod sizeof=" << sizeof(GfSurroundWorldPod)
+            << " ver=" << GF_CH_SURROUND_VERSION << " size=" << GF_CH_SURROUND_SIZE
+            << " (diag: [cio][surround] DROP)\n";
   std::cout << "gf_carla_io: waiting for giraffe_client (truth+cameras+cmd cosim)"
             << " frame_watch=identity+budget cmd[" << tx_cmd.PolicyHint() << "]"
             << "\n";
@@ -302,6 +314,7 @@ int main() {
     rx_state.Reset();
     rx_perc.Reset();
     rx_sw.Reset();
+    rx_rcm.Reset();
     tx_cmd.Reset();
     cmd_seq_out = 0;
     last_cmd_seen = 0;
@@ -392,12 +405,39 @@ int main() {
           }
           break;
         case GF_COSIM_MSG_SURROUND_WORLD:
-          if (sw && payload.size() >= sizeof(GfSurroundWorldPod)) {
+          if (sw) {
+            static int s_sw_log = 0;
+            const bool do_log = ((++s_sw_log) % 50) == 1;
+            if (payload.size() < sizeof(GfSurroundWorldPod)) {
+              if (do_log) {
+                std::cerr << "[cio][surround] DROP size=" << payload.size()
+                          << " need=" << sizeof(GfSurroundWorldPod)
+                          << " ver=" << GF_CH_SURROUND_VERSION << "\n";
+              }
+              break;
+            }
             GfSurroundWorldPod pod{};
             std::memcpy(&pod, payload.data(), sizeof(pod));
-            if (pod.magic == GF_CH_SURROUND_MAGIC && pod.version == GF_CH_SURROUND_VERSION) {
-              rx_sw.Observe(pod.seq, pod.timestamp_ns ? pod.timestamp_ns : hdr.timestamp_ns);
-              (void)gf_channel_publish(sw, &pod, sizeof(pod), hdr.timestamp_ns, hdr.seq);
+            if (pod.magic != GF_CH_SURROUND_MAGIC || pod.version != GF_CH_SURROUND_VERSION ||
+                !pod.valid) {
+              if (do_log) {
+                std::cerr << "[cio][surround] DROP magic=0x" << std::hex << pod.magic << std::dec
+                          << " ver=" << pod.version << " expect=" << GF_CH_SURROUND_VERSION
+                          << " valid=" << static_cast<int>(pod.valid) << "\n";
+              }
+              break;
+            }
+            rx_sw.Observe(pod.seq, pod.timestamp_ns ? pod.timestamp_ns : hdr.timestamp_ns);
+            (void)gf_channel_publish(sw, &pod, sizeof(pod), hdr.timestamp_ns, hdr.seq);
+          }
+          break;
+        case GF_COSIM_MSG_RCM_TRUTH:
+          if (rcm && payload.size() >= sizeof(GfRcmTruthPod)) {
+            GfRcmTruthPod pod{};
+            std::memcpy(&pod, payload.data(), sizeof(pod));
+            if (pod.magic == GF_CH_RCM_MAGIC && pod.version == GF_CH_RCM_VERSION) {
+              rx_rcm.Observe(pod.seq, pod.timestamp_ns ? pod.timestamp_ns : hdr.timestamp_ns);
+              (void)gf_channel_publish(rcm, &pod, sizeof(pod), hdr.timestamp_ns, hdr.seq);
             }
           }
           break;
@@ -454,6 +494,9 @@ int main() {
   gf_channel_close(fp);
   if (sw) {
     gf_channel_close(sw);
+  }
+  if (rcm) {
+    gf_channel_close(rcm);
   }
   if (hint) {
     gf_channel_close(hint);

@@ -17,6 +17,7 @@ python3 -m giraffe_client
 | `GF_COSIM_HOST` / `GF_COSIM_PORT` | 板端 `gf_carla_io` 或本机 octave_bridge |
 | `GF_COSIM_CAMERAS` | 可选，逗号分隔只传部分 id（如 `front`）；相机关闭时无效 |
 | `GF_SURROUND` / `GF_PRODUCT=adc` | 发 SurroundWorld（MSG 13）；仅 CARLA 真目标，**不合成车位** |
+| `GF_RCM` / `GF_PRODUCT=adc` | 发 RcmTruth（MSG 15）→ `gf.channel.rcm_truth`；后 FOV 线+目标，无 TSR |
 | `GF_MODE_HINT` / `GF_APA_ARMED` / `GF_SLOT_CONFIRMED` | 发 ModeHint（MSG 14）；cases `on_tick` 写 POSIX shm `gf_mode_hint` |
 
 `run_cases.py`（scenario_client）可自动拉起本进程。

@@ -26,6 +26,26 @@ from gf_config.gui.field_ux import multi_selected, string_list_values
 class AraCommitMixin:
     """Mixin: ``_on_*_changed`` writers for AraCfgEditor."""
 
+    def flush_to_session(self) -> None:
+        """Harvest all platform widgets → session (gate before validate/save).
+
+        Principle: controls → memory → validate → disk. No undo checkpoints.
+        """
+        if self._loading or not self._session:
+            return
+        self._flushing = True
+        try:
+            self._on_exec_changed()
+            self._on_em_launch_changed()
+            self._on_phm_changed()
+            self._on_diag_changed()
+            self._on_log_changed()
+            self._on_ucm_changed()
+            self._on_collector_changed()
+            self._on_bounds_changed()
+        finally:
+            self._flushing = False
+
     def _mark(self, key: str) -> None:
         """Notify UI after an ara write. Dirty flags come from ``update_ara_doc``."""
         if self._loading or not self._session:
@@ -74,7 +94,7 @@ class AraCommitMixin:
                 if states:
                     entry["states"] = states
                 fgs.append(entry)
-        # Keep EC column in sync when process name flips to/from host.*
+        # Align EC + active_in widgets to current FG *before* harvest (controls → memory).
         self._proc_table.blockSignals(True)
         try:
             for r in range(self._proc_table.rowCount()):
@@ -87,6 +107,14 @@ class AraCommitMixin:
                     self._set_proc_execution_client_cell(r, name, False)
                 elif (not is_daemon) and (not has_combo):
                     self._set_proc_execution_client_cell(r, name, True)
+                fg_id = _combo_text(self._proc_table, r, 1) or self._default_fg()
+                aw = self._proc_table.cellWidget(r, 3)
+                prev = (
+                    [_combo_text(self._proc_table, r, 3)]
+                    if isinstance(aw, QComboBox)
+                    else []
+                )
+                self._set_proc_active_in_cell(r, fg_id, prev)
         finally:
             self._proc_table.blockSignals(False)
 
@@ -97,8 +125,9 @@ class AraCommitMixin:
                 continue
             deps = multi_selected(self._proc_table, r, 2)
             fg_id = _combo_text(self._proc_table, r, 1) or self._default_fg()
-            aw = self._proc_table.cellWidget(r, 3)
-            active_one = _combo_text(self._proc_table, r, 3) if isinstance(aw, QComboBox) else ""
+            active_one = _combo_text(self._proc_table, r, 3)
+            if active_one.startswith("n/a"):
+                active_one = ""
             if is_host_platform_process(name):
                 ec = False
             else:
@@ -120,6 +149,7 @@ class AraCommitMixin:
         self._session.update_ara_doc(
             "exec", function_groups=fgs, processes=procs
         )
+        # FG id list / UCM picker only (active_in already aligned above).
         self._refresh_proc_fg_options()
         self._refresh_ucm_fg_combo()
         self._mark("exec")

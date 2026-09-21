@@ -1,7 +1,9 @@
 #include "gf_channel/gf_channel.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 int main() {
@@ -60,6 +62,35 @@ int main() {
   if (gf_channel_latest(rd, out.data(), need, &plane_out_bytes, &last, &ts, &ow, &oh,
                     &ofmt) != 0) {
     std::fprintf(stderr, "expected no new frame\n");
+    gf_channel_close(rd);
+    gf_channel_close(wr);
+    return 1;
+  }
+
+  if (gf_channel_wait_seq(rd, last, 5) != 0) {
+    std::fprintf(stderr, "wait_seq expected timeout\n");
+    gf_channel_close(rd);
+    gf_channel_close(wr);
+    return 1;
+  }
+  std::thread pub_th([&] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    plane[0] = 0xab;
+    (void)gf_channel_publish(wr, plane.data(), need, 999ull, 2);
+  });
+  if (gf_channel_wait_seq(rd, last, 500) != 1) {
+    std::fprintf(stderr, "wait_seq did not wake\n");
+    pub_th.join();
+    gf_channel_close(rd);
+    gf_channel_close(wr);
+    return 1;
+  }
+  pub_th.join();
+  if (gf_channel_latest(rd, out.data(), need, &plane_out_bytes, &last, &ts, &ow, &oh,
+                        &ofmt) != 1 ||
+      last != 2 || out[0] != 0xab) {
+    std::fprintf(stderr, "wait_seq latest fail last=%llu\n",
+                 static_cast<unsigned long long>(last));
     gf_channel_close(rd);
     gf_channel_close(wr);
     return 1;

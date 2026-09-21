@@ -8,7 +8,7 @@ from typing import Any, Mapping, Sequence
 
 GF_CH_SURROUND_MAGIC = 0x47535744
 GF_CH_MODE_HINT_MAGIC = 0x474D4854
-GF_CH_SURROUND_VERSION = 1
+GF_CH_SURROUND_VERSION = 2
 GF_CH_MODE_HINT_VERSION = 1
 _MAX_OBJ = 16
 _MAX_SLOT = 8
@@ -16,14 +16,15 @@ _MAX_SLOT = 8
 _HEAD = struct.Struct("<IHHQQBBBB")
 assert _HEAD.size == 28
 
-_OBJ = struct.Struct("<BB2x3f")
-assert _OBJ.size == 16
+# v2: id/class + long/lat/rel_v + length/width/heading
+_OBJ = struct.Struct("<BB2x6f")
+assert _OBJ.size == 28
 
 _SLOT = struct.Struct("<BB2x5f")
 assert _SLOT.size == 24
 
 _SW_SIZE = _HEAD.size + _MAX_OBJ * _OBJ.size + _MAX_SLOT * _SLOT.size
-assert _SW_SIZE == 476
+assert _SW_SIZE == 668
 
 _HINT = struct.Struct("<IHBBQQ")
 assert _HINT.size == 24
@@ -83,6 +84,9 @@ def pack_surround_world_pod(
                 _f(o.get("long_dist_m", o.get("long_m"))),
                 _f(o.get("lat_dist_m", o.get("lat_m"))),
                 _f(o.get("rel_vel_long_mps", o.get("rel_v"))),
+                _f(o.get("length_m", o.get("len")), 4.5),
+                _f(o.get("width_m", o.get("wid")), 1.8),
+                _f(o.get("heading_rad", o.get("heading"))),
             )
         off += _OBJ.size
     for i in range(_MAX_SLOT):

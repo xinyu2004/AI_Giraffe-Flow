@@ -180,6 +180,7 @@ void apply_ego(LiveBevState& st, const char* b, const char* e) {
 
 void apply_traj(LiveBevState& st, const char* b, const char* e) {
   double x = 0;
+  st.parking_view = false;
   if (get_number(b, e, "timestamp_ns", &x) && x > 0) st.t_ns = static_cast<std::uint64_t>(x);
   const char* vx = find_key(b, e, "points_x_m");
   const char* vy = find_key(b, e, "points_y_m");

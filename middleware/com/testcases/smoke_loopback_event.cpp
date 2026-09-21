@@ -1,7 +1,10 @@
 #include "gf_ara/com/event.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <optional>
+#include <thread>
 
 namespace {
 
@@ -54,6 +57,37 @@ int main() {
     return Fail("COM-03", "second Take should be empty");
   }
   Pass("COM-03", "second Take empty");
+
+  {
+    EventPublisher<EgoMotionSample> pub2{path};
+    EventSubscriber<EgoMotionSample> sub2{path};
+    LoopbackBus::Instance().Clear();
+    std::thread th([&] {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      EgoMotionSample s{2.0f, 0.01f};
+      (void)pub2.Publish(s);
+    });
+    auto w = sub2.Wait(std::optional<std::uint32_t>{200});
+    th.join();
+    if (!w) {
+      return Fail("COM-04", "Wait timeout");
+    }
+    auto t2 = sub2.Take();
+    if (!t2 || !t2.Value().has_value() || t2.Value()->vx != 2.0f) {
+      return Fail("COM-04", "Wait/Take payload");
+    }
+    Pass("COM-04", "Wait wakes on Publish");
+  }
+
+  {
+    LoopbackBus::Instance().Clear();
+    EventSubscriber<EgoMotionSample> sub3{path};
+    auto w = sub3.Wait(std::optional<std::uint32_t>{10});
+    if (w) {
+      return Fail("COM-05", "Wait should timeout");
+    }
+    Pass("COM-05", "Wait timeout");
+  }
 
   std::cout << "gf_com_loopback_smoke OK\n";
   return EXIT_SUCCESS;

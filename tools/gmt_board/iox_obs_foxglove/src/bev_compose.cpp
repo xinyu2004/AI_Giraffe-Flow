@@ -1,6 +1,9 @@
 #include "gf_foxglove/bev_compose.hpp"
 
 #include "gf_foxglove/png.hpp"
+#include "fs_envelope/fs_mounts.hpp"
+#include "fs_envelope/fs_envelope_cal.hpp"
+#include "fs_envelope/front_optical_footprint.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -8,13 +11,19 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace gf_foxglove {
 
+thread_local int g_bev_sku_override = -1;  // -1=env, 0=afc, 1=adc
+
 bool bev_sku_is_adc() {
+  if (g_bev_sku_override >= 0) {
+    return g_bev_sku_override == 1;
+  }
   if (const char* v = std::getenv("GF_BEV_SKU")) {
     if (std::strcmp(v, "adc") == 0 || std::strcmp(v, "ADC") == 0) {
       return true;
@@ -85,6 +94,66 @@ void blend_pixel(Buf& buf, int w, int h, int x, int y, Rgb rgb, float a) {
   buf[i] = static_cast<std::uint8_t>(buf[i] * b + rgb.r * a);
   buf[i + 1] = static_cast<std::uint8_t>(buf[i + 1] * b + rgb.g * a);
   buf[i + 2] = static_cast<std::uint8_t>(buf[i + 2] * b + rgb.b * a);
+}
+
+/** Even-odd fill of a pixel poly (solid, no region filter). */
+void fill_poly_even_odd(Buf& buf, int w, int h, int y_clip0,
+                        const std::vector<std::pair<int, int>>& pts, Rgb c, float alpha) {
+  const int n = static_cast<int>(pts.size());
+  if (n < 3 || alpha <= 0.01f) {
+    return;
+  }
+  std::vector<std::vector<float>> xs_at(static_cast<std::size_t>(h));
+  for (int i = 0; i < n; ++i) {
+    int x0 = pts[static_cast<std::size_t>(i)].first;
+    int y0 = pts[static_cast<std::size_t>(i)].second;
+    int x1 = pts[static_cast<std::size_t>((i + 1) % n)].first;
+    int y1 = pts[static_cast<std::size_t>((i + 1) % n)].second;
+    if (y0 == y1) {
+      continue;
+    }
+    if (y0 > y1) {
+      std::swap(x0, x1);
+      std::swap(y0, y1);
+    }
+    const int y_lo = std::max(y_clip0, y0);
+    const int y_hi = std::min(h - 1, y1 - 1);
+    if (y_hi < y_lo) {
+      continue;
+    }
+    const float dy = static_cast<float>(y1 - y0);
+    for (int y = y_lo; y <= y_hi; ++y) {
+      const float t = (static_cast<float>(y) - static_cast<float>(y0)) / dy;
+      xs_at[static_cast<std::size_t>(y)].push_back(static_cast<float>(x0) + t * (x1 - x0));
+    }
+  }
+  for (int y = y_clip0; y < h; ++y) {
+    auto& xs = xs_at[static_cast<std::size_t>(y)];
+    if (xs.size() < 2) {
+      continue;
+    }
+    std::sort(xs.begin(), xs.end());
+    for (std::size_t k = 0; k + 1 < xs.size(); k += 2) {
+      const int xa = std::max(0, static_cast<int>(std::floor(xs[k])));
+      const int xb = std::min(w - 1, static_cast<int>(std::ceil(xs[k + 1])));
+      for (int x = xa; x <= xb; ++x) {
+        blend_pixel(buf, w, h, x, y, c, alpha);
+      }
+    }
+  }
+}
+
+void stroke_poly(Buf& buf, int w, int h, const std::vector<std::pair<int, int>>& pts, Rgb c,
+                 int thickness) {
+  const int n = static_cast<int>(pts.size());
+  if (n < 2) {
+    return;
+  }
+  for (int i = 0; i < n; ++i) {
+    const auto& a = pts[static_cast<std::size_t>(i)];
+    const auto& b = pts[static_cast<std::size_t>((i + 1) % n)];
+    draw_line(buf, w, h, a.first, a.second, b.first, b.second, c, thickness);
+  }
 }
 
 void fill_convex_poly_blend(Buf& buf, int w, int h, const std::vector<std::pair<int, int>>& pts,
@@ -206,13 +275,32 @@ struct BevCam {
     const float v = oy_pp - f * yc / zc;
     return {static_cast<int>(std::lround(u)), static_cast<int>(std::lround(v))};
   }
+  /** Pixel → ground (z=0) in the same frame as project(x,y,0). */
+  bool unproject_ground(int u, int v, float* x, float* y) const {
+    if (!x || !y) {
+      return false;
+    }
+    const float xc = (static_cast<float>(u) - ox) / f;
+    const float yc = (oy_pp - static_cast<float>(v)) / f;
+    const Vec3 d{xc * right.x + yc * up.x + fwd.x, xc * right.y + yc * up.y + fwd.y,
+                 xc * right.z + yc * up.z + fwd.z};
+    if (std::fabs(d.z) < 1e-5f) {
+      return false;
+    }
+    const float s = -cpos.z / d.z;
+    if (s < 0.05f) {
+      return false;
+    }
+    *x = cpos.x + s * d.x;
+    *y = cpos.y + s * d.y;
+    return true;
+  }
 };
 
 void cam_basis(Vec3* cpos, Vec3* right, Vec3* up, Vec3* fwd) {
-  const bool adc = bev_sku_is_adc();
-  *cpos = {adc ? -kAdcCamBackM : -kBevCamBackM, 0.0f,
-           adc ? kAdcCamHeightM : kBevCamHeightM};
-  const Vec3 tgt{adc ? kAdcCamLookM : kBevCamLookM, 0.0f, 0.0f};
+  const gf_fs_envelope::CamMount& m = gf_fs_envelope::BevMount();
+  *cpos = {m.x, m.y, m.z};
+  const Vec3 tgt{m.look_x, m.y, 0.0f};
   *fwd = vnorm(vsub(tgt, *cpos));
   *right = vnorm(vcross(*fwd, {0, 0, 1}));
   if (std::fabs(vdot(*right, *right)) < 1e-8f) *right = {0, -1, 0};
@@ -220,12 +308,17 @@ void cam_basis(Vec3* cpos, Vec3* right, Vec3* up, Vec3* fwd) {
 }
 
 BevCam make_bev_cam(int width, int height) {
+  gf_fs_envelope::InitBevMountFromFile();
+  const gf_fs_envelope::CamMount& m = gf_fs_envelope::BevMount();
   const bool adc = bev_sku_is_adc();
   const float ox = static_cast<float>(width) * 0.5f;
-  // AFC: ego near bottom; ADC: leave more pixels below ego for ~35 m rear.
-  const float oy_ego =
-      adc ? static_cast<float>(height) * 0.62f : static_cast<float>(height) - 44.0f;
-  const float y_far = adc ? 28.0f : 32.0f;
+  float oy_ego;
+  if (m.oy_ego_frac < 0.0f) {
+    oy_ego = static_cast<float>(height) - 44.0f;  // AFC legacy
+  } else {
+    oy_ego = static_cast<float>(height) * m.oy_ego_frac;
+  }
+  const float y_far = m.y_far_px > 1.0f ? m.y_far_px : (adc ? 28.0f : 32.0f);
   const float x_far = adc ? kAdcXMaxM : kDBevM;
   Vec3 cpos, right, up, fwd;
   cam_basis(&cpos, &right, &up, &fwd);
@@ -452,6 +545,7 @@ Rgb traj_color_for_v(float v, float v_hi) {
 }
 
 float see_opening_m(float host_vr_m, const LiveBevState& st) {
+  // AFC-only host-lane occupy opening. ADC paints Freespace contour — do not use as ruler.
   float opening = std::max(0.0f, host_vr_m);
   const float lat_max = std::max(0.8f, kSeeHostLatM);
   for (int i = 0; i < st.n_obj; ++i) {
@@ -465,6 +559,8 @@ float see_opening_m(float host_vr_m, const LiveBevState& st) {
 }
 
 float driving_see_m(const LiveBevState& st, float host_vr_m) {
+  // AFC-only D_see display ruler (Trajectory D_see_m / optical / occupy).
+  // ADC: unused for paint; FS contour comes from planning Freespace.
   if (st.traj_d_see_m > 0.5f) return st.traj_d_see_m;
   const float occ = see_opening_m(host_vr_m, st);
   const float vr = std::max(0.0f, host_vr_m);
@@ -560,17 +656,25 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   };
 
   const BevWindow win = bev_window();
+  // Lateral frame center: host lane only, forward of ego (poly VR). Do not use
+  // rear linear extrapolation or adjacent lanes — those skew y_mid on curves.
   std::vector<float> y_road_samples;
-  const float x_span_samples[] = {win.x_min, win.x_min * 0.5f, 0.0f, 2.0f, 5.0f, 20.0f};
+  float host_vr_sample = win.x_max;
+  for (int i = 0; i < st.n_host; ++i) {
+    host_vr_sample = std::min(host_vr_sample, st.host_lanes[i].x1);
+  }
+  host_vr_sample = std::max(5.0f, std::min(win.x_max, host_vr_sample));
+  const float x_span_samples[] = {0.0f, 2.0f, 5.0f, 20.0f};
   for (float xe_s : x_span_samples) {
-    if (xe_s < win.x_min - 1e-3f || xe_s > win.x_max + 1e-3f) continue;
+    if (xe_s > host_vr_sample + 1e-3f) {
+      continue;
+    }
     for (char side : {'l', 'r'}) {
       y_road_samples.push_back(ego_to_road(xe_s, host_y_ego(xe_s, side)).second);
     }
-    for (int i = 0; i < st.n_host; ++i)
+    for (int i = 0; i < st.n_host; ++i) {
       y_road_samples.push_back(ego_to_road(xe_s, st.host_lanes[i].y_at(xe_s)).second);
-    for (int i = 0; i < st.n_adj; ++i)
-      y_road_samples.push_back(ego_to_road(xe_s, st.adj_lanes[i].y_at(xe_s)).second);
+    }
   }
   float y_span_min = -half, y_span_max = half;
   if (!y_road_samples.empty()) {
@@ -599,7 +703,6 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   };
 
   // Lane geometry over full frame [x_min, x_fwd]; extrapolate polys behind ego.
-  // Driving cyan / D_see stay on +x only (see opening / see-cap below).
   auto draw_poly = [&](auto&& poly, Rgb color, int thick, bool dashed) {
     const float x_hi = std::min(poly.x1, x_fwd);
     const float x_lo = win.x_min;
@@ -629,67 +732,107 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     }
   };
 
-  float d_see = 0;
-  if (st.n_host > 0) {
-    bool any = false;
-    for (int i = 0; i < st.n_host; ++i) {
-      if (st.host_lanes[i].x1 > 0.5f) {
-        d_see = any ? std::min(d_see, st.host_lanes[i].x1) : st.host_lanes[i].x1;
-        any = true;
+  // AFC: D_see wash / traj clip. ADC: no obs-side D_see — FS contour + fs_plan_d_front.
+  const bool adc = bev_sku_is_adc();
+  float occupy_open = 0.0f;
+  float opening = 0.0f;
+  if (!adc) {
+    float d_see = 0;
+    if (st.n_host > 0) {
+      bool any = false;
+      for (int i = 0; i < st.n_host; ++i) {
+        if (st.host_lanes[i].x1 > 0.5f) {
+          d_see = any ? std::min(d_see, st.host_lanes[i].x1) : st.host_lanes[i].x1;
+          any = true;
+        }
       }
     }
+    occupy_open = see_opening_m(d_see, st);
+    opening = driving_see_m(st, d_see);
   }
-  const float occupy_open = see_opening_m(d_see, st);
-  const float opening = driving_see_m(st, d_see);
 
   for (int i = 0; i < st.n_host; ++i)
     draw_poly(st.host_lanes[i], lh_c, 3, st.host_lanes[i].is_dashed());
   for (int i = 0; i < st.n_adj; ++i)
     draw_poly(st.adj_lanes[i], la_c, 2, st.adj_lanes[i].is_dashed());
+  // LRE road edges — amber (not grey LH/LA). Silent if none.
+  const Rgb lre_c{230, 140, 50};
+  for (int i = 0; i < st.n_lre; ++i)
+    draw_poly(st.lre_edges[i], lre_c, 3, false);
 
-  // Planning Freespace (ADC) or surround Near (parking / fallback).
-  // Closed sector loop — do not drop segments at window edges (breaks the door).
-  if (st.has_fs_plan || st.has_fs_near) {
-    const bool fused = st.has_fs_plan;
-    const bool adc = bev_sku_is_adc();
-    const Rgb fs_c = (fused || adc) ? Rgb{70, 190, 200} : Rgb{90, 140, 150};
-    const int fs_w = (fused || adc) ? 3 : 2;
-    constexpr float kNearFwdEnv = 15.0f;
-    const float half_fwd = 0.5f * kSeeFovDeg * 3.14159265358979323846f / 180.0f;
-    std::pair<int, int> pts[kFsNearSectors];
-    for (int i = 0; i < kFsNearSectors; ++i) {
-      const float ang = (static_cast<float>(i) + 0.5f) * (6.2831853f / kFsNearSectors);
-      float bearing = ang;
-      if (bearing > 3.14159265f) bearing -= 6.2831853f;
-      const bool in_front = std::fabs(bearing) <= half_fwd;
-      float r = st.fs_d_occ_m[i];
-      // Only stretch Near (parking/raw). Fused Freespace is already planning space.
-      if (!fused && adc && opening > 0.5f && in_front) {
-        if (r + 0.25f >= kNearFwdEnv) {
-          r = opening;
-        } else {
-          r = std::min(r, opening);
+  // Freespace.poly rim only (no fill). SIL region OR is packed in planning.
+  const bool use_plan = st.has_fs_plan && !st.parking_view;
+  const bool use_near =
+      st.has_fs_near && (st.parking_view || (!adc && !use_plan));
+  const Rgb fs_c = Rgb{70, 190, 200};
+
+  auto paint_fs_rim = [&](int n, const float* xs, const float* ys, int cap, Rgb c, int thick,
+                          bool mark_floor) {
+    const int np = std::min(n, cap);
+    if (np < 2 || !xs || !ys) {
+      return;
+    }
+    // Floor (~0.5 m): skip stroke (ego dig, not a rim).
+    constexpr float kDigHideM = 0.75f;
+    const Rgb dig_c{110, 110, 120};
+    auto rim_r = [&](int i) {
+      return std::hypot(xs[i], ys[i]);
+    };
+    std::vector<std::pair<int, int>> pts(static_cast<std::size_t>(np));
+    for (int i = 0; i < np; ++i) {
+      pts[static_cast<std::size_t>(i)] = e2p_ego(xs[i], ys[i]);
+    }
+    for (int i = 0; i < np; ++i) {
+      const int j = (i + 1) % np;
+      const bool dig_i = rim_r(i) < kDigHideM;
+      const bool dig_j = rim_r(j) < kDigHideM;
+      if (dig_i || dig_j) {
+        continue;
+      }
+      draw_line(buf, width, height, pts[static_cast<std::size_t>(i)].first,
+                pts[static_cast<std::size_t>(i)].second, pts[static_cast<std::size_t>(j)].first,
+                pts[static_cast<std::size_t>(j)].second, c, thick);
+    }
+    for (int i = 0; i < np; ++i) {
+      const int px = pts[static_cast<std::size_t>(i)].first;
+      const int py = pts[static_cast<std::size_t>(i)].second;
+      if (rim_r(i) < kDigHideM) {
+        if (mark_floor) {
+          fill_rect(buf, width, height, px - 1, py - 1, px + 1, py + 1, dig_c);
         }
+        continue;
       }
-      if (r < 0.5f) r = 0.5f;
-      if (r > kAdcXMaxM) r = kAdcXMaxM;
-      pts[i] = e2p_ego(r * std::cos(ang), r * std::sin(ang));
+      fill_rect(buf, width, height, px - 2, py - 2, px + 2, py + 2, c);
     }
-    for (int i = 0; i < kFsNearSectors; ++i) {
-      const auto& a = pts[i];
-      const auto& b = pts[(i + 1) % kFsNearSectors];
-      draw_line(buf, width, height, a.first, a.second, b.first, b.second, fs_c, fs_w);
-    }
-    if (fused || adc) {
-      const float ray_r = st.fs_d_front_m > 1.0f ? st.fs_d_front_m : opening;
-      if (ray_r > 1.0f) {
-        const Rgb ray_c{50, 140, 150};
-        const auto o = e2p_ego(0.0f, 0.0f);
-        const auto pl = e2p_ego(ray_r * std::cos(-half_fwd), ray_r * std::sin(-half_fwd));
-        const auto pr = e2p_ego(ray_r * std::cos(half_fwd), ray_r * std::sin(half_fwd));
-        draw_line(buf, width, height, o.first, o.second, pl.first, pl.second, ray_c, 1);
-        draw_line(buf, width, height, o.first, o.second, pr.first, pr.second, ray_c, 1);
+  };
+
+  // Planning poly (LRE/occ/dig). No debug empty overlay.
+  if (adc && use_plan && st.fs_plan_n_poly >= 2) {
+    paint_fs_rim(st.fs_plan_n_poly, st.fs_plan_poly_x_m, st.fs_plan_poly_y_m, 180, fs_c, 2, true);
+  } else if (use_plan || use_near) {
+    const bool fused = use_plan;
+    const Rgb wash_c = fused ? fs_c : Rgb{90, 140, 150};
+    const int fs_w = fused ? 2 : 2;
+    if (fused && st.fs_plan_n_poly >= 2) {
+      paint_fs_rim(st.fs_plan_n_poly, st.fs_plan_poly_x_m, st.fs_plan_poly_y_m, 180, wash_c, fs_w,
+                   true);
+    } else if (st.has_fs_near) {
+      constexpr int kN = gf_fs_envelope::kFsEmptyN;
+      float xs[kN];
+      float ys[kN];
+      int n = 0;
+      const float* occ = st.fs_near_d_r_m;
+      const int step = 2;
+      for (int i = 0; i < kN; i += step) {
+        const float ang = (static_cast<float>(i) + 0.5f) * (6.2831853f / static_cast<float>(kN));
+        float r = occ[i];
+        if (r < 0.5f) r = 0.5f;
+        if (r > kAdcXMaxM) r = kAdcXMaxM;
+        xs[n] = r * std::cos(ang);
+        ys[n] = r * std::sin(ang);
+        ++n;
       }
+      paint_fs_rim(n, xs, ys, kN, wash_c, fs_w, true);
     }
   }
 
@@ -767,13 +910,22 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     }
     const Rgb fallback_c = traj_color_for_lon(st);
     const int fallback_th = traj_thickness_for_lon(st);
-    // Path only inside driving see (Trajectory D_see when ingested). Forward only.
-    const float x_hi = opening > 0.5f ? opening : (occupy_open > 0.5f ? occupy_open : x_fwd);
+    // ADC driving: clip to Freespace host lane clear. Parking: full window.
+    float x_hi = x_fwd;
+    if (adc) {
+      if (!st.parking_view && st.has_fs_plan && st.fs_plan_d_lane_fwd_m[0] > 0.5f) {
+        x_hi = st.fs_plan_d_lane_fwd_m[0];
+      } else if (st.parking_view) {
+        x_hi = kAdcXMaxM;
+      }
+    } else {
+      x_hi = opening > 0.5f ? opening : (occupy_open > 0.5f ? occupy_open : x_fwd);
+    }
     for (int i = 0; i < nseg; ++i) {
       float x0 = st.traj_x[i], y0 = st.traj_y[i];
       float x1 = st.traj_x[i + 1], y1 = st.traj_y[i + 1];
-      if (std::min(x0, x1) > x_hi) break;
-      if (x1 > x_hi && x1 > x0 + 1e-6f) {
+      if (!st.parking_view && std::min(x0, x1) > x_hi) break;
+      if (!st.parking_view && x1 > x_hi && x1 > x0 + 1e-6f) {
         const float t = (x_hi - x0) / (x1 - x0);
         y1 = y0 + t * (y1 - y0);
         x1 = x_hi;
@@ -861,9 +1013,8 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
 
   paint_box(0.0f, 0.0f, 4.5f, 1.8f, 0.0f, ego_c, nullptr, 1.5f);
 
-  // Cyan wash / see-cap = FCM D_see corridor (AFC). ADC: validate fused FS only — skip.
-  const bool adc_fs_only = bev_sku_is_adc() && (st.has_fs_plan || st.has_fs_near);
-  if (!adc_fs_only && opening > 1.0f && st.n_host >= 1) {
+  // Cyan wash / see-cap = AFC D_see corridor only. ADC: FS contour above — no wash.
+  if (!adc && opening > 1.0f && st.n_host >= 1) {
     std::vector<std::pair<int, int>> wash;
     const int steps = std::max(8, static_cast<int>(opening / 2.0f) + 1);
     for (int i = 0; i <= steps; ++i) {
@@ -879,8 +1030,8 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     fill_convex_poly_blend(buf, width, height, wash, {60, 200, 210}, 0.28f, kHudH);
   }
 
-  // Solid see-cap bar across host lane at driving D (cyan). Not a FOV cone.
-  if (!adc_fs_only && opening > 1.0f && st.n_host >= 1) {
+  // Solid see-cap bar across host lane at driving D (cyan). AFC only.
+  if (!adc && opening > 1.0f && st.n_host >= 1) {
     const float yl = host_y_ego(opening, 'l');
     const float yr = host_y_ego(opening, 'r');
     const auto pl = e2p_ego(opening, yl);
@@ -889,7 +1040,7 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   }
 
   // Stop line ONLY for Relevant red/yellow (196/164). Never for green / none /
-  // s_stop-alone (cap or phantom). Cyan see-cap above is D_see, not this bar.
+  // s_stop-alone (cap or phantom). AFC cyan see-cap above is D_see, not this bar.
   const float s_stop = st.traj_s_stop_m;
   const bool stop_light =
       (st.light_sign_name == 164 || st.light_sign_name == 196);
@@ -931,20 +1082,29 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   }
   blit_text(buf, width, height, lamp_cx + lamp_r + 6, 10, light, light_c, kHudScale);
 
-  // Center HUD: D_see + LC intent (visible = planning同源).
+  // Center HUD: AFC keeps Dxx; ADC mode tag only (no D_see_m / LC).
   char mid[48];
-  if (opening > 0.5f) {
-    if (st.allow_lc) {
-      std::snprintf(mid, sizeof(mid), "D%.0f LC", static_cast<double>(opening));
+  Rgb mid_c{160, 160, 168};
+  if (adc) {
+    if (st.parking_view) {
+      std::snprintf(mid, sizeof(mid), "PRK");
+      mid_c = {90, 190, 160};
+    } else if (st.has_fs_plan) {
+      std::snprintf(mid, sizeof(mid), "DRV");
+      mid_c = {70, 190, 200};
     } else {
-      std::snprintf(mid, sizeof(mid), "D%.0f", static_cast<double>(opening));
+      mid[0] = '\0';
     }
+  } else if (opening > 0.5f) {
+    std::snprintf(mid, sizeof(mid), "D%.0f", static_cast<double>(opening));
+    mid_c = {60, 200, 210};
   } else {
     std::snprintf(mid, sizeof(mid), "D--");
   }
-  const Rgb mid_c = st.allow_lc ? Rgb{90, 210, 180} : Rgb{60, 200, 210};
-  const int mid_w = static_cast<int>(std::strlen(mid)) * ((5 + 1) * kHudScale);
-  blit_text(buf, width, height, std::max(8, (width - mid_w) / 2), 10, mid, mid_c, kHudScale);
+  if (mid[0] != '\0') {
+    const int mid_w = static_cast<int>(std::strlen(mid)) * ((5 + 1) * kHudScale);
+    blit_text(buf, width, height, std::max(8, (width - mid_w) / 2), 10, mid, mid_c, kHudScale);
+  }
 
   char right[64];
   int lim_hi = -1;
@@ -977,6 +1137,7 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   const int glyph_w = (5 + 1) * kHudScale;
   const int rx = width - 8 - static_cast<int>(std::strlen(right)) * glyph_w;
   blit_text(buf, width, height, std::max(8, rx), 10, right, accel_c, kHudScale);
+
 
   return png_rgb(width, height, buf.data());
 }

@@ -30,4 +30,26 @@ dtc_map:
     debounce_count: 1
     fdc_threshold: 1
     aging_cycles: 40
+  # LC P2 — planning.driving_plus ReportEvent (source=process)
+  - event: LcInhibitEgo
+    dtc: 0xC01C01
+    debounce_count: 1
+    fdc_threshold: 1
+    aging_cycles: 40
+  - event: LcInhibitSurround
+    dtc: 0xC01C02
+    debounce_count: 1
+    fdc_threshold: 1
+    aging_cycles: 40
+  - event: LcInhibitRcm
+    dtc: 0xC01C03
+    debounce_count: 1
+    fdc_threshold: 1
+    aging_cycles: 40
+  # Mapped for P3; corridor-only inhibit does not ReportEvent yet (expected stage).
+  - event: LcInhibitCorridor
+    dtc: 0xC01C04
+    debounce_count: 1
+    fdc_threshold: 1
+    aging_cycles: 40
 freeze_dids: []

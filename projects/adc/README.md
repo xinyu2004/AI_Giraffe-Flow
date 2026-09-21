@@ -14,7 +14,7 @@
 # compose / generate（或 gf-config Verify+Generate）后：
 bash projects/adc/scripts/compile_sil.sh
 # 调试帧：GF_FRAME_SOURCE=carla（ego 已 freeze carla）
-# ChaseCam=2 后高空 / =3 俯视泊车；Foxglove GF_BEV_SKU=adc（run_sil 默认）
+# ChaseCam=2 bev_afc / =3 bev_adc / =4 overhead；Foxglove GF_BEV_SKU=adc（run_sil 默认）
 GF_FRAME_SOURCE=carla bash projects/adc/scripts/run_sil.sh
 # DrivePark：GF_SLOT_CONFIRMED=1 + 停稳，或 ModeHint cosim
 ```

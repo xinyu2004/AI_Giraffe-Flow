@@ -35,12 +35,46 @@ def test_validate_rejects_bad_active_in():
     assert any("NotAState" in e for e in errs)
 
 
-def test_validate_rejects_active_in_on_machine():
+def test_validate_mode_requires_active_in():
     data = {
-        "function_groups": [{"id": "MachineFG", "kind": "machine", "initial": "Running"}],
+        "function_groups": [
+            {
+                "id": "DriveParkFG",
+                "kind": "mode",
+                "initial": "DrivingActive",
+                "states": ["DrivingActive", "ParkingActive"],
+            },
+        ],
         "processes": [
-            {"name": "perception.fcm", "function_group": "MachineFG", "active_in": ["Running"]}
+            {
+                "name": "perception.rcm",
+                "function_group": "DriveParkFG",
+                # missing active_in — GUI must flush widget default before validate
+            }
         ],
     }
     errs, _ = validate_exec_function_groups(data)
-    assert any("active_in not allowed" in e for e in errs)
+    assert any("requires active_in" in e for e in errs)
+
+
+def test_validate_mode_with_active_in_ok():
+    data = {
+        "function_groups": [
+            {
+                "id": "DriveParkFG",
+                "kind": "mode",
+                "initial": "DrivingActive",
+                "states": ["DrivingActive", "ParkingActive"],
+            },
+        ],
+        "processes": [
+            {
+                "name": "perception.rcm",
+                "function_group": "DriveParkFG",
+                "active_in": ["DrivingActive"],
+            }
+        ],
+    }
+    errs, _ = validate_exec_function_groups(data)
+    assert errs == []
+

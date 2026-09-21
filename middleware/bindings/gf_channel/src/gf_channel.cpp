@@ -2,15 +2,26 @@
 
 #include <atomic>
 #include <cerrno>
+#include <chrono>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #include <new>
 #include <string>
+#include <thread>
 
 #if defined(__linux__) || defined(__APPLE__)
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
+
+#if defined(__linux__)
+#include <limits.h>
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#include <time.h>
 #endif
 
 namespace {
@@ -30,7 +41,9 @@ struct ChannelHeader {
   std::uint32_t ready{0};
   std::uint64_t seq{0};
   std::uint64_t timestamp_ns{0};
-  std::uint8_t pad[32]{};
+  /** Futex word (Linux): bumped on publish so waiters wake. Same header size as prior pad[32]. */
+  std::uint32_t notify{0};
+  std::uint8_t pad[28]{};
 };
 #pragma pack(pop)
 
@@ -168,6 +181,10 @@ extern "C" int gf_channel_publish(GfChannel*, const void*, uint32_t, uint64_t,
 }
 extern "C" int gf_channel_latest(GfChannel*, void*, uint32_t, uint32_t*, uint64_t*,
                              uint64_t*, uint32_t*, uint32_t*, uint16_t*) {
+  return -1;
+}
+extern "C" int gf_channel_wait_seq(GfChannel*, uint64_t, uint32_t) {
+  errno = ENOTSUP;
   return -1;
 }
 extern "C" int gf_channel_info(const GfChannel*, uint32_t*, uint32_t*, uint16_t*,
@@ -325,6 +342,14 @@ extern "C" int gf_channel_publish(GfChannel* ch, const void* plane, uint32_t pla
   ch->hdr->timestamp_ns = timestamp_ns;
   ch->hdr->seq = use_seq;
   ch->hdr->active = write_idx;
+  std::atomic_thread_fence(std::memory_order_release);
+  {
+    auto* n = reinterpret_cast<std::atomic<std::uint32_t>*>(&ch->hdr->notify);
+    n->fetch_add(1u, std::memory_order_release);
+#if defined(__linux__)
+    ::syscall(SYS_futex, &ch->hdr->notify, FUTEX_WAKE, INT_MAX, nullptr, nullptr, 0);
+#endif
+  }
   return 0;
 }
 
@@ -370,6 +395,55 @@ extern "C" int gf_channel_latest(GfChannel* ch, void* plane_out, uint32_t plane_
     *out_format = ch->hdr->format;
   }
   return 1;
+}
+
+extern "C" int gf_channel_wait_seq(GfChannel* ch, uint64_t last_seq, uint32_t timeout_ms) {
+  if (!ch || !ch->hdr) {
+    errno = EINVAL;
+    return -1;
+  }
+  const auto deadline = (timeout_ms == 0 || timeout_ms == std::numeric_limits<uint32_t>::max())
+                            ? std::chrono::steady_clock::time_point::max()
+                            : (std::chrono::steady_clock::now() +
+                               std::chrono::milliseconds(timeout_ms));
+
+  for (;;) {
+    std::atomic_thread_fence(std::memory_order_acquire);
+    const uint64_t seq = ch->hdr->seq;
+    if (seq != 0 && seq != last_seq) {
+      return 1;
+    }
+    if (timeout_ms == 0) {
+      return 0;
+    }
+    if (timeout_ms != std::numeric_limits<uint32_t>::max() &&
+        std::chrono::steady_clock::now() >= deadline) {
+      return 0;
+    }
+
+#if defined(__linux__)
+    const uint32_t notify_snap = ch->hdr->notify;
+    std::atomic_thread_fence(std::memory_order_acquire);
+    if (ch->hdr->seq != 0 && ch->hdr->seq != last_seq) {
+      return 1;
+    }
+    if (timeout_ms == std::numeric_limits<uint32_t>::max()) {
+      ::syscall(SYS_futex, &ch->hdr->notify, FUTEX_WAIT, notify_snap, nullptr, nullptr, 0);
+    } else {
+      const auto left = deadline - std::chrono::steady_clock::now();
+      if (left.count() <= 0) {
+        return 0;
+      }
+      const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(left).count();
+      struct timespec ts {};
+      ts.tv_sec = static_cast<time_t>(ms / 1000);
+      ts.tv_nsec = static_cast<long>((ms % 1000) * 1000000L);
+      ::syscall(SYS_futex, &ch->hdr->notify, FUTEX_WAIT, notify_snap, &ts, nullptr, 0);
+    }
+#else
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+#endif
+  }
 }
 
 extern "C" int gf_channel_info(const GfChannel* ch, uint32_t* out_w, uint32_t* out_h,

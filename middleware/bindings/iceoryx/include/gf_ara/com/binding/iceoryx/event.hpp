@@ -51,6 +51,8 @@ class EventPublisher {
 };
 
 /// iceoryx-backed Event subscriber (requires RouDi + InitRuntime).
+/// Multi-topic wake: attach Native() to EventWaitSet (do not create a WaitSet per call —
+/// a subscriber may attach to only one WaitSet at a time).
 template <typename T>
 class EventSubscriber {
  public:
@@ -61,6 +63,11 @@ class EventSubscriber {
   }
 
   [[nodiscard]] const ServicePath& Path() const noexcept { return path_; }
+
+  [[nodiscard]] iox::popo::Subscriber<T>& Native() noexcept { return subscriber_; }
+  [[nodiscard]] const iox::popo::Subscriber<T>& Native() const noexcept { return subscriber_; }
+
+  [[nodiscard]] bool HasData() const noexcept { return subscriber_.hasData(); }
 
   gf_ara::core::Result<std::optional<T>> Take() {
     std::optional<T> out;

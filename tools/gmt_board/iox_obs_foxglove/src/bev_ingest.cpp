@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 #if __has_include("gf_gen/types/ego_motion.hpp")
@@ -25,6 +26,10 @@
 #elif __has_include("gf_gen/types/perception_message_out_st.hpp")
 #include "gf_gen/types/perception_message_out_st.hpp"
 #define GF_HAS_PERC 1
+#endif
+#if __has_include("gf_gen/types/parking_trajectory.hpp")
+#include "gf_gen/types/parking_trajectory.hpp"
+#define GF_HAS_PARK_TRAJ 1
 #endif
 #if __has_include("gf_gen/types/freespace_near.hpp")
 #include "gf_gen/types/freespace_near.hpp"
@@ -75,6 +80,7 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
 #ifdef GF_HAS_TRAJ
   if (std::strcmp(short_name, "Trajectory") == 0) {
     const auto& s = *static_cast<const gf_gen::Trajectory*>(sample);
+    st.parking_view = false;
     int n = static_cast<int>(s.point_count);
     n = std::max(0, std::min(n, kMaxTrajPts));
     st.n_traj = n;
@@ -87,18 +93,40 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
     st.throttle_cmd = s.throttle;
     st.brake_cmd = s.brake;
     st.traj_v_plan_mps = s.target_speed_mps;
-    st.traj_d_see_m = s.D_see_m;
+    st.traj_d_see_m = s.D_see_m;  // AFC only; ADC publishes 0
     st.traj_s_stop_m = s.s_stop_m;
     st.v_sign_max_mps = s.v_sign_max_mps;
     st.v_sign_min_mps = s.v_sign_min_mps;
-    // P2 thin: LC intent bit on gear_shift_second (no steer).
-    st.allow_lc = (s.gear_shift_second & 0x1) != 0;
+    st.allow_lc = false;
     // Prefer Trajectory CIPV long when set (semantic), not Obj[0].
     if (s.cipv_long_m > 0.5f) {
       st.has_perc_lead = true;
       st.lead_dist_m = s.cipv_long_m;
       st.cipo_x_m = s.cipv_long_m;
     }
+    if (s.timestamp_ns) st.t_ns = s.timestamp_ns;
+    return;
+  }
+#endif
+#ifdef GF_HAS_PARK_TRAJ
+  if (std::strcmp(short_name, "ParkingTrajectory") == 0) {
+    const auto& s = *static_cast<const gf_gen::ParkingTrajectory*>(sample);
+    if (!s.valid || s.n_points < 2) {
+      return;
+    }
+    st.parking_view = true;
+    st.has_fs_plan = false;  // drop stale driving FS contour
+    int n = static_cast<int>(s.n_points);
+    n = std::max(0, std::min(n, kMaxTrajPts));
+    st.n_traj = n;
+    st.n_traj_v = 0;
+    for (int i = 0; i < n; ++i) {
+      st.traj_x[i] = s.x_m[i];
+      st.traj_y[i] = s.y_m[i];
+      st.traj_v[i] = 0.0f;
+    }
+    st.traj_d_see_m = 0.0f;
+    st.allow_lc = false;
     if (s.timestamp_ns) st.t_ns = s.timestamp_ns;
     return;
   }
@@ -117,30 +145,35 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
       st.has_fs_plan = false;
       return;
     }
+    st.parking_view = false;
     st.has_fs_plan = true;
-    for (int i = 0; i < kFsNearSectors; ++i) st.fs_d_occ_m[i] = s.d_occ_m[i];
-    st.fs_d_front_m = s.d_front_m;
-    st.fs_d_rear_m = s.d_rear_m;
-    st.fs_d_left_m = s.d_left_m;
-    st.fs_d_right_m = s.d_right_m;
+    for (int i = 0; i < 3; ++i) {
+      st.fs_plan_d_lane_fwd_m[i] = s.d_lane_fwd_m[i];
+    }
+    st.fs_plan_n_poly = s.n_poly;
+    const int np = std::min<int>(s.n_poly, 180);
+    for (int i = 0; i < np; ++i) {
+      st.fs_plan_poly_x_m[i] = s.poly_x_m[i];
+      st.fs_plan_poly_y_m[i] = s.poly_y_m[i];
+    }
     if (s.timestamp_ns) st.t_ns = s.timestamp_ns;
     return;
   }
 #endif
 #ifdef GF_HAS_FS_NEAR
   if (std::strcmp(short_name, "FreespaceNear") == 0) {
-    if (st.has_fs_plan) return;  // driving fused FS owns the contour
+    // Always store Near (parking contour / planning input). Driving BEV paints
+    // Freespace only — Near is already fused into that product.
     const auto& s = *static_cast<const gf_gen::FreespaceNear*>(sample);
     if (!s.valid) {
       st.has_fs_near = false;
       return;
     }
     st.has_fs_near = true;
-    for (int i = 0; i < kFsNearSectors; ++i) st.fs_d_occ_m[i] = s.d_occ_m[i];
-    st.fs_d_front_m = s.d_front_m;
-    st.fs_d_rear_m = s.d_rear_m;
-    st.fs_d_left_m = s.d_left_m;
-    st.fs_d_right_m = s.d_right_m;
+    for (int i = 0; i < kFsEmptyN; ++i) {
+      st.fs_near_d_r_m[i] = s.d_r_m[i];
+      st.fs_near_type[i] = s.type[i];
+    }
     if (s.timestamp_ns) st.t_ns = s.timestamp_ns;
     return;
   }
@@ -153,15 +186,17 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
     for (int i = 0; i < no; ++i) {
       const auto& it = s.objects[i];
       const float dist = it.long_dist_m;
-      if (!dyn_in_window(dist)) continue;
+      if (!dyn_in_window(dist)) {
+        continue;
+      }
       BevDynObj o;
       o.obj_id = static_cast<int>(it.object_id);
       o.x_m = dist;
       o.y_m = it.lat_dist_m;
       o.obj_class = static_cast<int>(it.object_class);
-      o.length_m = 4.5f;
-      o.width_m = 1.8f;
-      o.heading_rad = 0.0f;
+      o.length_m = it.length_m > 0.5f ? it.length_m : 4.5f;
+      o.width_m = it.width_m > 0.5f ? it.width_m : 1.8f;
+      o.heading_rad = it.heading_rad;
       st.surround_objects[st.n_surround++] = o;
     }
     const int ns = std::min(static_cast<int>(s.n_slot), kMaxParkingSlots);
@@ -232,6 +267,29 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
       p.x1 = x1;
       p.lanemark_type = static_cast<int>(it.m_LA_Lanemark_Type);
       st.adj_lanes[st.n_adj++] = p;
+    }
+
+    st.n_lre = 0;
+    const auto& lre = s.Perception_LRE_Out;
+    const int nl = std::min(static_cast<int>(lre.m_roadedge_num), kMaxLreEdges);
+    for (int i = 0; i < nl; ++i) {
+      const auto& it = lre.m_roadedge_line[i];
+      const float conf = static_cast<float>(it.m_LRE_Confidence);
+      const int avail = static_cast<int>(it.m_LRE_Availability_State);
+      if (!lane_ok(conf, avail, true)) continue;
+      const float x0 = it.m_LRE_View_Range_Start;
+      float x1 = it.m_LRE_View_Range_End;
+      if (x1 <= x0 + 0.25f) continue;
+      x1 = std::min(x1, kDBevM);
+      LreEdgePoly p;
+      p.side = static_cast<int>(it.m_LRE_Side);
+      p.c0 = it.m_LRE_Line_C0;
+      p.c1 = it.m_LRE_Line_C1;
+      p.c2 = it.m_LRE_Line_C2;
+      p.c3 = it.m_LRE_Line_C3;
+      p.x0 = x0;
+      p.x1 = x1;
+      st.lre_edges[st.n_lre++] = p;
     }
 
     const auto& dyn = s.Perception_DYN_OBJ_Out;

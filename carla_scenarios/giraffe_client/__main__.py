@@ -31,6 +31,8 @@ from _fake_perc_pack import pack_fake_perc_pod  # noqa: E402
 from _lane_truth import measure_lane_topology  # noqa: E402
 from _mode_hint import read_mode_hint  # noqa: E402
 from _objects_truth import collect_dyn_objects  # noqa: E402
+from _rcm_pack import pack_rcm_truth_pod  # noqa: E402
+from _rcm_truth import collect_rcm_truth  # noqa: E402
 from _surround_pack import pack_mode_hint_pod, pack_surround_world_pod  # noqa: E402
 from _surround_truth import collect_surround_world  # noqa: E402
 from _tsr_static_truth import collect_tsr_static  # noqa: E402
@@ -51,6 +53,7 @@ GF_COSIM_MSG_FAKE_PERC = 11
 GF_COSIM_MSG_CAMERA_NV12 = 12
 GF_COSIM_MSG_SURROUND_WORLD = 13
 GF_COSIM_MSG_MODE_HINT = 14
+GF_COSIM_MSG_RCM_TRUTH = 15
 GF_COSIM_MSG_VEHICLE_CMD = 20
 GF_COSIM_SLOT_ID_LEN = 32
 
@@ -90,6 +93,14 @@ def _giraffe_cam_on() -> bool:
 def _surround_cosim_on() -> bool:
     """ADC / parking: GF_SURROUND=1 (default on when GF_PRODUCT=adc)."""
     v = (_env("GF_SURROUND", "")).strip().lower()
+    if v:
+        return v in ("1", "on", "true", "yes")
+    return (_env("GF_PRODUCT", "")).strip().lower() == "adc"
+
+
+def _rcm_cosim_on() -> bool:
+    """ADC rear truth: GF_RCM=1 (default on when GF_PRODUCT=adc)."""
+    v = (_env("GF_RCM", "")).strip().lower()
     if v:
         return v in ("1", "on", "true", "yes")
     return (_env("GF_PRODUCT", "")).strip().lower() == "adc"
@@ -181,6 +192,9 @@ class CosimSock:
 
     def send_surround_world(self, blob: bytes, ts: int) -> None:
         self._send_frame(GF_COSIM_MSG_SURROUND_WORLD, blob, ts)
+
+    def send_rcm_truth(self, blob: bytes, ts: int) -> None:
+        self._send_frame(GF_COSIM_MSG_RCM_TRUTH, blob, ts)
 
     def send_mode_hint(self, blob: bytes, ts: int) -> None:
         self._send_frame(GF_COSIM_MSG_MODE_HINT, blob, ts)
@@ -288,6 +302,14 @@ def _find_hero(world: Any, role: str = "hero") -> Any:
 def run() -> int:
     signal.signal(signal.SIGINT, _on_sig)
     signal.signal(signal.SIGTERM, _on_sig)
+    # Windows consoles often use cp1252; avoid UnicodeEncodeError on print.
+    for _stream in (sys.stdout, sys.stderr):
+        reconf = getattr(_stream, "reconfigure", None)
+        if callable(reconf):
+            try:
+                reconf(errors="replace")
+            except Exception:
+                pass
 
     # Load scenario carla.env if present (same as scenario_client).
     env_path = Path(__file__).resolve().parents[1] / "carla.env"
@@ -326,7 +348,7 @@ def run() -> int:
                 return 2
     else:
         print(
-            "[giraffe_client] camera off (GF_GIRAFFE_CAM=0) — no RGB/NV12/send_camera",
+            "[giraffe_client] camera off (GF_GIRAFFE_CAM=0) - no RGB/NV12/send_camera",
             flush=True,
         )
 
@@ -458,6 +480,7 @@ def run() -> int:
     tip_seq = 0
     perc_seq = 0
     surround_seq = 0
+    rcm_seq = 0
     hint_seq = 0
     cmd_seen = False
     cmd_miss_logged = False
@@ -465,11 +488,18 @@ def run() -> int:
     tip = TipSender()
     lane_log_once = False
     surround_log_once = False
+    rcm_log_once = False
     want_surround = _surround_cosim_on()
+    want_rcm = _rcm_cosim_on()
     want_hint = _mode_hint_cosim_on()
     if want_surround:
         print(
             "[giraffe_client] SurroundWorld cosim on (GF_SURROUND / GF_PRODUCT=adc)",
+            flush=True,
+        )
+    if want_rcm:
+        print(
+            "[giraffe_client] RcmTruth cosim on (GF_RCM / GF_PRODUCT=adc) -> rear FOV",
             flush=True,
         )
     if want_hint:
@@ -526,8 +556,9 @@ def run() -> int:
             if want_surround:
                 sw = collect_surround_world(hero, world)
                 surround_seq += 1
+                objs = sw.get("objects") or []
                 sw_blob = pack_surround_world_pod(
-                    objects=sw.get("objects") or [],
+                    objects=objs,
                     slots=sw.get("slots") or [],
                     seq=surround_seq,
                     timestamp_ns=ts,
@@ -537,7 +568,45 @@ def run() -> int:
                     surround_log_once = True
                     print(
                         f"[giraffe_client] surround_world n_obj={sw.get('n_obj')} "
-                        f"n_slot={sw.get('n_slot')}",
+                        f"n_slot={sw.get('n_slot')} blob={len(sw_blob)} "
+                        f"(need 668 / ver=2; periodic [giraffe_client][surround] diag)",
+                        flush=True,
+                    )
+                if surround_seq % 50 == 1:
+                    n_f = n_s = n_r = 0
+                    for o in objs:
+                        x = float(o.get("long_dist_m", 0.0))
+                        if x > 0.8:
+                            n_f += 1
+                        elif x < -0.5:
+                            n_r += 1
+                        else:
+                            n_s += 1
+                    o0 = objs[0] if objs else {}
+                    print(
+                        f"[giraffe_client][surround] seq={surround_seq} n={len(objs)} "
+                        f"zone F/S/R={n_f}/{n_s}/{n_r} blob={len(sw_blob)} "
+                        f"o0 x={o0.get('long_dist_m')} y={o0.get('lat_dist_m')} "
+                        f"hdg={o0.get('heading_rad')} L={o0.get('length_m')} "
+                        f"W={o0.get('width_m')}",
+                        flush=True,
+                    )
+            if want_rcm:
+                rcm = collect_rcm_truth(hero, world)
+                rcm_seq += 1
+                rcm_blob = pack_rcm_truth_pod(
+                    lanes=rcm.get("lanes") or [],
+                    objects=rcm.get("objects") or [],
+                    seq=rcm_seq,
+                    timestamp_ns=ts,
+                    valid=int(rcm.get("valid", 1)),
+                )
+                cosim.send_rcm_truth(rcm_blob, ts)
+                if not rcm_log_once:
+                    rcm_log_once = True
+                    print(
+                        f"[giraffe_client] rcm_truth n_lane={rcm.get('n_lane')} "
+                        f"n_obj={rcm.get('n_obj')}",
                         flush=True,
                     )
             if want_hint:
@@ -576,7 +645,7 @@ def run() -> int:
                 ):
                     cmd_miss_logged = True
                     print(
-                        f"[giraffe_client] no vehicle_cmd after {cmd_wait_s:.1f}s — "
+                        f"[giraffe_client] no vehicle_cmd after {cmd_wait_s:.1f}s - "
                         "hold last ctrl (overlay-latest, world clock not blocked)",
                         flush=True,
                     )

@@ -60,7 +60,7 @@ _GIRAFFE_CLIENT_PROC: Optional[subprocess.Popen[Any]] = None
 def _on_sig(signum: int, _frame: object) -> None:
     global STOP
     STOP = True
-    print(f"[run_cases] signal {signum} → stop", flush=True)
+    print(f"[run_cases] signal {signum} -> stop", flush=True)
 
 
 def _start_giraffe_client() -> None:
@@ -68,7 +68,7 @@ def _start_giraffe_client() -> None:
     global _GIRAFFE_CLIENT_PROC
     flag = (os.environ.get("GF_START_GIRAFFE_CLIENT") or "1").strip().lower()
     if flag in ("0", "false", "no", "off"):
-        print("[run_cases] GF_START_GIRAFFE_CLIENT=0 → skip giraffe_client", flush=True)
+        print("[run_cases] GF_START_GIRAFFE_CLIENT=0 -> skip giraffe_client", flush=True)
         return
     if _GIRAFFE_CLIENT_PROC is not None and _GIRAFFE_CLIENT_PROC.poll() is None:
         return
@@ -135,7 +135,7 @@ def _ensure_view(
             except Exception:  # noqa: BLE001
                 pass
         if not no_window:
-            print("[run_cases] GF_SCENARIO_VIEW=0 — pygame off (iGPU)", flush=True)
+            print("[run_cases] GF_SCENARIO_VIEW=0 - pygame off (iGPU)", flush=True)
         return None
     if view is not None:
         try:
@@ -225,7 +225,7 @@ def _write_results(
         + "\n",
         encoding="utf-8",
     )
-    print(f"[run_cases] results → {run_dir}", flush=True)
+    print(f"[run_cases] results -> {run_dir}", flush=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -348,7 +348,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 keep_ego = False
                 print(
-                    f"[run_cases] WARN {cid}: ego missing mid-batch → cold spawn "
+                    f"[run_cases] WARN {cid}: ego missing mid-batch -> cold spawn "
                     f"(window may remount)",
                     flush=True,
                 )
@@ -465,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
                 if stop_on_fail:
                     skipped_rest.extend(c for c, _, _ in runnable[idx + 1 :])
                     print(
-                        "[run_cases] stop_on_fail=1 → not running remaining cases",
+                        "[run_cases] stop_on_fail=1 -> not running remaining cases",
                         flush=True,
                     )
                     break

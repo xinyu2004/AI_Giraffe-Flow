@@ -2,12 +2,18 @@
 
 Lab HMI only. Product camera stays on carla_bridge — view mode never moves camera.
 
-ChaseCam (carla.env):
-  1 = windshield (default)
-  2 = scene (short rear gap + longer forward; not −40 m 1:1 with BEV)
-  3 = overhead (parking BEV-like)
+ChaseCam (carla.env) ↔ config/spectator/*.mount.json:
+  1 = windshield
+  2 = bev_afc   (lab chase; attach-relative — previously tuned)
+  3 = bev_adc   (lab chase; attach-relative)
+  4 = overhead
 
-GF_CHASE_GHOST_OCCLUDERS: Cam2/3 hide Bridge/Roads blocking ego (pose fixed).
+Pygame RGB is attach_to ego (relative xyz/pitch/fov from spectator JSON).
+UE spectator follows ChaseCam. Modes 2/3 place ego on screen
+(2 a bit below center, 3 near center). Mode 3 is pulled in along the mount.
+Mode 4 copies the overhead mount (near vertical). Not Foxglove paint canvas.
+
+GF_CHASE_GHOST_OCCLUDERS: Cam 2/3/4 hide Bridge/Roads blocking ego (pose fixed).
 """
 
 from __future__ import annotations
@@ -19,16 +25,24 @@ from typing import Any, Callable, Optional
 from _instrument import ClusterState, draw_cluster
 from _camera_mount import (
     CameraMount,
+    SPECTATOR_BY_ENV,
     load_camera_mount,
-    overhead_chase_pose,
-    scene_chase_pose,
+    load_spectator_mount,
+    spectator_pose,
 )
 from _chase_ghost import ChaseGhostOccluders
+from _chase_ground import profile_for_mode, solve_spectator_along_mount
 from _perf import PerfAgg
 
-MODE_SCENE = "2"
 MODE_WINDSHIELD = "1"
-MODE_OVERHEAD = "3"
+MODE_BEV_AFC = "2"
+MODE_BEV_ADC = "3"
+MODE_OVERHEAD = "4"
+
+# Backward aliases used by older call sites
+MODE_SCENE = MODE_BEV_AFC
+
+_CYCLE = (MODE_WINDSHIELD, MODE_BEV_AFC, MODE_BEV_ADC, MODE_OVERHEAD)
 
 
 def scenario_view_wanted(snap: Any = None) -> bool:
@@ -40,17 +54,24 @@ def scenario_view_wanted(snap: Any = None) -> bool:
 
 
 def resolve_chase_cam_mode(raw: Optional[str] = None) -> str:
-    """ChaseCam: 1=windshield, 2=scene, 3=overhead. Pass raw from Snapshot."""
+    """ChaseCam: 1=windshield, 2=bev_afc, 3=bev_adc, 4=overhead."""
     if raw is None:
-        raw = os.environ.get("ChaseCam") or "1"
+        raw = os.environ.get("ChaseCam") or "3"
     v = str(raw).strip().lower()
     if v in ("1", "mobileye_windshield", "windshield", MODE_WINDSHIELD):
         return MODE_WINDSHIELD
-    if v in ("2", "scene", "chase", MODE_SCENE):
-        return MODE_SCENE
-    if v in ("3", "overhead", "bev", "parking", MODE_OVERHEAD):
+    if v in ("2", "scene", "chase", "bev_afc", "afc", MODE_BEV_AFC):
+        return MODE_BEV_AFC
+    if v in ("3", "bev_adc", "adc", MODE_BEV_ADC):
+        return MODE_BEV_ADC
+    if v in ("4", "overhead", "parking", "bev", MODE_OVERHEAD):
+        # bare "bev" kept as overhead alias for old scripts; prefer bev_afc/bev_adc
         return MODE_OVERHEAD
     return MODE_WINDSHIELD
+
+
+def _empty_surfaces() -> dict[str, Any]:
+    return {m: None for m in _CYCLE}
 
 
 class ScenarioView:
@@ -81,11 +102,7 @@ class ScenarioView:
         mode_src = initial_mode if initial_mode is not None else chase_cam
         mode = resolve_chase_cam_mode(mode_src)
         self._mode = mode
-        self._surfaces: dict[str, Any] = {
-            MODE_SCENE: None,
-            MODE_WINDSHIELD: None,
-            MODE_OVERHEAD: None,
-        }
+        self._surfaces: dict[str, Any] = _empty_surfaces()
         self._hud_lines: list[str] = []
         self._cluster: Optional[ClusterState] = None
         self._cameras: dict[str, Any] = {}
@@ -113,18 +130,28 @@ class ScenarioView:
 
         self._ensure_cam(self._mode)
         self._sync_spectator()
+        m = self._mount_for(self._mode)
         print(
-            f"[view] pygame ChaseCam mode={self._mode} (V cycles 1/2/3) "
-            f"mount_ref={self._mount.describe()} (camera owned by bridge)",
+            f"[view] pygame ChaseCam mode={self._mode} "
+            f"({SPECTATOR_BY_ENV.get(self._mode, '?')}; V cycles 1/2/3/4) "
+            f"attach fov={m.fov:.0f} size={w}x{h} "
+            f"(perception camera still owned by bridge)",
             flush=True,
         )
+
+    def _mount_for(self, mode: str) -> CameraMount:
+        if mode == MODE_WINDSHIELD:
+            return self._mount
+        name = SPECTATOR_BY_ENV.get(mode, "bev_adc")
+        return load_spectator_mount(name)
 
     def _ensure_cam(self, mode: str) -> None:
         if self._cameras.get(mode) is not None:
             return
         carla = self._carla
-        if mode == MODE_SCENE:
-            cx, cz, cpitch, cyaw, cfov = scene_chase_pose()
+        name = SPECTATOR_BY_ENV.get(mode)
+        if name and mode != MODE_WINDSHIELD:
+            cx, cz, cpitch, cyaw, cfov = spectator_pose(name)
             self._cameras[mode] = self._spawn_cam(
                 fov=cfov,
                 transform=carla.Transform(
@@ -134,22 +161,21 @@ class ScenarioView:
                 mode=mode,
             )
             return
-        if mode == MODE_OVERHEAD:
-            cx, cz, cpitch, cyaw, cfov = overhead_chase_pose()
+        # Mode 1: product front contract; spectator/windshield as fallback.
+        try:
+            m = self._mount
             self._cameras[mode] = self._spawn_cam(
-                fov=cfov,
-                transform=carla.Transform(
-                    carla.Location(x=cx, z=cz),
-                    carla.Rotation(pitch=cpitch, yaw=cyaw),
-                ),
+                fov=m.fov,
+                transform=m.as_carla_transform(carla),
                 mode=mode,
             )
-            return
-        self._cameras[mode] = self._spawn_cam(
-            fov=self._mount.fov,
-            transform=self._mount.as_carla_transform(carla),
-            mode=mode,
-        )
+        except Exception:  # noqa: BLE001
+            wm = load_spectator_mount("windshield")
+            self._cameras[mode] = self._spawn_cam(
+                fov=wm.fov,
+                transform=wm.as_carla_transform(carla),
+                mode=mode,
+            )
 
     def _spawn_cam(self, *, fov: float, transform: Any, mode: str) -> Any:
         bp = self._world.get_blueprint_library().find("sensor.camera.rgb")
@@ -201,11 +227,7 @@ class ScenarioView:
             except Exception:  # noqa: BLE001
                 pass
         self._cameras.clear()
-        self._surfaces = {
-            MODE_SCENE: None,
-            MODE_WINDSHIELD: None,
-            MODE_OVERHEAD: None,
-        }
+        self._surfaces = _empty_surfaces()
         self._vehicle = vehicle
         # Ghost catalog is process-once; do not restore_all on case retarget
         # (T_clear fades old ids — avoids flash + catalog rebuild stutter).
@@ -224,51 +246,67 @@ class ScenarioView:
         return self._mount
 
     def toggle_mode(self) -> str:
-        order = (MODE_WINDSHIELD, MODE_SCENE, MODE_OVERHEAD)
         try:
-            i = order.index(self._mode)
+            i = _CYCLE.index(self._mode)
         except ValueError:
             i = 0
-        nxt = order[(i + 1) % len(order)]
+        nxt = _CYCLE[(i + 1) % len(_CYCLE)]
         self._ensure_cam(nxt)
         self._mode = nxt
         if self._mode == MODE_WINDSHIELD:
             self._ghost.restore_all()
         self._sync_spectator()
-        print(f"[view] display={self._mode} (perception camera unchanged)", flush=True)
+        name = SPECTATOR_BY_ENV.get(self._mode, "?")
+        print(
+            f"[view] display={self._mode}/{name} (perception camera unchanged)",
+            flush=True,
+        )
         return self._mode
 
     def _sync_spectator(self) -> None:
+        """UE spectator follows ChaseCam.
+
+        Elevated 2/3: pitch places ego (2 below center, 3 near center).
+        Mode 3 is scaled in along the mount so it is not a tiny overview.
+        Mode 1 and 4 copy the mount (4 stays near-nadir).
+        """
         if not self._follow_spectator:
             return
         try:
+            m = self._mount_for(self._mode)
+            sx, sy, sz = float(m.x), float(m.y), float(m.z)
+            pitch = float(m.pitch)
+            if self._mode not in (MODE_WINDSHIELD, MODE_OVERHEAD):
+                try:
+                    ue_fov = float((os.environ.get("GF_SPECTATOR_FOV") or "100").strip())
+                except ValueError:
+                    ue_fov = 100.0
+                ue_fov = max(60.0, min(120.0, ue_fov))
+                aspect = float(self.width) / max(1.0, float(self.height))
+                sx, sz, pitch, _ef, _er = solve_spectator_along_mount(
+                    float(m.x),
+                    float(m.z),
+                    float(m.pitch),
+                    float(m.fov),
+                    aspect,
+                    ue_fov,
+                    profile=profile_for_mode(self._mode),
+                )
             tf = self._vehicle.get_transform()
             fwd = tf.get_forward_vector()
+            right = tf.get_right_vector()
+            up = tf.get_up_vector()
             loc = tf.location
-            if self._mode == MODE_WINDSHIELD:
-                # Approx world pose of windshield camera_mount.
-                m = self._mount
-                right = tf.get_right_vector()
-                up = tf.get_up_vector()
-                cam_loc = self._carla.Location(
-                    x=loc.x + fwd.x * m.x + right.x * m.y + up.x * m.z,
-                    y=loc.y + fwd.y * m.x + right.y * m.y + up.y * m.z,
-                    z=loc.z + fwd.z * m.x + right.z * m.y + up.z * m.z,
-                )
-                rot = self._carla.Rotation(
-                    pitch=tf.rotation.pitch + m.pitch,
-                    yaw=tf.rotation.yaw + m.yaw,
-                    roll=0.0,
-                )
-            else:
-                cam_loc = self._carla.Location(
-                    x=loc.x - fwd.x * 8.0,
-                    y=loc.y - fwd.y * 8.0,
-                    z=loc.z + 4.0,
-                )
-                rot = self._carla.Rotation(
-                    pitch=-15.0, yaw=tf.rotation.yaw, roll=0.0
-                )
+            cam_loc = self._carla.Location(
+                x=loc.x + fwd.x * sx + right.x * sy + up.x * sz,
+                y=loc.y + fwd.y * sx + right.y * sy + up.y * sz,
+                z=loc.z + fwd.z * sx + right.z * sy + up.z * sz,
+            )
+            rot = self._carla.Rotation(
+                pitch=tf.rotation.pitch + pitch,
+                yaw=tf.rotation.yaw + m.yaw,
+                roll=0.0,
+            )
             self._world.get_spectator().set_transform(
                 self._carla.Transform(cam_loc, rot)
             )

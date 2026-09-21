@@ -14,16 +14,23 @@ enum {
   GF_CH_SURROUND_MAGIC = 0x47535744u,     /* 'GSWD' surround world */
   GF_CH_MODE_HINT_MAGIC = 0x474d4854u,    /* 'GMHT' host APA arm/confirm */
   GF_CH_POD_VERSION = 1u,                 /* vehicle_state / cmd */
-  GF_CH_FAKE_PERC_VERSION = 2u,           /* v1=520 B head; v2=+TSR/STATIC tail */
+  GF_CH_FAKE_PERC_VERSION = 3u, /* v1=520; v2=+TSR/STATIC; v3=+LRE road edges */
   GF_CH_FAKE_PERC_V1_SIZE = 520u,
+  GF_CH_FAKE_PERC_V2_SIZE = 740u,
+  GF_CH_FAKE_PERC_V3_SIZE = 776u,
   GF_CH_FAKE_PERC_MAX_OBJ = 13u,
   GF_CH_FAKE_PERC_MAX_ADJ = 4u,
   GF_CH_FAKE_PERC_MAX_TSR = 6u,
   GF_CH_FAKE_PERC_MAX_STAT = 6u,
-  GF_CH_SURROUND_VERSION = 1u,
+  GF_CH_SURROUND_VERSION = 2u, /* obj = long/lat/rel + length/width/heading (28B) */
   GF_CH_SURROUND_MAX_OBJ = 16u,
   GF_CH_SURROUND_MAX_SLOT = 8u,
+  GF_CH_SURROUND_SIZE = 668u,
   GF_CH_MODE_HINT_VERSION = 1u,
+  GF_CH_RCM_MAGIC = 0x4752434du, /* 'GRCM' rear camera module truth */
+  GF_CH_RCM_VERSION = 1u,
+  GF_CH_RCM_MAX_LANE = 8u,
+  GF_CH_RCM_MAX_OBJ = 16u,
 };
 
 #pragma pack(push, 1)
@@ -135,6 +142,18 @@ typedef struct GfFakePercPod {
   uint8_t pad1[2];
   GfFakePercTsr tsr[GF_CH_FAKE_PERC_MAX_TSR];
   GfFakePercStat stat[GF_CH_FAKE_PERC_MAX_STAT];
+  /* v3 — physical road edges (LRE). Not adjacent Driving lane marks (LA). */
+  uint8_t lre_n;    /* 0..2 */
+  uint8_t lre_mask; /* bit0=left, bit1=right */
+  uint8_t pad2[2];
+  float lre_left_c0;
+  float lre_left_c1;
+  float lre_left_c2;
+  float lre_left_vr_m;
+  float lre_right_c0;
+  float lre_right_c1;
+  float lre_right_c2;
+  float lre_right_vr_m;
 } GfFakePercPod;
 
 typedef struct GfSurroundObjPod {
@@ -144,6 +163,9 @@ typedef struct GfSurroundObjPod {
   float long_dist_m;
   float lat_dist_m;
   float rel_vel_long_mps;
+  float length_m;
+  float width_m;
+  float heading_rad; /* ego +x forward, +y left */
 } GfSurroundObjPod;
 
 typedef struct GfSurroundSlotPod {
@@ -180,8 +202,48 @@ typedef struct GfModeHintPod {
   uint64_t timestamp_ns;
   uint64_t seq;
 } GfModeHintPod;
+
+/* Host → RCM (Perception_Rear_Out_St). Rear FOV truth; no TSR. */
+typedef struct GfRcmLanePod {
+  float c0_m;
+  float c1_rad;
+  float c2;
+  float c3;
+  float view_range_m;
+  uint8_t quality;
+  uint8_t side; /* 0=hostL 1=hostR 2=adjL 3=adjR */
+  uint8_t pad[2];
+} GfRcmLanePod;
+
+typedef struct GfRcmObjPod {
+  uint8_t object_id;
+  uint8_t object_class;
+  uint8_t pad[2];
+  float long_dist_m; /* ego +x forward; rear typically ≤0 */
+  float lat_dist_m;
+  float rel_vel_long_mps;
+  float rel_vel_lat_mps;
+  float abs_vel_mps;
+} GfRcmObjPod;
+
+typedef struct GfRcmTruthPod {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t reserved;
+  uint64_t timestamp_ns;
+  uint64_t seq;
+  uint8_t valid;
+  uint8_t n_lane;
+  uint8_t n_obj;
+  uint8_t pad0;
+  GfRcmLanePod lanes[GF_CH_RCM_MAX_LANE];
+  GfRcmObjPod objects[GF_CH_RCM_MAX_OBJ];
+} GfRcmTruthPod;
 #pragma pack(pop)
 
 #ifdef __cplusplus
-}
+} /* extern "C" */
+
+static_assert(sizeof(GfSurroundObjPod) == 28u, "GfSurroundObjPod size");
+static_assert(sizeof(GfSurroundWorldPod) == GF_CH_SURROUND_SIZE, "GfSurroundWorldPod size");
 #endif

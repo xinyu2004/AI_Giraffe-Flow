@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
         self._history = DocHistory()
         self._history.bind(
             lambda: self._session,
-            lambda: self._graph.flush_canvas(),
+            lambda: self._flush_editors_to_session(),
         )
 
         self._tabs = QTabWidget(self)
@@ -243,12 +243,23 @@ class MainWindow(QMainWindow):
         lang_group.addAction(act_en)
         lang_menu.addAction(act_en)
 
+    def _flush_editors_to_session(self) -> None:
+        """Controls → memory (canvas + platform). Call before validate/save/undo."""
+        self._graph.flush_canvas()
+        self._ara_cfg_ed.flush_to_session()
+
+    def _pipeline_flush_kwargs(self) -> dict:
+        return {
+            "flush_canvas": self._graph.flush_canvas,
+            "flush_platform": self._ara_cfg_ed.flush_to_session,
+        }
+
     def _on_language(self, lang: str) -> None:
         if lang == get_language():
             return
         project_path: str | None = None
         if self._session is not None:
-            self._graph.flush_canvas()
+            self._flush_editors_to_session()
             project_path = str(self._session.paths.project_file.resolve())
             if self._session.is_dirty():
                 reply = QMessageBox.question(
@@ -265,7 +276,7 @@ class MainWindow(QMainWindow):
                     try:
                         result = save_validated(
                             self._session,
-                            flush_canvas=self._graph.flush_canvas,
+                            **self._pipeline_flush_kwargs(),
                         )
                     except Exception as exc:  # noqa: BLE001
                         QMessageBox.critical(self, t("保存失败"), str(exc))
@@ -549,7 +560,7 @@ class MainWindow(QMainWindow):
             event.accept()
             return
         if self._session is not None:
-            self._graph.flush_canvas()
+            self._flush_editors_to_session()
             if self._session.is_dirty():
                 reply = QMessageBox.question(
                     self,
@@ -566,7 +577,7 @@ class MainWindow(QMainWindow):
                     try:
                         result = save_validated(
                             self._session,
-                            flush_canvas=self._graph.flush_canvas,
+                            **self._pipeline_flush_kwargs(),
                         )
                     except Exception as exc:  # noqa: BLE001
                         QMessageBox.critical(self, t("保存失败"), str(exc))
@@ -599,13 +610,13 @@ class MainWindow(QMainWindow):
         if not self._session:
             QMessageBox.information(self, t("保存"), t("请先打开项目"))
             return
-        self._graph.flush_canvas()
+        self._flush_editors_to_session()
         if not self._session.is_dirty():
             self.statusBar().showMessage(t("没有未保存更改"), 4000)
             QMessageBox.information(self, t("保存"), t("没有未保存的更改。"))
             return
         try:
-            result = save_validated(self._session)
+            result = save_validated(self._session, **self._pipeline_flush_kwargs())
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, t("保存失败"), str(exc))
             return
@@ -646,7 +657,7 @@ class MainWindow(QMainWindow):
             else:
                 rc, report, result = compose_validated(
                     self._session,
-                    flush_canvas=self._graph.flush_canvas,
+                    **self._pipeline_flush_kwargs(),
                 )
                 if not result.ok:
                     QMessageBox.warning(
@@ -698,7 +709,7 @@ class MainWindow(QMainWindow):
         if not self._session:
             QMessageBox.information(self, t("Generate"), t("请先打开项目"))
             return
-        self._graph.flush_canvas()
+        self._flush_editors_to_session()
         out = self._session.paths.project_dir / "generated"
         try:
             rc, report, result = self._session.generate(out)

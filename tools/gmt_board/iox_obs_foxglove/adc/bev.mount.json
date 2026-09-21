@@ -1,0 +1,16 @@
+{
+  "name": "bev_adc",
+  "note": "Foxglove ADC BEV observer (ChaseCam≈3). Oblique: CamBack=45 Height=48 Look=40. Align with carla spectator bev_adc.mount.json.",
+  "x": -45.0,
+  "y": 0.0,
+  "z": 48.0,
+  "pitch": -29.5,
+  "yaw": 0.0,
+  "roll": 0.0,
+  "fov": 60.0,
+  "w": 400,
+  "h": 800,
+  "look_x": 40.0,
+  "oy_ego_frac": 0.62,
+  "y_far_px": 28.0
+}

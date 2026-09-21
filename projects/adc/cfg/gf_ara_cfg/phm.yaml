@@ -19,6 +19,12 @@ entities:
   alive_timeout_ms: 300
   deadline_ms: 0
   on_failure: notify_sm
+- id: rcm_alive
+  process: perception.rcm
+  alive_period_ms: 100
+  alive_timeout_ms: 300
+  deadline_ms: 0
+  on_failure: notify_sm
 - id: mode_alive
   process: mode.drive_park
   alive_period_ms: 100

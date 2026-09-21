@@ -37,17 +37,26 @@ frame_ingest:
   frame_source: carla_file
   pixel_format: nv12
   ego_source: carla
-  frame_w: 640
-  frame_h: 480
+  frame_w: 2048
+  frame_h: 1536
   camera_transport: shm
   # SOP freeze default; SIL overrides via GF_FRAME_SOURCE=carla|replay|colorbar
   active_source: isp
   camera_slots:
   - id: front
-    w: 640
-    h: 480
+    w: 2048
+    h: 1536
     pixel_format: nv12
     fps: 30
+    mount:
+      id: front
+      x: 0.55
+      y: 0.0
+      z: 1.35
+      pitch: -5.0
+      yaw: 0.0
+      roll: 0.0
+      fov: 100.0
   bridge:
     enabled: true
   channels:

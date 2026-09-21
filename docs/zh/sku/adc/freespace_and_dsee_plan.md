@@ -11,7 +11,7 @@
 |----|--------|------|------|-----|
 | **标线** `VR_End` | 线质量还在多远 | FCM / 地图 | 规划只当 `D_vr` | **灰线** |
 | **驾驶尺** `D_see` | 本拍敢当前向畅通多远（内部） | `driving_plus`：`slew(min(D_vr,D_occ,D_fov,D_wx,D_fs_fwd,cap))` | 路径长、`T_plan`、`v_cap_vis`、HUD `D` | **青洗 + 青横杠**（仅 +x） |
-| **近场 FS** `FreespaceNear` | 周向可行驶（扇区 + 轴） | surround | 行车：fuse 进 `D_fs_*`；**泊车：走廊/碰撞主输入** | **同米窗扇区轮廓**（非身后青洗） |
+| **近场 FS** `FreespaceNear` | 周向 Empty180（`d_r_m[180]`+`type`） | surround | 行车 compose 基线输入；**泊车：走廊/碰撞主输入** | **同米窗 180 轮廓** |
 | FailSafe `Perception_FS_Out` | 功能安全失效 | FCM | 诊断/降级 | 不画成可行驶 |
 
 ```text
@@ -41,15 +41,15 @@
 
 1. `parking` **订** `FreespaceNear` + `SurroundWorld`，**不算** 120 m 前视融合。
 2. 走廊 / 碰撞 / 库位几何吃 FS 包络 + slots。
-3. BEV 同窗可画槽位与 FS；ChaseCam=3 仅旁观。
+3. BEV 同窗可画槽位与 FS；ChaseCam=3/4（bev_adc / overhead）仅旁观。
 
 ### 2.3 观测
 
 | 可见物 | 数据源 | 禁止 |
 |--------|--------|------|
 | 灰线 | Out LH `VR_End` | 把 occupy/FS 写进 VR |
-| 青洗 / `D` | `Trajectory.D_see_m`（优先）或同源 occupy+光学 | Foxglove 重算「最终行车 FS」当主路径 |
-| FS 环 | 订阅 `FreespaceNear` | 另写「身后专用画车道」函数；应统一米窗 |
+| 青洗 / `D` | **AFC**；ADC **删除**（无 `D_see_m` 旁路） | Foxglove 重算「最终行车 FS」 |
+| FS 环 | 行车：`Freespace`；泊车：`FreespaceNear` | 行车再订 Near 当主轮廓 |
 
 ---
 
@@ -64,14 +64,15 @@ surround ──► FreespaceNear ──┐
               ┌──────────────────────────┐
               │ FuseDrivingFs (前处理)    │
               │  → D_fs_fwd / 侧后净空   │
-              │ m_plan_tick / D_see      │
-              │  → Trajectory (+D_see_m) │
+              │ m_plan_tick / 内部 D_see │
+              │  → Freespace + Trajectory（ADC 无 D_see_m）│
               └──────────────────────────┘
                              │
-              parking (后) ───┴── 直接吃 Near+World → ParkingTrajectory
+              parking ───────┴── Near+World → ParkingTrajectory
 
-Foxglove: 订 Out + Ego + Traj + FreespaceNear(+World)
-          同一 BevWindow 绘制；不双算最终 FS
+Foxglove 行车: Out + Ego + Freespace + Trajectory
+Foxglove 泊车: Near + World + ParkingTrajectory
+          同一 BevWindow；ingest 不融
 ```
 
 ### 3.1 fuse 进 `D_see`（P0 假完成收口）
@@ -103,7 +104,7 @@ D_see         ← slew(min(D_vr, D_occ, D_fov, D_wx, d_fs_fwd, cap))
 |------|------|------|----------|
 | **P0 收口假完成** | fuse→`D_see`；BEV 订并画 `FreespaceNear`；合同/原则文档 | 有近障：HUD `D` 与青杠缩短；BEV 有扇区轮廓；日志可见 fuse | 变道转向；真多摄投影；compose 分叉 |
 | **P1 看见对齐** | 青洗走廊（+x 至 `D_see`）；FS 轮廓与轴净空可读；ChaseCam 文档旁观≠产品槽 | 空直道青区跟 `D`；身后无青洗；重启 SIL 米窗连续 | 泊车搜索 |
-| **P2 变道门控（薄）** | `rear_*_free`→`Trajectory.gear_shift_second` bit0 + HUD `LC`；**不改 steer** | 后有车时 candidate=false | 半套打方向 |
+| **P2 变道门控（薄）** | ~~HUD LC~~ **ADC 已撤**；变道转向后挂 | — | 半套打方向 |
 | **P3 泊车吃 FS** | parking 订 Near；`m_park_tick` 按扇区裁剪路径 | 库位路径不穿扇区硬边 | 120 m 融合进泊车 |
 | **P4 surround 产品化** | 标定投影→稠密近场（合同：扇区可加密，**不改名**） | 多摄 SIL 与扇区一致 | 发明 `fcm_plus` |
 | **P5 plus 金源（可选）** | 仅行为分叉时拆 `.m` | Host/C 1:1 | 为改名而拆包 |
@@ -127,7 +128,7 @@ D_see         ← slew(min(D_vr, D_occ, D_fov, D_wx, d_fs_fwd, cap))
 |------|------------|
 | FreespaceNear fuse 空转 / BEV 不画 | **P0–P1 必做**；完整 FS 仍不上 traj |
 | driving_plus 名薄壳 | 名保留；**能力 = fuse 进尺 + 钩子**；真变道 P2+ |
-| ChaseCam 2/3 | **文档/验收对齐**，不与产品槽强绑几何 |
+| ChaseCam 2/3/4 | **文档/验收对齐**，不与产品槽强绑几何 |
 | 周视 stub | **P4**；此前标 stage-A |
 | 金源挂 AFC | **默认合法**；P5 条件触发 |
 | 双 bin + SKU 开关 | **默认合法**；分叉后置 |

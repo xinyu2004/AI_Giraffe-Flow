@@ -20,6 +20,7 @@ GF_COSIM_MSG_FAKE_PERC = 11
 GF_COSIM_MSG_CAMERA_NV12 = 12
 GF_COSIM_MSG_SURROUND_WORLD = 13
 GF_COSIM_MSG_MODE_HINT = 14
+GF_COSIM_MSG_RCM_TRUTH = 15
 GF_COSIM_MSG_VEHICLE_CMD = 20
 GF_COSIM_SLOT_ID_LEN = 32
 GF_COSIM_DEFAULT_PORT = 7600
@@ -67,8 +68,12 @@ _STAT = struct.Struct("<BBBB5f")
 _TAIL_HEAD = struct.Struct("<BB2x")
 _MAX_TSR = 6
 _MAX_STAT = 6
-FP_SIZE = FP_V1_SIZE + _TAIL_HEAD.size + _MAX_TSR * _TSR.size + _MAX_STAT * _STAT.size
-assert FP_SIZE == 740
+FP_V2_SIZE = FP_V1_SIZE + _TAIL_HEAD.size + _MAX_TSR * _TSR.size + _MAX_STAT * _STAT.size
+assert FP_V2_SIZE == 740
+_LRE_TAIL = struct.Struct("<BB2x8f")
+assert _LRE_TAIL.size == 36
+FP_SIZE = FP_V2_SIZE + _LRE_TAIL.size
+assert FP_SIZE == 776
 
 
 def pack_frame(msg_type: int, payload: bytes, ts: int, seq: int) -> bytes:
@@ -135,7 +140,7 @@ def unpack_fake_perc(blob: bytes) -> Optional[dict]:
         return None
     f = _FP_HEAD.unpack_from(blob)
     magic, ver = f[0], f[1]
-    if magic != GF_CH_FAKE_PERC_MAGIC or ver not in (1, 2):
+    if magic != GF_CH_FAKE_PERC_MAGIC or ver not in (1, 2, 3):
         return None
     # indices mirror _FP_HEAD.pack order in _fake_perc_pack.py
     i = 2
@@ -281,8 +286,10 @@ def unpack_fake_perc(blob: bytes) -> Optional[dict]:
         "stat": [],
         "tsr_n": 0,
         "stat_n": 0,
+        "lre_n": 0,
+        "lre_mask": 0,
     }
-    if ver >= 2 and len(blob) >= FP_SIZE:
+    if ver >= 2 and len(blob) >= FP_V2_SIZE:
         tsr_n, stat_n = _TAIL_HEAD.unpack_from(blob, FP_V1_SIZE)
         tsr_n = min(_MAX_TSR, int(tsr_n))
         stat_n = min(_MAX_STAT, int(stat_n))
@@ -323,4 +330,27 @@ def unpack_fake_perc(blob: bytes) -> Optional[dict]:
         out["stat"] = stats
         out["tsr_n"] = tsr_n
         out["stat_n"] = stat_n
+    if ver >= 3 and len(blob) >= FP_SIZE:
+        (
+            lre_n,
+            lre_mask,
+            ll_c0,
+            ll_c1,
+            ll_c2,
+            ll_vr,
+            rr_c0,
+            rr_c1,
+            rr_c2,
+            rr_vr,
+        ) = _LRE_TAIL.unpack_from(blob, FP_V2_SIZE)
+        out["lre_n"] = int(lre_n)
+        out["lre_mask"] = int(lre_mask)
+        out["lre_left_c0"] = float(ll_c0)
+        out["lre_left_c1"] = float(ll_c1)
+        out["lre_left_c2"] = float(ll_c2)
+        out["lre_left_vr_m"] = float(ll_vr)
+        out["lre_right_c0"] = float(rr_c0)
+        out["lre_right_c1"] = float(rr_c1)
+        out["lre_right_c2"] = float(rr_c2)
+        out["lre_right_vr_m"] = float(rr_vr)
     return out

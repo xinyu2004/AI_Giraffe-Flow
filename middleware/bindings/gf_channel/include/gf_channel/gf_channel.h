@@ -47,6 +47,13 @@ int gf_channel_latest(GfChannel* ch, void* plane_out, uint32_t plane_cap,
                       uint32_t* out_plane_bytes, uint64_t* inout_last_seq,
                       uint64_t* out_timestamp_ns, uint32_t* out_w, uint32_t* out_h,
                       uint16_t* out_format);
+/*
+ * Block until hdr->seq != last_seq (new frame) or timeout.
+ * timeout_ms: 0 = poll once; UINT32_MAX = wait forever.
+ * Returns 1 if seq advanced, 0 on timeout/unchanged, -1 on error.
+ * Does not copy plane — call gf_channel_latest after a successful wait.
+ */
+int gf_channel_wait_seq(GfChannel* ch, uint64_t last_seq, uint32_t timeout_ms);
 int gf_channel_info(const GfChannel* ch, uint32_t* out_w, uint32_t* out_h,
                     uint16_t* out_format, uint32_t* out_plane_bytes, uint32_t* out_buffers);
 

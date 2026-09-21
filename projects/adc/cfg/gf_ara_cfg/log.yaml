@@ -1,4 +1,3 @@
-# log lite — console + DLT only. See docs/zh/operations/DLT_PLAN.md.
 schema_version: '0.1'
 default_level: INFO
 color: auto
@@ -28,3 +27,4 @@ contexts:
   level: INFO
 - id: diag
   level: INFO
+file_max_bytes: 1048576

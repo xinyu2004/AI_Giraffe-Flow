@@ -1,4 +1,5 @@
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
+#include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
 #include "gf_ara/sm/state_client.hpp"
 #include "gf_gen/proxy/ego_motion_proxy.hpp"
@@ -8,13 +9,13 @@
 
 #include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"
 
+#include <cmath>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <string>
-#include <thread>
 
 namespace {
 
@@ -24,6 +25,8 @@ constexpr uint8_t kSpotSearch = 1;
 constexpr uint8_t kParking = 2;
 constexpr float kSpotSearchMaxMps = 15.0f / 3.6f;
 constexpr float kStopMps = 0.35f;
+constexpr std::uint32_t kWaitSliceMs = 20;
+constexpr std::uint64_t kIdEgo = 1;
 
 bool ReadModeHint(GfChannel* ch, std::uint64_t* last_seq, uint8_t* apa, uint8_t* confirm) {
   if (!ch || !last_seq || !apa || !confirm) {
@@ -59,7 +62,6 @@ int main() {
 
   using gf_ara::sm::StateClient;
 
-  // Product ModeDeclaration names — App-local, not middleware constants.
   constexpr const char* kDriveParkFg = "DriveParkFG";
   constexpr const char* kDrivingActive = "DrivingActive";
   constexpr const char* kParkingActive = "ParkingActive";
@@ -68,6 +70,11 @@ int main() {
   (void)StateClient::RequestTransitionNamed(kDriveParkFg, kDrivingActive);
 
   gf_gen::EgoMotionProxy ego;
+  gf_ara::com::binding::iceoryx::EventWaitSet<2> waitset;
+  if (!waitset.AttachProxy(ego, kIdEgo)) {
+    std::cerr << "[ERROR] mode.drive_park: EventWaitSet attach failed\n";
+    return EXIT_FAILURE;
+  }
   gf_gen::VehicleModeSkeleton mode_sk;
 
   const char* hint_slot = std::getenv("GF_MODE_HINT_SLOT");
@@ -78,15 +85,36 @@ int main() {
   std::uint64_t hint_seq = 0;
 
   uint8_t last_mode = 255;
+  uint8_t last_sent_mode = 255;
+  uint8_t last_sent_apa = 255;
+  uint8_t last_sent_confirm = 255;
+  float last_sent_v = -1.0f;
   std::string last_fg;
+  std::cout << "mode.drive_park: EventWaitSet; VehicleMode on_change only\n";
+
   while (!iox::posix::hasTerminationRequested()) {
     supervisor.Tick();
     if (supervisor.ExitForEmRestart()) {
       return gf_ara::exec::kEmRestartExitCode;
     }
+
+    (void)waitset.TimedWaitMs(kWaitSliceMs);
+
     float v = 0.0f;
-    if (auto taken = ego.Take(); taken.HasValue() && taken.Value().has_value()) {
+    std::uint64_t ego_ts = 0;
+    bool have_ego = false;
+    for (;;) {
+      auto taken = ego.Take();
+      if (!taken.HasValue() || !taken.Value().has_value()) {
+        break;
+      }
       v = taken.Value()->speed_mps;
+      ego_ts = taken.Value()->timestamp_ns;
+      have_ego = true;
+    }
+
+    if (!hint_ch) {
+      hint_ch = gf_channel_open(hint_slot);
     }
     uint8_t apa = 0;
     uint8_t confirm = 0;
@@ -96,17 +124,18 @@ int main() {
     if (const char* c = std::getenv("GF_SLOT_CONFIRMED"); c && c[0] == '1') {
       confirm = 1;
     }
-    if (!hint_ch) {
-      hint_ch = gf_channel_open(hint_slot);
-    }
     uint8_t apa_h = 0;
     uint8_t confirm_h = 0;
-    if (ReadModeHint(hint_ch, &hint_seq, &apa_h, &confirm_h)) {
+    const bool hint_new = ReadModeHint(hint_ch, &hint_seq, &apa_h, &confirm_h);
+    if (hint_new) {
       apa = apa_h;
       confirm = confirm_h;
     }
 
-    // VehicleMode (HUD / obs): SpotSearch is still DrivingActive for FG set-diff.
+    if (!have_ego && !hint_new && last_sent_mode != 255) {
+      continue;
+    }
+
     uint8_t m = kDriving;
     if (confirm && v < kStopMps) {
       m = kParking;
@@ -123,24 +152,37 @@ int main() {
       }
     }
 
+    const bool mode_changed =
+        m != last_sent_mode || apa != last_sent_apa || confirm != last_sent_confirm ||
+        (last_sent_v < 0.0f) || (std::fabs(v - last_sent_v) > 0.05f);
+    if (!mode_changed) {
+      continue;
+    }
+
     gf_gen::VehicleMode out{};
-    out.timestamp_ns = static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count());
+    out.timestamp_ns =
+        ego_ts ? ego_ts
+               : static_cast<uint64_t>(
+                     std::chrono::duration_cast<std::chrono::nanoseconds>(
+                         std::chrono::steady_clock::now().time_since_epoch())
+                         .count());
     out.mode = m;
     out.speed_mps = v;
     out.apa_armed = apa;
     out.slot_confirmed = confirm;
     (void)mode_sk.Send(out);
+    last_sent_mode = m;
+    last_sent_apa = apa;
+    last_sent_confirm = confirm;
+    last_sent_v = v;
     if (m != last_mode) {
-      std::cout << "mode.drive_park: VehicleMode=" << static_cast<int>(m)
-                << " v=" << v << " apa=" << static_cast<int>(apa)
+      std::cout << "mode.drive_park: VehicleMode=" << static_cast<int>(m) << " v=" << v
+                << " apa=" << static_cast<int>(apa)
                 << " confirm=" << static_cast<int>(confirm) << '\n';
       last_mode = m;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
+  waitset.MarkForDestruction();
   if (hint_ch) {
     gf_channel_close(hint_ch);
   }

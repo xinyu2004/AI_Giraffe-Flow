@@ -1,0 +1,12 @@
+{
+  "name": "overhead",
+  "carla_env_id": 4,
+  "note": "CARLA spectator #4 — overhead / parking.",
+  "x": -5.0,
+  "y": 0.0,
+  "z": 32.0,
+  "pitch": -88.0,
+  "yaw": 0.0,
+  "roll": 0.0,
+  "fov": 90.0
+}

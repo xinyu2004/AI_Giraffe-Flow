@@ -1,7 +1,7 @@
 # ADC：Freespace 所有权与 gf-config 修改方案
 
 > 配套 [fs_fov_bev_scheme.md](./fs_fov_bev_scheme.md)、[multi_cam_contract.md](./multi_cam_contract.md)。  
-> **已对齐：** 行泊都在 FS 里规划；环视出 `FreespaceNear`；行车三段合成出 **`Freespace`**；BEV 行车图只订规划成品；**不再用 `D_see_m` 当 ADC 行车规划尺**。  
+> **已对齐：** 行泊都在 FS 里规划；环视出 `FreespaceNear`；行车三段合成出 **`Freespace`**；BEV 行车图只订规划成品；**ADC 无 `D_see_m` 旁路（不写、不画）**。  
 > 本文是 **wiring / 数据流 / 落地顺序**，动手前对照。
 
 ---
@@ -16,10 +16,12 @@ ego       ──► EgoMotion ─────► driving / parking / surround / 
 
 driving_plus 合成 前视+后视+环视
           ──► Freespace          ──► BEV 行车图（只订这个）
-          ──► Trajectory         ──► gateway / MCU（路径+执行；ADC 不以 D_see_m 为尺）
-```
+          ──► Trajectory         ──► gateway / MCU / BEV 路径（ADC 不写 D_see_m）
 
-两套 image：行车订 `Freespace`；泊车订 `FreespaceNear`。服务并存，不冲突。
+BEV 行车（DrivingActive，含 SpotSearch）：感知 Out 叠画 + Freespace + Trajectory
+BEV 泊车（ParkingActive）：Near + ParkingTrajectory（+ SurroundWorld 槽）
+ingest 只显示，不融合。
+```
 
 ---
 
@@ -61,9 +63,9 @@ struct Freespace {
 
 ### 1.3 `Trajectory.D_see_m`（ADC）
 
-- 总线字段可暂留（AFC / 旧 HUD）。
-- **ADC 行车 tick 不以它为规划尺**；路径裁剪、停车、横向走廊只读 `Freespace`。
-- 若 HUD 仍要数字：从 `Freespace.d_front_m`（或前楔扇区）**派生**，写回 `D_see_m` 仅作旁路显示，不当输入。
+- **ADC 不写有效 `D_see_m`（恒 0）**；路径裁剪 / 敢开空间只读 **`Freespace`**。
+- **BEV 不读、不画 `Dxx`/`LC`**（无旁路 HUD）。AFC 仍可用 `D_see_m` + 青洗。
+- IDL 字段可暂留兼容；禁止「派生写回当验收」。
 
 ---
 
@@ -151,11 +153,13 @@ to: host.iox_obs_foxglove   # 或现有 tap 进程名
 ```text
 [front cam] → fcm → Out ─────────────────┐
 [fl/fr/rl/rr] → surround → FreespaceNear ┼→ driving_plus
+rear(中置后视) → 后视感知(FCM小集) ──────────┘  （变道；≠环视）
+[front] → FCM → Out ──────────────────────────┘
 [gateway] → EgoMotion ───────────────────┘
                          │ fuse（车体光学契约）
                          │  前：front.fov，深≤120
                          │  后：rear fov，深≤35
-                         │  环：Near 侧包络 ~5.25
+                         │  环：Near 侧包络 ~7
                          ├─ Freespace ──► BEV 行车（只投影）
                          └─ Trajectory ─► gateway（点列在 FS 内）
 ```
@@ -172,7 +176,16 @@ BEV 泊车图订 Near（或 parking 若日后裁剪再发，仍不与行车 Free
 
 ### 3.3 合成规则（driving 内，BEV 不算）
 
-与 [fs_fov_bev_scheme.md](./fs_fov_bev_scheme.md) §2–3 相同：扇区 `r(θ)` 落在前楔 / 后楔 / 侧带，空路用各段 cap，有障取近。结果写入 `Freespace.d_occ_m[]`。
+**判断序（前提：前光学 ⇒ 近大远小；边=FOV，与 7 无关）：**  
+`FrontEmpty` / `SideEmpty` / `RearEmpty` → `OccupyByLane` → 轮廓；兔耳=减障结果。
+
+| 瓣 | 空场函数 | 减障 |
+|----|----------|------|
+| **前** | `FrontEmpty`：前视 **光锥∩地面** ∧ `x≤d_empty`（mount=`camera_contract`；**无** 7） | 本车道+邻道目标 AABB 射线；仍夹在光学空场内 → 兔耳 |
+| **后** | `RearEmpty`：后 FOV ∧ `x=−35`；**无** 7 | 同左 |
+| **侧** | `SideEmpty`：仅 `kFsSideCapM`/Near | `min` |
+
+**禁止：** 侧 7 写前/后空场；用演示 FOV（如 30°）冒充合同；空 Near 前 cap 钳远顶；BEV 重算 FS。
 
 ---
 
@@ -198,7 +211,7 @@ AFC 工程 **不**加 `Freespace` 服务（单摄仍 `D_see`）。
 | **W0** | 类型 + wiring + compose 口齐 | gf-config 画布 driving 有 Out:Freespace；surround 仍只有 Near |
 | **W1** | driving fuse 发布 `Freespace`（可先与现 paint 公式 1:1） | 日志/iceoryx 有包；空路前扇区到 ~120，后 ≤35 |
 | **W2** | BEV 改订 `Freespace`，去掉行车 Near 旁路融 | 切模式：行车图随 Freespace，泊车图仍 Near |
-| **W3** | ADC tick 路径/停点只裁 FS；`D_see_m` 仅派生或忽略 | 无前车不短在 15；有前车前瓣咬车 |
+| **W3** | ADC tick 路径只裁 FS；**不写 / 不画 `D_see_m`** | 无前车不短在 15；有前车前瓣咬车；BEV 无 D/LC |
 | **W4** | paint 连续闭合 + 可选 ±fov/2 参考射线 | 与 Cam1 左右缘同一扇门（车体等角，不是屏上量 100°） |
 
 **假完成：** 口上有 `Freespace`、仍 `(void)` 不发，或 BEV 继续 Near+`D_see` 自融。

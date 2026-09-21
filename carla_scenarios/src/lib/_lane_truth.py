@@ -361,6 +361,7 @@ def measure_lane_topology(ego: Any, world: Any) -> dict[str, Any]:
         "lane_conf": 0.0,
         "lane_vr_end_m": 0.0,
         "lane_quality_reason": "no_map",
+        "lre_n": 0,
     }
     try:
         carla = _carla()
@@ -461,6 +462,61 @@ def measure_lane_topology(ego: Any, world: Any) -> dict[str, Any]:
 
     adj = adj_from_chain_neighbors(lane_lr, ego_idx)
 
+    # Road edges (LRE): corridor outer of Driving chain — not LA neighbor identity.
+    # Prefer Border/Shoulder curb when present; else leftmost-left / rightmost-right.
+    lre_l = dict(lane_lr[0][0])
+    lre_r = dict(lane_lr[-1][1])
+    try:
+        carla = _carla()
+        for side_name, extreme_wp in (
+            ("left", chain[0]),
+            ("right", chain[-1]),
+        ):
+            best = None
+            best_c0 = float(lre_l["c0"] if side_name == "left" else lre_r["c0"])
+            for ltype in (
+                getattr(carla.LaneType, "Border", None),
+                getattr(carla.LaneType, "Shoulder", None),
+            ):
+                if ltype is None:
+                    continue
+                try:
+                    swp = mmap.get_waypoint(
+                        extreme_wp.transform.location,
+                        project_to_road=True,
+                        lane_type=ltype,
+                    )
+                except Exception:  # noqa: BLE001
+                    swp = None
+                if swp is None:
+                    continue
+                try:
+                    if int(swp.road_id) != int(extreme_wp.road_id):
+                        continue
+                    if not _same_dir(extreme_wp, swp):
+                        continue
+                    sw = float(getattr(swp, "lane_width", 0.0) or 0.0)
+                    sh = 0.5 * max(0.4, min(sw if sw > 0.2 else 1.0, 4.0))
+                    c0, c1, c2 = _sample_edge_poly(
+                        ego, swp, side=side_name, half_w=sh, pose=pose, horizon_m=120.0
+                    )
+                    # Left edge wants larger y; right wants smaller y.
+                    if side_name == "left" and c0 > best_c0 + 0.15:
+                        best = (c0, c1, c2)
+                        best_c0 = c0
+                    elif side_name == "right" and c0 < best_c0 - 0.15:
+                        best = (c0, c1, c2)
+                        best_c0 = c0
+                except Exception:  # noqa: BLE001
+                    continue
+            if best is not None:
+                if side_name == "left":
+                    lre_l = {"c0": best[0], "c1": best[1], "c2": best[2]}
+                else:
+                    lre_r = {"c0": best[0], "c1": best[1], "c2": best[2]}
+    except Exception:  # noqa: BLE001
+        pass
+
     all_c0 = [hl_c0, hr_c0] + [float(a["c0"]) for a in adj]
     y_lo, y_hi = min(all_c0), max(all_c0)
 
@@ -506,6 +562,16 @@ def measure_lane_topology(ego: Any, world: Any) -> dict[str, Any]:
         "lane_conf": float(q["lane_conf"]),
         "lane_vr_end_m": float(q["lane_vr_end_m"]),
         "lane_quality_reason": str(q["reason"]),
+        # LRE = physical road edge (corridor/Border). Never adj Driving as neighbor.
+        "lre_n": 2,
+        "lre_left_c0": float(lre_l["c0"]),
+        "lre_left_c1": float(lre_l["c1"]),
+        "lre_left_c2": float(lre_l["c2"]),
+        "lre_left_vr_m": float(q["lane_vr_end_m"]),
+        "lre_right_c0": float(lre_r["c0"]),
+        "lre_right_c1": float(lre_r["c1"]),
+        "lre_right_c2": float(lre_r["c2"]),
+        "lre_right_vr_m": float(q["lane_vr_end_m"]),
     }
     for i, a in enumerate(adj):
         out[f"adj{i}_side"] = int(a["side"])

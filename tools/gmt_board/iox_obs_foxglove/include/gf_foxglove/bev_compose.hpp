@@ -9,31 +9,34 @@ namespace gf_foxglove {
 
 constexpr float kDWorkM = 120.0f;
 constexpr float kDBevM = 130.0f;
-constexpr float kAdcXMinM = -35.0f;  // see ~35 m rear (mutual check with ChaseCam=2)
+constexpr float kAdcXMinM = -35.0f;  // FS rear tip / meter-window rear (contract)
 constexpr float kAdcXMaxM = 120.0f;
 constexpr int kBevW = 400;
 constexpr int kBevH = 800;
-constexpr float kBevCamBackM = 35.0f;  // match ChaseCam=2 rear; front window unchanged
+constexpr float kBevCamBackM = 35.0f;  // match env#2 bev_afc / afc bev.mount
 constexpr float kBevCamHeightM = 40.0f;
 constexpr float kBevCamLookM = 60.0f;
-// ADC CamBack=35: camera at rear edge of meter window (see 35 m behind ego).
-constexpr float kAdcCamBackM = 35.0f;
+// Camera behind rear FS tip (−35) so closing bar is in front of cam (visible).
+// Meter window stays x∈[−35,+120]; CamBack > 35.
+// Observer pose: config/{afc,adc}/bev.mount.json (GF_MOUNTS_JSON / GF_BEV_SKU).
+constexpr float kAdcCamBackM = 45.0f;
 constexpr float kAdcCamHeightM = 48.0f;
 constexpr float kAdcCamLookM = 40.0f;
 constexpr float kDashOnM = 6.0f;
 constexpr float kDashGapM = 9.0f;
 constexpr float kDashPeriodM = kDashOnM + kDashGapM;
-constexpr float kSeeHostLatM = 1.5f;
-constexpr float kSeeFovDeg = 100.0f;  // = camera_contract front.fov (gf-config)
+constexpr float kSeeHostLatM = 1.5f;  // AFC occupy opening only
+constexpr float kSeeFovDeg = 100.0f;  // AFC optical_d; = camera_contract front.fov
 constexpr int kMaxHostLanes = 2;
 constexpr int kMaxAdjLanes = 4;
+constexpr int kMaxLreEdges = 2;
 constexpr int kMaxDynObj = 13;
 constexpr int kMaxSurroundObj = 16;
 constexpr int kMaxParkingSlots = 8;
-constexpr int kFsNearSectors = 36;
+constexpr int kFsEmptyN = 180;
 constexpr int kMaxTrajPts = 60;
 
-// Single meter-window for paint/camera (SKU). Forward VR / D_see stay on +x.
+// Single meter-window for paint/camera (SKU). Grey lanes follow VR_End on +x.
 struct BevWindow {
   float x_min = 0.0f;
   float x_max = kDBevM;
@@ -43,13 +46,21 @@ struct Rgb {
   std::uint8_t r, g, b;
 };
 
+/** Cubic on +x (trusted VR); behind ego: linear c0+c1·x — same as planning RoadEdgeYFwd. */
+inline float PolyYAt(float x, float c0, float c1, float c2, float c3) {
+  if (x < 0.0f) {
+    return c0 + c1 * x;
+  }
+  return c0 + c1 * x + c2 * x * x + c3 * x * x * x;
+}
+
 struct HostLanePoly {
   int side = 0;
   float c0 = 0, c1 = 0, c2 = 0, c3 = 0;
   float x0 = 0;
   float x1 = kDBevM;
   int lanemark_type = 1;
-  float y_at(float x) const { return c0 + c1 * x + c2 * x * x + c3 * x * x * x; }
+  float y_at(float x) const { return PolyYAt(x, c0, c1, c2, c3); }
   bool is_dashed() const { return lanemark_type == 2; }
 };
 
@@ -59,8 +70,17 @@ struct AdjLanePoly {
   float x0 = 0;
   float x1 = kDBevM;
   int lanemark_type = 2;
-  float y_at(float x) const { return c0 + c1 * x + c2 * x * x + c3 * x * x * x; }
+  float y_at(float x) const { return PolyYAt(x, c0, c1, c2, c3); }
   bool is_dashed() const { return lanemark_type != 1; }
+};
+
+/** Physical road edge (LRE). Distinct from LH/LA paint. */
+struct LreEdgePoly {
+  int side = 0;  // 1=left 2=right
+  float c0 = 0, c1 = 0, c2 = 0, c3 = 0;
+  float x0 = 0;
+  float x1 = kDBevM;
+  float y_at(float x) const { return PolyYAt(x, c0, c1, c2, c3); }
 };
 
 struct BevDynObj {
@@ -117,6 +137,8 @@ struct LiveBevState {
   int n_host = 0;
   AdjLanePoly adj_lanes[kMaxAdjLanes];
   int n_adj = 0;
+  LreEdgePoly lre_edges[kMaxLreEdges];
+  int n_lre = 0;
   float lane_width_m = 3.5f;
   BevDynObj perc_objects[kMaxDynObj];
   int n_obj = 0;
@@ -128,21 +150,24 @@ struct LiveBevState {
   float lead_dist_m = 0;
   float cipo_x_m = 0;
   float cipo_y_m = 0;
-  // Driving fused Freespace (planning) preferred over surround Near.
+  // Driving fused Freespace vs surround Near (separate buffers — no stomping).
   bool has_fs_plan = false;
+  float fs_plan_d_lane_fwd_m[3]{};  // host/left/right clear
+  uint8_t fs_plan_n_poly = 0;
+  float fs_plan_poly_x_m[180]{};
+  float fs_plan_poly_y_m[180]{};
   bool has_fs_near = false;
-  float fs_d_occ_m[kFsNearSectors]{};
-  float fs_d_front_m = 0;
-  float fs_d_rear_m = 0;
-  float fs_d_left_m = 0;
-  float fs_d_right_m = 0;
+  float fs_near_d_r_m[kFsEmptyN]{};
+  uint8_t fs_near_type[kFsEmptyN]{};
+  // ParkingTrajectory owns path → parking BEV (Near contour); else driving.
+  bool parking_view = false;
 };
 
 bool dash_lit_m(float s_m, float scroll_m = 0.0f);
 Rgb color_for_obj_id(int obj_id);
 Rgb traj_color_for_v(float v, float v_hi = 12.0f);
-float see_opening_m(float host_vr_m, const LiveBevState& st);
-float driving_see_m(const LiveBevState& st, float host_vr_m);
+float see_opening_m(float host_vr_m, const LiveBevState& st);  // AFC ruler
+float driving_see_m(const LiveBevState& st, float host_vr_m);   // AFC ruler
 void advance_odom(LiveBevState& st, std::uint64_t t_ns, float speed_mps);
 
 // Portrait 400×800 PNG. Gold paint for SIL gf_foxglove_ws and Host gf_host_bev_ws.

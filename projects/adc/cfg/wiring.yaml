@@ -11,6 +11,8 @@ modules:
   package: customer/fcm-perception
 - id: perception.surround
   hpp: projects/adc/interfaces/perception_surround/io_types.hpp
+- id: perception.rcm
+  hpp: projects/adc/interfaces/perception_rcm/io_types.hpp
 - id: planning.driving_plus
   hpp: projects/adc/interfaces/planning_driving/io_types.hpp
   package: customer/planning-driving
@@ -42,11 +44,18 @@ deployments:
   - services.semantic.Perception_MESSAGE_Out_St
   requires:
   - services.semantic.Perception_In_St
+  - services.semantic.EgoMotion
 - process: perception.surround
   compute_domain: ap_linux
   provides:
   - services.semantic.SurroundWorld
   - services.semantic.FreespaceNear
+  requires:
+  - services.semantic.EgoMotion
+- process: perception.rcm
+  compute_domain: ap_linux
+  provides:
+  - services.semantic.Perception_Rear_Out_St
   requires:
   - services.semantic.EgoMotion
 - process: planning.driving_plus
@@ -56,8 +65,10 @@ deployments:
   - services.semantic.Freespace
   requires:
   - services.semantic.EgoMotion
-  - services.semantic.Perception_MESSAGE_Out_St
+  - services.semantic.SurroundWorld
   - services.semantic.FreespaceNear
+  - services.semantic.Perception_MESSAGE_Out_St
+  - services.semantic.Perception_Rear_Out_St
 - process: planning.parking
   compute_domain: ap_linux
   provides:
@@ -94,6 +105,8 @@ bindings:
   inputs:
   - service: semantic.Perception_In_St
     type: Perception_In_St
+  - service: semantic.EgoMotion
+    type: EgoMotion
   outputs:
   - service: semantic.Perception_MESSAGE_Out_St
     type: Perception_MESSAGE_Out_St
@@ -106,6 +119,13 @@ bindings:
     type: SurroundWorld
   - service: semantic.FreespaceNear
     type: FreespaceNear
+- module: perception.rcm
+  inputs:
+  - service: semantic.EgoMotion
+    type: EgoMotion
+  outputs:
+  - service: semantic.Perception_Rear_Out_St
+    type: Perception_Rear_Out_St
 - module: planning.driving_plus
   inputs:
   - service: semantic.Perception_MESSAGE_Out_St
@@ -114,6 +134,10 @@ bindings:
     type: EgoMotion
   - service: semantic.FreespaceNear
     type: FreespaceNear
+  - service: semantic.SurroundWorld
+    type: SurroundWorld
+  - service: semantic.Perception_Rear_Out_St
+    type: Perception_Rear_Out_St
   outputs:
   - service: semantic.Trajectory
     type: Trajectory
@@ -144,6 +168,9 @@ dataflows:
 - from: adapter.vehicle_can_gateway
   service: services.semantic.Perception_In_St
   to: perception.fcm
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
+  to: perception.fcm
 - from: perception.fcm
   service: services.semantic.Perception_MESSAGE_Out_St
   to: planning.driving_plus
@@ -158,6 +185,9 @@ dataflows:
   to: perception.surround
 - from: adapter.vehicle_can_gateway
   service: services.semantic.EgoMotion
+  to: perception.rcm
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.EgoMotion
   to: planning.parking
 - from: mode.drive_park
   service: services.semantic.VehicleMode
@@ -170,7 +200,13 @@ dataflows:
   to: planning.parking
 - from: perception.surround
   service: services.semantic.SurroundWorld
+  to: planning.driving_plus
+- from: perception.surround
+  service: services.semantic.SurroundWorld
   to: planning.parking
+- from: perception.rcm
+  service: services.semantic.Perception_Rear_Out_St
+  to: planning.driving_plus
 - from: planning.driving_plus
   service: services.semantic.Trajectory
   to: adapter.vehicle_can_gateway
@@ -201,6 +237,10 @@ channel_flows:
   to: perception.surround
   kind: gf_channel
   slot: gf.channel.rr
+- from: host.frame_ingest
+  to: perception.rcm
+  kind: gf_channel
+  slot: gf.channel.rear
 canvas:
   nodes:
     host.frame_ingest:
@@ -212,17 +252,21 @@ canvas:
       in_side: left
       port_slot_order:
         right:
-        - out:gf.channel.front
+        - out:gf.channel.rear
         left:
         - out:gf.channel.fl
         - out:gf.channel.fr
         - out:gf.channel.rl
         - out:gf.channel.rr
+        bottom:
+        - out:gf.channel.front
       port_sides:
         out:gf.channel.fl: left
         out:gf.channel.fr: left
         out:gf.channel.rl: left
         out:gf.channel.rr: left
+        out:gf.channel.rear: right
+        out:gf.channel.front: bottom
       color: '#aaffff'
       color_user: true
     external.vehicle_mcu: {}
@@ -250,24 +294,27 @@ canvas:
         - out:EgoMotion
       color: '#f1c40f'
     perception.fcm:
-      x: 12363.5
-      y: -343.3
+      x: 12105.8
+      y: -469.8
       out_side: right
       in_side: left
       port_sides:
         in:gf.channel.front: top
+        in:EgoMotion: left
+        in:Perception_In_St: left
         out:Perception_MESSAGE_Out_St: bottom
       port_slot_order:
         left:
         - in:Perception_In_St
+        - in:EgoMotion
         bottom:
         - out:Perception_MESSAGE_Out_St
         top:
         - in:gf.channel.front
       color: '#8bc34a'
     perception.surround:
-      x: 11807.8
-      y: -508.2
+      x: 11765.6
+      y: -572.2
       out_side: right
       in_side: left
       port_sides:
@@ -289,6 +336,23 @@ canvas:
         - in:gf.channel.rl
         - in:gf.channel.rr
       color: '#3498db'
+    perception.rcm:
+      x: 12417.3
+      y: -359.1
+      out_side: right
+      in_side: left
+      port_sides:
+        in:gf.channel.rear: top
+        in:EgoMotion: left
+        out:Perception_Rear_Out_St: bottom
+      port_slot_order:
+        left:
+        - in:EgoMotion
+        top:
+        - in:gf.channel.rear
+        bottom:
+        - out:Perception_Rear_Out_St
+      color: '#16a085'
     planning.driving_plus:
       x: 12263.1
       y: 66.7
@@ -297,6 +361,8 @@ canvas:
       port_sides:
         in:Perception_MESSAGE_Out_St: top
         in:FreespaceNear: top
+        in:SurroundWorld: top
+        in:Perception_Rear_Out_St: top
         out:Trajectory: bottom
         out:Freespace: bottom
       port_slot_order:
@@ -306,8 +372,10 @@ canvas:
         - out:Trajectory
         - out:Freespace
         top:
+        - in:SurroundWorld
         - in:FreespaceNear
         - in:Perception_MESSAGE_Out_St
+        - in:Perception_Rear_Out_St
       color: '#9b59b6'
     planning.parking:
       x: 11876.7

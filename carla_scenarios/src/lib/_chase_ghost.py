@@ -1,4 +1,4 @@
-"""ChaseCam occluder ghost — lab Cam2/3 only.
+"""ChaseCam occluder ghost — lab Cam 2/3/4 (elevated spectators).
 
 Hide Bridge/Roads that block seeing the ego: tube|screen seed, then the whole
 connected overhead span. Camera pose never changes. Catalog once per world.
@@ -212,24 +212,44 @@ class ChaseGhostOccluders:
                 best = t if best is None else min(best, t)
         return best
 
+    def _in_frustum(
+        self,
+        inv: Any,
+        x: float,
+        y: float,
+        z: float,
+        half: float,
+        v_half: float,
+    ) -> bool:
+        # CARLA camera local: +X forward, +Y right, +Z up (not OpenGL z-depth).
+        rx = inv[0][0] * x + inv[0][1] * y + inv[0][2] * z + inv[0][3]
+        ry = inv[1][0] * x + inv[1][1] * y + inv[1][2] * z + inv[1][3]
+        rz = inv[2][0] * x + inv[2][1] * y + inv[2][2] * z + inv[2][3]
+        if rx < 1.0:
+            return False
+        if abs(ry) > half * rx * 0.95:
+            return False
+        if abs(rz) > v_half * rx * 0.85:
+            return False
+        return True
+
     def _screen_hit(self, m: _Mesh, cam_tf: Any, fov_deg: float, aspect: float) -> bool:
         try:
             inv = cam_tf.get_inverse_matrix()
         except Exception:  # noqa: BLE001
             return False
-        x, y, z = m.cx, m.cy, m.cz
-        rx = inv[0][0] * x + inv[0][1] * y + inv[0][2] * z + inv[0][3]
-        ry = inv[1][0] * x + inv[1][1] * y + inv[1][2] * z + inv[1][3]
-        rz = inv[2][0] * x + inv[2][1] * y + inv[2][2] * z + inv[2][3]
-        if rz < 1.0:
-            return False
         half = math.tan(math.radians(0.5 * fov_deg))
         v_half = half / max(aspect, 0.5)
-        if abs(rx) > half * rz * 0.95:
+        if self._in_frustum(inv, m.cx, m.cy, m.cz, half, v_half):
+            return True
+        try:
+            verts = m.raw.bounding_box.get_world_vertices(m.raw.transform)
+        except Exception:  # noqa: BLE001
             return False
-        if abs(ry) > v_half * rz * 0.85:
-            return False
-        return True
+        for v in verts:
+            if self._in_frustum(inv, float(v.x), float(v.y), float(v.z), half, v_half):
+                return True
+        return False
 
     def _seed_score(
         self,
@@ -240,12 +260,10 @@ class ChaseGhostOccluders:
         fov: float,
         aspect: float,
     ) -> Optional[float]:
-        t_tube = self._tube_hit(m, cam, focus)
-        if t_tube is not None:
-            return t_tube
+        # Primary: in the chase view (overpass ahead of ego). Tube is cam→ego only.
         if self._screen_hit(m, cam_tf, fov, aspect):
             return 0.55
-        return None
+        return self._tube_hit(m, cam, focus)
 
     def _select(self, camera: Any, vehicle: Any) -> Set[int]:
         carla = self._carla
@@ -323,7 +341,7 @@ class ChaseGhostOccluders:
     def pump(self, *, mode: str, camera: Any, vehicle: Any) -> None:
         if not self._on:
             return
-        if mode not in ("2", "3"):
+        if mode not in ("2", "3", "4"):
             self.restore_all()
             return
         self._frame += 1
@@ -369,7 +387,7 @@ class ChaseGhostOccluders:
         try:
             self._world.enable_environment_objects(set(ids), enable)
         except Exception:  # noqa: BLE001
-            pass
+            return
 
 
 __all__ = ["ChaseGhostOccluders", "chase_ghost_wanted"]

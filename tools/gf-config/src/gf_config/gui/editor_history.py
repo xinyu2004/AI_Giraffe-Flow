@@ -28,10 +28,15 @@ class HistoryHooksMixin:
         self._clear_history_fn = clear
 
     def _checkpoint(self, *, coalesce: bool = False) -> None:
+        # Bulk flush (save/verify gate) must not invent undo steps.
+        if getattr(self, "_flushing", False):
+            return
         if self._checkpoint_fn is not None:
             self._checkpoint_fn(coalesce=coalesce)
 
     def _end_doc_edit(self) -> None:
+        if getattr(self, "_flushing", False):
+            return
         if self._end_edit_fn is not None:
             self._end_edit_fn()
 
