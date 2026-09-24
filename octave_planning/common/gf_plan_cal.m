@@ -65,9 +65,34 @@ function p = gf_plan_cal()
   p.peer_v_min_mps = 1.0;
   p.peer_lat_max_m = 7.0;
   p.peer_d_max_m = 35.0;
-  p.t_lc_min_s = 6.0;
+  p.t_lc_min_s = 6.0;       % max occupy time T=L/v; also v_min = L/T
   p.d_lc_min_m = 40.0;
-  p.lc_conf_min = 0.50;
+  p.d_lc_rear_min_m = 2.0;
+  % Leave-host bumper. Opening still skips ACC time-gap. Not a 40 m stick.
+  p.d_lc_host_min_m = 8.0;
+  p.lc_ttc_margin_s = 1.0;
+  p.lc_hdg_same = 0.50;     % rad; else not a same-way mate
+  p.lc_left_bias_m = 8.0;
+  p.lc_hyst_m = 6.0;
+  % Neighbor must beat host quality by this to leave (not LC-for-LC).
+  p.lc_stay_m = 12.0;
+  p.plan_dt_s = 0.05;          % default tick if caller omits dt
+  p.lc_dt_min_s = 0.01;
+  p.lc_dt_max_s = 0.20;
+  p.lc_done_eps_m = 0.50;
+  p.lc_a_plan_mps2 = 3.0;
+  p.lc_settle_ey_m = 0.80;
+  p.lc_settle_steer_deg = 5.0;
+  % Host-center jump that means FCM remapped onto the target.
+  p.lc_remap_ey_m = 1.20;
+  % Done dwell: planted this many ticks in a row (reset if any gate fails).
+  p.lc_done_hold_n = 8;
+  % Host-keep e gain in gf_lat_host_delta: atan(k e / v). Same idle and after remap.
+  p.lc_reg_k = 1.0;
+  % Unused for steer (no law switch). Kept so old logs/cal stay aligned.
+  p.lc_commit_s = 0.25;
+  % After done/abort: ticks that block a new enter. Not a lateral mode.
+  p.lc_cool_n = 20;
   p.cutin_head_gain = 1.20;
   p.cutin_approach_m = 1.50;
   % Cut-in only while closing (rel < -this). Pulling away is peer flow.
@@ -83,14 +108,15 @@ function p = gf_plan_cal()
   p.a_req_label_aeb = 0.85;
 
   %% Cruise / execute tracking
-  p.cruise_v_mps = 12.0;
+  p.cruise_v_mps = 25.0;  % 90 km/h
+  p.a_accel_max = 4.0;    % m/s^2 extreme; a_cmd = a_accel_max * throttle
   p.acc_time_gap_s = 1.7;
   p.acc_gap_min_m = 8.0;
   p.acc_gap_max_m = 80.0;
   p.acc_gap_over_stop_m = 6.0;
   p.acc_speed_db_mps = 0.25;
   p.acc_thr_gain = 0.11;
-  p.acc_thr_max = 0.50;
+  p.acc_thr_max = 1.0;
   p.acc_thr_hold = 0.10;
   p.acc_brake_gain = 0.22;
   p.acc_brake_min = 0.08;
@@ -101,7 +127,7 @@ function p = gf_plan_cal()
   p.cruise_thr_standstill_max = 0.72;
   p.hold_brake = 0.22;
 
-  %% Lane / LKA
+  %% Lane / host-keep (gf_lat_host_delta). lat_ky unused; kψ + k e/v + κ.
   p.lat_ky = 0.38;
   p.lat_kpsi = 0.65;
   p.lat_max_steer = 0.42;
@@ -112,10 +138,12 @@ function p = gf_plan_cal()
   p.lat_ky_scale_lo = 0.50;
   p.lat_c1_sat = 0.40;
   p.lat_dsteer_max = 0.055;
+  p.wheelbase_m = 2.70;     % κ → δ_ff (bicycle). LC plan, not a gate.
+  % Plant full-lock (CARLA max_steer). Wire Trajectory.steer is [-1,1] = rad / this.
+  p.steer_max_deg = 70.0;
   % LKA only while ego is still inside a typical lane. 3 m let us chase a
   % neighbour / barrier pair (Foxglove: left C0≈4.1, right C0≈0.6).
   p.lat_ey_invalid_m = 1.6;
-  p.lat_c1_invalid = 0.40;
   p.lat_ey_slow_m = 1.0;
   % Host pair in ego frame (+y left): must straddle the vehicle.
   p.host_width_min_m = 2.50;

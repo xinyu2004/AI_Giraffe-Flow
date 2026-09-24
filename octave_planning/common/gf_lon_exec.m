@@ -46,6 +46,7 @@ function ctrl = gf_lon_exec(v, v_plan, a_req)
       ctrl.throttle = gf_clamp(0.48 + err * 0.04, ...
                                p.cruise_thr_standstill_min, p.cruise_thr_standstill_max);
     else
+      % a_cmd = a_accel_max * throttle; throttle capped by acc_thr_max (full=1).
       ctrl.throttle = gf_clamp(0.14 + err * p.acc_thr_gain, 0.0, p.acc_thr_max);
     end
     ctrl.brake = 0.0;

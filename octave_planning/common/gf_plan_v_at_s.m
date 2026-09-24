@@ -1,5 +1,6 @@
 % Planned speed at station s. Take-strict min of:
-%   vis cap, sign max, comfort stop-line, host-lane occupy follow, adjacent flow.
+%   vis cap, sign max, comfort stop-line, host-lane occupy follow,
+%   adjacent stoppable-then-release (gf_plan_v_peers).
 % Sign min floors cruise only when no stop-line; stop/follow may still cut.
 % Light is a speed profile (v_reg); late/at-line brake is lon_a_req_stop, not occupy.
 % Host follow: gap-error P on (gap - τ·v - g0), capped by kinematics (not raw (gap-g0)/τ).

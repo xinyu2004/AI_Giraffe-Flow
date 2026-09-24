@@ -90,15 +90,6 @@ inline LcGate MakeLcGate(bool ego_ok, bool near_ok, bool rcm_ok, bool corridor_r
   return g;
 }
 
-inline void ApplyLcInhibit(FsDriving* fs, const LcGate& gate) {
-  if (!fs || !gate.inhibit) {
-    return;
-  }
-  fs->rear_left_free = false;
-  fs->rear_right_free = false;
-  fs->lane_change_candidate = false;
-}
-
 template <typename NearFs, typename FsOut>
 inline void ComposeFreespace(float d_empty_cap_m, float /*lane_width_m*/, const NearFs* near,
                              const FsOccSample* objs, int n_obj, std::uint64_t ts_ns, FsOut* fs,

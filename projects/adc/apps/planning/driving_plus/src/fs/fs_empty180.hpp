@@ -120,6 +120,16 @@ inline std::uint32_t FsFpOcc(const FsOccSample* objs, int n_obj) {
 }
 
 // ---- L0: optical / FSD baseline (no occ, no lane) ----
+// Front = camera cone ∩ ground ∩ x≤cap (FrontEmptyR). Not r=cap on every FOV bin.
+// Front corners also eat the surround side wall (|y|≤SideLatM). LRE (L1) only tightens.
+
+inline float FsFrontLatWallR(float ang, float side_lat_m) {
+  const float sa = std::fabs(std::sin(ang));
+  if (sa < 1.0e-3f) {
+    return 1.0e6f;
+  }
+  return std::max(0.5f, side_lat_m / sa);
+}
 
 inline void FsBaselineFromOpticsFsd(FsEmpty180* out, const float* near_r, const std::uint8_t* near_ty,
                                     int near_n, float front_cap_m) {
@@ -128,13 +138,19 @@ inline void FsBaselineFromOpticsFsd(FsEmpty180* out, const float* near_r, const 
   }
   *out = {};
   const float fcap = std::max(0.5f, std::min(kFsFrontFarCapM, front_cap_m));
+  const float y_side = gf_fs_envelope::SideLatM();
+  const gf_fs_envelope::FrontOptics cam = gf_fs_envelope::FrontOpticsFromProduct();
   float surr[kFsEmptyN];
-  gf_fs_envelope::SurroundFillEmpty180(surr, gf_fs_envelope::SideLatM());
+  gf_fs_envelope::SurroundFillEmpty180(surr, y_side);
   for (int i = 0; i < kFsEmptyN; ++i) {
     const float ang = FsBinAngRad(i);
     float r;
     if (FsInFrontFov(ang)) {
-      r = fcap;
+      r = gf_fs_envelope::FrontEmptyR(ang, fcap, cam);
+      if (r < 0.5f) {
+        r = (surr[i] >= 0.5f) ? surr[i] : 0.5f;
+      }
+      r = std::min(r, FsFrontLatWallR(ang, y_side));
     } else if (FsInRearFov(ang)) {
       r = gf_fs_envelope::RearCapM();
     } else {
@@ -157,6 +173,9 @@ inline void FsBaselineFromOpticsFsd(FsEmpty180* out, const float* near_r, const 
           ty = nty;
         }
       }
+    }
+    if (FsInFrontFov(ang)) {
+      r = std::min(r, FsFrontLatWallR(ang, y_side));
     }
     out->r[i] = std::max(0.5f, r);
     out->type[i] = ty;
@@ -453,6 +472,93 @@ inline GroundPoly FsPack180ToPoly(const FsEmpty180& active) {
   }
   p.valid = p.n == kFsEmptyN;
   return p;
+}
+
+// Packed contour is star-shaped from ego. Used by path clip + LC land (C preprocess).
+inline int FsBinFromXY(float x, float y) {
+  constexpr float twopi = 6.2831853f;
+  float a = std::atan2(y, x);
+  if (a < 0.0f) {
+    a += twopi;
+  }
+  int s = static_cast<int>(a / twopi * static_cast<float>(kFsEmptyN)) % kFsEmptyN;
+  if (s < 0) {
+    s += kFsEmptyN;
+  }
+  return s;
+}
+
+inline bool FsPointInPacked(float x, float y, const float* px, const float* py, int n,
+                            float slack_m = 0.35f) {
+  if (!px || !py || n < 8) {
+    return false;
+  }
+  const float r = std::hypot(x, y);
+  if (r < 0.5f) {
+    return true;
+  }
+  const int i = std::min(n - 1, FsBinFromXY(x, y));
+  const float rb = std::hypot(px[i], py[i]);
+  return r <= rb + slack_m;
+}
+
+/** Trim traj at the first point that leaves the packed FS. Keeps ≥2 points when possible. */
+inline void ClipPathToFreespace(float* xs, float* ys, int* n, const float* px, const float* py,
+                                int np) {
+  if (!xs || !ys || !n || *n < 2 || !px || !py || np < 8) {
+    return;
+  }
+  const int n0 = *n;
+  int keep = 1;
+  for (int i = 1; i < n0; ++i) {
+    if (FsPointInPacked(xs[i], ys[i], px, py, np)) {
+      keep = i + 1;
+      continue;
+    }
+    float lo = 0.0f;
+    float hi = 1.0f;
+    const float x0 = xs[i - 1];
+    const float y0 = ys[i - 1];
+    const float x1 = xs[i];
+    const float y1 = ys[i];
+    for (int it = 0; it < 12; ++it) {
+      const float mid = 0.5f * (lo + hi);
+      const float xm = x0 + mid * (x1 - x0);
+      const float ym = y0 + mid * (y1 - y0);
+      if (FsPointInPacked(xm, ym, px, py, np, 0.05f)) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    xs[i] = x0 + lo * (x1 - x0);
+    ys[i] = y0 + lo * (y1 - y0);
+    keep = i + 1;
+    break;
+  }
+  if (keep < 2) {
+    keep = 2;
+  }
+  *n = keep;
+}
+
+/** Land: target-lane samples must sit in the current FS. Enter and pre-reg hold share this. */
+inline bool FsLandInFreespace(int side, const float* px, const float* py, int np, float lane_w_m) {
+  if (side == 0) {
+    return true;
+  }
+  if (!px || !py || np < 16) {
+    return false;
+  }
+  const float w = (side > 0 ? 1.0f : -1.0f) * std::max(2.5f, std::min(lane_w_m, 4.5f));
+  const float xs[4] = {5.0f, 10.0f, 16.0f, 24.0f};
+  int ok = 0;
+  for (float x : xs) {
+    if (FsPointInPacked(x, 0.55f * w, px, py, np) || FsPointInPacked(x, w, px, py, np)) {
+      ++ok;
+    }
+  }
+  return ok >= 3;
 }
 
 // ---- L4: short-lived D_see components from active ----

@@ -1,5 +1,5 @@
-# planning.driving_plus — empty cones → CarveEars → Stitch → Freespace + Trajectory
-# FCM owns forward lane_clear; RCM/Surround occupy only (ears).
+# planning.driving_plus — Empty180 compose + Trajectory (AFC tick + LC S on plus).
+# FCM/RCM/Surround/Near → LcQuad land; host D_see stays host-only.
 
 set(_GF_PLAN_SOURCES src/main.cpp)
 

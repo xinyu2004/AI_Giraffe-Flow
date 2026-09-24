@@ -1,5 +1,6 @@
 % Host L/R C0 may be drawn on BEV even when the corridor is not ours.
-% Control only: both lines on their side of ego, plausible width. +y left.
+% LKA only: both lines on their side of ego, plausible width. +y left.
+% LC pose uses gf_plan_host_pair_geom (width only) so sitting on a mark is not "no lane".
 function ok = gf_plan_host_pair_ok(lc0, rc0)
   p = gf_plan_cal();
   ok = 0.0;

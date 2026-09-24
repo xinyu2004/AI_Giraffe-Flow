@@ -9,7 +9,7 @@
 // Lon composition (1:1 m_plan_tick.m):
 //   D_see = slew(min(D_vr, D_occ, D_fov, cap))     — marks / occupy / optics
 //   s_stop = plan_reg_stop(TSR)                    — known light, not gated on D_see
-//   v(s) = min(vis, v_reg(s_stop), peers, follow)  — light is a speed profile
+//   v(s) = min(vis, v_reg(s_stop), peers(stoppable/release), follow)
 //   a_req = lon_a_req_n(occupy) + lon_a_req_stop(late/at-line)
 
 namespace gf_octave_planning {
@@ -180,16 +180,40 @@ inline float plan_obj_weight(float lat, float heading, float is_ped) {
   return plan_obj_weight(lat, heading, is_ped, 4.5f, 1.0f, 0.0f, 0.0f);
 }
 
-// 1:1 gf_plan_v_peers.m — match moving adjacent flow. Not occupy, not parked.
-inline float plan_v_peers(float s, float v_ego, const PlanObj* obj, int n, float c0) {
+// 1:1 gf_plan_v_peers.m persistent hold (update only at s<=0.5).
+inline float& plan_v_peers_hold() {
+  static float v = 1.0e6f;
+  return v;
+}
+inline float& plan_v_peers_seen() {
+  static float v = 1.0e6f;
+  return v;
+}
+inline int& plan_v_peers_had() {
+  static int h = 0;
+  return h;
+}
+
+// 1:1 gf_plan_v_peers.m — stoppable cap, then release if not pointing at host.
+inline void plan_v_peers_reset() {
+  plan_v_peers_hold() = 1.0e6f;
+  plan_v_peers_seen() = 1.0e6f;
+  plan_v_peers_had() = 0;
+}
+
+inline void plan_v_peer_scan(float s, float v_ego, const PlanObj* obj, int n, float c0, float* v_safe,
+                             bool* toward, bool* have) {
   const PlanCal& p = plan_cal();
-  float vi = 1.0e6f;
+  *v_safe = 1.0e6f;
+  *toward = false;
+  *have = false;
   n = clamp_nobj(n);
   if (n < 1 || obj == nullptr) {
-    return vi;
+    return;
   }
   const float vv = std::max(0.0f, v_ego);
   const float half_w = 0.5f * p.lane_width_m;
+  const float a = std::max(p.aeb_decel_mps2, 0.5f);
   for (int k = 0; k < n; ++k) {
     if (plan_is_reg_stop(obj[k].cls)) {
       continue;
@@ -210,9 +234,57 @@ inline float plan_v_peers(float s, float v_ego, const PlanObj* obj, int n, float
     if (v_obj < p.peer_v_min_mps) {
       continue;
     }
-    vi = std::min(vi, v_obj);
+    *have = true;
+    if ((obj[k].lat - c0) * obj[k].heading < -0.02f) {
+      *toward = true;
+    }
+    const float gap = std::max(0.0f, obj[k].d - s);
+    float vs = v_obj;
+    if (gap > p.aeb_d_min_m) {
+      vs = std::sqrt(std::max(0.0f, v_obj * v_obj + 2.0f * a * (gap - p.aeb_d_min_m)));
+    }
+    *v_safe = std::min(*v_safe, vs);
   }
-  return vi;
+}
+
+inline float plan_v_peers(float s, float v_ego, const PlanObj* obj, int n, float c0) {
+  const PlanCal& p = plan_cal();
+  float v_safe = 1.0e6f;
+  bool toward = false;
+  bool have = false;
+  plan_v_peer_scan(s, v_ego, obj, n, c0, &v_safe, &toward, &have);
+  float& v_hold = plan_v_peers_hold();
+  float& v_seen = plan_v_peers_seen();
+  int& had = plan_v_peers_had();
+  if (s <= 0.5f) {
+    if (!have) {
+      v_hold = 1.0e6f;
+      v_seen = 1.0e6f;
+      had = 0;
+    } else if (toward || v_safe + 0.5f < v_seen) {
+      v_hold = v_safe;
+      v_seen = v_safe;
+      had = 1;
+    } else if (had < 1) {
+      v_hold = v_safe;
+      v_seen = v_safe;
+      had = 1;
+    } else {
+      v_hold = plan_vis_slew(p.cruise_v_mps, v_hold, p.vis_up_alpha);
+      if (v_hold >= p.cruise_v_mps - 0.3f) {
+        v_hold = 1.0e6f;
+      }
+      v_seen = v_safe;
+      had = 1;
+    }
+  }
+  if (v_hold >= 1.0e5f) {
+    return 1.0e6f;
+  }
+  if (toward) {
+    return std::min(v_hold, v_safe);
+  }
+  return v_hold;
 }
 
 // 1:1 gf_plan_occlusion.m

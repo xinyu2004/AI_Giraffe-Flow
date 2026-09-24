@@ -1,5 +1,7 @@
 #include "gf_foxglove/bev_compose.hpp"
 #include "gf_foxglove/bev_ingest.hpp"
+#include "gf_foxglove/paint_adc.hpp"
+#include "gf_foxglove/paint_afc.hpp"
 #include "gf_foxglove/png.hpp"
 #include "gf_foxglove/ws_hub.hpp"
 
@@ -84,6 +86,18 @@ int main() {
   stop.traj_v_plan_mps = 0;
   const std::string png_stop = gf_foxglove::render_ego_bev_png(stop);
   CHECK(png != png_stop);
+
+  CHECK(gf_foxglove::bev_is_multicam() == gf_foxglove::bev_sku_is_adc());
+  const std::string png_afc = gf_foxglove::paint_afc_bev(st);
+  const std::string png_adc = gf_foxglove::paint_adc_bev(st);
+  CHECK(png_afc.size() > 8);
+  CHECK(png_adc.size() > 8);
+  CHECK(png_afc != png_adc);
+  gf_foxglove::LiveBevState off = st;
+  off.host_lanes[0].c0 = 2.55f;
+  off.host_lanes[1].c0 = -0.95f;
+  CHECK(gf_foxglove::paint_adc_bev(off) != png_adc);
+  CHECK(gf_foxglove::paint_afc_bev(off) != png_afc);
 
   CHECK(gf_foxglove::is_image_topic("/gf/driving/bev/compressed"));
   CHECK(gf_foxglove::is_image_topic("/gf/driving/camera/front/compressed"));

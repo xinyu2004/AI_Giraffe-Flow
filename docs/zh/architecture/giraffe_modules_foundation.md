@@ -1,6 +1,6 @@
 # Giraffe Modules 根基（阶段 M）合同
 
-> 与 [gallery/Giraffe_Modules](../../../gallery/Giraffe_Modules/README.md) 动图一致。全项目计划：先 M → 再 ADC 骨架 → 再算法/场景。
+> 与 [Giraffe_Modules.gif](../../../gallery/Giraffe_Modules/Giraffe_Modules.gif) 动图一致。全项目计划：先 M → 再 ADC 骨架 → 再算法/场景。
 
 ## 启动顺序（唯一正确）
 

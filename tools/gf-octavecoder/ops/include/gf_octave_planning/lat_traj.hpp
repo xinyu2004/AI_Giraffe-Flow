@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
-// Corresponds to octave_planning/afc/m_lat_traj.m
+// Corresponds to octave_planning/afc/m_lat_traj.m — host / D_see path only.
 namespace gf_octave_planning {
 
 inline constexpr int kLatTrajPoints = 16;
@@ -16,6 +16,9 @@ struct LatTraj {
   float x_m[kLatTrajPoints]{};
   float y_m[kLatTrajPoints]{};
   float v_mps[kLatTrajPoints]{};
+  float psi[kLatTrajPoints]{};
+  float kappa[kLatTrajPoints]{};
+  float delta[kLatTrajPoints]{};
   float horizon_m{25.0f};
   float T_plan_s{10.0f};
 };

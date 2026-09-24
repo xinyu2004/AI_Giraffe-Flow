@@ -18,11 +18,19 @@ OEM camera/NN stays out of tree.
 **中文:** [README_zh.md](README_zh.md)
 
 <p align="center">
+  Single camera (AFC) <a href="gallery/videos/afc.mp4">mp4</a>
+</p>
+
+<p align="center">
   <img src="gallery/videos/afc_preview.gif" alt="AFC closed-loop demo (preview)" />
 </p>
 
 <p align="center">
-  <a href="gallery/videos/afc.mp4">Full demo (mp4)</a>
+  Multi cameras (ADC) <a href="gallery/videos/adc.mp4">mp4</a>
+</p>
+
+<p align="center">
+  <img src="gallery/videos/adc_preview.gif" alt="ADC closed-loop demo (preview)" />
 </p>
 
 ---
@@ -50,7 +58,7 @@ Defines **what**, **who talks to whom**, and **which board modules to trim** —
 
 - Verify / Generate → SOR + Proxy/Skeleton + lineage (incl. `platform_em_launch`)
 
-![gf-config — signal graph (tab 1)](gallery/gf-config.png)
+![gf-config — SOA, then EM / PHM / Memory](gallery/gf-config.gif)
 
 ```bash
 gf-config projects/afc/giraffe.yaml

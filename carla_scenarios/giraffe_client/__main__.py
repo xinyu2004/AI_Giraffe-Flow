@@ -528,6 +528,7 @@ def run() -> int:
         speed = math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z)
         ang = hero.get_angular_velocity()
         yaw_rate = float(ang.z)
+        # Plant [-1,1] → wheel deg. Must match plan_cal.steer_max_deg.
         steer_deg = float(hero.get_control().steer) * 70.0
 
         ts = _now_ns()

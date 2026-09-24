@@ -1,15 +1,13 @@
-% AFC Host entry — one call per tick.
-% Scene: D_see (marks/occupy/optics) + stop-line from TSR + occupy targets.
-% Plan: path in D_see; v(s) = min(vis, sign max, comfort line, peers, follow)
-%       + optional sign-min floor when no stop-line.
-% Exec: gf_lon_exec tracks v_plan(0); a_req occupy + late/at-line light.
+% AFC Host entry — one call per tick. Plan then control; no mixed laws.
+% Plan always emits δ_ff (S or host-keep). Ctrl only follows.
+% AFC keeps lc_side=0 (host LKA). plus may pass LC + land motion.
 
 function out = m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end, ...
                            lane_conf, lane_count, obj, D_see_prev, T_plan_prev, ...
-                           v_sign_max, v_sign_min)
+                           v_sign_max, v_sign_min, lc_side, d_f, d_r, rel_r, dt, d_hard, ...
+                           rel_f, hdg_f, paint_ok, land_ok)
   t0 = tic;
   p = gf_plan_cal();
-  v = max(0.0, v);
   if nargin < 10
     lane_conf = 1.0;
   end
@@ -31,60 +29,91 @@ function out = m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end,
   if nargin < 16 || isempty(v_sign_min)
     v_sign_min = 0.0;
   end
-
-  D_occ = gf_plan_occlusion(obj, c0);
-  D_fov = gf_plan_d_fov(c0, c1, c2, c3, x_end);
-  [D_see, T_plan] = gf_plan_horizon(v, lane_valid, e_y, c1, x_end, ...
-                                   D_occ, D_fov, D_see_prev, T_plan_prev);
-
-  lane_ok = gf_lane_usable(lane_valid, e_y, c1);
-  if abs(e_y) > p.lat_ey_slow_m
-    lane_ok = 0;
+  if nargin < 17 || isempty(lc_side)
+    lc_side = 0;
+  end
+  if nargin < 18 || isempty(d_f)
+    d_f = 0.0;
+  end
+  if nargin < 19 || isempty(d_r)
+    d_r = 0.0;
+  end
+  if nargin < 20 || isempty(rel_r)
+    rel_r = 0.0;
+  end
+  if nargin < 21 || isempty(dt) || dt <= 0.0
+    dt = p.plan_dt_s;
+  end
+  if nargin < 22 || isempty(d_hard)
+    d_hard = 1.0e6;
+  end
+  if nargin < 23 || isempty(rel_f)
+    rel_f = 0.0;
+  end
+  if nargin < 24 || isempty(hdg_f)
+    hdg_f = 0.0;
+  end
+  if nargin < 25 || isempty(paint_ok)
+    paint_ok = 0.0;
+  end
+  if nargin < 26 || isempty(land_ok)
+    land_ok = 1.0;
   end
 
-  [x_m, y_m, horizon_m] = m_lat_traj(v, D_see, T_plan, lane_valid, ...
-                                    c0, c1, c2, c3, x_end);
-  s_stop = gf_plan_reg_stop(obj, c0);
-  v_s = gf_plan_speed_profile(x_m, v, obj, D_see, lane_ok, c0, s_stop, ...
-                              v_sign_max, v_sign_min);
-  if isempty(v_s)
-    v_plan = 0.0;
-  else
-    v_plan = v_s(1);
-  end
-  a_req = gf_lon_a_req_n(v, obj, c0);
-  if D_see < p.d_vis_tight_m
-    a_max = max(p.aeb_decel_mps2, 0.5);
-    a_req = min(a_max, a_req * p.a_req_vis_gain);
-  end
-  a_reg = gf_lon_a_req_stop(v, s_stop);
-  if a_reg > a_req
-    a_req = a_reg;
-  end
-  if ~lane_ok
-    v_plan = 0.0;
-    v_s = zeros(size(x_m));
-  end
-  ctrl = gf_lon_exec(v, v_plan, a_req);
-  steer = m_lat_lka(lane_valid, e_y, c1, steer_deg);
-
-  allow_lc = 0.0;
-  % Demoted: no real corridor product yet (adj count ≠ LC). Keep flag 0.
+  plan = m_plan(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end, ...
+                obj, D_see_prev, T_plan_prev, v_sign_max, v_sign_min, ...
+                lc_side, d_f, d_r, rel_r, dt, d_hard, rel_f, hdg_f, paint_ok, land_ok);
+  ctrl = m_ctrl(plan, v, steer_deg, lane_valid, e_y, c1);
 
   out.throttle = ctrl.throttle;
   out.brake = ctrl.brake;
-  out.steer = steer;
+  out.steer = ctrl.steer;
   out.mode = ctrl.mode;
   out.target_speed_mps = ctrl.target_speed_mps;
-  out.D_see = D_see;
-  out.T_plan = T_plan;
-  out.D_occ = D_occ;
-  out.a_req = a_req;
-  out.horizon_m = horizon_m;
-  out.s_stop = s_stop;
-  out.x_m = x_m;
-  out.y_m = y_m;
-  out.v_mps = v_s;
-  out.allow_lc = allow_lc;
+  out.D_see = plan.D_see;
+  out.T_plan = plan.T_plan;
+  out.D_occ = plan.D_occ;
+  out.a_req = plan.a_req;
+  out.horizon_m = plan.horizon_m;
+  out.s_stop = plan.s_stop;
+  out.x_m = plan.x_m;
+  out.y_m = plan.y_m;
+  out.v_mps = plan.v_mps;
+  out.allow_lc = plan.allow_lc;
+  out.lc_s_done = plan.lc_s_done;
+  out.lc_L = plan.lc_L;
+  out.delta_ff = plan.delta_ff;
+  out.psi = plan.psi;
+  out.target = plan.target;
+  out.err_delta = ctrl.err_delta;
+  out.err_v = ctrl.err_v;
+  out.err_e = ctrl.err_e;
+  out.err_epsi = ctrl.err_epsi;
+  out.y_dr = plan.y_dr;
+  out.y_s = plan.y_s;
+  out.y_road = 0.0;
+  out.remapped = 0;
+  out.paint_ok = 0;
+  if isfield(plan, 'y_road')
+    out.y_road = plan.y_road;
+  end
+  if isfield(plan, 'remapped')
+    out.remapped = plan.remapped;
+  end
+  if isfield(plan, 'paint_ok')
+    out.paint_ok = plan.paint_ok;
+  end
+  out.commit_m = 0.0;
+  out.reg = 0;
+  out.plant_n = 0;
+  if isfield(plan, 'commit_m')
+    out.commit_m = plan.commit_m;
+  end
+  if isfield(plan, 'reg')
+    out.reg = plan.reg;
+  end
+  if isfield(plan, 'plant_n')
+    out.plant_n = plan.plant_n;
+  end
   out.t_m_s = toc(t0);
 end

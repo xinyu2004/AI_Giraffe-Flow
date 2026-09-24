@@ -102,10 +102,36 @@ inline PlanTickOut m_plan_tick(float v, float steer_deg, bool lane_valid, float 
                                float c1, float c2, float c3, float x_end, float lane_conf,
                                float lane_count, const PlanObj* obj, int nobj, float D_see_prev,
                                float T_plan_prev, float v_sign_max = 1.0e6f,
-                               float v_sign_min = 0.0f) {
+                               float v_sign_min = 0.0f, int lc_side = 0, float d_f = 0.0f,
+                               float d_r = 0.0f, float rel_r = 0.0f, float dt = 0.0f,
+                               float d_hard = 1.0e6f, float rel_f = 0.0f, float hdg_f = 0.0f,
+                               bool paint_ok = false, bool land_ok = true) {
   return gf_octave_planning::m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end,
                                          lane_conf, lane_count, obj, nobj, D_see_prev,
-                                         T_plan_prev, v_sign_max, v_sign_min);
+                                         T_plan_prev, v_sign_max, v_sign_min, lc_side, d_f, d_r,
+                                         rel_r, dt, d_hard, rel_f, hdg_f, paint_ok, land_ok);
+}
+
+}  // namespace oct_gen
+"""
+    )
+
+
+def _emit_afc_lat_follow_hpp() -> str:
+    return (
+        _HEADER
+        + """
+#pragma once
+
+#include "gf_octave_planning/lat_follow.hpp"
+
+namespace oct_gen {
+
+using gf_octave_planning::m_lat_follow_reset;
+
+/** Corresponds to octave_planning/afc/m_lat_follow.m — execute planned δ_ff. */
+inline float m_lat_follow(float delta_ff, float steer_angle_deg = 0.0f) {
+  return gf_octave_planning::m_lat_follow(delta_ff, steer_angle_deg);
 }
 
 }  // namespace oct_gen
@@ -130,6 +156,37 @@ using gf_octave_planning::lat_steer_from_ego;
 inline float m_lat_lka(bool lane_valid, float e_y, float c1, float steer_angle_deg) {
   return gf_octave_planning::m_lat_lka(lane_valid, e_y, c1, steer_angle_deg);
 }
+
+}  // namespace oct_gen
+"""
+    )
+
+
+def _emit_afc_lc_path_hpp() -> str:
+    return (
+        _HEADER
+        + """
+#pragma once
+
+#include "gf_octave_planning/lc_path.hpp"
+
+namespace oct_gen {
+
+using gf_octave_planning::LcPathOut;
+using gf_octave_planning::LcPathHold;
+using gf_octave_planning::lc_sigma;
+
+/** Corresponds to octave_planning/afc/m_lc_path.m */
+inline LcPathOut m_lc_path(int lc_side, float v, float d_f, float d_r, float rel_r = 0.0f,
+                           float dt = 0.0f, float steer_deg = 0.0f, float d_hard = 1.0e6f,
+                           float rel_f = 0.0f, float hdg_f = 0.0f, float e_y = 0.0f,
+                           float c1 = 0.0f, bool paint_ok = false, float c2 = 0.0f,
+                           float c3 = 0.0f, bool land_ok = true) {
+  return gf_octave_planning::m_lc_path(lc_side, v, d_f, d_r, rel_r, dt, steer_deg, d_hard, rel_f,
+                                      hdg_f, e_y, c1, paint_ok, c2, c3, land_ok);
+}
+
+inline void m_lc_path_reset() { gf_octave_planning::m_lc_path_reset(); }
 
 }  // namespace oct_gen
 """
@@ -233,7 +290,9 @@ def generate_sku(*, repo_root: Path, sku: str, force: bool = False) -> int:
             for name, emit in (
                 ("m_lon_acc_aeb.m", _emit_afc_lon_hpp),
                 ("m_lat_lka.m", _emit_afc_lat_lka_hpp),
+                ("m_lat_follow.m", _emit_afc_lat_follow_hpp),
                 ("m_lat_traj.m", _emit_afc_lat_traj_hpp),
+                ("m_lc_path.m", _emit_afc_lc_path_hpp),
                 ("m_plan_tick.m", _emit_afc_plan_tick_hpp),
             ):
                 src = plan_src_root / name

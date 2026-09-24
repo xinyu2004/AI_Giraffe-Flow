@@ -370,7 +370,7 @@ void ApplyTick(const oct_gen::PlanTickOut& tick, const gf_gen::EgoMotion& ego,
   }
   traj.throttle = tick.throttle;
   traj.brake = tick.brake;
-  traj.steer = tick.steer;
+  traj.steer = gf_octave_planning::steer_rad_to_plant(tick.steer);
   traj.target_speed_mps = tick.target_speed_mps;
   traj.ctrl_mode = CtrlModeId(tick.mode);
   traj.D_see_m = tick.D_see;

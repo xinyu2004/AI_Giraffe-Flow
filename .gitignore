@@ -92,6 +92,11 @@ session*.jsonl
 
 # Architecture GIF generator (local helper)
 gallery/_gen_architecture_gif.py
+# Flow / Modules: GitHub ships GIFs only; scripts · assets · SVG · 文案稿留本机
+gallery/Giraffe_Flow/*
+!gallery/Giraffe_Flow/*.gif
+gallery/Giraffe_Modules/*
+!gallery/Giraffe_Modules/*.gif
 
 # FuSa local artifacts (do not commit)
 fusa/runs/*

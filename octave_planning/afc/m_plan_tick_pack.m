@@ -25,17 +25,33 @@ function vec = m_plan_tick_pack(in)
   if nobj > 0 && numel(in) >= need
     obj = reshape(in(15:14 + nobj * 7), 7, nobj)';
   end
-  % Optional trailing: v_sign_max, v_sign_min (mps). Absent → no sign constraint.
+  % Optional trailing: v_sign_max, v_sign_min (mps), lc_side, d_f, d_r, rel_r, dt.
   v_sign_max = 1.0e6;
   v_sign_min = 0.0;
+  lc_side = 0.0;
+  d_f = 0.0;
+  d_r = 0.0;
+  rel_r = 0.0;
+  dt = 0.0;
   if numel(in) >= need + 2
     v_sign_max = in(need + 1);
     v_sign_min = in(need + 2);
   end
+  if numel(in) >= need + 5
+    lc_side = in(need + 3);
+    d_f = in(need + 4);
+    d_r = in(need + 5);
+  end
+  if numel(in) >= need + 6
+    rel_r = in(need + 6);
+  end
+  if numel(in) >= need + 7
+    dt = in(need + 7);
+  end
 
   out = m_plan_tick(v, steer_deg, lane_valid, e_y, c0, c1, c2, c3, x_end, ...
                     lane_conf, lane_count, obj, D_see_prev, T_plan_prev, ...
-                    v_sign_max, v_sign_min);
+                    v_sign_max, v_sign_min, lc_side, d_f, d_r, rel_r, dt);
 
   mid = 0.0;
   if ischar(out.mode) || isstring(out.mode)

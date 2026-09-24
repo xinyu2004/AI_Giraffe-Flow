@@ -1,4 +1,5 @@
-% AFC path — horizon from D_see / T_plan (not mode speed_scale). 1:1 lat_traj.hpp.
+% AFC / host path — horizon from D_see / T_plan. 1:1 lat_traj.hpp.
+% Lane-change S is m_lc_path (committed remaining). This file does not emit S.
 
 function [x_m, y_m, horizon_m] = m_lat_traj(speed_mps, D_see, T_plan, lane_valid, c0, c1, c2, c3, x_end)
   p = gf_plan_cal();

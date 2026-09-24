@@ -175,6 +175,8 @@ void advance_odom(LiveBevState& st, std::uint64_t t_ns, float speed_mps);
 std::string render_ego_bev_png(const LiveBevState& st, int width = kBevW, int height = kBevH);
 
 bool bev_sku_is_adc();
+// Multi-cam (front+surround+rear). Ribbon / road-lock gate. Proxy = SKU adc for now.
+bool bev_is_multicam();
 BevWindow bev_window();
 
 }  // namespace gf_foxglove

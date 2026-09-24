@@ -109,7 +109,7 @@ AI_Giraffe-Flow/
 │   ├── runs/                     # local CASE logs (gitignore)
 │   └── packs/                    # SKU packs via projects/.../generate_fusa_artifacts.sh
 │
-├── gallery/                      # README: Giraffe_Flow/ + Giraffe_Modules/ + GIF / later video
+├── gallery/                      # README 成品：Flow / Modules / gf-config GIF + videos
 └── STRUCTURE.md                  # this file
 ```
 

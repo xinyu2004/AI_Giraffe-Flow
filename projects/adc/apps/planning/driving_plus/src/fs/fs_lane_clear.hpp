@@ -25,11 +25,29 @@ struct LaneClearFwd {
   float host_m{kFsFrontFarCapM};
   float left_m{kFsFrontFarCapM};
   float right_m{kFsFrontFarCapM};
-  float rear_m{gf_fs_envelope::kFsRearCapM};  // behind ego; shapes rear tip
+  float host_veh_m{kFsFrontFarCapM};
+  float left_veh_m{kFsFrontFarCapM};
+  float right_veh_m{kFsFrontFarCapM};
+  float host_hard_m{kFsFrontFarCapM};
+  float left_hard_m{kFsFrontFarCapM};
+  float right_hard_m{kFsFrontFarCapM};
+  float rear_m{gf_fs_envelope::kFsRearCapM};  // host behind; shapes rear tip
+  float left_rear_m{gf_fs_envelope::kFsRearCapM};
+  float right_rear_m{gf_fs_envelope::kFsRearCapM};
+  float left_rear_rel{0.0f};
+  float right_rear_rel{0.0f};
+  float host_veh_rel{0.0f};
+  float host_veh_hdg{0.0f};
+  float left_veh_rel{0.0f};
+  float left_veh_hdg{0.0f};
+  float right_veh_rel{0.0f};
+  float right_veh_hdg{0.0f};
   int n_host{0};
   int n_left{0};
   int n_right{0};
   int n_rear{0};
+  int n_left_rear{0};
+  int n_right_rear{0};
   bool have_left{false};
   bool have_right{false};
 };
@@ -39,6 +57,8 @@ struct LaneClearSample {
   float y_m{0.0f};
   float half_l_m{2.0f};
   float half_w_m{0.9f};
+  float rel_v{0.0f};
+  float heading{0.0f};
   std::uint8_t assign{0};
   std::uint8_t cls{0};
   std::uint16_t id{0};
@@ -100,19 +120,59 @@ inline bool BandOverlapsY(float y0, float y1, float a, float b, float pad = 0.15
   return y1 >= lo && y0 <= hi;
 }
 
-inline void ClipLaneBumper(LaneClearFwd* out, LaneSlot slot, float bumper) {
+inline void ClipLaneBumper(LaneClearFwd* out, LaneSlot slot, float bumper, bool hard = false,
+                           float rel_v = 0.0f, float heading = 0.0f) {
+  if (!out) {
+    return;
+  }
+  auto clip = [&](float* combined, float* veh, float* hardp, float* relp, float* hdgp, int* n) {
+    *combined = std::min(*combined, bumper);
+    if (hard) {
+      *hardp = std::min(*hardp, bumper);
+    } else if (bumper < *veh) {
+      *veh = bumper;
+      if (relp) {
+        *relp = rel_v;
+      }
+      if (hdgp) {
+        *hdgp = heading;
+      }
+    }
+    ++*n;
+  };
+  if (slot == LaneSlot::Host) {
+    clip(&out->host_m, &out->host_veh_m, &out->host_hard_m, &out->host_veh_rel, &out->host_veh_hdg,
+         &out->n_host);
+  } else if (slot == LaneSlot::Left && out->have_left) {
+    clip(&out->left_m, &out->left_veh_m, &out->left_hard_m, &out->left_veh_rel, &out->left_veh_hdg,
+         &out->n_left);
+  } else if (slot == LaneSlot::Right && out->have_right) {
+    clip(&out->right_m, &out->right_veh_m, &out->right_hard_m, &out->right_veh_rel,
+         &out->right_veh_hdg, &out->n_right);
+  }
+}
+
+inline void ClipLaneRear(LaneClearFwd* out, LaneSlot slot, float dist_behind, float rel_v) {
   if (!out) {
     return;
   }
   if (slot == LaneSlot::Host) {
-    out->host_m = std::min(out->host_m, bumper);
-    ++out->n_host;
+    if (dist_behind + 0.25f < out->rear_m) {
+      out->rear_m = dist_behind;
+      ++out->n_rear;
+    }
   } else if (slot == LaneSlot::Left && out->have_left) {
-    out->left_m = std::min(out->left_m, bumper);
-    ++out->n_left;
+    if (dist_behind + 0.25f < out->left_rear_m) {
+      out->left_rear_m = dist_behind;
+      out->left_rear_rel = rel_v;
+      ++out->n_left_rear;
+    }
   } else if (slot == LaneSlot::Right && out->have_right) {
-    out->right_m = std::min(out->right_m, bumper);
-    ++out->n_right;
+    if (dist_behind + 0.25f < out->right_rear_m) {
+      out->right_rear_m = dist_behind;
+      out->right_rear_rel = rel_v;
+      ++out->n_right_rear;
+    }
   }
 }
 
@@ -127,7 +187,15 @@ inline LaneClearFwd ComputeLaneClearFwd(const LaneBands& bands, const LaneClearS
   out.host_m = cap;
   out.left_m = cap;
   out.right_m = cap;
+  out.host_veh_m = cap;
+  out.left_veh_m = cap;
+  out.right_veh_m = cap;
+  out.host_hard_m = cap;
+  out.left_hard_m = cap;
+  out.right_hard_m = cap;
   out.rear_m = gf_fs_envelope::kFsRearCapM;
+  out.left_rear_m = gf_fs_envelope::kFsRearCapM;
+  out.right_rear_m = gf_fs_envelope::kFsRearCapM;
   if (n_conflicts) {
     *n_conflicts = 0;
   }
@@ -139,20 +207,15 @@ inline LaneClearFwd ComputeLaneClearFwd(const LaneBands& bands, const LaneClearS
     // Behind ego: only shortens rear tip. Never clips forward host/left/right clear
     // (that caused right-front retract with only a rear-side vehicle).
     if (o.x_m < 0.5f) {
-      // Host lane only. A rear-side / neighbor box must not pull the global rear tip
-      // (same class as the old right-front retract).
+      // Rear: host still only shapes the global rear tip; adj bands feed LcQuad.
       const float xq = o.x_m < 0.0f ? 0.0f : o.x_m;
-      const LaneSlot slot = ClassifyLaneGeom(xq, o.y_m, bands);
-      const bool host = (slot == LaneSlot::Host) ||
-                        (!bands.host_l.valid && std::fabs(o.y_m) < 1.9f);
-      if (host) {
-        const float near_face = o.x_m + std::max(0.5f, o.half_l_m);
-        const float dist_behind = std::max(0.5f, -near_face);
-        if (dist_behind + 0.25f < out.rear_m) {
-          out.rear_m = dist_behind;
-          ++out.n_rear;
-        }
+      LaneSlot slot = ClassifyLaneGeom(xq, o.y_m, bands);
+      if (slot == LaneSlot::None && !bands.host_l.valid && std::fabs(o.y_m) < 1.9f) {
+        slot = LaneSlot::Host;
       }
+      const float near_face = o.x_m + std::max(0.5f, o.half_l_m);
+      const float dist_behind = std::max(0.5f, -near_face);
+      ClipLaneRear(&out, slot, dist_behind, o.rel_v);
       continue;
     }
     const float bumper = std::max(0.5f, o.x_m - std::max(0.5f, o.half_l_m));
@@ -171,23 +234,23 @@ inline LaneClearFwd ComputeLaneClearFwd(const LaneBands& bands, const LaneClearS
       const float hl = RoadEdgeY(bands.host_l, o.x_m);
       const float hr = RoadEdgeY(bands.host_r, o.x_m);
       if (BandOverlapsY(y0, y1, hl, hr)) {
-        ClipLaneBumper(&out, LaneSlot::Host, bumper);
+        ClipLaneBumper(&out, LaneSlot::Host, bumper, true);
       }
       if (bands.have_left && bands.left_outer.valid) {
         const float lo = RoadEdgeY(bands.left_outer, o.x_m);
         if (BandOverlapsY(y0, y1, lo, hl)) {
-          ClipLaneBumper(&out, LaneSlot::Left, bumper);
+          ClipLaneBumper(&out, LaneSlot::Left, bumper, true);
         }
       }
       if (bands.have_right && bands.right_outer.valid) {
         const float ro = RoadEdgeY(bands.right_outer, o.x_m);
         if (BandOverlapsY(y0, y1, hr, ro)) {
-          ClipLaneBumper(&out, LaneSlot::Right, bumper);
+          ClipLaneBumper(&out, LaneSlot::Right, bumper, true);
         }
       }
       continue;
     }
-    ClipLaneBumper(&out, geom, bumper);
+    ClipLaneBumper(&out, geom, bumper, false, o.rel_v, o.heading);
   }
   return out;
 }

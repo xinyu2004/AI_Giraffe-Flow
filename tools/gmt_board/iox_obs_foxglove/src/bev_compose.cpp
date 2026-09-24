@@ -38,6 +38,8 @@ bool bev_sku_is_adc() {
   return false;
 }
 
+bool bev_is_multicam() { return bev_sku_is_adc(); }
+
 BevWindow bev_window() {
   if (bev_sku_is_adc()) return {kAdcXMinM, kAdcXMaxM};
   return {0.0f, kDBevM};
@@ -646,13 +648,22 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
   const float c_psi = std::cos(psi);
   const float s_psi = std::sin(psi);
 
-  auto ego_to_road = [&](float xe, float ye) {
-    return std::pair<float, float>{xe * c_psi + ye * s_psi, -xe * s_psi + ye * c_psi};
-  };
   auto host_y_ego = [&](float xe, char side) {
     if (side == 'l' && left_poly) return left_poly->y_at(xe);
     if (side == 'r' && right_poly) return right_poly->y_at(xe);
     return side == 'l' ? half : -half;
+  };
+
+  // Multi-cam: pin host center (B1). Single-cam keeps ego at y=0 (AFC frozen).
+  const bool multicam = bev_is_multicam();
+  const float yc =
+      (multicam && left_poly && right_poly)
+          ? 0.5f * (host_y_ego(0.0f, 'l') + host_y_ego(0.0f, 'r'))
+          : 0.0f;
+
+  auto ego_to_road = [&](float xe, float ye) {
+    ye -= yc;
+    return std::pair<float, float>{xe * c_psi + ye * s_psi, -xe * s_psi + ye * c_psi};
   };
 
   const BevWindow win = bev_window();
@@ -921,6 +932,8 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
     } else {
       x_hi = opening > 0.5f ? opening : (occupy_open > 0.5f ? occupy_open : x_fwd);
     }
+    const bool ribbon = multicam && !st.parking_view;
+    const float ribbon_half = lane_w / 6.0f;
     for (int i = 0; i < nseg; ++i) {
       float x0 = st.traj_x[i], y0 = st.traj_y[i];
       float x1 = st.traj_x[i + 1], y1 = st.traj_y[i + 1];
@@ -930,8 +943,6 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
         y1 = y0 + t * (y1 - y0);
         x1 = x_hi;
       }
-      const auto a = e2p_ego(x0, y0);
-      const auto b = e2p_ego(x1, y1);
       Rgb col = fallback_c;
       int th = fallback_th;
       if (has_v) {
@@ -940,7 +951,25 @@ std::string render_ego_bev_png(const LiveBevState& st, int width, int height) {
         col = traj_color_for_v(0.5f * (v0 + v1), v_hi);
         th = traj_seg_thickness(v0, v1);
       }
-      draw_line(buf, width, height, a.first, a.second, b.first, b.second, col, th);
+      if (ribbon) {
+        const float dx = x1 - x0;
+        const float dy = y1 - y0;
+        const float len = std::hypot(dx, dy);
+        if (len < 1e-4f) continue;
+        const float nx = (-dy / len) * ribbon_half;
+        const float ny = (dx / len) * ribbon_half;
+        const std::vector<std::pair<int, int>> quad{
+            e2p_ego(x0 + nx, y0 + ny),
+            e2p_ego(x1 + nx, y1 + ny),
+            e2p_ego(x1 - nx, y1 - ny),
+            e2p_ego(x0 - nx, y0 - ny),
+        };
+        fill_poly_even_odd(buf, width, height, kHudH, quad, col, 0.88f);
+      } else {
+        const auto a = e2p_ego(x0, y0);
+        const auto b = e2p_ego(x1, y1);
+        draw_line(buf, width, height, a.first, a.second, b.first, b.second, col, th);
+      }
     }
   }
 

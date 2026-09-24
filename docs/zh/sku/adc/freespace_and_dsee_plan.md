@@ -115,7 +115,7 @@ D_see         ← slew(min(D_vr, D_occ, D_fov, D_wx, d_fs_fwd, cap))
 |------|------|
 | P0 fuse→`D_see`（`x_end` 钳） | **已落地** |
 | P1 青洗 + HUD `D` + FS 环加粗 | **已落地** |
-| P2 LC 意图位 + HUD `LC` | **已落地（无转向）** |
+| P2 LC 意图位 + HUD `LC` | **已落地（转向在金源；remap≠reg；FS 进门+hold）** |
 | P3 parking clip by Near | **已落地（几何 stub+裁剪）** |
 | P4 真多摄投影 | **未做**（SIL demo 加强前后障便于看效果） |
 | P5 plus 金源分叉 | **未做**（仍复用 AFC tick） |

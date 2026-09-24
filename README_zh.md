@@ -18,11 +18,19 @@ OEM 相机/网络权重仍在仓外。
 **English:** [README.md](README.md)
 
 <p align="center">
+  Single camera (AFC) <a href="gallery/videos/afc.mp4">mp4</a>
+</p>
+
+<p align="center">
   <img src="gallery/videos/afc_preview.gif" alt="AFC 闭环演示（预览）" />
 </p>
 
 <p align="center">
-  <a href="gallery/videos/afc.mp4">完整演示（mp4）</a>
+  Multi cameras (ADC) <a href="gallery/videos/adc.mp4">mp4</a>
+</p>
+
+<p align="center">
+  <img src="gallery/videos/adc_preview.gif" alt="ADC 闭环演示（预览）" />
 </p>
 
 ---
@@ -50,7 +58,7 @@ OEM 相机/网络权重仍在仓外。
 
 - **Verify / Generate** → SOR + Proxy/Skeleton + lineage（含 `platform_em_launch` 等门禁）
 
-![gf-config — 信号图（页 1）](gallery/gf-config.png)
+![gf-config — SOA，再贴 EM / PHM / Memory](gallery/gf-config.gif)
 
 ```bash
 gf-config projects/afc/giraffe.yaml

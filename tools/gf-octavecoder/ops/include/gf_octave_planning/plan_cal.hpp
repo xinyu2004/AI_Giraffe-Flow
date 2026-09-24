@@ -53,7 +53,25 @@ struct PlanCal {
   float peer_d_max_m{35.0f};
   float t_lc_min_s{6.0f};
   float d_lc_min_m{40.0f};
-  float lc_conf_min{0.50f};
+  float d_lc_rear_min_m{2.0f};
+  float d_lc_host_min_m{8.0f};
+  float lc_ttc_margin_s{1.0f};
+  float lc_hdg_same{0.50f};
+  float lc_left_bias_m{8.0f};
+  float lc_hyst_m{6.0f};
+  float lc_stay_m{12.0f};
+  float plan_dt_s{0.05f};
+  float lc_dt_min_s{0.01f};
+  float lc_dt_max_s{0.20f};
+  float lc_done_eps_m{0.50f};
+  float lc_a_plan_mps2{3.0f};
+  float lc_settle_ey_m{0.80f};
+  float lc_settle_steer_deg{5.0f};
+  float lc_remap_ey_m{1.20f};
+  int lc_done_hold_n{8};
+  float lc_reg_k{1.0f};
+  float lc_commit_s{0.25f};
+  int lc_cool_n{20};
   float cutin_head_gain{1.20f};
   float cutin_approach_m{1.50f};
   float cutin_close_mps{0.5f};
@@ -66,14 +84,15 @@ struct PlanCal {
   float a_req_label_acc{0.12f};
   float a_req_label_aeb{0.85f};
 
-  float cruise_v_mps{12.0f};
+  float cruise_v_mps{25.0f};  // 90 km/h
+  float a_accel_max{4.0f};    // m/s^2; a_cmd = a_accel_max * throttle
   float acc_time_gap_s{1.7f};
   float acc_gap_min_m{8.0f};
   float acc_gap_max_m{80.0f};
   float acc_gap_over_stop_m{6.0f};
   float acc_speed_db_mps{0.25f};
   float acc_thr_gain{0.11f};
-  float acc_thr_max{0.50f};
+  float acc_thr_max{1.0f};
   float acc_thr_hold{0.10f};
   float acc_brake_gain{0.22f};
   float acc_brake_min{0.08f};
@@ -94,8 +113,9 @@ struct PlanCal {
   float lat_ky_scale_lo{0.50f};
   float lat_c1_sat{0.40f};
   float lat_dsteer_max{0.055f};
+  float wheelbase_m{2.70f};
+  float steer_max_deg{70.0f};
   float lat_ey_invalid_m{1.6f};
-  float lat_c1_invalid{0.40f};
   float lat_ey_slow_m{1.0f};
   float host_width_min_m{2.50f};
   float host_width_max_m{5.50f};
@@ -115,10 +135,19 @@ inline const PlanCal& plan_cal() {
   return kDemo;
 }
 
-inline bool lane_usable(bool lane_valid, float e_y, float c1) {
+// Internal δ is road-wheel rad. Trajectory.steer / CARLA is [-1,1] of steer_max_deg.
+inline float steer_rad_to_plant(float rad) {
+  const float full = plan_cal().steer_max_deg * 3.14159265f / 180.0f;
+  return clamp(rad / std::max(full, 1.0e-3f), -1.0f, 1.0f);
+}
+
+inline float steer_deg_to_rad(float deg) {
+  return deg * 3.14159265f / 180.0f;
+}
+
+inline bool lane_usable(bool lane_valid, float e_y, float /*c1*/) {
   const PlanCal& p = plan_cal();
-  return lane_valid && std::fabs(e_y) <= p.lat_ey_invalid_m &&
-         std::fabs(c1) <= p.lat_c1_invalid;
+  return lane_valid && std::fabs(e_y) <= p.lat_ey_invalid_m;
 }
 
 // 1:1 gf_plan_host_pair_ok.m — +y left. Marks may still be drawn when this is false.
@@ -133,6 +162,13 @@ inline bool plan_host_pair_ok(float lc0, float rc0) {
     return false;
   }
   return true;
+}
+
+// Width only. Sitting on a mark is still a pair for LC pose. 1:1 gf_plan_host_pair_geom.m
+inline bool plan_host_pair_geom(float lc0, float rc0) {
+  const PlanCal& p = plan_cal();
+  const float w = lc0 - rc0;
+  return w >= p.host_width_min_m && w <= p.host_width_max_m;
 }
 
 inline float lon_d_stop(float v) {

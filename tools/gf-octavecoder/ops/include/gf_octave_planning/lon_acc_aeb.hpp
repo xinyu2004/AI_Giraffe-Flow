@@ -57,6 +57,7 @@ inline LonCtrl lon_exec(float v, float v_plan, float a_req) {
       c.throttle = clamp(0.48f + err * 0.04f, p.cruise_thr_standstill_min,
                          p.cruise_thr_standstill_max);
     } else {
+      // a_cmd = a_accel_max * throttle; throttle capped by acc_thr_max (full=1).
       c.throttle = clamp(0.14f + err * p.acc_thr_gain, 0.0f, p.acc_thr_max);
     }
     c.brake = 0.0f;

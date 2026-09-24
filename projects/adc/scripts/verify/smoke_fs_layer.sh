@@ -46,23 +46,49 @@ int main(){
   }
   GroundPoly p=FsPack180ToPoly(act);
   if(!p.valid || p.n!=kFsEmptyN) return fail("pack");
-  // Rabbit ear: host-lane box shortens center more than FOV-edge miss bins.
+  // No-LRE L0: dead-ahead stays long; FOV lip |y| eats SideLatM (no 50°×120 V).
+  {
+    FsEmpty180 raw{};
+    FsBaselineFromOpticsFsd(&raw, nullptr, nullptr, 0, 120.f);
+    float r_fwd=0.f, y_lip=0.f;
+    for(int i=0;i<kFsEmptyN;++i){
+      const float a=FsBinAngRad(i);
+      if(!FsInFrontFov(a)) continue;
+      const float ca=std::cos(a), sa=std::sin(a);
+      if(ca>0.98f) r_fwd=std::max(r_fwd, raw.r[i]);
+      if(ca>0.60f && ca<0.80f) y_lip=std::max(y_lip, std::fabs(raw.r[i]*sa));
+    }
+    if(r_fwd<40.f) return fail("front empty too short");
+    if(y_lip>gf_fs_envelope::SideLatM()+0.75f) return fail("front lip V");
+    GroundPoly g=FsPack180ToPoly(raw);
+    if(FsPointInPacked(40.f, 40.f, g.x, g.y, g.n)) return fail("off-road in FS");
+    if(!FsPointInPacked(20.f, 2.f, g.x, g.y, g.n)) return fail("host in FS");
+    if(!FsLandInFreespace(1, g.x, g.y, g.n, 3.5f)) return fail("left land in FS");
+    if(FsPointInPacked(16.f, 20.f, g.x, g.y, g.n)) return fail("y20 in FS");
+    float xs[4]={0.f,15.f,30.f,50.f};
+    float ys[4]={0.f,1.f,25.f,40.f};
+    int n=4;
+    ClipPathToFreespace(xs, ys, &n, g.x, g.y, g.n);
+    if(n>3) return fail("path not clipped");
+    if(std::fabs(ys[n-1])>gf_fs_envelope::SideLatM()+1.0f) return fail("clipped y");
+  }
+  // Occupy still shortens host-ahead (no V-ear requirement).
   FsEmpty180 ear_base{};
   FsBaselineFromOpticsFsd(&ear_base, nullptr, nullptr, 0, 120.f);
   FsEmpty180 ear=ear_base;
   bool hit2[kFsEmptyN]{};
   FsOccSample car{}; car.x_m=25.f; car.y_m=0.f; car.half_l_m=2.25f; car.half_w_m=0.95f;
   FsOccApply180(&ear, &car, 1, hit2);
-  float r_c=1e9f, r_e=0.f;
+  float r_c=1e9f, r_c0=1e9f;
   for(int i=0;i<kFsEmptyN;++i){
     float a=FsBinAngRad(i);
     if(!FsInFrontFov(a)) continue;
-    float ca=std::cos(a);
-    // Center vs FOV lip (front half≈50° → ca≳0.64).
-    if(ca>0.98f) r_c=std::min(r_c, ear.r[i]);
-    if(ca>0.64f && ca<0.75f) r_e=std::max(r_e, ear.r[i]);
+    if(std::cos(a)>0.98f){
+      r_c=std::min(r_c, ear.r[i]);
+      r_c0=std::min(r_c0, ear_base.r[i]);
+    }
   }
-  if(!(r_e > r_c + 3.f)) return fail("ears");
+  if(!(r_c + 2.f < r_c0)) return fail("occ center");
   // Chord clip: pull longer forward ray toward shorter (no ego dig / no rear touch).
   {
     RoadEdgePoly L{}, R{};
@@ -120,7 +146,7 @@ int main(){
     }
     if (r_rear1 + 0.5f < r_rear0) return fail("rear dug by chord clip");
   }
-  std::printf("OK empty180 r0=%.1f poly_n=%d ear_c=%.1f ear_e=%.1f\n", r0, p.n, r_c, r_e);
+  std::printf("OK empty180 r0=%.1f poly_n=%d occ_c=%.1f\n", r0, p.n, r_c);
   return 0;
 }
 """)

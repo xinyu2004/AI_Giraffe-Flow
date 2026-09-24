@@ -46,10 +46,11 @@ CAL = {
     "closing_min_mps": 0.3,
     "a_req_label_acc": 0.12,
     "a_req_label_aeb": 0.85,
-    "cruise_v_mps": 12.0,
+    "cruise_v_mps": 25.0,
+    "a_accel_max": 4.0,
     "acc_speed_db_mps": 0.25,
     "acc_thr_gain": 0.11,
-    "acc_thr_max": 0.50,
+    "acc_thr_max": 1.0,
     "acc_thr_hold": 0.10,
     "acc_brake_min": 0.08,
     "acc_brake_max": 0.85,
@@ -59,7 +60,6 @@ CAL = {
     "cruise_thr_standstill_max": 0.72,
     "hold_brake": 0.22,
     "lat_ey_invalid_m": 1.6,
-    "lat_c1_invalid": 0.40,
     "lat_ey_slow_m": 1.0,
     "traj_speed_floor_mps": 0.2,
 }
@@ -70,8 +70,9 @@ def gf_clamp(x: float, lo: float, hi: float) -> float:
 
 
 def lane_usable(lane_valid: bool, e_y: float, c1: float) -> bool:
+    del c1
     p = CAL
-    return lane_valid and abs(e_y) <= p["lat_ey_invalid_m"] and abs(c1) <= p["lat_c1_invalid"]
+    return lane_valid and abs(e_y) <= p["lat_ey_invalid_m"]
 
 
 def plan_lat_weight(alat: float) -> float:
@@ -231,11 +232,36 @@ def lon_a_req_stop(v: float, s_stop: float) -> float:
     return min(a_late, max(0.0, a_kin))
 
 
-def plan_v_peers(s: float, v_ego: float, obj: list[list[float]], c0: float = 0.0) -> float:
+_peer_hold = 1.0e6
+_peer_seen = 1.0e6
+_peer_had = 0
+
+
+def reset_plan_v_peers() -> None:
+    global _peer_hold, _peer_seen, _peer_had
+    _peer_hold = 1.0e6
+    _peer_seen = 1.0e6
+    _peer_had = 0
+
+
+def plan_vis_slew(raw: float, prev: float, alpha: float) -> float:
+    if prev <= 0.0:
+        return raw
+    if raw < prev:
+        return raw
+    return prev + alpha * (raw - prev)
+
+
+def peer_scan(
+    s: float, v_ego: float, obj: list[list[float]], c0: float = 0.0
+) -> tuple[float, bool, bool]:
     p = CAL
-    vi = 1.0e6
+    v_safe = 1.0e6
+    toward = False
+    have = False
     vv = max(0.0, v_ego)
     half_w = 0.5 * p["lane_width_m"]
+    a = max(p["aeb_decel_mps2"], 0.5)
     for row in obj:
         d, rel, lat, ln, cls = row[0], row[1], row[2], row[3], row[4]
         hdg = row[5] if len(row) > 5 else 0.0
@@ -253,8 +279,46 @@ def plan_v_peers(s: float, v_ego: float, obj: list[list[float]], c0: float = 0.0
         v_obj = max(0.0, vv + rel)
         if v_obj < p["peer_v_min_mps"]:
             continue
-        vi = min(vi, v_obj)
-    return vi
+        have = True
+        if (lat - c0) * hdg < -0.02:
+            toward = True
+        gap = max(0.0, d - s)
+        if gap <= p["aeb_d_min_m"]:
+            vs = v_obj
+        else:
+            vs = math.sqrt(max(0.0, v_obj * v_obj + 2.0 * a * (gap - p["aeb_d_min_m"])))
+        v_safe = min(v_safe, vs)
+    return v_safe, toward, have
+
+
+def plan_v_peers(s: float, v_ego: float, obj: list[list[float]], c0: float = 0.0) -> float:
+    global _peer_hold, _peer_seen, _peer_had
+    p = CAL
+    v_safe, toward, have = peer_scan(s, v_ego, obj, c0)
+    if s <= 0.5:
+        if not have:
+            _peer_hold = 1.0e6
+            _peer_seen = 1.0e6
+            _peer_had = 0
+        elif toward or v_safe + 0.5 < _peer_seen:
+            _peer_hold = v_safe
+            _peer_seen = v_safe
+            _peer_had = 1
+        elif _peer_had < 1:
+            _peer_hold = v_safe
+            _peer_seen = v_safe
+            _peer_had = 1
+        else:
+            _peer_hold = plan_vis_slew(p["cruise_v_mps"], _peer_hold, p["vis_up_alpha"])
+            if _peer_hold >= p["cruise_v_mps"] - 0.3:
+                _peer_hold = 1.0e6
+            _peer_seen = v_safe
+            _peer_had = 1
+    if _peer_hold >= 1.0e5:
+        return 1.0e6
+    if toward:
+        return min(_peer_hold, v_safe)
+    return _peer_hold
 
 
 def plan_obj_weight(
@@ -599,7 +663,7 @@ def test_reg_stop_roadside_light_cuts_v_not_occ() -> None:
     assert plan_lane_occupy(0.0, 0.0, 1.0, 1.0, 0.0) > 1.0
     assert plan_obj_weight(0.0, 0.0, 0.0, 1.0, 16.0) < 0.1
     v_plan = plan_v_at_s_n(0.0, 12.0, light, 120.0, True)
-    assert abs(v_plan - min(12.0, plan_v_reg(0.0, s_stop, 12.0))) < 1e-4
+    assert abs(v_plan - min(CAL["cruise_v_mps"], plan_v_reg(0.0, s_stop, 12.0))) < 1e-4
     # Occupy a_req still skips the light; late a_req_stop is separate.
     assert lon_a_req_n(12.0, light) == 0.0
     assert lon_a_req_stop(12.0, 32.0) > 0.0
@@ -638,23 +702,50 @@ def test_light_outranks_runner_past_line() -> None:
     s_stop = plan_reg_stop(obj)
     assert abs(s_stop - 32.0) < 1e-6
     v_plan = plan_v_at_s_n(0.0, 12.0, obj, 120.0, True)
-    assert abs(v_plan - min(12.0, plan_v_reg(0.0, s_stop, 12.0))) < 1e-4
+    assert abs(v_plan - min(CAL["cruise_v_mps"], plan_v_reg(0.0, s_stop, 12.0))) < 1e-4
     # Line is not a_req; occupy of the far runner is unchanged.
     assert lon_a_req_n(12.0, obj) == lon_a_req_n(12.0, [runner])
 
 
 def test_peer_flow_matches_not_occupy() -> None:
+    reset_plan_v_peers()
     peer = [[30.0, -4.0, 3.5, 4.5, 1.0, 0.0, 0.0]]
     assert plan_obj_weight(3.5) < 0.1
-    assert abs(plan_v_peers(0.0, 12.0, peer) - 8.0) < 1e-6
+    # First see: stoppable, not v_obj=8. sqrt(8^2 + 12*(30-4.5))
+    v_safe = math.sqrt(64.0 + 12.0 * 25.5)
+    assert abs(plan_v_peers(0.0, 12.0, peer) - v_safe) < 1e-4
+    reset_plan_v_peers()
     v_plan = plan_v_at_s_n(0.0, 12.0, peer, 120.0, True)
-    assert abs(v_plan - 8.0) < 1e-4
+    assert abs(v_plan - v_safe) < 1e-4
     parked = [[30.0, -12.0, 3.5, 4.5, 1.0, 0.0, 0.0]]
     assert plan_v_peers(0.0, 12.0, parked) > 1.0e5
     # Foxglove turtle: adjacent at ~48 m, v_obj≈1.7 — must not set cruise.
     far = [[48.2, -0.28, -3.50, 4.5, 1.0, 0.0, 0.0]]
     assert plan_v_peers(0.0, 2.0, far) > 1.0e5
     assert plan_v_at_s_n(0.0, 2.0, far, 120.0, True) >= 11.5
+
+
+def test_peer_toward_holds_v_safe() -> None:
+    reset_plan_v_peers()
+    # Left of host, heading into lane (lat*hdg < 0).
+    peer = [[10.0, 0.0, 3.5, 4.5, 1.0, -0.30, 0.0]]
+    v_safe = math.sqrt(12.0 * 12.0 + 12.0 * (10.0 - 4.5))
+    assert abs(plan_v_peers(0.0, 12.0, peer) - v_safe) < 1e-4
+    for _ in range(30):
+        v = plan_v_peers(0.0, 12.0, peer)
+        assert abs(v - v_safe) < 1e-3
+
+
+def test_peer_parallel_releases() -> None:
+    reset_plan_v_peers()
+    # Log-like: 4.5 m left, opening, heading not toward host.
+    peer = [[4.5, 0.30, 3.5, 4.5, 1.0, 0.09, 0.0]]
+    v0 = plan_v_peers(0.0, 2.70, peer)
+    assert abs(v0 - 3.0) < 1e-3
+    last = v0
+    for _ in range(40):
+        last = plan_v_peers(0.0, 2.70, peer)
+    assert last > 15.0
 
 
 def test_in_lane_pass_not_stop() -> None:
@@ -697,18 +788,17 @@ def test_late_reg_stop_requests_brake() -> None:
 
 
 def test_sign_speed_limits_not_vis_cap() -> None:
-    # 50 kph max ≈ 13.89 m/s; empty road vis cap is 12 → min still 12 without sign.
+    # 50 kph max ≈ 13.89 m/s; empty road vis cap is cruise 25 (90 kph).
     empty: list[list[float]] = []
-    assert abs(plan_v_at_s_n(0.0, 12.0, empty, 120.0, True) - 12.0) < 1e-4
+    assert abs(plan_v_at_s_n(0.0, 12.0, empty, 120.0, True) - 25.0) < 1e-4
     # 40 kph max ≈ 11.11 → caps below cruise.
     v40 = 40.0 / 3.6
     assert abs(plan_v_at_s_n(0.0, 12.0, empty, 120.0, True, v_sign_max=v40) - v40) < 1e-4
     # Min 30 kph with vis 12: floor only if min < vis; 30 kph ≈ 8.33 → raise above? Wait
     # vis cap 12, min 8.33 → max(12 after max, min 8.33) stays 12. Use low vis via short D.
-    # With D_see large, v_cap=12; min=10 kph≈2.78 should not change.
-    # Use min=50 kph≈13.89 with v_cap=12 → floor min(min,v_cap)=12 (no raise above vis).
+    # With D_see large, v_cap=cruise 25; min=50 kph≈13.89 does not raise above vis.
     v50 = 50.0 / 3.6
-    assert abs(plan_v_at_s_n(0.0, 12.0, empty, 120.0, True, v_sign_min=v50) - 12.0) < 1e-4
+    assert abs(plan_v_at_s_n(0.0, 12.0, empty, 120.0, True, v_sign_min=v50) - 25.0) < 1e-4
     # Max 30 + min 20: cruise at max.
     v30 = 30.0 / 3.6
     v20 = 20.0 / 3.6
@@ -751,3 +841,14 @@ def test_generate_lon_header() -> None:
     assert "m_plan_tick_pack" not in tick
     assert "v_sign_max" in tick
     assert "v_sign_min" in tick
+
+
+def test_cruise_90_and_full_throttle_accel() -> None:
+    # Empty-road vis cap is cruise 90 km/h, not the old 12 m/s demo.
+    assert abs(CAL["cruise_v_mps"] - 90.0 / 3.6) < 1e-6
+    empty: list[list[float]] = []
+    assert abs(plan_v_at_s_n(0.0, 20.0, empty, 120.0, True) - 25.0) < 1e-4
+    # a_cmd = a_accel_max * throttle; full pedal = 4.0 m/s².
+    assert abs(CAL["a_accel_max"] * CAL["acc_thr_max"] - 4.0) < 1e-6
+    c = lon_exec(5.0, 25.0, 0.0)
+    assert c["throttle"] == CAL["acc_thr_max"]
