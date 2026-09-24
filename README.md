@@ -1,19 +1,21 @@
 # AI Giraffe Flow
 
-**Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop virtual world, Foxglove, and CI/CD — see it, stress it, pass it on the bench; the hardware is the last mile.**
+**Lightweight SOA middleware + toolchain.**
 
-Trimmable `gf_ara::*` runtime (**ARM Linux** primary; OSAL reserved for MIPS / RISC-V) and the tools that configure, generate, observe, and ship it. Perception and planning in this tree are a **closed-loop workload**, not the product — a real pub/sub loop so we can measure the platform:
+Why this repo: so a trimmable on-board SOA is authored, run, seen, and stressed on the bench — then the **same EM** goes to the board. When it is done you can decompose an OEM contract into a running runtime without hand-written plumbing, kill a process and keep control, measure a real tick, put the same chain back, and **CD only what passed**. Hardware is the last mile.
 
-| What we prove | What the loop is for |
-|---------------|----------------------|
-| **Robustness / isolation** | Kill or starve one process; others **hold-last**; control stays up |
-| **Latency** | Overlay-latest vs wait; e2e tick; FuSa latency scripts |
-| **Fault localization** | GMT tap + Foxglove: *who published what, when* |
-| **Replay** | Playhead inject on the same chain |
-| **Bring-up / CI/CD** | EM topology + relaunch; compose → generate → SIL; **CD** only what passed — hardware is the last mile |
-| **Config fidelity** | gf-config → SOR; OEM deltas in gateway/mapping, not in apps |
+The product is a trimmable `gf_ara::*` runtime (**ARM Linux** first; OSAL reserved for MIPS / RISC-V) and three tools around it: **gf-config** authors what runs and who talks to whom; **Giraffe modules** are the on-target SOA (EM launch, com, PHM, isolation); **GMT** answers *who published what, when* and injects the same chain. In-tree perception and planning are a **closed-loop workload**, not an ADAS product — they exist to prove the traits above. OEM cameras and NN weights stay out of tree.
 
-OEM camera/NN stays out of tree.
+| Feature | Why it matters |
+|---------|----------------|
+| **Robustness / isolation** | A fault stays in one process; the rest **hold-last**. One EM owns the topology: spawn, PHM, relaunch **that** process — not the whole stack. Same entry on SIL and on the board. |
+| **Latency** | High throughput, low latency — **overlay-latest**, no blocking IPC. |
+| **Visibility** | The live chain stays in the open — measure it, watch it, play it back, same picture. |
+| **Inject / replay** | Same wiring, same types; put the scene back on that chain. |
+| **CI/CD with FuSa** | Compose → generate → SIL, FuSa in the CI loop. **CD only what passed.** |
+| **OEM decomposition** | Tools split the OEM contract into modules. No hand wiring; every change is traceable. |
+
+The clips below are that loop on the bench — **AFC** (single camera) and **ADC** (surround). The car is the hook; the claim is the stack behind it.
 
 **中文:** [README_zh.md](README_zh.md)
 
@@ -58,7 +60,7 @@ Defines **what**, **who talks to whom**, and **which board modules to trim** —
 
 - Verify / Generate → SOR + Proxy/Skeleton + lineage (incl. `platform_em_launch`)
 
-![gf-config — SOA, then EM / PHM / Memory](gallery/gf-config.gif)
+![gf-config — SOA signal graph](gallery/gf-config.png)
 
 ```bash
 gf-config projects/afc/giraffe.yaml
@@ -107,20 +109,25 @@ Aligned with Giraffe SoC chips in the architecture GIF (`com` · `EM`∈exec · 
 
 Overview: [middleware/README.md](middleware/README.md)
 
-#### 2.3 Closed-loop workload (sample SKU)
+#### 2.3 Closed-loop workload (sample SKUs)
 
-[projects/afc](projects/afc/) (no USS). Used to **validate** com / EM / observability — not to ship a perception or planner product. Planning gold: [octave_planning/](octave_planning/README.md).
+Two SKUs **validate** com / EM / observability — they are not a perception or planner product. Planning gold: [octave_planning/](octave_planning/README.md).
+
+| SKU | Cameras | Workload chain |
+|-----|---------|----------------|
+| [AFC](projects/afc/) | Single front | gateway → `perception.fcm` → `planning.driving` |
+| [ADC](projects/adc/) | Surround | gateway → surround / fcm / rcm → `planning.driving_plus` · parking · `mode.drive_park` |
 
 ```text
 Vehicle state (pick one)
   · gateway (no inject)   or   · inject (playhead; gateway off)
         │
-        ▼ EgoMotion / Perception_In
+        ▼ EgoMotion / Perception_In  (+ surround / rear on ADC)
         ▼
-   perception.fcm → Perception_Out     ← workload (not a camera NN)
+   perception.* → Out / Near / World     ← workload (not a camera NN)
         │
         ▼
-   planning.driving → Trajectory       ← workload (.m gold, C 1:1)
+   planning.* → Trajectory               ← workload (.m gold, C 1:1)
         │
         ▼
    gmt_board: tap NDJSON · gf_foxglove_ws :8765
@@ -131,34 +138,29 @@ Vehicle state (pick one)
 | Process | Role |
 |---------|------|
 | `adapter.vehicle_can_gateway` | CAN/sim → EgoMotion, Perception_In… (off under inject) |
-| `perception.fcm` | Perception_In → Out (workload; not a camera NN) |
-| `planning.driving` | Ego + perc → Trajectory (workload) |
+| `perception.fcm` · `surround` · `rcm` | Workload perception (ADC adds surround + rear) |
+| `planning.driving` / `driving_plus` | Ego + perc → Trajectory (workload) |
 | `gf_iox_obs_tap` | Allowlisted services → NDJSON (GMT record) |
 | `gf_foxglove_ws` | iceoryx → Foxglove Studio + BEV (`tools/gmt_board`) |
 | `gf_iox_obs_inject` | playhead / continuous Ego inject |
 
 SKU apps live under `projects/<sku>/apps/`. iceoryx smoke: `middleware/bindings/iceoryx/testcases/`.
 
-#### 2.4 Bring-up (SIL → board)
+#### 2.4 Build & run
 
-Primary SKU `projects/afc`: **mtime compose / configure-on-need / incremental build**; `ctest` only with `GF_CTEST=1`; staged `runtime/bin/giraffe_launch`. `projects/adc` is an empty slot (not started). Host CARLA: [carla_scenarios/](carla_scenarios/). CI: [devops/](devops/README.md). GMT extras via `GMT_depend_launch` (`GF_GMT_DEPEND=0` → EM only).
+Same scripts for [AFC](projects/afc/) and [ADC](projects/adc/). SIL overrides the frame source; the board freeze default stays `isp`. Host CARLA: [carla_scenarios/](carla_scenarios/). CI: [devops/](devops/README.md).
+
+`GF_FRAME_SOURCE` = `carla` · `replay` · `colorbar` · `isp` · `none`
 
 ```bash
-bash projects/afc/scripts/compile_sil.sh
-bash projects/afc/scripts/run_sil.sh
+bash projects/adc/scripts/compile_sil.sh
+GF_FRAME_SOURCE=carla bash projects/adc/scripts/run_sil.sh
 
-# Board / same EM entry after stage:
-#   ./projects/afc/build-sil/runtime/bin/giraffe_launch
-
-GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
-  bash projects/afc/scripts/run_sil.sh
-
-# CI-style tests during compile:
-#   GF_CTEST=1 bash projects/afc/scripts/compile_sil.sh
+# Same EM on the board (after stage):
+#   ./projects/adc/build-sil/runtime/bin/giraffe_launch
 ```
 
-Scripts: [afc/scripts](projects/afc/scripts/) · [afc README](projects/afc/README.md)  
-Scenarios: [carla_scenarios/](carla_scenarios/)
+AFC is the same path under `projects/afc/scripts/`. Inject / replay lives in GMT, not here.
 
 #### 2.5 Boundary vs toolchain
 
@@ -212,6 +214,7 @@ Details: [tools/gmt/README.md](tools/gmt/README.md) · [gmt_board](tools/gmt_boa
 | [projects/](projects/) | OEM SKU: apps, wiring, SIL·HIL, CI scripts |
 | [carla_scenarios/](carla_scenarios/) | Host CARLA scenes + instrument |
 | [projects/afc/apps/](projects/afc/apps/) | AFC workload (gateway / FCM / planning) |
+| [projects/adc/apps/](projects/adc/apps/) | ADC workload (surround / driving_plus / parking) |
 | [fusa/](fusa/) | FuSa evidence |
 | [tools/gf-config/](tools/gf-config/) | gf-config |
 | [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |

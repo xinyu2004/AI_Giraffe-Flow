@@ -1,19 +1,21 @@
 # AI Giraffe Flow
 
-**Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop virtual world, Foxglove, and CI/CD — see it, stress it, pass it on the bench; the hardware is the last mile.**
+**可裁剪的车规 SOA 中间件 + 工具链。**
 
-可裁剪的 `gf_ara::*` 运行时（**ARM Linux** 优先；OSAL 预留 MIPS / RISC-V）以及配置、生成、观测、上车的配套工具。闭环虚拟世界、Foxglove、CI/CD：台上看见、压住、过门；真机是 last mile。本仓里的感知和规划是 **闭环载荷，不是产品**——给中间件和工具一条诚实的 pub/sub 环，用来量这些：
+为什么做：板上要的是可裁剪的 SOA，先在台架上配、跑、看见、压住，再把 **同一套 EM** 上车。做好之后：OEM 合同能被工具分解进运行时，不用手写接线；杀掉一个进程，控车不断；真环上的一拍时延量得着；同一条链灌得回去；**过了才 CD**。真机是 last mile。
 
-| 要验证的 | 载荷用来干什么 |
-|----------|----------------|
-| **健壮性 / 隔离** | 杀掉或饿死一个进程，其余 **hold-last**，控车不断 |
-| **时延** | overlay-latest vs wait；端到端一拍；FuSa 时延脚本 |
-| **故障定位** | GMT tap + Foxglove：谁在何时发了什么 |
-| **回放** | 同一条链上 playhead 回灌 |
-| **拉起 / CI/CD** | EM 拓扑与 relaunch；compose → generate → SIL；**过了才 CD**——真机是 last mile |
-| **配置保真** | gf-config → SOR；OEM 差异在 gateway/映射，不进业务 App |
+产品是可裁剪的 `gf_ara::*` 运行时（**ARM Linux** 优先；OSAL 预留 MIPS / RISC-V）和围着它的三件工具：**gf-config** 写要跑什么、谁连谁；**Giraffe 模块** 是板上 SOA（EM 拉起、通信、PHM、隔离）；**GMT** 回答「谁在何时发了什么」，并在同一条链上做回灌。仓内感知和规划是 **闭环载荷，不是 ADAS 产品**——用来把上面这些特点跑实。OEM 相机和网络权重在仓外。
 
-OEM 相机/网络权重仍在仓外。
+| 特点 | 图什么 |
+|------|--------|
+| **健壮 / 隔离** | 故障关在一个进程，其余 **hold-last**。一套 EM 管拓扑：拉起、PHM、只再拉起那一个，不整栈重启。台架和板同一个入口。 |
+| **时延** | 高吞吐、低时延；**overlay-latest**，互不卡住。 |
+| **看得见** | 活链在明处：能量、能看，回灌也还是同一幅画。 |
+| **回灌 / 回放** | 同一套接线、同一套类型，把场景灌回这条链。 |
+| **CI/CD with FuSa** | compose → generate → SIL，FuSa 走在 CI 里。**过了才 CD。** |
+| **OEM 分解** | 工具把 OEM 合同拆成模块。不手写接线，改动可追溯。 |
+
+下面两段视频就是这条环在台架上的样子——**AFC**（单相机）和 **ADC**（环视）。车是用来把人留下的；要证明的是车后面的栈。
 
 **English:** [README.md](README.md)
 
@@ -58,7 +60,7 @@ OEM 相机/网络权重仍在仓外。
 
 - **Verify / Generate** → SOR + Proxy/Skeleton + lineage（含 `platform_em_launch` 等门禁）
 
-![gf-config — SOA，再贴 EM / PHM / Memory](gallery/gf-config.gif)
+![gf-config — SOA 信号图](gallery/gf-config.png)
 
 ```bash
 gf-config projects/afc/giraffe.yaml
@@ -109,18 +111,23 @@ gf-config projects/afc/giraffe.yaml
 
 #### 2.3 闭环载荷（示例 SKU）
 
-以 [projects/afc](projects/afc/)（无 USS）为例。用来 **验证** com / EM / 可观测性，不是交付感知或规划产品。规划金源：[octave_planning/](octave_planning/README.md)。
+两套 SKU 都用来 **验证** com / EM / 可观测性，不是交付感知或规划产品。规划金源：[octave_planning/](octave_planning/README.md)。
+
+| SKU | 相机 | 载荷链 |
+|-----|------|--------|
+| [AFC](projects/afc/) | 单前视 | gateway → `perception.fcm` → `planning.driving` |
+| [ADC](projects/adc/) | 环视 | gateway → surround / fcm / rcm → `planning.driving_plus` · parking · `mode.drive_park` |
 
 ```text
 车态源（二选一）
   · gateway（continuous / 无回灌）  或  · inject（playhead，替 gateway）
         │
-        ▼ EgoMotion / Perception_In
+        ▼ EgoMotion / Perception_In  （ADC 另有 surround / 后视）
         ▼
-   perception.fcm → Perception_Out     ← 载荷（不是相机网络）
+   perception.* → Out / Near / World     ← 载荷（不是相机网络）
         │
         ▼
-   planning.driving → Trajectory       ← 载荷（.m 金源，C 1:1）
+   planning.* → Trajectory               ← 载荷（.m 金源，C 1:1）
         │
         ▼
    gmt_board：tap NDJSON · gf_foxglove_ws :8765
@@ -131,36 +138,29 @@ gf-config projects/afc/giraffe.yaml
 | 进程 | 角色 |
 |------|------|
 | `adapter.vehicle_can_gateway` | CAN/仿真 → EgoMotion、Perception_In…（回灌时关闭） |
-| `perception.fcm` | Perception_In → Out（载荷；不是相机网络） |
-| `planning.driving` | Ego + 感知 → Trajectory（载荷） |
+| `perception.fcm` · `surround` · `rcm` | 载荷感知（ADC 加环视与后视） |
+| `planning.driving` / `driving_plus` | Ego + 感知 → Trajectory（载荷） |
 | `gf_iox_obs_tap` | 白名单服务 → NDJSON（GMT 录制） |
 | `gf_foxglove_ws` | iceoryx → Foxglove Studio + BEV（`tools/gmt_board`） |
 | `gf_iox_obs_inject` | playhead / continuous 回灌 Ego |
 
 SKU 载荷在 `projects/<sku>/apps/`。iceoryx 烟测：`middleware/bindings/iceoryx/testcases/`。
 
-#### 2.4 拉起路径（SIL → 板）
+#### 2.4 编译与运行
 
-主 SKU `projects/afc`：**mtime compose / 按需 cmake configure / 增量 build**；`GF_CTEST=1` 才跑 ctest；stage 出 `runtime/bin/giraffe_launch`。`projects/adc` 是空槽（未开工）。上位机 CARLA：[carla_scenarios/](carla_scenarios/)。CI：[devops/](devops/README.md)。GMT 旁路为 `GMT_depend_launch`（`GF_GMT_DEPEND=0` → 只 EM）。
+[AFC](projects/afc/) 与 [ADC](projects/adc/) 同一套脚本。SIL 用环境变量覆盖帧源；板上 freeze 默认仍是 `isp`。上位机 CARLA：[carla_scenarios/](carla_scenarios/)。CI：[devops/](devops/README.md)。
+
+`GF_FRAME_SOURCE` = `carla` · `replay` · `colorbar` · `isp` · `none`
 
 ```bash
-bash projects/afc/scripts/compile_sil.sh
+bash projects/adc/scripts/compile_sil.sh
+GF_FRAME_SOURCE=carla bash projects/adc/scripts/run_sil.sh
 
-# 普通主链（gateway 开车态）+ 默认挂 GMT depend
-bash projects/afc/scripts/run_sil.sh
-
-# 板端 / 同口径 EM：
-#   ./projects/afc/build-sil/runtime/bin/giraffe_launch
-
-# 场景回灌（GMT playhead；全量 live 含 Ego → BEV）
-GF_INJECT_MODE=playhead GF_INJECT_LIVE=all \
-  bash projects/afc/scripts/run_sil.sh
-
-# CI 要测：GF_CTEST=1 bash …/compile_sil.sh
+# 板上同一套 EM（stage 之后）：
+#   ./projects/adc/build-sil/runtime/bin/giraffe_launch
 ```
 
-脚本：[afc/scripts](projects/afc/scripts/) · [afc README](projects/afc/README.md)  
-场景：[carla_scenarios/](carla_scenarios/)
+AFC 把路径换成 `projects/afc/scripts/` 即可。回灌 / 回放在 GMT，不在这里。
 
 #### 2.5 与工具链的边界
 
@@ -214,6 +214,7 @@ GMT gui --project projects/afc \
 | [projects/](projects/) | OEM SKU：apps、wiring、SIL·HIL、CI |
 | [carla_scenarios/](carla_scenarios/) | 上位机 CARLA 布景 + 仪表 |
 | [projects/afc/apps/](projects/afc/apps/) | AFC 载荷（gateway / FCM / 规划） |
+| [projects/adc/apps/](projects/adc/apps/) | ADC 载荷（surround / driving_plus / parking） |
 | [fusa/](fusa/) | FuSa 证据 |
 | [tools/gf-config/](tools/gf-config/) | gf-config |
 | [tools/gf-codegen/](tools/gf-codegen/) | gf-codegen |
