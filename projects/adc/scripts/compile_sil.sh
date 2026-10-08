@@ -40,19 +40,24 @@ if [[ ! -f "${BUILD_SIL}/CMakeCache.txt" ]] && command -v ninja >/dev/null 2>&1;
   echo "${TAG} CMake generator=Ninja"
 fi
 
+_GF_TESTS=OFF
+if [[ "${GF_BUILD_TESTS:-${GF_CTEST:-0}}" =~ ^(1|true|yes|on|ON)$ ]]; then
+  _GF_TESTS=ON
+fi
+
 if gf_sil_need_cmake_configure; then
   echo "${TAG} cmake configure → ${BUILD_SIL} ..."
   DEP_PREFIX="${ROOT}/middleware/.deps-prefix"
   cmake -S "${ROOT}" -B "${BUILD_SIL}" \
     "${SIL_CMAKE_ARGS[@]}" \
-    -DGF_BUILD_TESTS=ON \
+    -DGF_BUILD_TESTS="${_GF_TESTS}" \
     -DGF_USE_GENERATED=ON \
     -DGF_GENERATED_DIR="${GEN_OUT}" \
     -DGF_SKU_CMAKE="${GEN_OUT}/gf_build.cmake" \
     -DCMAKE_PREFIX_PATH="${DEP_PREFIX}${CMAKE_PREFIX_PATH:+;${CMAKE_PREFIX_PATH}}" \
     || cmake -S "${ROOT}" -B "${BUILD_SIL}" \
       "${SIL_CMAKE_ARGS[@]}" \
-      -DGF_BUILD_TESTS=ON \
+      -DGF_BUILD_TESTS="${_GF_TESTS}" \
       -DGF_USE_GENERATED=ON \
       -DGF_GENERATED_DIR="${GEN_OUT}" \
       -DGF_SKU_CMAKE="${GEN_OUT}/gf_build.cmake" \

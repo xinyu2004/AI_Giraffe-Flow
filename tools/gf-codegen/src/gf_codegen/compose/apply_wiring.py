@@ -7,10 +7,6 @@ from typing import Any
 
 import yaml
 
-from gf_codegen.compose.parse_fidl import fidl_structs_to_sor_types, parse_fidl_file
-from gf_codegen.compose.parse_hpp import parse_hpp_file, structs_to_sor_types
-from gf_codegen.paths import resolve_path
-
 
 def _canon_service(s: str) -> str:
     s = s.strip()
@@ -58,35 +54,16 @@ def apply_wiring(
     *,
     repo_root: Path,
     project_dir: Path,
+    wiring: dict[str, Any] | None = None,
 ) -> list[str]:
     """Mutate sor in place. Return warnings."""
+    del repo_root, project_dir
     warnings: list[str] = []
-    with wiring_path.open(encoding="utf-8") as f:
-        wiring = yaml.safe_load(f) or {}
-
-    # Parse module hpp / fidl → types (hpp may be a string or list)
-    for mod in wiring.get("modules") or []:
-        hpp_rels = mod.get("hpp")
-        if isinstance(hpp_rels, str):
-            hpp_rels = [hpp_rels]
-        for hpp_rel in hpp_rels or []:
-            hpp_path = resolve_path(project_dir, hpp_rel, repo_root=repo_root)
-            if not hpp_path.is_file():
-                warnings.append(f"hpp not found: {hpp_path}")
-                continue
-            structs = parse_hpp_file(hpp_path)
-            for t in structs_to_sor_types(structs):
-                _ensure_type(sor, t["id"], t.get("fields"))
-
-        fidl_rel = mod.get("fidl")
-        if fidl_rel:
-            fidl_path = resolve_path(project_dir, fidl_rel, repo_root=repo_root)
-            if not fidl_path.is_file():
-                warnings.append(f"fidl not found: {fidl_path}")
-            else:
-                parsed = parse_fidl_file(fidl_path)
-                for t in fidl_structs_to_sor_types(parsed.get("structs") or []):
-                    _ensure_type(sor, t["id"], t.get("fields"))
+    if wiring is None:
+        with wiring_path.open(encoding="utf-8") as f:
+            wiring = yaml.safe_load(f) or {}
+    if not isinstance(wiring, dict):
+        wiring = {}
 
     # Deployments
     deployments = []
@@ -104,7 +81,7 @@ def apply_wiring(
         for svc in entry["provides"]:
             short = svc.split(".")[-1]
             type_ref = f"types.{short}"
-            if short == "Trajectory":
+            if short == "DrivingTrajectory":
                 # placeholder when no planning hpp
                 types = sor.get("types") or []
                 existing = next(
@@ -117,10 +94,14 @@ def apply_wiring(
                         type_ref,
                         [{"name": "point_count", "type": "uint8"}],
                     )
-                    warnings.append("placeholder_type: types.Trajectory (no planning hpp)")
+                    warnings.append(
+                        "placeholder_type: types.DrivingTrajectory (missing in cfg/types.yaml)"
+                    )
                 elif not existing.get("fields"):
                     existing["fields"] = [{"name": "point_count", "type": "uint8"}]
-                    warnings.append("placeholder_type: types.Trajectory (no planning hpp)")
+                    warnings.append(
+                        "placeholder_type: types.DrivingTrajectory (missing in cfg/types.yaml)"
+                    )
             _ensure_service(sor, svc, type_ref)
 
     sor["deployments"] = deployments

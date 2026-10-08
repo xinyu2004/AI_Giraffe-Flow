@@ -1,5 +1,5 @@
 # Giraffe 工程入口索引（原 project.yaml）— 不含业务细节
-# 作者源在 cfg/：req · wiring · gf_ara_cfg/*
+# 作者源在 cfg/：req · wiring · types · mappings · gf_ara_cfg/*
 schema_version: "0.1"
 project_id: afc
 customer_id: oem
@@ -8,15 +8,13 @@ product: AFC
 base: tools/gf-codegen/schemas/examples/desktop_ap_only.sor.json
 out: gf.sor.json
 
-oem:
-  dbc: oem/oem_import.dbc
-  manifest: oem/oem_import.yaml
-
 delivery:
   req: cfg/req.yaml
 
 integration:
   wiring: cfg/wiring.yaml
+  types: cfg/types.yaml
+  mappings: cfg/mappings.yaml
 
 # 中间件运行时作者树（gf-config 页 2）→ Verify 冻成 hpp；≠ 全部 gf-config 输出
 gf_ara_cfg:

@@ -14,9 +14,14 @@ from typing import Any
 
 import yaml
 from gf_codegen.compose.load_project import ProjectPaths, load_project
-from gf_codegen.compose.parse_fidl import parse_fidl_file
-from gf_codegen.compose.parse_hpp import parse_hpp_file
+from gf_codegen.compose.parse_fidl import fidl_structs_to_sor_types, parse_fidl_file
+from gf_codegen.compose.parse_hpp import parse_hpp_file, structs_to_sor_types
 from gf_codegen.compose.pipeline import compose_project
+from gf_codegen.compose.types_store import (
+    load_types_yaml,
+    merge_type_lists,
+    save_types_yaml,
+)
 from gf_codegen.paths import resolve_path
 from gf_config.names import (
     CHANNEL_POLICY_DEFAULTS,
@@ -28,6 +33,7 @@ from gf_config.names import (
     normalize_channel_slot,
     short_service,
 )
+from gf_config.authored import merge_authored
 from gf_config.validate import ValidationResult, validate_project
 
 # Re-export naming API (tests / GUI historically import from core).
@@ -70,6 +76,8 @@ class ProjectSession:
     dirty_req: bool = False
     dirty_wiring: bool = False
     dirty_ara_cfg: set[str] | None = None
+    _types_by_leaf: dict[str, list[dict[str, Any]]] | None = None
+    _types_mtime: float | None = None
 
     def __post_init__(self) -> None:
         if self.dirty_ara_cfg is None:
@@ -131,7 +139,9 @@ class ProjectSession:
         """Merge top-level fields into ara_cfg[key] and mark dirty if changed.
 
         ``None`` values remove the key. Ensures ``schema_version`` exists.
-        Returns True if the document changed.
+        Form output is folded onto disk: extra keys and hex/int id forms stay.
+        Missing keys stay missing unless harvest sends them (do not invent
+        display defaults here). Returns True if the document changed.
         """
         doc = self.ara_cfg.get(key)
         if not isinstance(doc, dict):
@@ -148,8 +158,14 @@ class ProjectSession:
                 if k in doc:
                     doc.pop(k, None)
                     changed = True
-            elif doc.get(k) != v:
+                continue
+            if k not in doc:
                 doc[k] = v
+                changed = True
+                continue
+            merged, ch = merge_authored(doc[k], v)
+            if ch:
+                doc[k] = merged
                 changed = True
         if changed:
             self.mark_ara_cfg_dirty(key)
@@ -179,6 +195,10 @@ class ProjectSession:
         if wir_t and not self.req.get("topology"):
             self.req["topology"] = str(wir_t)
             self.mark_req_dirty()
+        for m in self.modules():
+            if isinstance(m, dict):
+                m.pop("hpp", None)
+                m.pop("fidl", None)
         self.migrate_legacy_camera_channel_flows()
 
     def apply_sku_update(
@@ -1029,13 +1049,127 @@ class ProjectSession:
 
     def parse_hpp_candidates(self, hpp_path: Path) -> list[str]:
         """Struct names from header → service short-name candidates."""
-        structs = parse_hpp_file(hpp_path)
-        return [str(s["name"]) for s in structs if s.get("name")]
+        return [
+            str(s["name"])
+            for s in self.parse_hpp_structs(hpp_path)
+            if s.get("name")
+        ]
+
+    def parse_hpp_structs(self, hpp_path: Path) -> list[dict[str, Any]]:
+        """Full structs: {name, fields:[{name,type,array_size?}]}."""
+        return parse_hpp_file(hpp_path)
+
+    def invalidate_types_index(self) -> None:
+        self._types_by_leaf = None
+        self._types_mtime = None
+
+    def _types_index(self) -> dict[str, list[dict[str, Any]]]:
+        """id-leaf → fields. Load cfg/types.yaml once per mtime; never in paint."""
+        cached = getattr(self, "_types_by_leaf", None)
+        types_path = getattr(getattr(self, "paths", None), "types_yaml", None)
+        if types_path is None:
+            return cached or {}
+        path = Path(types_path)
+        try:
+            mtime = path.stat().st_mtime if path.is_file() else None
+        except OSError:
+            mtime = None
+        if cached is not None and mtime == self._types_mtime:
+            return cached
+        by_leaf: dict[str, list[dict[str, Any]]] = {}
+        if mtime is not None:
+            for t in load_types_yaml(path):
+                tid = str(t.get("id") or "")
+                leaf = tid.rsplit(".", 1)[-1]
+                if leaf:
+                    by_leaf[leaf] = list(t.get("fields") or [])
+        self._types_by_leaf = by_leaf
+        self._types_mtime = mtime
+        return by_leaf
+
+    def authored_type_names(self) -> list[str]:
+        """Struct short-names from cfg/types.yaml (cached)."""
+        return list(self._types_index().keys())
+
+    def ingest_imported_types(
+        self,
+        types: list[dict[str, Any]],
+        *,
+        source: str,
+    ) -> int:
+        """Merge digested structs into cfg/types.yaml (compose source)."""
+        existing = load_types_yaml(self.paths.types_yaml)
+        merged = merge_type_lists(existing, types, overwrite=True)
+        save_types_yaml(self.paths.types_yaml, merged, imported_from=source)
+        self.invalidate_types_index()
+        return len(types)
+
+    def ingest_hpp_structs(self, structs: list[dict[str, Any]], *, source: str) -> int:
+        return self.ingest_imported_types(structs_to_sor_types(structs), source=source)
+
+    def ingest_fidl_structs(self, structs: list[dict[str, Any]], *, source: str) -> int:
+        return self.ingest_imported_types(
+            fidl_structs_to_sor_types(structs), source=source
+        )
+
+    def lookup_type_fields(self, service: str) -> list[dict[str, Any]]:
+        """One struct from authored cfg/types.yaml (indexed). Not for paint."""
+        if is_channel_svc(service):
+            return []
+        short = short_service(service)
+        if not short:
+            return []
+        return list(self._types_index().get(short) or [])
+
+    def rename_dataflow_service(self, flow: dict[str, Any], new_service: str) -> None:
+        """Rename one dataflow service and matching src Out / dst In ports."""
+        new_svc = canon_service(new_service)
+        new_short = short_service(new_svc)
+        if not new_short:
+            return
+        old = short_service(str(flow.get("service") or ""))
+        frm = str(flow.get("from") or "")
+        to = str(flow.get("to") or "")
+        flows = self.dataflows()
+        for f in flows:
+            if (
+                str(f.get("from") or "") == frm
+                and str(f.get("to") or "") == to
+                and short_service(str(f.get("service") or "")) == old
+            ):
+                f["service"] = new_svc
+        self.set_dataflows(flows)
+
+        def _swap(names: list[Any]) -> list[str]:
+            out: list[str] = []
+            for x in names:
+                out.append(new_svc if short_service(str(x)) == old else str(x))
+            return out
+
+        for dep in self.deployments():
+            proc = str(dep.get("process") or "")
+            if proc == frm:
+                self.set_ports(
+                    proc,
+                    _swap(list(dep.get("provides") or [])),
+                    list(dep.get("requires") or []),
+                    prune_flows=False,
+                )
+            elif proc == to:
+                self.set_ports(
+                    proc,
+                    list(dep.get("provides") or []),
+                    _swap(list(dep.get("requires") or [])),
+                    prune_flows=False,
+                )
 
     def parse_fidl_candidates(self, fidl_path: Path) -> list[str]:
         """Struct / broadcast / method / interface names from .fidl."""
         parsed = parse_fidl_file(fidl_path)
         return list(parsed.get("candidates") or [])
+
+    def parse_fidl_structs(self, fidl_path: Path) -> list[dict[str, Any]]:
+        return list(parse_fidl_file(fidl_path).get("structs") or [])
 
     def module_hpp_for_process(self, process: str) -> Path | None:
         for m in self.modules():

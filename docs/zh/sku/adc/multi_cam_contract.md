@@ -22,7 +22,7 @@
 
 ## 包络（周视 / 环视，不发明）
 
-数值单源（stage-A）：[`fs_envelope_cal.hpp`](../../../../projects/adc/interfaces/fs_envelope/fs_envelope_cal.hpp)。前/侧/后分域，见 [fs_fov_bev_scheme.md §1.1](./fs_fov_bev_scheme.md)。
+数值单源（stage-A）：[`fs_envelope_cal.hpp`](../../../../projects/adc/generated/include/fs_envelope/fs_envelope_cal.hpp)。前/侧/后分域，见 [fs_fov_bev_scheme.md §1.1](./fs_fov_bev_scheme.md)。
 
 | 方位 | 概念 | 默认 envelope（cal 名） |
 |------|------|----------------|

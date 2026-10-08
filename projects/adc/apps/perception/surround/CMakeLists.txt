@@ -10,6 +10,5 @@ if(NOT GF_USE_GENERATED)
 endif()
 target_include_directories(gf_perception_surround PRIVATE
   "${GF_GENERATED_DIR}/include"
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../../interfaces"
 )
 target_compile_definitions(gf_perception_surround PRIVATE GF_USE_GENERATED=1)

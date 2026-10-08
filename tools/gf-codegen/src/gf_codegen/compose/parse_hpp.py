@@ -1,4 +1,4 @@
-"""Minimal C/C++ header parser for io_types / io_ports (no libclang)."""
+"""Minimal C/C++ header parser for Import digest (no libclang). Compose does not call this."""
 
 from __future__ import annotations
 
@@ -38,6 +38,7 @@ _FAT_PORT_EXACT = {
     "EgoMotion",
     "UssZones",
     "Trajectory",
+    "DrivingTrajectory",
     "FrontObjectList",
     "ApaStatus",
     "ApaSlotList",

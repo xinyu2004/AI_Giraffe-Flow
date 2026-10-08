@@ -5,9 +5,9 @@
 #include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/com/binding/iceoryx/period_timer.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
-#include "gf_gen/proxy/trajectory_proxy.hpp"
-#include "gf_gen/skeleton/ego_motion_skeleton.hpp"
-#include "gf_gen/skeleton/perception__in__st_skeleton.hpp"
+#include "gf_gen/driving_trajectory.hpp"
+#include "gf_gen/ego_motion.hpp"
+#include "gf_gen/perception__in__st.hpp"
 #include "gf_gen/frame_ingest_config.hpp"
 #include "gf_gen/publish_policy.hpp"
 
@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
 
   gf_gen::EgoMotionSkeleton ego_pub{};
   gf_gen::Perception_In_StSkeleton perc_in_pub{};
-  gf_gen::TrajectoryProxy traj_sub{};
+  gf_gen::DrivingTrajectoryProxy traj_sub{};
 
   GfChannel* state_ch = nullptr;
   GfChannel* cmd_ch = nullptr;
@@ -296,7 +296,7 @@ int main(int argc, char** argv) {
   rx_state.Init("gw", "rx.vehicle_state");
   rx_state.BindChannel("vehicle_state");
   rx_traj.Init("gw", "rx.traj");
-  rx_traj.BindService("Trajectory");
+  rx_traj.BindService("DrivingTrajectory");
   tx_cmd.Init("gw", "tx.cmd");
   tx_cmd.BindChannel("vehicle_cmd");
   tx_cmd.EnablePeriodSilence();

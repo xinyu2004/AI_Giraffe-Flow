@@ -42,6 +42,13 @@ venv/
 # Generated (when codegen lands)
 **/generated/
 !**/generated/.gitkeep
+# ADC / AFC compile inputs + gf_gen (gf-config fuse; do not hand-edit)
+!projects/adc/generated/
+!projects/adc/generated/**
+projects/adc/generated/reports/
+!projects/afc/generated/
+!projects/afc/generated/**
+projects/afc/generated/reports/
 # Octave→C++ under planning app (gf-octavecoder; not gf-codegen)
 **/apps/planning/**/oct_gen/
 !**/apps/planning/**/oct_gen/.gitkeep

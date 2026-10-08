@@ -1,9 +1,9 @@
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
 #include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
-#include "gf_gen/proxy/ego_motion_proxy.hpp"
-#include "gf_gen/proxy/perception_message__out__st_proxy.hpp"
-#include "gf_gen/skeleton/trajectory_skeleton.hpp"
+#include "gf_gen/ego_motion.hpp"
+#include "gf_gen/perception_message__out__st.hpp"
+#include "gf_gen/driving_trajectory.hpp"
 
 #include "gf_app/frame_watch.hpp"
 
@@ -359,7 +359,7 @@ std::uint64_t now_ns() {
 }
 
 void ApplyTick(const oct_gen::PlanTickOut& tick, const gf_gen::EgoMotion& ego,
-               const PercView& view, gf_gen::Trajectory& traj) {
+               const PercView& view, gf_gen::DrivingTrajectory& traj) {
   traj.point_count = static_cast<std::uint8_t>(oct_gen::kLatTrajPoints);
   traj.gear_shift_first = ego.gear;
   traj.gear_shift_second = 0;
@@ -394,7 +394,7 @@ int main() {
 
   gf_gen::Perception_MESSAGE_Out_StProxy perc_sub{};
   gf_gen::EgoMotionProxy ego_sub{};
-  gf_gen::TrajectorySkeleton traj_pub{};
+  gf_gen::DrivingTrajectorySkeleton traj_pub{};
 
   std::optional<gf_gen::EgoMotion> last_ego;
   std::optional<gf_gen::Perception_MESSAGE_Out_St> last_perc;
@@ -411,7 +411,7 @@ int main() {
   rx_perc.BindService("Perception_MESSAGE_Out_St");
   rx_perc.BindCameraCeiling();
   tx_traj.Init("plan", "tx.traj");
-  tx_traj.BindService("Trajectory");
+  tx_traj.BindService("DrivingTrajectory");
   std::uint64_t last_perc_ts = 0;
   bool have_planned = false;
   bool perc_edge = false;
@@ -478,7 +478,7 @@ int main() {
     D_see_prev = tick.D_see;
     T_plan_prev = tick.T_plan;
 
-    gf_gen::Trajectory traj{};
+    gf_gen::DrivingTrajectory traj{};
     ApplyTick(tick, ego, view, traj);
     traj.timestamp_ns = perc_ts;
 

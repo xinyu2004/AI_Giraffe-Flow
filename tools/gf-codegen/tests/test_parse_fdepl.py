@@ -5,8 +5,17 @@ from pathlib import Path
 from gf_codegen.compose.parse_fdepl import parse_fdepl_file
 
 
-def test_parse_repo_sample_fdepl(repo_root: Path) -> None:
-    p = repo_root / "projects/afc/interfaces/demo_fidl/VehicleStatus.fdepl"
+def test_parse_repo_sample_fdepl(tmp_path: Path) -> None:
+    p = tmp_path / "VehicleStatus.fdepl"
+    p.write_text(
+        """
+define afc.demo.VehicleStatus someip {
+  SomeIpServiceID = 0x1234
+  SomeIpInstanceID = 1
+}
+""",
+        encoding="utf-8",
+    )
     parsed = parse_fdepl_file(p)
     assert parsed["deployments"]
     dep = next(d for d in parsed["deployments"] if "SomeIpServiceID" in d)

@@ -139,7 +139,7 @@ D_see         ← slew(min(D_vr, D_occ, D_fov, D_wx, d_fs_fwd, cap))
 
 | 层 | 路径 |
 |----|------|
-| Near 类型 | `projects/adc/interfaces/perception_surround/io_types.hpp` |
+| Near 类型 | `projects/adc/generated/include/perception_surround/io_types.hpp` |
 | surround 算/发 | `apps/perception/surround/` |
 | fuse | `apps/planning/driving_plus/src/fuse_driving_fs.hpp` + `main.cpp` → tick |
 | 金源/ops | AFC pack → `driving_plus/oct_gen`（直至 P5） |

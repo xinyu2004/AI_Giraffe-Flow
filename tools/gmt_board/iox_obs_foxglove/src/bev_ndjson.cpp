@@ -436,7 +436,7 @@ bool apply_ndjson_row(LiveBevState& st, std::string_view line) {
     apply_ego(st, db, de);
     return true;
   }
-  if (topic_is(topic, "Trajectory")) {
+  if (topic_is(topic, "DrivingTrajectory") || topic_is(topic, "Trajectory")) {
     apply_traj(st, db, de);
     return true;
   }

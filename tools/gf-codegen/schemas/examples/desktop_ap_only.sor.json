@@ -4,7 +4,7 @@
   "types": [],
   "semantic_services": [
     { "id": "semantic.ObjectList" },
-    { "id": "semantic.Trajectory" },
+    { "id": "semantic.DrivingTrajectory" },
     { "id": "semantic.EgoMotion" }
   ],
   "services": [],

@@ -12,5 +12,5 @@ children:
   - cases/roadway
   - cases/isp_env
   - cases/weather
-  # ADC shells (planned): python3 run_cases.py cases/adc
-  # - cases/adc
+  # Parking: python3 run_cases.py cases/parking
+  # LC scene: cases/lateral/assist_lc.py (in this suite)

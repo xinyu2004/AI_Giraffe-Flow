@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_suggest = sub.add_parser("suggest", help="Suggest wiring fragments")
     sug_sub = p_suggest.add_subparsers(dest="suggest_what", required=True)
-    p_sug_w = sug_sub.add_parser("wiring", help="Suggest bindings from hpp structs")
+    p_sug_w = sug_sub.add_parser("wiring", help="Suggest bindings from cfg/types.yaml")
     p_sug_w.add_argument("--project", type=Path, required=True)
     p_sug_w.add_argument("--repo-root", type=Path, default=None)
 
@@ -53,11 +53,21 @@ def main(argv: list[str] | None = None) -> int:
     p_idl.add_argument("--out", type=Path, required=True, help="Output directory")
     p_idl.add_argument("--module", type=str, default="gf_types")
 
-    p_imp = sub.add_parser("import", help="Import OEM artifacts into fragment JSON")
+    p_imp = sub.add_parser(
+        "import",
+        help="Digest vendor artifacts into cfg/types.yaml or cfg/mappings.yaml",
+    )
     imp_sub = p_imp.add_subparsers(dest="import_what", required=True)
     p_arxml = imp_sub.add_parser("arxml", help="ARXML subset (FARACON-compatible)")
     p_arxml.add_argument("path", type=Path)
     p_arxml.add_argument("--out", type=Path, default=None, help="Write fragment JSON")
+    p_hpp = imp_sub.add_parser("hpp", help="Digest C/C++ header into cfg/types.yaml")
+    p_hpp.add_argument("path", type=Path)
+    p_hpp.add_argument("--project", type=Path, required=True)
+    p_dbc = imp_sub.add_parser("dbc", help="Digest DBC into cfg/mappings.yaml")
+    p_dbc.add_argument("path", type=Path)
+    p_dbc.add_argument("--project", type=Path, required=True)
+    p_dbc.add_argument("--manifest", type=Path, default=None)
 
     args = parser.parse_args(argv)
 
@@ -102,6 +112,32 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wrote {args.out}")
         else:
             print(text, end="")
+        return 0
+
+    if args.cmd == "import" and args.import_what == "hpp":
+        from gf_codegen.compose.load_project import load_project
+        from gf_codegen.compose.types_store import ingest_hpp_into_types, types_yaml_path
+
+        paths = load_project(args.project)
+        incoming = ingest_hpp_into_types(paths.project_dir, args.path)
+        print(
+            f"ingested {len(incoming)} types → {types_yaml_path(paths.project_dir)}"
+        )
+        return 0
+
+    if args.cmd == "import" and args.import_what == "dbc":
+        from gf_codegen.compose.load_project import load_project
+        from gf_codegen.compose.types_store import (
+            ingest_dbc_into_mappings,
+            mappings_yaml_path,
+        )
+
+        paths = load_project(args.project)
+        overlay = ingest_dbc_into_mappings(
+            paths.project_dir, args.path, manifest_path=args.manifest
+        )
+        n = len(overlay.get("adapter_mappings") or [])
+        print(f"ingested {n} adapter_mappings → {mappings_yaml_path(paths.project_dir)}")
         return 0
 
     return 2

@@ -180,7 +180,6 @@ def _write_results(
     passed_ids: list[str],
     failed_ids: list[str],
     skipped_rest: list[str],
-    planned_skip: int,
     runnable_n: int,
     stop_on_fail: bool,
     duration_s: float,
@@ -202,7 +201,6 @@ def _write_results(
         "duration_s": duration_s,
         "stop_on_fail": stop_on_fail,
         "runnable": runnable_n,
-        "planned_skipped": planned_skip,
         "passed": passed_ids,
         "failed": failed_ids,
         "skipped_remaining": skipped_rest,
@@ -247,7 +245,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--period-s", type=float, default=0.05)
     p.add_argument("--no-window", action="store_true")
     p.add_argument("--wait-s", type=float, default=None)
-    p.add_argument("--include-planned", action="store_true")
     p.add_argument(
         "--stop-on-fail",
         action="store_true",
@@ -279,12 +276,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     runnable: list[tuple[str, Path, str]] = []
-    planned_skip = 0
     for c in cases:
-        status = str(c.get("status") or "active")
-        if status == "planned" and not args.include_planned:
-            planned_skip += 1
-            continue
         script = c.get("_script_path") or (Path(c["_dir"]) / str(c.get("script") or ""))
         script = Path(script)
         if not script.is_file():
@@ -304,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"[run_cases] Client A long-lived host={snap.host}:{snap.port} "
         f"tm={snap.tm_port} "
-        f"cases={len(runnable)} planned_skipped={planned_skip} "
+        f"cases={len(runnable)} "
         f"stop_on_fail={int(stop_on_fail)} write_results={int(write_results)} "
         f"(scheme-1: natural continue; Giraffe drives; one window)",
         flush=True,
@@ -485,7 +477,6 @@ def main(argv: list[str] | None = None) -> int:
                     passed_ids=passed_ids,
                     failed_ids=failed_ids,
                     skipped_rest=skipped_rest,
-                    planned_skip=planned_skip,
                     runnable_n=len(runnable),
                     stop_on_fail=stop_on_fail,
                     duration_s=float(args.duration_s),
@@ -500,7 +491,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"[run_cases] SUMMARY passed={len(passed_ids)} "
             f"failed={len(failed_ids)} skipped_remaining={len(skipped_rest)} "
-            f"planned_skipped={planned_skip} runnable={len(runnable)} "
+            f"runnable={len(runnable)} "
             f"stop_on_fail={int(stop_on_fail)}",
             flush=True,
         )

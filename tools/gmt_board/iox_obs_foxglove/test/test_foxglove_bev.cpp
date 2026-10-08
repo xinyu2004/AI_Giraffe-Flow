@@ -5,11 +5,8 @@
 #include "gf_foxglove/png.hpp"
 #include "gf_foxglove/ws_hub.hpp"
 
-#if __has_include("gf_gen/types/perception_message__out__st.hpp")
-#include "gf_gen/types/perception_message__out__st.hpp"
-#define GF_TEST_HAS_PERC 1
-#elif __has_include("gf_gen/types/perception_message_out_st.hpp")
-#include "gf_gen/types/perception_message_out_st.hpp"
+#if __has_include("gf_gen/perception_message__out__st.hpp")
+#include "gf_gen/perception_message__out__st.hpp"
 #define GF_TEST_HAS_PERC 1
 #endif
 

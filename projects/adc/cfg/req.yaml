@@ -32,7 +32,7 @@ observability:
     services:
     - services.semantic.EgoMotion
     - services.semantic.Perception_MESSAGE_Out_St
-    - services.semantic.Trajectory
+    - services.semantic.DrivingTrajectory
     - services.semantic.Freespace
     - services.semantic.FreespaceNear
     - services.semantic.VehicleMode
@@ -158,9 +158,11 @@ acceptance:
   - services.semantic.Perception_In_St
   - services.semantic.Perception_MESSAGE_Out_St
   - services.semantic.Perception_Rear_Out_St
-  - services.semantic.Trajectory
+  - services.semantic.DrivingTrajectory
   - services.semantic.VehicleBus
   - services.semantic.VehicleMode
+  - services.semantic.ParkingSlot
+  - services.semantic.ApaStatus
 publish_policy:
   services:
     EgoMotion:
@@ -178,9 +180,13 @@ publish_policy:
     Perception_Rear_Out_St:
       trigger: on_change
       expect_fps: 20
-    Trajectory:
+    DrivingTrajectory:
       trigger: on_change
     VehicleMode:
+      trigger: on_change
+    ParkingSlot:
+      trigger: on_change
+    ApaStatus:
       trigger: on_change
     SurroundWorld:
       trigger: on_change

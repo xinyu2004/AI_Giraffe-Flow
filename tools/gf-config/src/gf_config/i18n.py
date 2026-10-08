@@ -29,9 +29,9 @@ _EN: dict[str, str] = {
     "新建失败": "Create failed",
     "目录非空：": "Directory not empty: ",
     "已生成最小完备树：": "Scaffolded minimal tree:\n",
-    "含 cfg/req.yaml · cfg/wiring.yaml · cfg/gf_ara_cfg/*\n请补 OEM DBC 后 Verify。": (
-        "Includes cfg/req.yaml · cfg/wiring.yaml · cfg/gf_ara_cfg/*\n"
-        "Add OEM DBC then Verify."
+    "含 cfg/req.yaml · cfg/wiring.yaml · cfg/types.yaml · cfg/gf_ara_cfg/*\n请导入类型后 Verify。": (
+        "Includes cfg/req.yaml · cfg/wiring.yaml · cfg/types.yaml · cfg/gf_ara_cfg/*\n"
+        "Import types then Verify."
     ),
     "打开 giraffe.yaml…": "Open giraffe.yaml…",  # legacy tip key
     "保存（只写盘，不检查）": "Save (disk only, no check)",
@@ -970,6 +970,18 @@ _EN: dict[str, str] = {
     "变化时": "On change",
     "编辑信号": "Edit signal",
     "编辑信号名…": "Edit signal name…",
+    "查看类型…": "View type…",
+    "查看字段（只读）": "View fields (read-only)",
+    "ⓘ 看字段 · 双击 Out 改服务名 · 右键同样可以": (
+        "ⓘ view fields · double-click Out to rename · right-click also works"
+    ),
+    "信号名": "Signal name",
+    "信号名不能为空": "Signal name cannot be empty",
+    "字段": "Field",
+    "数组": "Array",
+    "类型": "Type",
+    "结构 / 字段": "Struct / field",
+    "无字段（先 Verify 或导入 hpp）": "No fields (Verify or import hpp first)",
     "重置连线路径": "Reset wire path",
     "删除信号线": "Delete signal wire",
     "删除 GfChannel 边": "Delete GfChannel edge",
@@ -1026,13 +1038,18 @@ _EN: dict[str, str] = {
     ),
     "请先添加至少一个模块": "Add at least one module first",
     "导入完成": "Import done",
-    "已关联 {rel}\n向 {process} 添加了 {n} 个{direction} 端口。\n"
+    "已写入 cfg/types.yaml（{n_types} 个类型）\n"
+    "向 {process} 添加了 {n} 个{direction} 端口。\n"
     "可双击模块继续调整，再从 Out 拖到 In 连线。": (
-        "Linked {rel}\nAdded {n} {direction} ports to {process}.\n"
+        "Wrote cfg/types.yaml ({n_types} types)\n"
+        "Added {n} {direction} ports to {process}.\n"
         "Double-click the module to adjust, then drag Out→In to wire."
     ),
     "拖拽连线 · Ctrl+拖：改边或同边调序 · 右键选边": (
         "Drag to wire · Ctrl+drag: move/reorder · right-click for side"
+    ),
+    "拖拽连线 · Ctrl+拖：改边或同边调序 · 右键查看类型": (
+        "Drag to wire · Ctrl+drag: move/reorder · right-click to view type"
     ),
 }
 

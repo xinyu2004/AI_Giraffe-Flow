@@ -1,0 +1,13 @@
+kind: cases
+cases:
+  - id: spot_search
+    script: spot_search.py
+    keyword: APA
+    tags: [parking, spot_search]
+    description: Town04 lot; ModeHint APA armed only; no slot pick
+
+  - id: apa
+    script: apa.py
+    keyword: APA
+    tags: [parking, apa]
+    description: Town04 lot; write gold P* for slot 2 then confirm after stop

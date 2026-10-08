@@ -24,8 +24,7 @@
 // Never run alongside a live publisher of the same service.
 
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
-#include "gf_gen/skeleton/ego_motion_skeleton.hpp"
-#include "gf_gen/types/ego_motion.hpp"
+#include "gf_gen/ego_motion.hpp"
 
 #include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"
 

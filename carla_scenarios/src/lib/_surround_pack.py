@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 GF_CH_SURROUND_MAGIC = 0x47535744
 GF_CH_MODE_HINT_MAGIC = 0x474D4854
 GF_CH_SURROUND_VERSION = 2
-GF_CH_MODE_HINT_VERSION = 1
+GF_CH_MODE_HINT_VERSION = 2
 _MAX_OBJ = 16
 _MAX_SLOT = 8
 
@@ -26,8 +26,8 @@ assert _SLOT.size == 24
 _SW_SIZE = _HEAD.size + _MAX_OBJ * _OBJ.size + _MAX_SLOT * _SLOT.size
 assert _SW_SIZE == 668
 
-_HINT = struct.Struct("<IHBBQQ")
-assert _HINT.size == 24
+_HINT = struct.Struct("<IHBBQQ6f")
+assert _HINT.size == 48
 
 
 def _u8(v: Any, default: int = 0) -> int:
@@ -113,6 +113,12 @@ def pack_mode_hint_pod(
     slot_confirmed: int = 0,
     seq: int = 0,
     timestamp_ns: int | None = None,
+    fParkingSlot_P0X: float = 0.0,
+    fParkingSlot_P0Y: float = 0.0,
+    fParkingSlot_P1X: float = 0.0,
+    fParkingSlot_P1Y: float = 0.0,
+    fParkingSlot_P2X: float = 0.0,
+    fParkingSlot_P2Y: float = 0.0,
 ) -> bytes:
     ts = int(timestamp_ns if timestamp_ns is not None else time.time_ns())
     return _HINT.pack(
@@ -122,4 +128,10 @@ def pack_mode_hint_pod(
         1 if slot_confirmed else 0,
         ts & 0xFFFFFFFFFFFFFFFF,
         int(seq) & 0xFFFFFFFFFFFFFFFF,
+        _f(fParkingSlot_P0X),
+        _f(fParkingSlot_P0Y),
+        _f(fParkingSlot_P1X),
+        _f(fParkingSlot_P1Y),
+        _f(fParkingSlot_P2X),
+        _f(fParkingSlot_P2Y),
     )

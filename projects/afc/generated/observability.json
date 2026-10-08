@@ -1,0 +1,27 @@
+{
+  "profile": "vehicle-debug",
+  "live_tap": {
+    "enabled": true,
+    "mode": "wiring_all",
+    "services": [
+      "VehicleBus",
+      "Perception_In_St",
+      "Perception_MESSAGE_Out_St",
+      "EgoMotion",
+      "DrivingTrajectory",
+      "semantic.VehicleBus",
+      "semantic.DrivingTrajectory",
+      "semantic.EgoMotion",
+      "semantic.Perception_In_St",
+      "semantic.Perception_MESSAGE_Out_St"
+    ]
+  },
+  "record": {
+    "mode": "minimal",
+    "services": [
+      "EgoMotion",
+      "Perception_MESSAGE_Out_St",
+      "DrivingTrajectory"
+    ]
+  }
+}

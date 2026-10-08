@@ -1,4 +1,4 @@
-# Longitudinal atoms. status: active = batch-run; planned = listed only.
+# Longitudinal atoms.
 kind: cases
 cases:
   - id: acc

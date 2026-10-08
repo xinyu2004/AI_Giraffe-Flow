@@ -26,7 +26,7 @@ enum {
   GF_CH_SURROUND_MAX_OBJ = 16u,
   GF_CH_SURROUND_MAX_SLOT = 8u,
   GF_CH_SURROUND_SIZE = 668u,
-  GF_CH_MODE_HINT_VERSION = 1u,
+  GF_CH_MODE_HINT_VERSION = 2u, /* v1=24B; v2=+fParkingSlot_P0..P2 */
   GF_CH_RCM_MAGIC = 0x4752434du, /* 'GRCM' rear camera module truth */
   GF_CH_RCM_VERSION = 1u,
   GF_CH_RCM_MAX_LANE = 8u,
@@ -201,6 +201,12 @@ typedef struct GfModeHintPod {
   uint8_t slot_confirmed;
   uint64_t timestamp_ns;
   uint64_t seq;
+  float fParkingSlot_P0X;
+  float fParkingSlot_P0Y;
+  float fParkingSlot_P1X;
+  float fParkingSlot_P1Y;
+  float fParkingSlot_P2X;
+  float fParkingSlot_P2Y;
 } GfModeHintPod;
 
 /* Host → RCM (Perception_Rear_Out_St). Rear FOV truth; no TSR. */

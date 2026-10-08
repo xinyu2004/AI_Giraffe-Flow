@@ -244,7 +244,11 @@ class MainWindow(QMainWindow):
         lang_menu.addAction(act_en)
 
     def _flush_editors_to_session(self) -> None:
-        """Controls → memory (canvas + platform). Call before validate/save/undo."""
+        """Controls → memory (canvas + platform). Call before validate/save/undo.
+
+        Three bags, three flushes: SKU writes live; wiring/ARA harvest only
+        authored deltas (display defaults and form-omitted keys stay).
+        """
         self._graph.flush_canvas()
         self._ara_cfg_ed.flush_to_session()
 
@@ -470,8 +474,8 @@ class MainWindow(QMainWindow):
                 t("新建 Giraffe 工程"),
                 t("已生成最小完备树：")
                 + f"\n{entry}\n\n"
-                + t("含 cfg/req.yaml · cfg/wiring.yaml · cfg/gf_ara_cfg/*\n"
-                    "请补 OEM DBC 后 Verify。"),
+                + t("含 cfg/req.yaml · cfg/wiring.yaml · cfg/types.yaml · cfg/gf_ara_cfg/*\n"
+                    "请导入类型后 Verify。"),
             )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, t("新建失败"), str(exc))

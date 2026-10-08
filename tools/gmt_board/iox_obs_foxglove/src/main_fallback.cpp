@@ -6,8 +6,8 @@
 #include "gf_foxglove/bev_ingest.hpp"
 #include "gf_foxglove/camera.hpp"
 #include "gf_foxglove/ws_hub.hpp"
-#include "gf_gen/proxy/ego_motion_proxy.hpp"
-#include "gf_gen/proxy/trajectory_proxy.hpp"
+#include "gf_gen/ego_motion.hpp"
+#include "gf_gen/driving_trajectory.hpp"
 
 #include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"
 
@@ -52,14 +52,14 @@ int main() {
   gf_foxglove::WsHub hub;
   if (!hub.listen(host, port)) return EXIT_FAILURE;
 
-  std::vector<std::string> topics{"/gf/EgoMotion", "/gf/Trajectory"};
+  std::vector<std::string> topics{"/gf/EgoMotion", "/gf/DrivingTrajectory"};
   if (synth_bev) topics.push_back("/gf/driving/bev/compressed");
   if (cam_on) topics.push_back("/gf/driving/camera/front/compressed");
   hub.advertise(topics);
 
   gf_ara::com::binding::iceoryx::InitRuntime("gf-foxglove-ws");
   gf_gen::EgoMotionProxy sub_ego{};
-  gf_gen::TrajectoryProxy sub_traj{};
+  gf_gen::DrivingTrajectoryProxy sub_traj{};
 
   gf_foxglove::LiveBevState bev;
   const char* slot = std::getenv("GF_CAMERA_SLOT");
@@ -89,14 +89,14 @@ int main() {
     auto taken_t = sub_traj.Take();
     if (taken_t && taken_t.Value().has_value()) {
       const auto& s = *taken_t.Value();
-      gf_foxglove::apply_sample(bev, "Trajectory", &s);
+      gf_foxglove::apply_sample(bev, "DrivingTrajectory", &s);
       const std::uint64_t t = s.timestamp_ns ? s.timestamp_ns : now_ns();
       std::string js = "{\"timestamp_ns\":";
       js += std::to_string(s.timestamp_ns);
       js += ",\"point_count\":";
       js += std::to_string(static_cast<unsigned>(s.point_count));
       js += "}";
-      hub.publish_json("/gf/Trajectory", t, js);
+      hub.publish_json("/gf/DrivingTrajectory", t, js);
     }
     const auto now = std::chrono::steady_clock::now();
     if (synth_bev && now - last_bev >= std::chrono::milliseconds(33)) {

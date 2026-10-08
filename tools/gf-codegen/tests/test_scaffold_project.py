@@ -14,7 +14,10 @@ def test_scaffold_minimal_tree(tmp_path: Path, repo_root: Path) -> None:
     assert entry.name == GIRAFFE_YAML
     assert (dest / "cfg" / "req.yaml").is_file()
     assert (dest / "cfg" / "wiring.yaml").is_file()
+    assert (dest / "cfg" / "types.yaml").is_file()
     assert (dest / "cfg" / "gf_ara_cfg" / "exec.yaml").is_file()
+    assert not (dest / "oem").exists()
     paths = load_project(entry, repo_root=repo_root)
     assert paths.req == dest / "cfg" / "req.yaml"
+    assert paths.types_yaml == dest / "cfg" / "types.yaml"
     assert "exec" in paths.gf_ara_cfg

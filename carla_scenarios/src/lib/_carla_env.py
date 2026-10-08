@@ -355,6 +355,9 @@ def duration_s_for_case(case_id: str, *, fallback: float = 8.0, snap: Optional[C
     isp = cid.startswith("env_tunnel") or "isp" in cid
     if isp:
         return max(1.0, float(s.duration_isp_s))
+    if cid in ("apa", "spot_search"):
+        need = 20.0 if cid == "apa" else 12.0
+        return max(1.0, float(s.duration_s or 0), float(fallback), need)
     return max(1.0, float(s.duration_s if s.duration_s else fallback))
 
 

@@ -14,7 +14,7 @@ int main() {
     return 1;
   }
   const char* traj =
-      R"({"topic":"/gf/Trajectory","data":{"points_x_m":[0,10,20],"points_y_m":[0,0.1,-0.1],"points_v_mps":[8,8,7],"throttle":0.2,"brake":0,"D_see_m":40,"s_stop_m":120}})";
+      R"({"topic":"/gf/DrivingTrajectory","data":{"points_x_m":[0,10,20],"points_y_m":[0,0.1,-0.1],"points_v_mps":[8,8,7],"throttle":0.2,"brake":0,"D_see_m":40,"s_stop_m":120}})";
   if (!gf_foxglove::apply_ndjson_row(st, traj) || st.n_traj != 3) {
     std::fprintf(stderr, "traj apply failed n=%d\n", st.n_traj);
     return 2;

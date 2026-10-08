@@ -1,0 +1,642 @@
+schema_version: '0.1'
+types:
+- id: types.EgoMotion
+  kind: struct
+  fields:
+  - name: timestamp_ns
+    type: uint64
+  - name: speed_mps
+    type: float32
+  - name: yaw_rate_degps
+    type: float32
+  - name: steer_angle_deg
+    type: float32
+  - name: gear
+    type: uint8
+- id: types.Perception_In_St
+  kind: struct
+  fields:
+  - name: timestamp_ns
+    type: uint64
+  - name: ipc_frame_counter
+    type: uint32
+  - name: gear
+    type: uint8
+  - name: vehicle_speed
+    type: float32
+  - name: yaw_rate
+    type: float32
+  - name: _vendor_payload_opaque
+    type: uint8
+    array_size: 1
+- id: types.VehicleBus
+  kind: struct
+  fields:
+  - name: timestamp_ns
+    type: uint64
+  - name: _opaque
+    type: uint8
+    array_size: 1
+- id: types.DrivingTrajectory
+  kind: struct
+  fields:
+  - name: timestamp_ns
+    type: uint64
+  - name: point_count
+    type: uint8
+  - name: points_x_m
+    type: float32
+    array_size: 60
+  - name: points_y_m
+    type: float32
+    array_size: 60
+  - name: points_v_mps
+    type: float32
+    array_size: 60
+  - name: gear_shift_first
+    type: uint8
+  - name: gear_shift_second
+    type: uint8
+  - name: throttle
+    type: float32
+  - name: brake
+    type: float32
+  - name: steer
+    type: float32
+  - name: target_speed_mps
+    type: float32
+  - name: ctrl_mode
+    type: uint8
+  - name: D_see_m
+    type: float32
+  - name: s_stop_m
+    type: float32
+  - name: cipv_long_m
+    type: float32
+  - name: cipv_rel_v
+    type: float32
+  - name: v_sign_max_mps
+    type: float32
+  - name: v_sign_min_mps
+    type: float32
+- id: types.Dyn_OBJ_Item_St
+  kind: struct
+  fields:
+  - name: m_OBJ_ID
+    type: uint8
+  - name: m_OBJ_Object_Class
+    type: uint8
+  - name: m_OBJ_IsCutin
+    type: uint8
+  - name: m_OBJ_Width
+    type: float32
+  - name: m_OBJ_Length
+    type: float32
+  - name: m_OBJ_Height
+    type: float32
+  - name: m_OBJ_Abs_Long_Velocity
+    type: float32
+  - name: m_OBJ_Abs_Long_Velocity_STD
+    type: float32
+  - name: m_OBJ_Abs_Lat_Velocity
+    type: float32
+  - name: m_OBJ_Abs_Lat_Velocity_STD
+    type: float32
+  - name: m_OBJ_Relative_Long_Velocity
+    type: float32
+  - name: m_OBJ_Relative_Lat_Velocity
+    type: float32
+  - name: m_OBJ_Lane_Assignment
+    type: uint8
+  - name: m_OBJ_Abs_Long_Acc
+    type: float32
+  - name: m_OBJ_Abs_Long_Acc_STD
+    type: float32
+  - name: m_OBJ_Abs_Lat_Acc
+    type: float32
+  - name: m_OBJ_Abs_Lat_Acc_STD
+    type: float32
+  - name: m_OBJ_Relative_Long_Acc
+    type: float32
+  - name: m_OBJ_Relative_Long_Acc_STD
+    type: float32
+  - name: m_OBJ_Long_Distance
+    type: float32
+  - name: m_OBJ_Long_Distance_STD
+    type: float32
+  - name: m_OBJ_Lat_Distance
+    type: float32
+  - name: m_OBJ_Lat_Distance_STD
+    type: float32
+  - name: m_OBJ_Abs_Acceleration
+    type: float32
+  - name: m_OBJ_Heading
+    type: float32
+  - name: m_OBJ_Existence_Probability
+    type: float32
+  - name: m_OBJ_Motion_Category
+    type: uint8
+  - name: m_OBJ_Object_Age
+    type: uint32
+  - name: m_OBJ_Measuring_Status
+    type: uint8
+  - name: m_OBJ_Class_Probability
+    type: float32
+  - name: m_OBJ_Motion_Status
+    type: uint8
+  - name: m_OBJ_Right_Out_Of_Image
+    type: bool
+  - name: m_OBJ_Left_Out_Of_Image
+    type: bool
+  - name: m_OBJ_Top_Out_Of_Image
+    type: bool
+  - name: m_OBJ_Bottom_Out_Of_Image
+    type: bool
+  - name: m_OBJ_Absolute_Speed
+    type: float32
+  - name: m_OBJ_Angle_Rate
+    type: float32
+  - name: m_OBJ_Angle_Right
+    type: float32
+  - name: m_OBJ_Angle_Left
+    type: float32
+  - name: m_OBJ_Angle_Side
+    type: float32
+  - name: m_OBJ_Angle_Mid
+    type: float32
+- id: types.Perception_Dyn_OBJ_Out_St
+  kind: struct
+  fields:
+  - name: OBJ_Datalength
+    type: uint32
+  - name: OBJ_CRC
+    type: uint32
+  - name: m_frame_id
+    type: uint32
+  - name: m_time_stamp
+    type: uint64
+  - name: m_OBJ_Ped_Count
+    type: uint8
+  - name: m_OBJ_VD_Count
+    type: uint8
+  - name: m_OBJ_VD_Allow_Acc
+    type: uint8
+  - name: m_OBJ_VD_CIPV_ID
+    type: uint8
+  - name: m_OBJ_VD_CIPV_Lost
+    type: uint8
+  - name: m_OBJ_VD_NIV_Left
+    type: uint8
+  - name: m_OBJ_VD_NIV_Right
+    type: uint8
+  - name: m_OBJ_VD_Pre_Cutin_ID
+    type: uint8
+  - name: m_OBJ_VD_OCC_ID
+    type: uint8
+  - name: m_Obj_item
+    type: types.Dyn_OBJ_Item_St
+    array_size: 13
+- id: types.Static_OBJ_Item_St
+  kind: struct
+  fields:
+  - name: m_OBJ_ID
+    type: uint8
+  - name: m_OBJ_Object_Class
+    type: uint8
+  - name: m_OBJ_Width
+    type: float32
+  - name: m_OBJ_Length
+    type: float32
+  - name: m_OBJ_Lane_Assignment
+    type: uint8
+  - name: m_OBJ_Long_Distance
+    type: float32
+  - name: m_OBJ_Lat_Distance
+    type: float32
+  - name: m_OBJ_Heading
+    type: float32
+  - name: m_OBJ_Existence_Probability
+    type: float32
+  - name: m_OBJ_Object_Age
+    type: uint32
+  - name: m_OBJ_Class_Probability
+    type: float32
+  - name: m_OBJ_Angle_Right
+    type: float32
+  - name: m_OBJ_Angle_Left
+    type: float32
+  - name: m_OBJ_Angle_Side
+    type: float32
+  - name: m_OBJ_Angle_Mid
+    type: float32
+- id: types.Perception_Static_Obj_Out_St
+  kind: struct
+  fields:
+  - name: STAT_OBJ_Datalength
+    type: uint32
+  - name: STAT_OBJ_CRC
+    type: uint32
+  - name: m_frame_id
+    type: uint32
+  - name: m_time_stamp
+    type: uint64
+  - name: m_Static_OBJ_Count
+    type: uint8
+  - name: STAT_OBJ_Static_CIPV_ID
+    type: uint8
+  - name: m_Obj_item
+    type: types.Static_OBJ_Item_St
+    array_size: 10
+- id: types.FCF_VD_St
+  kind: struct
+  fields:
+  - name: m_FCF_VD_Dyn_SET_ID
+    type: uint8
+  - name: m_FCF_VD_Dyn_Alert
+    type: uint8
+  - name: m_FCF_VD_Obj_ID
+    type: uint8
+  - name: m_FCF_VD_TTC
+    type: float32
+  - name: m_FCF_VD_TTC_Thres
+    type: float32
+  - name: FCF_rel_demand_deceleration
+    type: float32
+  - name: FCF_target_deceleration
+    type: float32
+  - name: m_FCF_VD_AEB_SuppressReason
+    type: uint8
+  - name: m_FCF_VD_FCW_SuppressReason
+    type: uint8
+- id: types.FCF_VRU_St
+  kind: struct
+  fields:
+  - name: m_FCF_VRU_Dyn_Level_ID
+    type: uint8
+  - name: m_FCF_VRU_Dyn_Alert
+    type: uint8
+  - name: m_FCF_VRU_Obj_ID
+    type: uint8
+  - name: m_FCF_VRU_TTC
+    type: float32
+  - name: m_FCF_VRU_TTC_Thres
+    type: float32
+  - name: FCF_rel_demand_deceleration
+    type: float32
+  - name: FCF_target_deceleration
+    type: float32
+  - name: m_FCF_VRU_AEB_SuppressReason
+    type: uint8
+  - name: m_FCF_VRU_FCW_SuppressReason
+    type: uint8
+- id: types.FCF_CV_St
+  kind: struct
+  fields:
+  - name: m_FCF_CV_Dyn_Alert_Level
+    type: uint8
+  - name: m_FCF_CV_Dyn_Alert
+    type: uint8
+  - name: m_FCF_CV_Obj_ID
+    type: uint8
+  - name: m_FCF_CV_TTC
+    type: float32
+  - name: m_FCF_CV_TTC_Thres
+    type: float32
+  - name: FCF_rel_demand_deceleration
+    type: float32
+  - name: FCF_target_deceleration
+    type: float32
+  - name: m_FCF_CV_AEB_SuppressReason
+    type: uint8
+  - name: m_FCF_CV_FCW_SuppressReason
+    type: uint8
+- id: types.Perception_FCF_Out_St
+  kind: struct
+  fields:
+  - name: FCF_Datalength
+    type: uint32
+  - name: FCF_CRC
+    type: uint32
+  - name: m_frame_id
+    type: uint32
+  - name: m_time_stamp
+    type: uint64
+  - name: asil_fcw_vo_seta
+    type: bool
+  - name: asil_aeb_vo_sete
+    type: bool
+  - name: aeb_resource
+    type: uint8
+  - name: m_FCF_VD_Info
+    type: types.FCF_VD_St
+    array_size: 8
+  - name: m_FCF_VRU_Info
+    type: types.FCF_VRU_St
+    array_size: 8
+  - name: m_FCF_CV_Info
+    type: types.FCF_CV_St
+    array_size: 8
+- id: types.HostLine_St
+  kind: struct
+  fields:
+  - name: LH_Track_ID
+    type: uint8
+  - name: m_LH_Side
+    type: uint8
+  - name: m_LH_Confidence
+    type: float32
+  - name: m_LH_Availability_State
+    type: uint8
+  - name: m_LH_Lanemark_Type
+    type: uint8
+  - name: m_LH_First_VR_Start
+    type: float32
+  - name: m_LH_First_VR_End
+    type: float32
+  - name: m_LH_Marker_Width
+    type: float32
+  - name: m_LH_Line_First_C0
+    type: float32
+  - name: m_LH_Line_First_C1
+    type: float32
+  - name: m_LH_Line_First_C2
+    type: float32
+  - name: m_LH_Line_First_C3
+    type: float32
+  - name: m_LH_Color
+    type: uint8
+  - name: m_LH_DLM_Type
+    type: uint8
+  - name: m_LH_DECEL_Type
+    type: uint8
+  - name: m_LH_Crossing
+    type: bool
+- id: types.Perception_LH_Out_St
+  kind: struct
+  fields:
+  - name: LH_Datalength
+    type: uint32
+  - name: LH_CRC
+    type: uint32
+  - name: m_frame_id
+    type: uint32
+  - name: m_time_stamp
+    type: uint64
+  - name: m_hostline_num
+    type: uint8
+  - name: m_LH_Estimated_Width
+    type: float32
+  - name: m_hostline
+    type: types.HostLine_St
+    array_size: 2
+- id: types.Perception_HLB_Out_St
+  kind: struct
+  fields:
+  - name: HLB_Datalength
+    type: uint32
+  - name: HLB_CRC
+    type: uint32
+  - name: m_frame_id
+    type: uint32
+  - name: m_time_stamp
+    type: uint64
+  - name: m_HLB_Decision
+    type: uint8
+  - name: m_HLB_Reason
+    type: uint32
+- id: types.Perception_FS_Out_St
+  kind: struct
+  fields:
+  - name: FS_Datalength
+    type: uint32
+  - name: FS_CRC
+    type: uint32
+  - name: m_frame_id
+    type: uint32
+  - name: m_time_stamp
+    type: uint64
+  - name: m_FS_Free_Sight
+    type: bool
+  - name: m_FS_Full_Blockage
+    type: uint8
+  - name: m_FS_Rain
+    type: uint8
+  - name: m_FS_Fog
+    type: uint8
+  - name: m_FS_Splashes
+    type: uint8
+  - name: m_FS_Sun_Ray
+    type: uint8
+  - name: m_FS_Low_Sun
+    type: uint8
+  - name: m_FS_Blur_Image
+    type: uint8
+  - name: m_FS_Partial_Blockage
+    type: uint8
+  - name: m_FS_Frozen_Windshield_Lens
+    type: uint8
+  - name: m_FS_Out_Of_Focus
+    type: uint8
+- id: types.TSR_Item_St
+  kind: struct
+  fields:
+  - name: m_DSTSR_ID
+    type: uint8
+  - name: m_DSTSR_Sign_Name
+    type: uint8
+  - name: m_DSTSR_Sign_Long_Distance
+    type: float32
+  - name: m_DSTSR_Sign_Lat_Distance
+    type: float32
+  - name: m_DSTSR_Sign_Height
+    type: float32
+  - name: m_DSTSR_Sign_Shape
+    type: uint8
+  - name: m_DSTSR_Relevancy
+    type: uint8
+  - name: m_DSTSR_Sup1_Confidence
+    type: float32
+  - name: m_DSTSR_Confidence
+    type: float32
+  - name: m_DSTSR_Relevancy_Confidence
+    type: float32
+  - name: m_DSTSR_Tracking_Out_of_Image
+    type: uint32
+  - name: m_DSTSR_Sup1_SignName
+    type: uint8
+- id: types.Perception_DSTSR_Out_St
+  kind: struct
+  fields:
+  - name: DSTSR_Datalength
+    type: uint32
+  - name: DSTSR_CRC
+    type: uint32
+  - name: m_frame_id
+    type: uint32
+  - name: m_time_stamp
+    type: uint64
+  - name: m_tsr_num
+    type: uint8
+  - name: m_TSR_Item
+    type: types.TSR_Item_St
+    array_size: 6
+- id: types.LA_Line_St
+  kind: struct
+  fields:
+  - name: LA_Track_ID
+    type: uint8
+  - name: m_LA_Confidence
+    type: float32
+  - name: m_LA_Availability_State
+    type: uint8
+  - name: m_LA_View_Range_Start
+    type: float32
+  - name: m_LA_View_Range_End
+    type: float32
+  - name: m_LA_Lanemark_Type
+    type: uint8
+  - name: m_LA_Line_Side
+    type: uint8
+  - name: m_LA_Line_C3
+    type: float32
+  - name: m_LA_Line_C2
+    type: float32
+  - name: m_LA_Line_C1
+    type: float32
+  - name: m_LA_Line_C0
+    type: float32
+- id: types.Perception_LA_Out_St
+  kind: struct
+  fields:
+  - name: LA_Datalength
+    type: uint32
+  - name: LA_CRC
+    type: uint32
+  - name: m_frame_id
+    type: uint32
+  - name: m_time_stamp
+    type: uint64
+  - name: m_adj_line_num
+    type: uint8
+  - name: m_adj_line
+    type: types.LA_Line_St
+    array_size: 4
+- id: types.LRE_Line_St
+  kind: struct
+  fields:
+  - name: LRE_Track_ID
+    type: uint8
+  - name: m_LRE_Confidence
+    type: float32
+  - name: m_LRE_Availability_State
+    type: uint8
+  - name: m_LRE_View_Range_Start
+    type: float32
+  - name: m_LRE_View_Range_End
+    type: float32
+  - name: m_LRE_Line_C3
+    type: float32
+  - name: m_LRE_Line_C2
+    type: float32
+  - name: m_LRE_Line_C1
+    type: float32
+  - name: m_LRE_Line_C0
+    type: float32
+  - name: m_LRE_Side
+    type: uint8
+- id: types.Perception_LRE_Out_St
+  kind: struct
+  fields:
+  - name: LRE_Datalength
+    type: uint32
+  - name: LRE_CRC
+    type: uint32
+  - name: m_frame_id
+    type: uint32
+  - name: m_time_stamp
+    type: uint64
+  - name: m_roadedge_num
+    type: uint8
+  - name: m_roadedge_line
+    type: types.LRE_Line_St
+    array_size: 2
+- id: types.Perception_APP_Out_St
+  kind: struct
+  fields:
+  - name: APP_Datalength
+    type: uint32
+  - name: APP_CRC
+    type: uint32
+  - name: APP_Frame_ID
+    type: uint32
+  - name: APP_Timestamp
+    type: uint64
+  - name: APP_Main_State
+    type: uint8
+  - name: APP_Cam_State
+    type: uint8
+  - name: APP_Cam_Temperature
+    type: float32
+  - name: APP_Sensor_Framerate
+    type: float32
+  - name: APP_Perception_Framerate
+    type: float32
+  - name: APP_Latency
+    type: float32
+- id: types.AF_CamCalibResult_St
+  kind: struct
+  fields:
+  - name: cam_tx
+    type: float32
+  - name: cam_ty
+    type: float32
+  - name: cam_tz
+    type: float32
+  - name: cam_pitch
+    type: float32
+  - name: cam_yaw
+    type: float32
+  - name: cam_roll
+    type: float32
+- id: types.Perception_AF_Out_St
+  kind: struct
+  fields:
+  - name: AF_Datalength
+    type: uint32
+  - name: AF_CRC
+    type: uint32
+  - name: AF_Frame_ID
+    type: uint32
+  - name: AF_Timestamp
+    type: uint64
+  - name: AF_calib_status
+    type: uint8
+  - name: AF_calib_progress
+    type: uint8
+  - name: AF_calib_result
+    type: types.AF_CamCalibResult_St
+- id: types.Perception_MESSAGE_Out_St
+  kind: struct
+  fields:
+  - name: Perception_APP_Out
+    type: types.Perception_APP_Out_St
+  - name: Perception_DYN_OBJ_Out
+    type: types.Perception_Dyn_OBJ_Out_St
+  - name: Perception_STATIC_OBJ_Out
+    type: types.Perception_Static_Obj_Out_St
+  - name: Perception_FCF_Out
+    type: types.Perception_FCF_Out_St
+  - name: Perception_LH_Out
+    type: types.Perception_LH_Out_St
+  - name: Perception_HLB_Out
+    type: types.Perception_HLB_Out_St
+  - name: Perception_FS_Out
+    type: types.Perception_FS_Out_St
+  - name: Perception_DSTSR_Out
+    type: types.Perception_DSTSR_Out_St
+  - name: Perception_LA_Out
+    type: types.Perception_LA_Out_St
+  - name: Perception_LRE_Out
+    type: types.Perception_LRE_Out_St
+  - name: Perception_AF_Out
+    type: types.Perception_AF_Out_St

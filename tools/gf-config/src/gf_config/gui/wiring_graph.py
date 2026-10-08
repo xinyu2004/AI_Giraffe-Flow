@@ -123,11 +123,11 @@ class WiringGraphView(
         self._checkpoint(coalesce=False)
 
     def begin_card_drag(self, card: ProcessCard) -> None:
-        """Arm one undo snapshot per drag gesture."""
-        if self._drag_undo_armed:
+        """Remember press pose. Undo/session write only if the card actually moved."""
+        if not _qt_alive(card):
             return
-        self._push_undo()
-        self._drag_undo_armed = True
+        p = card.pos()
+        self._drag_start_xy = (round(p.x(), 1), round(p.y(), 1))
 
     def apply_session_restore(self, session: ProjectSession) -> None:
         """Reload canvas from session after doc undo/redo (keep DocHistory)."""
@@ -332,33 +332,26 @@ class WiringGraphView(
         self._layout_pos[card.process_name] = (p.x(), p.y())
 
     def finalize_card_drag(self, card: ProcessCard) -> None:
-        """鼠标松开：写 session、扩 sceneRect；不 ensureVisible（避免拖飞）。"""
+        """鼠标松开：真拖过才写 session；单击不伪造坐标。"""
         if not _qt_alive(card):
             return
         p = card.pos()
+        nx, ny = round(p.x(), 1), round(p.y(), 1)
         self._layout_pos[card.process_name] = (p.x(), p.y())
-        if self._session is not None:
-            fields: dict[str, Any] = {
-                "x": round(p.x(), 1),
-                "y": round(p.y(), 1),
-                "out_side": card.out_side,
-                "in_side": card.in_side,
-            }
-            if card.port_sides:
-                fields["port_sides"] = dict(card.port_sides)
-            if card.kind and card.kind != "process":
-                fields["kind"] = card.kind
-            if card.label:
-                fields["label"] = card.label
-            self._session.set_node_ui(card.process_name, **fields)
+        start = getattr(self, "_drag_start_xy", None)
+        moved = start is not None and (nx != start[0] or ny != start[1])
+        self._drag_start_xy = None
+        if moved and self._session is not None:
+            self._push_undo()
+            self._session.set_node_ui(card.process_name, x=nx, y=ny)
             self.changed.emit()
         self._refresh_scene_rect()
         self._drag_undo_armed = False
         self._end_doc_edit()
         # Drop ScrollHandDrag "closed hand" residual after item drag.
         self._view.viewport().unsetCursor()
-        # Release can re-fire selection styling (update_path); keep labels apart.
-        self.relayout_edge_labels()
+        if moved:
+            self.relayout_edge_labels()
 
     def _nodes_content_rect(self) -> QRectF:
         """以模块卡片为准算包围盒（含负坐标 MCU，不依赖细线 path）。"""
@@ -444,7 +437,6 @@ class WiringGraphView(
         for p in list(self._peers):
             if _qt_alive(p):
                 p.set_visual_state(highlight=False, dimmed=False)
-        self.relayout_edge_labels()
 
     def relayout_edge_labels(self) -> None:
         """Re-run label deconflict after any path refresh that resets anchors."""
@@ -555,9 +547,6 @@ class WiringGraphView(
         for m in self._missing:
             hit = m.src is focus or m.dst is focus
             m.set_visual_state(highlight=hit, dimmed=not hit)
-
-        # set_visual_state → update_path resets labels; re-separate after batch.
-        self.relayout_edge_labels()
 
     # --- wiring drag ---
 

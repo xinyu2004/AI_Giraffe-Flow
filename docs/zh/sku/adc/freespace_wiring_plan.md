@@ -58,7 +58,7 @@ struct Freespace {
 };
 ```
 
-放在 `projects/adc/interfaces/planning_driving/io_types.hpp`（规划成品，不是感知）。  
+放在 `projects/adc/generated/include/planning_driving/io_types.hpp`（规划成品，不是感知）。  
 **禁止** surround 发布 `Freespace`；**禁止** BEV 用 Near+`D_see_m` 再融。
 
 ### 1.3 `Trajectory.D_see_m`（ADC）

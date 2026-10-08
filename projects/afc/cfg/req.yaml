@@ -31,7 +31,7 @@ observability:
     services:
     - services.semantic.EgoMotion
     - services.semantic.Perception_MESSAGE_Out_St
-    - services.semantic.Trajectory
+    - services.semantic.DrivingTrajectory
 # Behavior freeze (gf-config → compose → compile). Not a runtime camera JSON.
 frame_ingest:
   frame_source: carla_file
@@ -72,13 +72,13 @@ apps:
 - frame_replay
 - carla_io
 acceptance:
-  description: AFC 无 USS — Perception_* + Trajectory + frame_ingest（默认 C dry-run）
+  description: AFC 无 USS — Perception_* + DrivingTrajectory + frame_ingest（默认 C dry-run）
   lineage_required: true
   required_services:
   - services.semantic.EgoMotion
   - services.semantic.Perception_In_St
   - services.semantic.Perception_MESSAGE_Out_St
-  - services.semantic.Trajectory
+  - services.semantic.DrivingTrajectory
   - services.semantic.VehicleBus
 publish_policy:
   services:
@@ -86,7 +86,7 @@ publish_policy:
     Perception_In_St: { trigger: period, period_ms: 10 }
     VehicleBus: { trigger: period, period_ms: 10 }
     Perception_MESSAGE_Out_St: { trigger: on_change, expect_fps: 20 }
-    Trajectory: { trigger: on_change }
+    DrivingTrajectory: { trigger: on_change }
   channels:
     vehicle_cmd: { trigger: period, period_ms: 10 }  # + Traj edge extra tick (AEB); not freeze
     vehicle_state: { trigger: on_change }

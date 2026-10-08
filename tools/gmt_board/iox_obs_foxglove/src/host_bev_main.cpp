@@ -60,7 +60,7 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
   const std::vector<std::string> topics{"/gf/driving/bev/compressed", "/gf/EgoMotion",
-                                        "/gf/Trajectory",
+                                        "/gf/DrivingTrajectory",
                                         "/gf/Perception_MESSAGE_Out_St"};
   hub.advertise(topics);
   std::cerr << "gf_host_bev_ws: " << hub.bind_desc()

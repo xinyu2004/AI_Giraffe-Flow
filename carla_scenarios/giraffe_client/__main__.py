@@ -611,7 +611,7 @@ def run() -> int:
                         flush=True,
                     )
             if want_hint:
-                apa, confirm = read_mode_hint()
+                apa, confirm, corners = read_mode_hint()
                 hint_seq += 1
                 cosim.send_mode_hint(
                     pack_mode_hint_pod(
@@ -619,6 +619,7 @@ def run() -> int:
                         slot_confirmed=confirm,
                         seq=hint_seq,
                         timestamp_ns=ts,
+                        **corners,
                     ),
                     ts,
                 )

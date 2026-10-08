@@ -1,0 +1,25 @@
+schema_version: '0.1'
+adapter_mappings:
+- id: map.ego_motion_from_can
+  source:
+    protocol: can
+    message: P_VEHICLE_INFO
+    frame_id: '0x631'
+  semantic_type: types.EgoMotion
+  fields:
+  - semantic: P_Vehicle_Gear
+    source_signal: P_Vehicle_Gear
+  - semantic: P_Vehicle_YawRate
+    source_signal: P_Vehicle_YawRate
+  - semantic: P_Vehicle_SteerAngle
+    source_signal: P_Vehicle_SteerAngle
+  - semantic: P_Vehicle_Speed
+    source_signal: P_Vehicle_Speed
+  - semantic: P_Vehicle_FL_Speed
+    source_signal: P_Vehicle_FL_Speed
+  - semantic: P_Vehicle_FR_Speed
+    source_signal: P_Vehicle_FR_Speed
+  - semantic: P_Vehicle_RL_Speed
+    source_signal: P_Vehicle_RL_Speed
+  - semantic: P_Vehicle_RR_Speed
+    source_signal: P_Vehicle_RR_Speed

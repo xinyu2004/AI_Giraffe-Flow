@@ -4,8 +4,8 @@
 // Env GF_OBS_LIVE_SERVICES: comma-separated short names.
 
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
-#include "gf_gen/proxy/ego_motion_proxy.hpp"
-#include "gf_gen/proxy/trajectory_proxy.hpp"
+#include "gf_gen/ego_motion.hpp"
+#include "gf_gen/driving_trajectory.hpp"
 
 #include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"
 
@@ -32,7 +32,7 @@ std::uint64_t now_ns() {
 
 std::set<std::string> parse_allowlist() {
   const char* env = std::getenv("GF_OBS_LIVE_SERVICES");
-  std::string raw = env && *env ? env : "EgoMotion,Trajectory";
+  std::string raw = env && *env ? env : "EgoMotion,DrivingTrajectory";
   std::set<std::string> out;
   std::string cur;
   for (char c : raw) {
@@ -75,7 +75,7 @@ void emit_ego(const gf_gen::EgoMotion& ego) {
   std::fflush(stdout);
 }
 
-void emit_traj(const gf_gen::Trajectory& t) {
+void emit_traj(const gf_gen::DrivingTrajectory& t) {
   const std::uint64_t t_ns = t.timestamp_ns ? t.timestamp_ns : now_ns();
   const int n = static_cast<int>(t.point_count);
   const int export_n = n < kMaxPointsExport ? n : kMaxPointsExport;
@@ -95,7 +95,7 @@ void emit_traj(const gf_gen::Trajectory& t) {
   }
 
   std::printf(
-      "{\"t_ns\":%llu,\"topic\":\"/gf/Trajectory\",\"data\":{"
+      "{\"t_ns\":%llu,\"topic\":\"/gf/DrivingTrajectory\",\"data\":{"
       "\"timestamp_ns\":%llu,\"point_count\":%u,"
       "\"points_x_m\":[%s],\"points_y_m\":[%s],"
       "\"gear_shift_first\":%u,\"gear_shift_second\":%u}}\n",
@@ -114,12 +114,13 @@ void emit_traj(const gf_gen::Trajectory& t) {
 int main() {
   const auto allow = parse_allowlist();
   const bool want_ego = allow.count("EgoMotion") > 0;
-  const bool want_traj = allow.count("Trajectory") > 0;
+  const bool want_traj =
+      allow.count("DrivingTrajectory") > 0 || allow.count("Trajectory") > 0;
 
   for (const auto& s : allow) {
-    if (s != "EgoMotion" && s != "Trajectory") {
+    if (s != "EgoMotion" && s != "DrivingTrajectory" && s != "Trajectory") {
       std::cerr << "gf-iox-obs-tap: ignore unsupported service '" << s
-                << "' (implemented: EgoMotion, Trajectory)\n";
+                << "' (implemented: EgoMotion, DrivingTrajectory)\n";
     }
   }
   if (!want_ego && !want_traj) {
@@ -130,7 +131,7 @@ int main() {
   gf_ara::com::binding::iceoryx::InitRuntime("gf-iox-obs-tap");
 
   gf_gen::EgoMotionProxy ego_sub{};
-  gf_gen::TrajectoryProxy traj_sub{};
+  gf_gen::DrivingTrajectoryProxy traj_sub{};
 
   std::cerr << "gf-iox-obs-tap: start allowlist=";
   for (const auto& s : allow) {

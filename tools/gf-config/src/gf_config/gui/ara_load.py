@@ -14,7 +14,6 @@ from gf_config.gui.ara_constants import (
     _DEFAULT_ALIVE_PERIOD_MS,
     _DEFAULT_ALIVE_TIMEOUT_MS,
     _DEFAULT_DEADLINE_MS,
-    _DEFAULT_EM_ARGS,
     _DEFAULT_MAX_RESTARTS,
     _DID_ACCESS,
     _FG_INITIAL,
@@ -111,8 +110,6 @@ class AraLoadMixin:
                 args_s = ""
             else:
                 args_s = str(args)
-            if not args_s.strip():
-                args_s = _DEFAULT_EM_ARGS
             mr = p.get("max_restarts")
             if mr is None or mr == "":
                 mr_s = str(_DEFAULT_MAX_RESTARTS)

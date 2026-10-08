@@ -32,7 +32,7 @@
 
 ONNX/`MakeFromDetect` 当前不写 Out；内容由 truth 驱动。SIL（非 colorbar）Out 只在 fake_perc 更新时发，不重发冻帧。
 
-契约头示例：`projects/afc/interfaces/fcm_perception/Perception_Out_messages.h`  
+契约头示例：`projects/afc/generated/include/fcm_perception/Perception_Out_messages.h`  
 FCM：`…/apps/perception/fcm/src/main.cpp`  
 Planning：`…/apps/planning/driving/src/main.cpp`  
 BEV 金源：`tools/gmt_board/iox_obs_foxglove`（`bev_compose.cpp` → `gf_foxglove_paint`）。SIL=`gf_foxglove_ws`；Host octave=`gf_host_bev_ws`。

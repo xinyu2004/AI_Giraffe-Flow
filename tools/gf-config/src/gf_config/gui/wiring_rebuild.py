@@ -176,18 +176,7 @@ def rebuild_wiring_graph(
         locked=locked,
         preferred=preferred,
     )
-    # Persist auto colours (never overwrite color_user locks).
-    for name, qc in view._process_color_map.items():
-        if name in locked:
-            continue
-        hex_c = qc.name()
-        ui_c = view._session.get_node_ui(name)
-        same = str(ui_c.get("color") or "").lower() == hex_c.lower()
-        if same and not ui_c.get("color_user"):
-            continue
-        view._session.set_node_ui(name, color=hex_c)
-        if ui_c.get("color_user"):
-            view._session.clear_node_ui_keys(name, "color_user")
+    # Paint only — never set_node_ui. Autocolour lands on add_node / user pick.
 
     for name in ordered:
         if ProjectSession.is_frame_ingest_process(process=name):

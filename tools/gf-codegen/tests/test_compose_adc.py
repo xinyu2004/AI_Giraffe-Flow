@@ -17,6 +17,12 @@ def test_compose_adc_empty_slot(repo_root: Path, tmp_path: Path) -> None:
     service_ids = {s["id"] for s in (sor.get("services") or [])}
     assert "services.semantic.UssZones" not in service_ids
 
+    types_by_id = {t["id"]: t for t in (sor.get("types") or []) if isinstance(t, dict)}
+    ego = types_by_id["types.EgoMotion"]
+    assert any(f.get("name") == "speed_mps" for f in (ego.get("fields") or []))
+    assert "types.ParkingSlot" in types_by_id
+    assert "types.ApaStatus" in types_by_id
+
     procs = {d["process"] for d in (sor.get("deployments") or [])}
     assert "sensing.uss" not in procs
     assert "adapter.mcu_cp_gateway" not in procs

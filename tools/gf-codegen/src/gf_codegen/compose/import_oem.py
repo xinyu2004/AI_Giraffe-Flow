@@ -19,10 +19,18 @@ def _message_included(name: str, include: list[str], exclude_patterns: list[str]
     return True
 
 
-def import_oem(dbc_path: Path, manifest_path: Path) -> dict[str, Any]:
-    """Return overlay dict: imports_meta, adapter_mappings, types (partial)."""
-    with manifest_path.open(encoding="utf-8") as f:
-        manifest = yaml.safe_load(f) or {}
+def import_oem(dbc_path: Path, manifest_path: Path | None = None) -> dict[str, Any]:
+    """Digest DBC (+ optional policy yaml) into adapter_mappings.
+
+    Compose does not call this. Import writes cfg/mappings.yaml; compose
+    only reads that YAML.
+    """
+    manifest: dict[str, Any] = {}
+    if manifest_path is not None and manifest_path.is_file():
+        with manifest_path.open(encoding="utf-8") as f:
+            loaded = yaml.safe_load(f) or {}
+        if isinstance(loaded, dict):
+            manifest = loaded
 
     db = cantools.database.load_file(str(dbc_path))
     extraction = (manifest.get("extraction") or {}).get("dbc") or {}
@@ -50,8 +58,10 @@ def import_oem(dbc_path: Path, manifest_path: Path) -> dict[str, Any]:
             continue
         imported_msgs.append(msg.name)
 
-        # P_VEHICLE_INFO → EgoMotion mapping (gateway)
-        if msg.name == "P_VEHICLE_INFO" and "services.semantic.EgoMotion" in gateway_provides:
+        # P_VEHICLE_INFO → EgoMotion (no manifest: still digest if the message exists)
+        if msg.name == "P_VEHICLE_INFO" and (
+            not gateway_provides or "services.semantic.EgoMotion" in gateway_provides
+        ):
             fields = []
             for sig in msg.signals:
                 fields.append(
@@ -83,7 +93,9 @@ def import_oem(dbc_path: Path, manifest_path: Path) -> dict[str, Any]:
                 "import": "gf-codegen compose import oem",
             }
         ],
-        "manifest": str(manifest_path).replace("\\", "/"),
+        "manifest": (
+            str(manifest_path).replace("\\", "/") if manifest_path is not None else ""
+        ),
         "module_owned": module_owned,
         "gateway_provides": gateway_provides,
     }

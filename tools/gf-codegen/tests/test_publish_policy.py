@@ -36,7 +36,7 @@ def test_apply_stamps_services_and_drops_invented_period() -> None:
     sor = {
         "services": [
             {"id": "services.semantic.EgoMotion", "kind": "event", "period_ms": 50},
-            {"id": "services.semantic.Trajectory", "kind": "event", "period_ms": 50},
+            {"id": "services.semantic.DrivingTrajectory", "kind": "event", "period_ms": 50},
             {"id": "services.semantic.Orphan", "kind": "event", "period_ms": 50},
         ]
     }
@@ -55,7 +55,7 @@ def test_apply_stamps_services_and_drops_invented_period() -> None:
     assert ego["trigger"] == "period"
     assert ego["period_ms"] == 10
     assert "expect_fps" not in ego
-    traj = by_id["services.semantic.Trajectory"]
+    traj = by_id["services.semantic.DrivingTrajectory"]
     assert traj["trigger"] == "on_change"
     assert "period_ms" not in traj
     orphan = by_id["services.semantic.Orphan"]

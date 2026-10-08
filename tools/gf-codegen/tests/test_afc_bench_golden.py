@@ -17,7 +17,7 @@ from gf_codegen.compose.pipeline import compose_project
 REQUIRED_SERVICES = {
     "services.semantic.EgoMotion",
     "services.semantic.Perception_MESSAGE_Out_St",
-    "services.semantic.Trajectory",
+    "services.semantic.DrivingTrajectory",
     "services.semantic.VehicleBus",
 }
 

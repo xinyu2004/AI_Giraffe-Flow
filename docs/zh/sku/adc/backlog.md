@@ -14,6 +14,7 @@
 | **BL-FG-SIL** | DrivePark 抽检 | FCM+RCM 已挂 `DrivingActive`；Parking：FCM/RCM 停、surround+parking 吃 Near |
 | **BL-RCM-OBS** | RCM 可观测 | 现仅启动一行 stdout；无周期心跳。需 FrameWatch / 稀疏 diag（与主链 log 对齐），便于确认 truth/Ego/Send |
 | **BL-FAKE-PARK** | 泊车 invent 车位 | 无真源沉默；禁 `SLOT_DEMO` |
+| **BL-APP-DAQ** | EM App 间 DAQ | **后置（平台）**：泊车做完再细化。现无此层；tap ≠ DAQ。见 [DAQ_APP_PLAN.md](../../operations/DAQ_APP_PLAN.md) |
 | **BL-FAKE-DET** | FCM Detect 空转 | 勿宣称视觉已通 |
 | **BL-LOG-NOISE** | stdout 节流口径 | gateway `Trajectory#` / `[fs][diag]` 靠 `GF_APP_LOG_EVERY` + on-change；默认 40；SIL 验主链依赖这些串 |
 

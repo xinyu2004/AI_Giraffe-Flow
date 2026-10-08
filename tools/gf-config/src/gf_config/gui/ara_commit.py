@@ -12,7 +12,6 @@ from gf_config.gui.ara_constants import (
     _DEFAULT_ALIVE_PERIOD_MS,
     _DEFAULT_ALIVE_TIMEOUT_MS,
     _DEFAULT_DEADLINE_MS,
-    _DEFAULT_EM_ARGS,
     _DEFAULT_MAX_RESTARTS,
     _DID_ACCESS,
     _FG_INITIAL,
@@ -27,9 +26,11 @@ class AraCommitMixin:
     """Mixin: ``_on_*_changed`` writers for AraCfgEditor."""
 
     def flush_to_session(self) -> None:
-        """Harvest all platform widgets → session (gate before validate/save).
+        """Harvest platform widgets → session (gate before validate/save).
 
-        Principle: controls → memory → validate → disk. No undo checkpoints.
+        Same contract as canvas ``flush_canvas``: display defaults are not
+        authors; ``update_ara_doc`` folds form output and must not dirty a
+        round-trip. No undo checkpoints.
         """
         if self._loading or not self._session:
             return
@@ -169,8 +170,6 @@ class AraCommitMixin:
                 continue
             args_raw = _cell(self._em_table, r, 2).replace(",", " ")
             args = [x for x in args_raw.split() if x]
-            if not args:
-                args = [_DEFAULT_EM_ARGS]
             entry: dict[str, Any] = {
                 "name": name,
                 "binary": binary,
@@ -375,14 +374,21 @@ class AraCommitMixin:
         if not sinks:
             sinks = ["console"]
         app_id = (self._log_dlt_app.text().strip() or "GFAP")[:4]
-        self._session.update_ara_doc(
-            "log",
-            default_level=self._log_level.currentText().strip() or "INFO",
-            contexts=contexts,
-            sinks=sinks,
-            dlt={"app_id": app_id},
-            file_max_bytes=int(self._log_file_max.value()),
-        )
+        prev_log = self._session.get_ara_doc("log")
+        log_fields: dict[str, Any] = {
+            "default_level": self._log_level.currentText().strip() or "INFO",
+            "contexts": contexts,
+            "sinks": sinks,
+            "dlt": {"app_id": app_id},
+        }
+        fmax = int(self._log_file_max.value())
+        if "file_max_bytes" in prev_log:
+            log_fields["file_max_bytes"] = fmax
+        else:
+            base = getattr(self._log_file_max, "_gf_baseline", None)
+            if base is None or int(base) != fmax:
+                log_fields["file_max_bytes"] = fmax
+        self._session.update_ara_doc("log", **log_fields)
         self._mark("log")
         self._refresh_mem_estimate()
         # DLT sink changes host catalog in pickers; tables are not auto-mutated.

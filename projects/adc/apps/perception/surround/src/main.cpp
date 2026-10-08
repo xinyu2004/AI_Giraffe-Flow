@@ -1,9 +1,9 @@
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
 #include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
-#include "gf_gen/proxy/ego_motion_proxy.hpp"
-#include "gf_gen/skeleton/surround_world_skeleton.hpp"
-#include "gf_gen/skeleton/freespace_near_skeleton.hpp"
+#include "gf_gen/ego_motion.hpp"
+#include "gf_gen/surround_world.hpp"
+#include "gf_gen/freespace_near.hpp"
 #include "gf_channel/gf_channel.h"
 #include "gf_channel/boundary_pods.h"
 #include "freespace_near.hpp"
@@ -53,7 +53,7 @@ bool ReadSurroundPod(GfChannel* ch, std::uint64_t* last_seq, gf_gen::SurroundWor
   }
   out->timestamp_ns = pod.timestamp_ns ? pod.timestamp_ns : ts;
   out->n_obj = pod.n_obj > 16 ? 16 : pod.n_obj;
-  out->n_slot = pod.n_slot > 8 ? 8 : pod.n_slot;
+  out->n_slot = pod.n_slot > 6 ? 6 : pod.n_slot;
   for (std::uint8_t i = 0; i < out->n_obj; ++i) {
     out->objects[i].object_id = pod.objects[i].object_id;
     out->objects[i].object_class = pod.objects[i].object_class;

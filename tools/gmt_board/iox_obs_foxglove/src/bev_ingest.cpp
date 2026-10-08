@@ -5,42 +5,36 @@
 #include <cstdio>
 #include <cstring>
 
-#if __has_include("gf_gen/types/ego_motion.hpp")
-#include "gf_gen/types/ego_motion.hpp"
+#if __has_include("gf_gen/ego_motion.hpp")
+#include "gf_gen/ego_motion.hpp"
 #define GF_HAS_EGO 1
 #endif
-#if __has_include("gf_gen/types/trajectory.hpp")
-#include "gf_gen/types/trajectory.hpp"
+#if __has_include("gf_gen/driving_trajectory.hpp")
+#include "gf_gen/driving_trajectory.hpp"
 #define GF_HAS_TRAJ 1
 #endif
-#if __has_include("gf_gen/types/uss_zones.hpp")
-#include "gf_gen/types/uss_zones.hpp"
+#if __has_include("gf_gen/uss_zones.hpp")
+#include "gf_gen/uss_zones.hpp"
 #define GF_HAS_USS 1
 #endif
-// Codegen _snake("Perception_MESSAGE_Out_St") → perception_message__out__st.hpp
-// (double underscore). The single-underscore name does not exist → GF_HAS_PERC
-// stayed off and BEV never ingested host lanes.
-#if __has_include("gf_gen/types/perception_message__out__st.hpp")
-#include "gf_gen/types/perception_message__out__st.hpp"
-#define GF_HAS_PERC 1
-#elif __has_include("gf_gen/types/perception_message_out_st.hpp")
-#include "gf_gen/types/perception_message_out_st.hpp"
+#if __has_include("gf_gen/perception_message__out__st.hpp")
+#include "gf_gen/perception_message__out__st.hpp"
 #define GF_HAS_PERC 1
 #endif
-#if __has_include("gf_gen/types/parking_trajectory.hpp")
-#include "gf_gen/types/parking_trajectory.hpp"
+#if __has_include("gf_gen/parking_trajectory.hpp")
+#include "gf_gen/parking_trajectory.hpp"
 #define GF_HAS_PARK_TRAJ 1
 #endif
-#if __has_include("gf_gen/types/freespace_near.hpp")
-#include "gf_gen/types/freespace_near.hpp"
+#if __has_include("gf_gen/freespace_near.hpp")
+#include "gf_gen/freespace_near.hpp"
 #define GF_HAS_FS_NEAR 1
 #endif
-#if __has_include("gf_gen/types/freespace.hpp")
-#include "gf_gen/types/freespace.hpp"
+#if __has_include("gf_gen/freespace.hpp")
+#include "gf_gen/freespace.hpp"
 #define GF_HAS_FS 1
 #endif
-#if __has_include("gf_gen/types/surround_world.hpp")
-#include "gf_gen/types/surround_world.hpp"
+#if __has_include("gf_gen/surround_world.hpp")
+#include "gf_gen/surround_world.hpp"
 #define GF_HAS_SURROUND 1
 #endif
 
@@ -78,8 +72,9 @@ void apply_sample(LiveBevState& st, const char* short_name, const void* sample) 
   }
 #endif
 #ifdef GF_HAS_TRAJ
-  if (std::strcmp(short_name, "Trajectory") == 0) {
-    const auto& s = *static_cast<const gf_gen::Trajectory*>(sample);
+  if (std::strcmp(short_name, "DrivingTrajectory") == 0 ||
+      std::strcmp(short_name, "Trajectory") == 0) {
+    const auto& s = *static_cast<const gf_gen::DrivingTrajectory*>(sample);
     st.parking_view = false;
     int n = static_cast<int>(s.point_count);
     n = std::max(0, std::min(n, kMaxTrajPts));

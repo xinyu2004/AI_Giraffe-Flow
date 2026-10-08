@@ -9,6 +9,8 @@ Envelope (not invent):
 from __future__ import annotations
 
 import math
+import struct
+from multiprocessing import shared_memory
 from typing import Any
 
 from _lane_truth import _wrap_pi
@@ -26,6 +28,7 @@ from _objects_truth import (
 )
 
 _MAX_OBJ = 16
+_MAX_PLD = 6
 _REAR_M = 35.0  # mutual check with ChaseCam / BEV window rear
 _SIDE_M = 7.0  # ~2 × 3.5 m lane; match surround kFsSideCapM
 _SIDE_X_M = 10.0
@@ -43,13 +46,115 @@ def in_surround_envelope(x: float, y: float) -> bool:
     return False
 
 
+_BAYS_SHM = "gf_parking_bays"
+_BAY = struct.Struct("<BB2x5f")
+_BAYS_SIZE = 4 + _MAX_PLD * _BAY.size
+
+
+def _bays_attach(create: bool) -> shared_memory.SharedMemory | None:
+    try:
+        if create:
+            try:
+                return shared_memory.SharedMemory(name=_BAYS_SHM, create=True, size=_BAYS_SIZE)
+            except FileExistsError:
+                return shared_memory.SharedMemory(name=_BAYS_SHM, create=False)
+        return shared_memory.SharedMemory(name=_BAYS_SHM, create=False)
+    except (FileNotFoundError, OSError):
+        return None
+
+
+def clear_parking_bays() -> None:
+    write_parking_bays([])
+
+
+def write_parking_bays(bays: list[dict[str, Any]]) -> None:
+    """World-frame PLD bays for giraffe_client (max 6). Empty = n_slot 0."""
+    shm = _bays_attach(create=True)
+    if shm is None:
+        return
+    try:
+        buf = bytearray(_BAYS_SIZE)
+        sls = list(bays or [])[:_MAX_PLD]
+        buf[0] = len(sls)
+        off = 4
+        for i, s in enumerate(sls):
+            _BAY.pack_into(
+                buf,
+                off,
+                int(s.get("id", i + 1)) & 0xFF,
+                1 if int(s.get("free", 1)) else 0,
+                float(s.get("center_x_m", 0.0)),
+                float(s.get("center_y_m", 0.0)),
+                float(s.get("yaw_rad", 0.0)),
+                float(s.get("length_m", 5.0)),
+                float(s.get("width_m", 2.4)),
+            )
+            off += _BAY.size
+        shm.buf[:_BAYS_SIZE] = buf
+    finally:
+        shm.close()
+
+
+def read_parking_bays() -> list[dict[str, Any]]:
+    shm = _bays_attach(create=False)
+    if shm is None:
+        return []
+    try:
+        raw = bytes(shm.buf[:_BAYS_SIZE])
+        n = min(int(raw[0]), _MAX_PLD)
+        out: list[dict[str, Any]] = []
+        off = 4
+        for _ in range(n):
+            sid, free, cx, cy, yaw, ln, wd = _BAY.unpack_from(raw, off)
+            out.append(
+                {
+                    "id": int(sid),
+                    "free": int(free),
+                    "center_x_m": float(cx),
+                    "center_y_m": float(cy),
+                    "yaw_rad": float(yaw),
+                    "length_m": float(ln),
+                    "width_m": float(wd),
+                }
+            )
+            off += _BAY.size
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+    finally:
+        shm.close()
+
+
+def _world_to_ego_slot(
+    bay: dict[str, Any],
+    ex: float,
+    ey: float,
+    c: float,
+    s: float,
+    yaw_ego: float,
+) -> dict[str, Any]:
+    cx, cy = _xy_to_ego(ex, ey, c, s, float(bay["center_x_m"]), float(bay["center_y_m"]))
+    return {
+        "slot_id": int(bay.get("id") or 0),
+        "id": int(bay.get("id") or 0),
+        "free": int(bay.get("free", 1)),
+        "center_x_m": float(cx),
+        "center_y_m": float(cy),
+        "yaw_rad": _wrap_pi(float(bay.get("yaw_rad") or 0.0) - yaw_ego),
+        "length_m": float(bay.get("length_m") or 5.0),
+        "width_m": float(bay.get("width_m") or 2.4),
+        "valid": 1,
+        "type": 2,
+    }
+
+
 def collect_surround_world(
     ego: Any,
     world: Any,
     *,
     max_n: int = _MAX_OBJ,
 ) -> dict[str, Any]:
-    """Nearby vehicles/walkers in surround envelope. Slots: only if provided later (none invented)."""
+    """Nearby vehicles/walkers in surround envelope. Slots: only parking_bays shm (max 6)."""
     out: dict[str, Any] = {"objects": [], "slots": [], "n_obj": 0, "n_slot": 0}
     if ego is None or world is None:
         return out
@@ -196,7 +301,10 @@ def collect_surround_world(
         )
 
     out["objects"] = objects
-    out["slots"] = []  # no invented parking bays
+    slots: list[dict[str, Any]] = []
+    for bay in read_parking_bays()[:_MAX_PLD]:
+        slots.append(_world_to_ego_slot(bay, ex, ey, c, s, yaw))
+    out["slots"] = slots
     out["n_obj"] = len(objects)
-    out["n_slot"] = 0
+    out["n_slot"] = len(slots)
     return out

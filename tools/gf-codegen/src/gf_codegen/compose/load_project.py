@@ -37,8 +37,8 @@ class ProjectPaths:
     project_file: Path
     data: dict[str, Any]
     base_sor: Path
-    dbc: Path
-    manifest: Path
+    types_yaml: Path
+    mappings_yaml: Path
     wiring: Path
     req: Path
     out_sor: Path
@@ -69,7 +69,6 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
     with project_file.open(encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
 
-    oem = data.get("oem") or {}
     integ = data.get("integration") or {}
     delivery = data.get("delivery") or {}
     lineage = data.get("lineage") or {}
@@ -100,9 +99,11 @@ def load_project(project_file: Path, repo_root: Path | None = None) -> ProjectPa
         project_file=project_file,
         data=data,
         base_sor=base_sor,
-        dbc=resolve_path(project_dir, oem.get("dbc") or "oem/oem_import.dbc", repo_root=root),
-        manifest=resolve_path(
-            project_dir, oem.get("manifest") or "oem/oem_import.yaml", repo_root=root
+        types_yaml=resolve_path(
+            project_dir, integ.get("types") or "cfg/types.yaml", repo_root=root
+        ),
+        mappings_yaml=resolve_path(
+            project_dir, integ.get("mappings") or "cfg/mappings.yaml", repo_root=root
         ),
         wiring=resolve_path(
             project_dir, integ.get("wiring") or "cfg/wiring.yaml", repo_root=root

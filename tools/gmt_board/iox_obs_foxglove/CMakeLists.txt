@@ -8,7 +8,7 @@ find_package(Threads REQUIRED)
 
 set(_GF_FOX_INC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../../projects/adc/interfaces"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../../projects/adc/generated/include"
 )
 
 # Shared prims: PNG + WS + NDJSON (no SKU policy).
@@ -76,7 +76,7 @@ target_include_directories(gf_foxglove_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${GF_GENERATED_DIR}/include"
 )
-target_link_libraries(gf_foxglove_core PUBLIC gf_foxglove_paint)
+target_link_libraries(gf_foxglove_core PUBLIC gf_foxglove_paint gf_ara::com_iceoryx)
 if(TARGET gf_channel::channel)
   target_link_libraries(gf_foxglove_core PUBLIC gf_channel::channel)
 endif()

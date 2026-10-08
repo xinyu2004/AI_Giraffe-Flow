@@ -29,7 +29,7 @@
 projects/<sku>/
   giraffe.yaml
   cfg/req.yaml  cfg/wiring.yaml  cfg/gf_ara_cfg/*
-  oem/  interfaces/  apps/  scripts/
+  oem/  generated/include/  apps/  scripts/
   reports/         # lineage、iox_shm_report 等（非 generated；本地生成）
   [golden/]
 ```

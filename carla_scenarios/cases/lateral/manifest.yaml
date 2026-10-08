@@ -34,3 +34,9 @@ cases:
     keyword: LCC
     tags: [lateral, centering, l2]
     description: Lane centering on straight
+
+  - id: assist_lc
+    script: assist_lc.py
+    keyword: LC
+    tags: [lateral, surround, lane_change]
+    description: Adjacent-lane scene car (SurroundWorld); CARLA does not steer ego

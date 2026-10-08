@@ -3,7 +3,7 @@
   "topology": "ap_mcu_cp",
   "types": [],
   "semantic_services": [
-    { "id": "semantic.Trajectory" },
+    { "id": "semantic.DrivingTrajectory" },
     { "id": "semantic.ActuatorCommand" }
   ],
   "services": [],
@@ -28,9 +28,9 @@
   ],
   "cp_ipc_mappings": [
     {
-      "semantic": "semantic.Trajectory",
+      "semantic": "semantic.DrivingTrajectory",
       "direction": "ap_to_mcu",
-      "cp_signal": "Rte_Write_Trajectory_Placeholder"
+      "cp_signal": "Rte_Write_DrivingTrajectory_Placeholder"
     }
   ],
   "bindings": [

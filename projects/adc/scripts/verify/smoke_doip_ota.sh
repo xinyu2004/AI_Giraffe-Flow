@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # P3-4 smoke: DoIP session + UCM OTA + Collector fail path (SIL, no true flash).
+# Build tests first: GF_BUILD_TESTS=1 bash projects/adc/scripts/compile_sil.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 BUILD="${GF_BUILD_DIR:-$ROOT/projects/adc/build-sil}"

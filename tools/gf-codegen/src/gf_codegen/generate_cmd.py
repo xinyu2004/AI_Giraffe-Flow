@@ -1,10 +1,12 @@
-"""gf-codegen generate — types + Proxy/Skeleton headers (P0 B4)."""
+"""gf-codegen generate — one iceoryx service = one hpp (structs + Proxy/Skeleton)."""
 
 from __future__ import annotations
 
 import json
 import re
+import shutil
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -57,54 +59,6 @@ def _snake(name: str) -> str:
     return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
 
-def _type_includes(fields: list[Any]) -> list[str]:
-    incs: list[str] = []
-    seen: set[str] = set()
-    for field in fields:
-        if not isinstance(field, dict):
-            continue
-        t = str(field.get("type", ""))
-        if t.startswith("types."):
-            leaf = t.split(".")[-1]
-            key = _snake(leaf)
-            if key not in seen:
-                seen.add(key)
-                incs.append(f'#include "gf_gen/types/{key}.hpp"')
-    return incs
-
-
-def _write_types(sor: dict[str, Any], out_dir: Path) -> int:
-    types_dir = out_dir / "include" / "gf_gen" / "types"
-    types_dir.mkdir(parents=True, exist_ok=True)
-    count = 0
-    for t in sor.get("types") or []:
-        if not isinstance(t, dict) or t.get("kind") != "struct":
-            continue
-        tid = t.get("id") or ""
-        name = tid.split(".")[-1]
-        if not name:
-            continue
-        fields = t.get("fields") or []
-        lines = ["#pragma once", "", "#include <cstdint>", ""]
-        lines.extend(_type_includes(fields))
-        if _type_includes(fields):
-            lines.append("")
-        lines += ["namespace gf_gen {", "", f"struct {name} {{"]
-        for field in fields:
-            if not isinstance(field, dict):
-                continue
-            ft = _cxx_type(str(field.get("type", "uint8_t")))
-            fn = field.get("name", "field")
-            if "array_size" in field:
-                lines.append(f"  {ft} {fn}[{field['array_size']}];")
-            else:
-                lines.append(f"  {ft} {fn};")
-        lines += ["};", "", "}  // namespace gf_gen", ""]
-        (types_dir / f"{_snake(name)}.hpp").write_text("\n".join(lines), encoding="utf-8")
-        count += 1
-    return count
-
-
 def _service_parts(service_id: str) -> tuple[str, str]:
     """services.semantic.UssZones → (semantic.UssZones, UssZones)."""
     sid = service_id
@@ -114,14 +68,127 @@ def _service_parts(service_id: str) -> tuple[str, str]:
     return sid, event
 
 
-def _write_proxies_skeletons(sor: dict[str, Any], out_dir: Path) -> tuple[int, int]:
-    proxy_dir = out_dir / "include" / "gf_gen" / "proxy"
-    skel_dir = out_dir / "include" / "gf_gen" / "skeleton"
-    proxy_dir.mkdir(parents=True, exist_ok=True)
-    skel_dir.mkdir(parents=True, exist_ok=True)
+def _type_map(sor: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for t in sor.get("types") or []:
+        if isinstance(t, dict) and t.get("id"):
+            out[str(t["id"])] = t
+    return out
 
-    proxies = 0
-    skeletons = 0
+
+def _field_type_refs(tdef: dict[str, Any]) -> list[str]:
+    refs: list[str] = []
+    for field in tdef.get("fields") or []:
+        if not isinstance(field, dict):
+            continue
+        t = str(field.get("type") or "")
+        if t.startswith("types."):
+            refs.append(t)
+    return refs
+
+
+def _walk_tree(root_id: str, type_by_id: dict[str, dict[str, Any]]) -> set[str]:
+    seen: set[str] = set()
+
+    def walk(tid: str) -> None:
+        if tid in seen or tid not in type_by_id:
+            return
+        seen.add(tid)
+        for ref in _field_type_refs(type_by_id[tid]):
+            walk(ref)
+
+    walk(root_id)
+    return seen
+
+
+def _topo_ids(root_id: str, type_by_id: dict[str, dict[str, Any]]) -> list[str]:
+    visiting: set[str] = set()
+    done: set[str] = set()
+    order: list[str] = []
+
+    def dfs(tid: str) -> None:
+        if tid in done:
+            return
+        if tid in visiting:
+            raise ValueError(tid)
+        visiting.add(tid)
+        tdef = type_by_id.get(tid)
+        if tdef is not None:
+            for ref in _field_type_refs(tdef):
+                dfs(ref)
+        visiting.remove(tid)
+        done.add(tid)
+        order.append(tid)
+
+    dfs(root_id)
+    return order
+
+
+def _struct_body(name: str, fields: list[Any]) -> list[str]:
+    lines = [f"struct {name} {{"]
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        ft = _cxx_type(str(field.get("type", "uint8_t")))
+        fn = field.get("name", "field")
+        if "array_size" in field:
+            lines.append(f"  {ft} {fn}[{field['array_size']}];")
+        else:
+            lines.append(f"  {ft} {fn};")
+    lines += ["};", ""]
+    return lines
+
+
+def _proxy_skeleton_body(class_base: str, service_id: str) -> list[str]:
+    service_str, event_str = _service_parts(service_id)
+    return [
+        f"class {class_base}Skeleton {{",
+        " public:",
+        f'  static constexpr const char* kService = "{service_str}";',
+        f'  static constexpr const char* kEvent = "{event_str}";',
+        "",
+        f'  explicit {class_base}Skeleton(std::string instance = "1")',
+        "      : pub_{gf_ara::com::ServicePath{kService, std::move(instance), kEvent}} {}",
+        "",
+        f"  gf_ara::core::Result<void> Send(const {class_base}& sample) {{",
+        "    return pub_.Publish(sample);",
+        "  }",
+        "",
+        " private:",
+        f"  gf_ara::com::binding::iceoryx::EventPublisher<{class_base}> pub_;",
+        "};",
+        "",
+        f"class {class_base}Proxy {{",
+        " public:",
+        f'  static constexpr const char* kService = "{service_str}";',
+        f'  static constexpr const char* kEvent = "{event_str}";',
+        "",
+        f'  explicit {class_base}Proxy(std::string instance = "1")',
+        "      : sub_{gf_ara::com::ServicePath{kService, std::move(instance), kEvent}} {}",
+        "",
+        f"  gf_ara::core::Result<std::optional<{class_base}>> Take() {{",
+        "    return sub_.Take();",
+        "  }",
+        "",
+        "  [[nodiscard]] bool HasData() const noexcept { return sub_.HasData(); }",
+        "",
+        f"  [[nodiscard]] iox::popo::Subscriber<{class_base}>& Native() noexcept {{",
+        "    return sub_.Native();",
+        "  }",
+        f"  [[nodiscard]] const iox::popo::Subscriber<{class_base}>& Native() const noexcept {{",
+        "    return sub_.Native();",
+        "  }",
+        "",
+        " private:",
+        f"  gf_ara::com::binding::iceoryx::EventSubscriber<{class_base}> sub_;",
+        "};",
+        "",
+    ]
+
+
+def _event_services(sor: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """(service_id, type_ref, type_name) — one row per event service."""
+    rows: list[tuple[str, str, str]] = []
     for svc in sor.get("services") or []:
         if not isinstance(svc, dict):
             continue
@@ -131,96 +198,96 @@ def _write_proxies_skeletons(sor: dict[str, Any], out_dir: Path) -> tuple[int, i
         type_ref = str(svc.get("type_ref") or "")
         if not sid or not type_ref.startswith("types."):
             continue
-        type_name = type_ref.split(".")[-1]
-        type_hdr = _snake(type_name)
-        service_str, event_str = _service_parts(sid)
-        class_base = type_name  # UssZones
+        rows.append((sid, type_ref, type_ref.split(".")[-1]))
+    return rows
 
-        # Skeleton = provider (publish)
-        skel_lines = [
-            "#pragma once",
-            "",
-            f'#include "gf_gen/types/{type_hdr}.hpp"',
-            '#include "gf_ara/com/binding/iceoryx/event.hpp"',
-            '#include "gf_ara/com/service_path.hpp"',
-            "",
-            "#include <string>",
-            "",
-            "namespace gf_gen {",
-            "",
-            f"class {class_base}Skeleton {{",
-            " public:",
-            f'  static constexpr const char* kService = "{service_str}";',
-            f'  static constexpr const char* kEvent = "{event_str}";',
-            "",
-            "  explicit " + class_base + 'Skeleton(std::string instance = "1")',
-            "      : pub_{gf_ara::com::ServicePath{kService, std::move(instance), kEvent}} {}",
-            "",
-            f"  gf_ara::core::Result<void> Send(const {class_base}& sample) {{",
-            "    return pub_.Publish(sample);",
-            "  }",
-            "",
-            " private:",
-            f"  gf_ara::com::binding::iceoryx::EventPublisher<{class_base}> pub_;",
-            "};",
-            "",
-            "}  // namespace gf_gen",
-            "",
-        ]
-        (skel_dir / f"{_snake(class_base)}_skeleton.hpp").write_text(
-            "\n".join(skel_lines), encoding="utf-8"
+
+def _prune_legacy_slices(gf_inc: Path, written: set[str]) -> None:
+    for sub in ("types", "proxy", "skeleton"):
+        shutil.rmtree(gf_inc / sub, ignore_errors=True)
+    stamp = gf_inc / ".generate_svc_headers"
+    prev: set[str] = set()
+    if stamp.is_file():
+        prev = {ln.strip() for ln in stamp.read_text(encoding="utf-8").splitlines() if ln.strip()}
+    for name in prev - written:
+        p = gf_inc / name
+        if p.is_file():
+            p.unlink()
+    stamp.write_text("\n".join(sorted(written)) + ("\n" if written else ""), encoding="utf-8")
+
+
+def _write_service_headers(sor: dict[str, Any], out_dir: Path) -> tuple[int, int, int]:
+    """One hpp per event service: nested structs, payload, Skeleton, Proxy.
+
+    Orphan types (not on any service tree) are not emitted.
+    Nested type used by more than one service → error (no silent ODR / common/).
+    Two services sharing one payload type → error.
+    """
+    type_by_id = _type_map(sor)
+    rows = _event_services(sor)
+    payload_svc: dict[str, str] = {}
+    for sid, type_ref, _name in rows:
+        prev = payload_svc.get(type_ref)
+        if prev is not None and prev != sid:
+            print(
+                f"error: two services share payload {type_ref}: {prev} and {sid}",
+                file=sys.stderr,
+            )
+            return 0, 0, 2
+        payload_svc[type_ref] = sid
+
+    occupancy: dict[str, set[str]] = defaultdict(set)
+    for _sid, type_ref, _name in rows:
+        for tid in _walk_tree(type_ref, type_by_id):
+            occupancy[tid].add(type_ref)
+    shared = sorted(tid for tid, owners in occupancy.items() if len(owners) > 1)
+    if shared:
+        print(
+            "error: nested type used by multiple services (need a type-only header): "
+            + ", ".join(shared),
+            file=sys.stderr,
         )
-        skeletons += 1
+        return 0, 0, 2
 
-        # Proxy = consumer (subscribe / take / Native for EventWaitSet)
-        proxy_lines = [
+    gf_inc = out_dir / "include" / "gf_gen"
+    gf_inc.mkdir(parents=True, exist_ok=True)
+    written: set[str] = set()
+    n_nested = 0
+
+    for sid, type_ref, type_name in rows:
+        hdr = f"{_snake(type_name)}.hpp"
+        try:
+            order = _topo_ids(type_ref, type_by_id)
+        except ValueError as exc:
+            print(f"error: cyclic nested type in {type_ref}: {exc}", file=sys.stderr)
+            return 0, 0, 2
+        lines = [
             "#pragma once",
             "",
-            f'#include "gf_gen/types/{type_hdr}.hpp"',
-            '#include "gf_ara/com/binding/iceoryx/event.hpp"',
-            '#include "gf_ara/com/service_path.hpp"',
-            "",
-            '#include "iceoryx_posh/popo/subscriber.hpp"',
-            "",
+            "#include <cstdint>",
             "#include <optional>",
             "#include <string>",
             "",
+            '#include "gf_ara/com/binding/iceoryx/event.hpp"',
+            '#include "gf_ara/com/service_path.hpp"',
+            '#include "iceoryx_posh/popo/subscriber.hpp"',
+            "",
             "namespace gf_gen {",
             "",
-            f"class {class_base}Proxy {{",
-            " public:",
-            f'  static constexpr const char* kService = "{service_str}";',
-            f'  static constexpr const char* kEvent = "{event_str}";',
-            "",
-            "  explicit " + class_base + 'Proxy(std::string instance = "1")',
-            "      : sub_{gf_ara::com::ServicePath{kService, std::move(instance), kEvent}} {}",
-            "",
-            f"  gf_ara::core::Result<std::optional<{class_base}>> Take() {{",
-            "    return sub_.Take();",
-            "  }",
-            "",
-            f"  [[nodiscard]] bool HasData() const noexcept {{ return sub_.HasData(); }}",
-            "",
-            f"  [[nodiscard]] iox::popo::Subscriber<{class_base}>& Native() noexcept {{",
-            "    return sub_.Native();",
-            "  }",
-            f"  [[nodiscard]] const iox::popo::Subscriber<{class_base}>& Native() const noexcept {{",
-            "    return sub_.Native();",
-            "  }",
-            "",
-            " private:",
-            f"  gf_ara::com::binding::iceoryx::EventSubscriber<{class_base}> sub_;",
-            "};",
-            "",
-            "}  // namespace gf_gen",
-            "",
         ]
-        (proxy_dir / f"{_snake(class_base)}_proxy.hpp").write_text(
-            "\n".join(proxy_lines), encoding="utf-8"
-        )
-        proxies += 1
+        for tid in order:
+            tdef = type_by_id.get(tid) or {}
+            leaf = tid.split(".")[-1]
+            lines.extend(_struct_body(leaf, list(tdef.get("fields") or [])))
+            if tid != type_ref:
+                n_nested += 1
+        lines.extend(_proxy_skeleton_body(type_name, sid))
+        lines += ["}  // namespace gf_gen", ""]
+        (gf_inc / hdr).write_text("\n".join(lines), encoding="utf-8")
+        written.add(hdr)
 
-    return proxies, skeletons
+    _prune_legacy_slices(gf_inc, written)
+    return len(written), n_nested, 0
 
 
 _SCALAR_PRINTF: dict[str, tuple[str, str]] = {
@@ -562,7 +629,7 @@ def _write_obs_tap(sor: dict[str, Any], out_dir: Path) -> int:
         '#include "gf_ara/com/binding/iceoryx/runtime.hpp"',
     ]
     for _s, _tn, hdr, _f in events:
-        lines.append(f'#include "gf_gen/proxy/{hdr}_proxy.hpp"')
+        lines.append(f'#include "gf_gen/{hdr}.hpp"')
     lines += [
         "",
         '#include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"',
@@ -728,7 +795,7 @@ def _write_obs_foxglove(sor: dict[str, Any], out_dir: Path) -> int:
         '#include "gf_foxglove/ws_hub.hpp"',
     ]
     for _s, _tn, hdr, _f in events:
-        lines.append(f'#include "gf_gen/proxy/{hdr}_proxy.hpp"')
+        lines.append(f'#include "gf_gen/{hdr}.hpp"')
     lines += [
         "",
         '#include "iceoryx_hoofs/posix_wrapper/signal_watcher.hpp"',
@@ -949,17 +1016,16 @@ def generate(sor_path: Path, out_dir: Path) -> int:
         sor = json.load(f)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    n_types = _write_types(sor, out_dir)
-    n_proxy, n_skel = _write_proxies_skeletons(sor, out_dir)
+    n_hdr, n_nested, rc = _write_service_headers(sor, out_dir)
+    if rc != 0:
+        return rc
     n_tap = _write_obs_tap(sor, out_dir)
     n_fox = _write_obs_foxglove(sor, out_dir)
 
     print(
-        f"generate wrote {n_types} type(s), {n_skel} skeleton(s), {n_proxy} proxy(ies), "
+        f"generate wrote {n_hdr} service header(s) ({n_nested} nested struct(s)), "
         f"{n_tap} obs-tap / {n_fox} foxglove service(s) under {out_dir}/"
     )
-    if n_types == 0:
-        print("warning: no struct types in SOR", file=sys.stderr)
-    if n_skel == 0:
+    if n_hdr == 0:
         print("warning: no event services → no Proxy/Skeleton", file=sys.stderr)
     return 0

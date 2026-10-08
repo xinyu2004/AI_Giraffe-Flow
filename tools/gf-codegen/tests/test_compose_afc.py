@@ -16,12 +16,17 @@ def test_compose_afc(repo_root: Path, tmp_path: Path) -> None:
     assert out.is_file()
     sor = json.loads(out.read_text(encoding="utf-8"))
 
+    maps = sor.get("adapter_mappings") or []
+    assert any(
+        isinstance(m, dict) and m.get("id") == "map.ego_motion_from_can" for m in maps
+    )
+
     service_ids = {s["id"] for s in sor["services"]}
     for svc in (
         "services.semantic.EgoMotion",
         "services.semantic.Perception_In_St",
         "services.semantic.Perception_MESSAGE_Out_St",
-        "services.semantic.Trajectory",
+        "services.semantic.DrivingTrajectory",
         "services.semantic.VehicleBus",
     ):
         assert svc in service_ids
@@ -47,7 +52,7 @@ def test_compose_afc(repo_root: Path, tmp_path: Path) -> None:
     assert out_svc.get("trigger") == "on_change"
     assert out_svc.get("expect_fps") == 20
     assert "period_ms" not in out_svc
-    traj = by_id["services.semantic.Trajectory"]
+    traj = by_id["services.semantic.DrivingTrajectory"]
     assert traj.get("trigger") == "on_change"
     assert "period_ms" not in traj
     assert "expect_fps" not in traj

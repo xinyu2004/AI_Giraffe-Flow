@@ -28,4 +28,4 @@ gf-codegen compose --project projects/afc/giraffe.yaml
 
 Tool internally: parse hpp + import oem + apply wiring + merge req → `gf.sor.json` + lineage report.
 
-Examples: [projects/afc/](../../../projects/afc/) · [interfaces/](../../../projects/afc/interfaces/)
+Examples: [projects/afc/](../../../projects/afc/) · [generated/include/](../../../projects/afc/generated/include/)

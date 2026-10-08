@@ -21,7 +21,7 @@ Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop v
 | [architecture/heterogeneous-compute.md](architecture/heterogeneous-compute.md) | AP + MCU |
 | [operations/ROADMAP.md](operations/ROADMAP.md) | 路线图 |
 | [operations/CONFIG_RUNTIME_POLICY.md](operations/CONFIG_RUNTIME_POLICY.md) | 白名单 vs 行为；板端零 yaml / 零 Python |
-| [operations/AP_LITE_BACKLOG.md](operations/AP_LITE_BACKLOG.md) | 后置项（含 `BL-BOARD-NO-PY` · `BL-GMT-FOX-PY`） |
+| [operations/AP_LITE_BACKLOG.md](operations/AP_LITE_BACKLOG.md) | 后置项（含 `BL-BOARD-NO-PY` · `BL-GMT-FOX-PY` · `BL-APP-DAQ`） |
 | [operations/WORKFLOW.md](operations/WORKFLOW.md) | 操作流程 |
 | [operations/OBSERVABILITY_DEMO.md](operations/OBSERVABILITY_DEMO.md) | tap / Foxglove（C `:8765`）/ 回灌 |
 | [driving/fcm_gold_and_planning_lite.md](driving/fcm_gold_and_planning_lite.md) | FCM 金样 + planning |

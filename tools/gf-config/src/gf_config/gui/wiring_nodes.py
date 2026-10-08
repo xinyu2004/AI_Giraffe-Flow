@@ -37,6 +37,7 @@ class WiringNodesMixin:
         self._push_undo()
         self._session.upsert_deployment(name, compute_domain=domain, provides=[], requires=[])
         self.rebuild(fit_view=True)
+        self._persist_authored_node_paint(name)
         self.changed.emit()
 
     def add_frame_ingest(self) -> None:
@@ -74,6 +75,7 @@ class WiringNodesMixin:
         self._apply_frame_ingest(fields, new_slots, seed_fcm=True)
         self._session.apply_channel_publish_policies(dlg.result_channel_policies())
         self.rebuild(fit_view=True)
+        self._persist_authored_node_paint(name)
         self.changed.emit()
 
     def edit_frame_ingest(self, card: ProcessCard | None = None) -> None:
@@ -185,7 +187,7 @@ class WiringNodesMixin:
             name,
             compute_domain="external",
             provides=["services.semantic.VehicleBus"],
-            requires=["services.semantic.Trajectory"],
+            requires=["services.semantic.DrivingTrajectory"],
         )
         self._session.set_node_ui(
             name,
@@ -201,53 +203,81 @@ class WiringNodesMixin:
         deps = {str(d.get("process")) for d in self._session.deployments()}
         if gw in deps:
             self._session.add_dataflow(name, "services.semantic.VehicleBus", gw)
-            self._session.add_dataflow(gw, "services.semantic.Trajectory", name)
+            self._session.add_dataflow(gw, "services.semantic.DrivingTrajectory", name)
             # ensure gateway ports
             for d in self._session.deployments():
                 if str(d.get("process")) != gw:
                     continue
                 prov = [str(x) for x in (d.get("provides") or [])]
                 req = [str(x) for x in (d.get("requires") or [])]
-                if not any(short_service(x) == "Trajectory" for x in prov):
-                    prov.append("services.semantic.Trajectory")
+                if not any(short_service(x) == "DrivingTrajectory" for x in prov):
+                    prov.append("services.semantic.DrivingTrajectory")
                 if not any(short_service(x) == "VehicleBus" for x in req):
                     req.append("services.semantic.VehicleBus")
-                if not any(short_service(x) == "Trajectory" for x in req):
-                    req.append("services.semantic.Trajectory")
+                if not any(short_service(x) == "DrivingTrajectory" for x in req):
+                    req.append("services.semantic.DrivingTrajectory")
                 self._session.set_ports(gw, prov, req)
                 break
         self.rebuild(fit_view=True)
+        self._persist_authored_node_paint(name)
         self.changed.emit()
         QMessageBox.information(self, t("external MCU"), t("已添加 {name}").format(name=name))
 
-    def flush_canvas(self) -> None:
-        """Persist node positions / sides into wiring.canvas before save.
+    def _persist_authored_node_paint(self, name: str) -> None:
+        """User added this node: keep this frame's colour/pose as authored UI."""
+        if not self._session:
+            return
+        ui = self._session.get_node_ui(name)
+        fields: dict[str, Any] = {}
+        qc = getattr(self, "_process_color_map", {}).get(name)
+        if qc is not None and not ui.get("color_user") and not ui.get("color"):
+            fields["color"] = qc.name()
+        card = self._nodes.get(name)
+        if card is not None and _qt_alive(card):
+            p = card.pos()
+            if "x" not in ui:
+                fields["x"] = round(p.x(), 1)
+            if "y" not in ui:
+                fields["y"] = round(p.y(), 1)
+        if fields:
+            self._session.set_node_ui(name, **fields)
 
-        Only write fields the card owns. ``set_node_ui`` skips None (never deletes).
+    def flush_canvas(self) -> None:
+        """Write back authored canvas fields only. Paint defaults are not authors.
+
+        ``set_node_ui`` skips None (never deletes). Missing keys stay missing.
         """
         if not self._session:
             return
         for name, card in self._nodes.items():
             if not _qt_alive(card):
                 continue
+            ui = self._session.get_node_ui(name)
+            if not ui:
+                continue
             p = card.pos()
-            fields: dict[str, Any] = {
-                "x": round(p.x(), 1),
-                "y": round(p.y(), 1),
-                "out_side": card.out_side,
-                "in_side": card.in_side,
-            }
-            if card.port_sides:
-                fields["port_sides"] = dict(card.port_sides)
-            if card.port_slot_order:
-                fields["port_slot_order"] = {
-                    s: list(keys) for s, keys in card.port_slot_order.items()
-                }
-            if card.kind and card.kind != "process":
-                fields["kind"] = card.kind
-            if card.label:
+            fields: dict[str, Any] = {}
+            if "x" in ui or "y" in ui:
+                nx = round(float(p.x()), 1)
+                ny = round(float(p.y()), 1)
+                ox = round(float(ui["x"]), 1) if "x" in ui else nx
+                oy = round(float(ui["y"]), 1) if "y" in ui else ny
+                if nx != ox or ny != oy:
+                    fields["x"] = nx
+                    fields["y"] = ny
+            if "out_side" in ui and card.out_side != ui.get("out_side"):
+                fields["out_side"] = card.out_side
+            if "in_side" in ui and card.in_side != ui.get("in_side"):
+                fields["in_side"] = card.in_side
+            # port_sides / port_slot_order are written at relocate time.
+            # Paint may infer extra slots — never flush those back.
+            if "kind" in ui and card.kind and card.kind != "process":
+                if card.kind != ui.get("kind"):
+                    fields["kind"] = card.kind
+            if "label" in ui and card.label and card.label != ui.get("label"):
                 fields["label"] = card.label
-            self._session.set_node_ui(name, **fields)
+            if fields:
+                self._session.set_node_ui(name, **fields)
 
     def delete_node(self, card: ProcessCard) -> None:
         if not self._session:
@@ -292,13 +322,10 @@ class WiringNodesMixin:
         if not self._session:
             return []
         names: list[str] = []
-        hpp = self._session.module_hpp_for_process(process)
-        if hpp:
-            try:
-                names.extend(self._session.parse_hpp_candidates(hpp))
-            except Exception:  # noqa: BLE001
-                pass
-        # also common services already in graph
+        for svc in self._session.wiring_service_names():
+            short = short_service(svc)
+            if short and short not in names:
+                names.append(short)
         for card in self._nodes.values():
             for s in card.provides + card.requires:
                 short = short_service(s)
@@ -363,6 +390,7 @@ class WiringNodesMixin:
             out_policies=self._session.publish_policy_services(),
             color_hex=str(ui.get("color") or ""),
             color_user=bool(ui.get("color_user")),
+            lookup_fields=self._session.lookup_type_fields,
         )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
@@ -396,10 +424,11 @@ class WiringNodesMixin:
             return
         hpp_path = Path(path)
         try:
-            candidates = self._session.parse_hpp_candidates(hpp_path)
+            structs = self._session.parse_hpp_structs(hpp_path)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, t("解析失败"), str(exc))
             return
+        candidates = [str(s["name"]) for s in structs if s.get("name")]
         if not candidates:
             QMessageBox.information(self, t("导入"), t("未解析到 struct，请检查头文件格式"))
             return
@@ -410,6 +439,7 @@ class WiringNodesMixin:
             kind="hpp",
             title=t("从头文件添加端口"),
             hint=t("勾选要加入的类型（作为 service 短名）："),
+            structs=structs,
         )
 
     def import_fidl(self, default_process: str = "") -> None:
@@ -454,6 +484,7 @@ class WiringNodesMixin:
         kind: str,
         title: str,
         hint: str,
+        structs: list[dict[str, Any]] | None = None,
     ) -> None:
         assert self._session is not None
         procs = sorted(self._nodes.keys())
@@ -462,7 +493,13 @@ class WiringNodesMixin:
             return
         default = default_process if default_process in procs else procs[0]
         dlg = ImportPortsDialog(
-            candidates, procs, default, self, title=title, hint=hint
+            candidates,
+            procs,
+            default,
+            self,
+            title=title,
+            hint=hint,
+            structs=structs,
         )
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
@@ -472,9 +509,13 @@ class WiringNodesMixin:
 
         rel = self._session.relpath_from_repo(source_path)
         if kind == "fidl":
-            self._session.upsert_module(process, fidl_rel=rel)
+            n_types = self._session.ingest_fidl_structs(
+                self._session.parse_fidl_structs(source_path), source=rel
+            )
         else:
-            self._session.upsert_module(process, rel)
+            n_types = self._session.ingest_hpp_structs(
+                list(structs or []), source=rel
+            )
 
         card = self._nodes.get(process)
         provides = list(card.provides) if card else []
@@ -494,8 +535,14 @@ class WiringNodesMixin:
             self,
             t("导入完成"),
             t(
-                "已关联 {rel}\n向 {process} 添加了 {n} 个{direction} 端口。\n"
+                "已写入 cfg/types.yaml（{n_types} 个类型）\n"
+                "向 {process} 添加了 {n} 个{direction} 端口。\n"
                 "可双击模块继续调整，再从 Out 拖到 In 连线。"
-            ).format(rel=rel, process=process, n=len(names), direction=direction),
+            ).format(
+                n_types=n_types,
+                process=process,
+                n=len(names),
+                direction=direction,
+            ),
         )
 

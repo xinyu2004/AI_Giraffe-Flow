@@ -3,40 +3,33 @@ project_id: adc
 variant: adc_drive_park
 modules:
 - id: adapter.vehicle_can_gateway
-  hpp: projects/adc/interfaces/vehicle_gateway/io_types.hpp
 - id: perception.fcm
-  hpp:
-  - projects/adc/interfaces/fcm_perception/io_ports.hpp
-  - projects/adc/interfaces/fcm_perception/Perception_Out_messages.h
   package: customer/fcm-perception
 - id: perception.surround
-  hpp: projects/adc/interfaces/perception_surround/io_types.hpp
 - id: perception.rcm
-  hpp: projects/adc/interfaces/perception_rcm/io_types.hpp
 - id: planning.driving_plus
-  hpp: projects/adc/interfaces/planning_driving/io_types.hpp
   package: customer/planning-driving
 - id: planning.parking
-  hpp: projects/adc/interfaces/planning_parking/io_types.hpp
 - id: mode.drive_park
-  hpp: projects/adc/interfaces/mode_drive_park/io_types.hpp
 deployments:
 - process: external.vehicle_mcu
   compute_domain: external
   provides:
   - services.semantic.VehicleBus
   requires:
-  - services.semantic.Trajectory
+  - services.semantic.DrivingTrajectory
 - process: adapter.vehicle_can_gateway
   compute_domain: ap_linux
   provides:
   - services.semantic.Perception_In_St
-  - services.semantic.Trajectory
+  - services.semantic.DrivingTrajectory
   - services.semantic.EgoMotion
+  - services.semantic.ParkingSlot
+  - services.semantic.ApaStatus
   requires:
   - services.semantic.VehicleBus
   - services.semantic.VehicleMode
-  - services.semantic.Trajectory
+  - services.semantic.DrivingTrajectory
   - services.semantic.ParkingTrajectory
 - process: perception.fcm
   compute_domain: ap_linux
@@ -61,7 +54,7 @@ deployments:
 - process: planning.driving_plus
   compute_domain: ap_linux
   provides:
-  - services.semantic.Trajectory
+  - services.semantic.DrivingTrajectory
   - services.semantic.Freespace
   requires:
   - services.semantic.EgoMotion
@@ -74,22 +67,23 @@ deployments:
   provides:
   - services.semantic.ParkingTrajectory
   requires:
-  - services.semantic.EgoMotion
   - services.semantic.SurroundWorld
   - services.semantic.FreespaceNear
+  - services.semantic.ParkingSlot
 - process: mode.drive_park
   compute_domain: ap_linux
   provides:
   - services.semantic.VehicleMode
   requires:
+  - services.semantic.ApaStatus
   - services.semantic.EgoMotion
 bindings:
 - module: adapter.vehicle_can_gateway
   inputs:
   - service: semantic.VehicleBus
     type: VehicleBus
-  - service: semantic.Trajectory
-    type: Trajectory
+  - service: semantic.DrivingTrajectory
+    type: DrivingTrajectory
   - service: semantic.VehicleMode
     type: VehicleMode
   - service: semantic.ParkingTrajectory
@@ -99,8 +93,12 @@ bindings:
     type: EgoMotion
   - service: semantic.Perception_In_St
     type: Perception_In_St
-  - service: semantic.Trajectory
-    type: Trajectory
+  - service: semantic.DrivingTrajectory
+    type: DrivingTrajectory
+  - service: semantic.ParkingSlot
+    type: ParkingSlot
+  - service: semantic.ApaStatus
+    type: ApaStatus
 - module: perception.fcm
   inputs:
   - service: semantic.Perception_In_St
@@ -139,8 +137,8 @@ bindings:
   - service: semantic.Perception_Rear_Out_St
     type: Perception_Rear_Out_St
   outputs:
-  - service: semantic.Trajectory
-    type: Trajectory
+  - service: semantic.DrivingTrajectory
+    type: DrivingTrajectory
   - service: semantic.Freespace
     type: Freespace
 - module: planning.parking
@@ -149,8 +147,8 @@ bindings:
     type: SurroundWorld
   - service: semantic.FreespaceNear
     type: FreespaceNear
-  - service: semantic.EgoMotion
-    type: EgoMotion
+  - service: semantic.ParkingSlot
+    type: ParkingSlot
   outputs:
   - service: semantic.ParkingTrajectory
     type: ParkingTrajectory
@@ -158,6 +156,8 @@ bindings:
   inputs:
   - service: semantic.EgoMotion
     type: EgoMotion
+  - service: semantic.ApaStatus
+    type: ApaStatus
   outputs:
   - service: semantic.VehicleMode
     type: VehicleMode
@@ -186,12 +186,15 @@ dataflows:
 - from: adapter.vehicle_can_gateway
   service: services.semantic.EgoMotion
   to: perception.rcm
-- from: adapter.vehicle_can_gateway
-  service: services.semantic.EgoMotion
-  to: planning.parking
 - from: mode.drive_park
   service: services.semantic.VehicleMode
   to: adapter.vehicle_can_gateway
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.ParkingSlot
+  to: planning.parking
+- from: adapter.vehicle_can_gateway
+  service: services.semantic.ApaStatus
+  to: mode.drive_park
 - from: perception.surround
   service: services.semantic.FreespaceNear
   to: planning.driving_plus
@@ -208,13 +211,13 @@ dataflows:
   service: services.semantic.Perception_Rear_Out_St
   to: planning.driving_plus
 - from: planning.driving_plus
-  service: services.semantic.Trajectory
+  service: services.semantic.DrivingTrajectory
   to: adapter.vehicle_can_gateway
 - from: planning.parking
   service: services.semantic.ParkingTrajectory
   to: adapter.vehicle_can_gateway
 - from: adapter.vehicle_can_gateway
-  service: services.semantic.Trajectory
+  service: services.semantic.DrivingTrajectory
   to: external.vehicle_mcu
 channel_flows:
 - from: host.frame_ingest
@@ -277,21 +280,25 @@ canvas:
       in_side: left
       port_sides:
         out:EgoMotion: right
+        out:ParkingSlot: right
+        out:ApaStatus: right
         in:ParkingTrajectory: bottom
         in:VehicleMode: bottom
-        in:Trajectory: bottom
+        in:DrivingTrajectory: bottom
         in:VehicleBus: top
       port_slot_order:
         bottom:
         - in:VehicleMode
-        - in:Trajectory
+        - in:DrivingTrajectory
         - in:ParkingTrajectory
         top:
         - in:VehicleBus
         right:
         - out:Perception_In_St
-        - out:Trajectory
+        - out:DrivingTrajectory
         - out:EgoMotion
+        - out:ParkingSlot
+        - out:ApaStatus
       color: '#f1c40f'
     perception.fcm:
       x: 12105.8
@@ -363,13 +370,13 @@ canvas:
         in:FreespaceNear: top
         in:SurroundWorld: top
         in:Perception_Rear_Out_St: top
-        out:Trajectory: bottom
+        out:DrivingTrajectory: bottom
         out:Freespace: bottom
       port_slot_order:
         left:
         - in:EgoMotion
         bottom:
-        - out:Trajectory
+        - out:DrivingTrajectory
         - out:Freespace
         top:
         - in:SurroundWorld
@@ -386,10 +393,10 @@ canvas:
         out:ParkingTrajectory: bottom
         in:SurroundWorld: top
         in:FreespaceNear: top
-        in:EgoMotion: left
+        in:ParkingSlot: left
       port_slot_order:
         left:
-        - in:EgoMotion
+        - in:ParkingSlot
         top:
         - in:SurroundWorld
         - in:FreespaceNear
@@ -404,8 +411,10 @@ canvas:
       port_sides:
         out:VehicleMode: left
         in:EgoMotion: top
+        in:ApaStatus: top
       port_slot_order:
         top:
+        - in:ApaStatus
         - in:EgoMotion
         left:
         - out:VehicleMode

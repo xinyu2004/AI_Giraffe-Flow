@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QGraphicsItem,
+    QInputDialog,
     QLabel,
     QMenu,
     QMessageBox,
@@ -76,11 +77,14 @@ class WiringMenusMixin:
         edge.setSelected(True)
         menu = QMenu(self)
         act_edit = menu.addAction(t("编辑信号名…"))
+        act_fields = menu.addAction(t("查看类型…"))
         act_reset = menu.addAction(t("重置连线路径"))
         act_del = menu.addAction(t("删除信号线"))
         chosen = menu.exec(global_pos)
         if chosen is act_edit:
             self.edit_edge(edge)
+        elif chosen is act_fields:
+            self.inspect_type(edge.service)
         elif chosen is act_reset:
             if self._session:
                 self._session.set_flow_route(edge.flow, None)
@@ -90,6 +94,43 @@ class WiringMenusMixin:
             self.changed.emit()
         elif chosen is act_del:
             self._remove_edge(edge)
+
+    def edit_edge(self, edge: EdgeCurve) -> None:
+        """Rename the dataflow service (canvas mid-label)."""
+        if not self._session:
+            return
+        old = short_service(edge.service)
+        text, ok = QInputDialog.getText(
+            self, t("编辑信号名…"), t("信号名"), text=old
+        )
+        if not ok:
+            return
+        new = str(text).strip()
+        if not new:
+            QMessageBox.warning(self, t("编辑信号名…"), t("信号名不能为空"))
+            return
+        if short_service(new) == old:
+            return
+        new_short = short_service(canon_service(new))
+        for f in self._session.dataflows():
+            if (
+                str(f.get("from") or "") == edge.src.process_name
+                and str(f.get("to") or "") == edge.dst.process_name
+                and short_service(str(f.get("service") or "")) == new_short
+            ):
+                QMessageBox.information(self, t("编辑信号名…"), t("该 dataflow 已存在"))
+                return
+        self._session.rename_dataflow_service(edge.flow, new)
+        self.rebuild()
+        self.changed.emit()
+
+    def inspect_type(self, service: str) -> None:
+        from gf_config.gui.wiring_dialogs import show_type_tree
+
+        fields: list[Any] = []
+        if self._session:
+            fields = self._session.lookup_type_fields(service)
+        show_type_tree(short_service(service), fields, self)
 
     def show_channel_edge_menu(self, edge: ChannelEdge, global_pos) -> None:  # type: ignore[no-untyped-def]
         edge.setSelected(True)

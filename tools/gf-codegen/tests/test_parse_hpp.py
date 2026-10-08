@@ -2,11 +2,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gf_codegen.compose.parse_hpp import parse_hpp_file, structs_to_sor_types
+from gf_codegen.compose.parse_hpp import (
+    is_fat_port_name,
+    parse_hpp_file,
+    structs_to_sor_types,
+)
 
 
-def test_parse_uss(repo_root: Path) -> None:
-    hpp = repo_root / "projects/afc/interfaces/uss_sensing/io_types.hpp"
+def test_parse_uss(tmp_path: Path) -> None:
+    hpp = tmp_path / "uss.hpp"
+    hpp.write_text(
+        "struct UssZoneSample { float dist_m; };\n"
+        "struct UssZones { UssZoneSample zones[6]; };\n",
+        encoding="utf-8",
+    )
     structs = parse_hpp_file(hpp)
     names = {s["name"] for s in structs}
     assert "UssZones" in names
@@ -18,18 +27,23 @@ def test_parse_uss(repo_root: Path) -> None:
     assert zone_field["array_size"] == 6
 
 
-def test_parse_front(repo_root: Path) -> None:
-    hpp = repo_root / "projects/afc/interfaces/perception_front/io_types.hpp"
+def test_parse_front(tmp_path: Path) -> None:
+    hpp = tmp_path / "front.hpp"
+    hpp.write_text("struct FrontObjectList { uint8_t count; };\n", encoding="utf-8")
     structs = parse_hpp_file(hpp)
     names = {s["name"] for s in structs}
     assert "FrontObjectList" in names
 
 
-def test_parse_fcm_fat_ports(repo_root: Path) -> None:
-    from gf_codegen.compose.parse_hpp import is_fat_port_name
-
-    hpp = repo_root / "projects/afc/interfaces/fcm_perception/io_ports.hpp"
-    structs = parse_hpp_file(hpp)
+def test_parse_fcm_fat_ports(tmp_path: Path) -> None:
+    ports = tmp_path / "io_ports.hpp"
+    ports.write_text(
+        "struct Perception_In_St { uint64_t timestamp_ns; };\n"
+        "struct Perception_MESSAGE_Out_St { uint8_t n; };\n"
+        "struct Dyn_OBJ_Item_St { uint8_t id; };\n",
+        encoding="utf-8",
+    )
+    structs = parse_hpp_file(ports)
     names = {s["name"] for s in structs}
     assert "Perception_In_St" in names
     assert "Perception_MESSAGE_Out_St" in names
@@ -48,13 +62,21 @@ def test_parse_typedef_struct(tmp_path: Path) -> None:
     assert structs[0]["fields"][0]["type"] == "uint8"
 
 
-def test_parse_gold_out_macros(repo_root: Path) -> None:
-    hpp = (
-        repo_root
-        / "projects/afc/interfaces/fcm_perception/Perception_Out_messages.h"
+def test_parse_gold_out_macros(tmp_path: Path) -> None:
+    hpp = tmp_path / "gold.h"
+    hpp.write_text(
+        "#define OBJ_NUM 13\n"
+        "typedef struct {\n"
+        "  uint8_demo m_OBJ_Object_Class;\n"
+        "} Dyn_OBJ_Item_St;\n"
+        "typedef struct {\n"
+        "  Dyn_OBJ_Item_St m_Obj_item[OBJ_NUM];\n"
+        "} Perception_Dyn_OBJ_Out_St;\n"
+        "typedef struct {\n"
+        "  Perception_Dyn_OBJ_Out_St dyn;\n"
+        "} Perception_MESSAGE_Out_St;\n",
+        encoding="utf-8",
     )
-    if not hpp.is_file():
-        return
     structs = parse_hpp_file(hpp)
     names = {s["name"] for s in structs}
     assert "Perception_MESSAGE_Out_St" in names
@@ -64,6 +86,5 @@ def test_parse_gold_out_macros(repo_root: Path) -> None:
     assert item["array_size"] == 13
     types = structs_to_sor_types(structs)
     item_t = next(t for t in types if t["id"] == "types.Dyn_OBJ_Item_St")
-    # enum fields become uint8 on the wire
     cls = next(f for f in item_t["fields"] if f["name"] == "m_OBJ_Object_Class")
     assert cls["type"] == "uint8"

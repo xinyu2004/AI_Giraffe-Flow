@@ -2,13 +2,13 @@
 #include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/collector/event_collector.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
-#include "gf_gen/proxy/ego_motion_proxy.hpp"
-#include "gf_gen/proxy/perception_message__out__st_proxy.hpp"
-#include "gf_gen/proxy/perception__rear__out__st_proxy.hpp"
-#include "gf_gen/proxy/freespace_near_proxy.hpp"
-#include "gf_gen/proxy/surround_world_proxy.hpp"
-#include "gf_gen/skeleton/trajectory_skeleton.hpp"
-#include "gf_gen/skeleton/freespace_skeleton.hpp"
+#include "gf_gen/ego_motion.hpp"
+#include "gf_gen/perception_message__out__st.hpp"
+#include "gf_gen/perception__rear__out__st.hpp"
+#include "gf_gen/freespace_near.hpp"
+#include "gf_gen/surround_world.hpp"
+#include "gf_gen/driving_trajectory.hpp"
+#include "gf_gen/freespace.hpp"
 
 #include "gf_app/frame_watch.hpp"
 
@@ -614,7 +614,7 @@ std::uint64_t now_ns() {
 }
 
 void ApplyTick(const oct_gen::PlanTickOut& tick, const gf_gen::EgoMotion& ego,
-               const PercView& view, gf_gen::Trajectory& traj) {
+               const PercView& view, gf_gen::DrivingTrajectory& traj) {
   traj.point_count = static_cast<std::uint8_t>(oct_gen::kLatTrajPoints);
   traj.gear_shift_first = ego.gear;
   traj.gear_shift_second = 0;
@@ -637,7 +637,7 @@ void ApplyTick(const oct_gen::PlanTickOut& tick, const gf_gen::EgoMotion& ego,
   traj.v_sign_min_mps = view.v_sign_min_mps;
 }
 
-void ClipPathToFront(gf_gen::Trajectory& traj, float d_front) {
+void ClipPathToFront(gf_gen::DrivingTrajectory& traj, float d_front) {
   const float cap = std::max(1.0f, d_front);
   int n = static_cast<int>(traj.point_count);
   while (n > 2 && traj.points_x_m[n - 1] > cap + 0.05f) {
@@ -776,7 +776,7 @@ int main() {
   gf_gen::FreespaceNearProxy fs_sub{};
   gf_gen::SurroundWorldProxy surround_sub{};
   gf_gen::Perception_Rear_Out_StProxy rcm_sub{};
-  gf_gen::TrajectorySkeleton traj_pub{};
+  gf_gen::DrivingTrajectorySkeleton traj_pub{};
   gf_gen::FreespaceSkeleton fs_pub{};
 
   std::optional<gf_gen::EgoMotion> last_ego;
@@ -845,7 +845,7 @@ int main() {
   rx_perc.BindService("Perception_MESSAGE_Out_St");
   rx_perc.BindCameraCeiling();
   tx_traj.Init("plan", "tx.traj");
-  tx_traj.BindService("Trajectory");
+  tx_traj.BindService("DrivingTrajectory");
   std::uint64_t last_perc_ts = 0;
   bool have_planned = false;
   bool perc_edge = false;
@@ -1195,7 +1195,7 @@ int main() {
         lc_snap_side = 0;
       }
 
-      gf_gen::Trajectory traj{};
+      gf_gen::DrivingTrajectory traj{};
       ApplyTick(tick, ego, view, traj);
       gf_plan_fs::LaneEnvMode clip_mode = gf_plan_fs::LaneEnvMode::HostOnly;
       float clip_front = fs_drv.d_front_m;

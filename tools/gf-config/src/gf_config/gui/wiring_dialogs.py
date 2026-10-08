@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import Qt
@@ -20,13 +21,16 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMenu,
     QMessageBox,
     QPushButton,
     QRadioButton,
-    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -228,34 +232,49 @@ class PortEditDialog(QDialog):
         out_policies: dict[str, dict[str, Any]] | None = None,
         color_hex: str = "",
         color_user: bool = False,
+        lookup_fields: Callable[[str], list[dict[str, Any]]] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(t("编辑端口 — {process}").format(process=process))
         self.resize(560, 560)
         self._active_in = True
+        self._lookup_fields = lookup_fields
         self._policies = {
             short_service(k): dict(v)
             for k, v in (out_policies or {}).items()
             if isinstance(v, dict)
         }
 
-        self._requires = QListWidget()
-        for r in requires:
-            self._requires.addItem(canon_service(r))
+        self._requires = QTableWidget(0, 2)
+        self._requires.verticalHeader().setVisible(False)
+        self._requires.horizontalHeader().setVisible(False)
+        self._requires.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self._requires.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self._requires.setColumnWidth(1, 28)
+        self._requires.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._requires.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._requires.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._requires.itemSelectionChanged.connect(self._on_in_selected)
-        self._requires.itemClicked.connect(lambda *_: self._focus_in())
+        self._requires.cellClicked.connect(lambda *_: self._focus_in())
+        self._requires.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._requires.customContextMenuRequested.connect(self._on_in_menu)
+        for r in requires:
+            self._append_in_row(canon_service(r))
 
-        self._outs = QTableWidget(0, 3)
+        self._outs = QTableWidget(0, 4)
         self._outs.setHorizontalHeaderLabels(
-            [t("Out（服务）"), t("触发"), t("ms / fps")]
+            [t("Out（服务）"), t("触发"), t("ms / fps"), ""]
         )
         self._outs.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._outs.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self._outs.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self._outs.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self._outs.setColumnWidth(3, 28)
         self._outs.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._outs.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._outs.itemSelectionChanged.connect(self._on_out_selected)
+        self._outs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._outs.customContextMenuRequested.connect(self._on_out_menu)
         for p in provides:
             self._append_out_row(canon_service(p))
 
@@ -293,6 +312,10 @@ class PortEditDialog(QDialog):
         row.addWidget(btn_swap)
         layout.addLayout(row)
 
+        guide = QLabel(t("ⓘ 看字段 · 双击 Out 改服务名 · 右键同样可以"))
+        guide.setWordWrap(True)
+        guide.setStyleSheet("color:#888;font-size:11px;")
+        layout.addWidget(guide)
         hint = QLabel(
             t(
                 "一发多收：多模块 In 同名正常（DDS/SOME/IP 多订阅）。"
@@ -316,7 +339,7 @@ class PortEditDialog(QDialog):
         self._outs.clearSelection()
 
     def _on_in_selected(self) -> None:
-        if self._requires.selectedItems():
+        if self._requires.currentRow() >= 0:
             self._active_in = True
             self._outs.blockSignals(True)
             self._outs.clearSelection()
@@ -333,6 +356,24 @@ class PortEditDialog(QDialog):
         short = short_service(svc)
         return dict(self._policies.get(short) or default_publish_spec())
 
+    def _type_info_button(self) -> QToolButton:
+        btn = QToolButton()
+        btn.setText("ⓘ")
+        btn.setAutoRaise(True)
+        btn.setToolTip(t("查看字段（只读）"))
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        return btn
+
+    def _append_in_row(self, svc: str) -> None:
+        row = self._requires.rowCount()
+        self._requires.insertRow(row)
+        item = QTableWidgetItem(svc)
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self._requires.setItem(row, 0, item)
+        btn = self._type_info_button()
+        btn.clicked.connect(self._on_in_info)
+        self._requires.setCellWidget(row, 1, btn)
+
     def _append_out_row(self, svc: str) -> None:
         row = self._outs.rowCount()
         self._outs.insertRow(row)
@@ -348,6 +389,31 @@ class PortEditDialog(QDialog):
         trig.currentIndexChanged.connect(lambda _i, r=row: self._on_trig_changed(r))
         self._outs.setCellWidget(row, 1, trig)
         self._outs.setCellWidget(row, 2, spin)
+        btn = self._type_info_button()
+        btn.clicked.connect(self._on_out_info)
+        self._outs.setCellWidget(row, 3, btn)
+
+    def _on_in_info(self) -> None:
+        btn = self.sender()
+        for r in range(self._requires.rowCount()):
+            if self._requires.cellWidget(r, 1) is btn:
+                self._requires.selectRow(r)
+                self._on_in_selected()
+                self._show_port_type(self._in_svc_at(r))
+                return
+
+    def _on_out_info(self) -> None:
+        btn = self.sender()
+        for r in range(self._outs.rowCount()):
+            if self._outs.cellWidget(r, 3) is btn:
+                self._outs.selectRow(r)
+                self._on_out_selected()
+                self._show_port_type(self._out_svc_at(r))
+                return
+
+    def _in_svc_at(self, row: int) -> str:
+        item = self._requires.item(row, 0)
+        return canon_service(item.text() if item else "")
 
     def _on_trig_changed(self, row: int) -> None:
         trig = self._outs.cellWidget(row, 1)
@@ -370,13 +436,13 @@ class PortEditDialog(QDialog):
         svc = canon_service(text)
         if direction == "in":
             existing = {
-                short_service(self._requires.item(i).text())
-                for i in range(self._requires.count())
+                short_service(self._in_svc_at(i))
+                for i in range(self._requires.rowCount())
             }
             if short_service(svc) in existing:
                 return
-            self._requires.addItem(svc)
-            self._requires.setCurrentRow(self._requires.count() - 1)
+            self._append_in_row(svc)
+            self._requires.selectRow(self._requires.rowCount() - 1)
             self._on_in_selected()
             return
         existing = {
@@ -398,7 +464,7 @@ class PortEditDialog(QDialog):
             return
         row = self._requires.currentRow()
         if row >= 0:
-            self._requires.takeItem(row)
+            self._requires.removeRow(row)
 
     def _swap_direction(self) -> None:
         if not self._active_in and self._outs.currentRow() >= 0:
@@ -407,25 +473,51 @@ class PortEditDialog(QDialog):
             short = short_service(svc)
             self._outs.removeRow(row)
             self._policies.pop(short, None)
-            self._requires.addItem(svc)
-            self._requires.setCurrentRow(self._requires.count() - 1)
+            self._append_in_row(svc)
+            self._requires.selectRow(self._requires.rowCount() - 1)
             self._on_in_selected()
             return
         row = self._requires.currentRow()
         if row < 0:
             return
-        item = self._requires.takeItem(row)
-        if item is None:
-            return
-        svc = item.text()
+        svc = self._in_svc_at(row)
+        self._requires.removeRow(row)
         self._policies.setdefault(short_service(svc), default_publish_spec())
         self._append_out_row(svc)
         self._outs.selectRow(self._outs.rowCount() - 1)
         self._on_out_selected()
 
+    def _show_port_type(self, svc: str) -> None:
+        fields: list[dict[str, Any]] = []
+        if self._lookup_fields is not None:
+            fields = list(self._lookup_fields(svc) or [])
+        show_type_tree(short_service(svc), fields, self)
+
+    def _on_in_menu(self, pos) -> None:  # type: ignore[no-untyped-def]
+        row = self._requires.rowAt(pos.y())
+        if row < 0:
+            return
+        self._requires.selectRow(row)
+        self._on_in_selected()
+        menu = QMenu(self)
+        act = menu.addAction(t("查看类型…"))
+        if menu.exec(self._requires.mapToGlobal(pos)) is act:
+            self._show_port_type(self._in_svc_at(row))
+
+    def _on_out_menu(self, pos) -> None:  # type: ignore[no-untyped-def]
+        row = self._outs.rowAt(pos.y())
+        if row < 0:
+            return
+        self._outs.selectRow(row)
+        self._on_out_selected()
+        menu = QMenu(self)
+        act = menu.addAction(t("查看类型…"))
+        if menu.exec(self._outs.mapToGlobal(pos)) is act:
+            self._show_port_type(self._out_svc_at(row))
+
     def result_ports(self) -> tuple[list[str], list[str]]:
         provides = [self._out_svc_at(i) for i in range(self._outs.rowCount())]
-        requires = [self._requires.item(i).text() for i in range(self._requires.count())]
+        requires = [self._in_svc_at(i) for i in range(self._requires.rowCount())]
         return provides, requires
 
     def result_color_action(self) -> tuple[str, str | None]:
@@ -447,6 +539,59 @@ class PortEditDialog(QDialog):
         return out
 
 
+def _field_type_text(field: dict[str, Any]) -> str:
+    typ = str(field.get("type") or "")
+    arr = field.get("array_size")
+    if arr is not None:
+        return f"{typ}[{arr}]"
+    return typ
+
+
+class TypeTreeDialog(QDialog):
+    """Read-only one-column field tree. Not a type editor."""
+
+    def __init__(
+        self,
+        type_name: str,
+        fields: list[dict[str, Any]],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(t("查看类型…"))
+        self.resize(360, 280)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        tree = QTreeWidget()
+        tree.setHeaderHidden(True)
+        tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        tree.setColumnCount(1)
+        top = QTreeWidgetItem([type_name or t("类型")])
+        tree.addTopLevelItem(top)
+        if fields:
+            for f in fields:
+                if not isinstance(f, dict):
+                    continue
+                name = str(f.get("name") or "")
+                QTreeWidgetItem(top, [f"{name} : {_field_type_text(f)}"])
+            top.setExpanded(True)
+        else:
+            QTreeWidgetItem(top, [t("无字段（先 Verify 或导入 hpp）")])
+            top.setExpanded(True)
+        root.addWidget(tree, stretch=1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self.accept)
+        root.addWidget(buttons)
+
+
+def show_type_tree(
+    type_name: str,
+    fields: list[dict[str, Any]],
+    parent: QWidget | None = None,
+) -> None:
+    TypeTreeDialog(type_name, fields, parent).exec()
+
+
 class ImportPortsDialog(QDialog):
     """Shared dialog: pick candidates from hpp or fidl → module ports."""
 
@@ -459,11 +604,13 @@ class ImportPortsDialog(QDialog):
         *,
         title: str | None = None,
         hint: str | None = None,
+        structs: list[dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title or t("添加端口"))
-        self.resize(460, 480)
+        self.resize(520, 520)
         self._all = list(candidates)
+        self._structs = {str(s.get("name") or ""): s for s in (structs or []) if s.get("name")}
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(hint or t("勾选要加入的名称（作为 service 短名）：")))
 
@@ -472,13 +619,10 @@ class ImportPortsDialog(QDialog):
         self._fat_only.toggled.connect(self._rebuild_checks)
         layout.addWidget(self._fat_only)
 
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._checks_host = QWidget()
-        self._checks_layout = QVBoxLayout(self._checks_host)
-        self._scroll.setWidget(self._checks_host)
-        layout.addWidget(self._scroll, stretch=1)
-        self._checks: list[QCheckBox] = []
+        self._tree = QTreeWidget()
+        self._tree.setHeaderLabels([t("结构 / 字段"), t("类型")])
+        self._tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self._tree, stretch=1)
         self._rebuild_checks()
 
         form = QFormLayout()
@@ -508,26 +652,33 @@ class ImportPortsDialog(QDialog):
         layout.addWidget(buttons)
 
     def _rebuild_checks(self) -> None:
-        while self._checks_layout.count():
-            item = self._checks_layout.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.deleteLater()
-        self._checks.clear()
+        self._tree.clear()
         names = self._all
         if self._fat_only.isChecked():
             fat = [n for n in self._all if is_fat_port_name(n)]
             if fat:
                 names = fat
         for name in names:
-            cb = QCheckBox(name)
-            cb.setChecked(True)
-            self._checks.append(cb)
-            self._checks_layout.addWidget(cb)
-        self._checks_layout.addStretch(1)
+            top = QTreeWidgetItem([name, ""])
+            top.setCheckState(0, Qt.CheckState.Checked)
+            for field in (self._structs.get(name) or {}).get("fields") or []:
+                if not isinstance(field, dict):
+                    continue
+                typ = str(field.get("type") or "")
+                arr = field.get("array_size")
+                if arr is not None:
+                    typ = f"{typ}[{arr}]"
+                QTreeWidgetItem(top, [str(field.get("name") or ""), typ])
+            self._tree.addTopLevelItem(top)
+            if self._structs.get(name):
+                top.setExpanded(False)
 
     def selected(self) -> tuple[str, list[str], str]:
-        names = [cb.text() for cb in self._checks if cb.isChecked()]
+        names: list[str] = []
+        for i in range(self._tree.topLevelItemCount()):
+            item = self._tree.topLevelItem(i)
+            if item is not None and item.checkState(0) == Qt.CheckState.Checked:
+                names.append(item.text(0))
         direction = "out" if self._dir_out.isChecked() else "in"
         return self._proc.currentText(), names, direction
 

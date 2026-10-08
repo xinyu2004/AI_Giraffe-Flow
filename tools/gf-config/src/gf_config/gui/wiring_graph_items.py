@@ -500,10 +500,10 @@ class PortItem(QGraphicsEllipseItem):
         self.setBrush(QBrush(fill))
         self.setPen(pen)
         side_l = _SIDE_LABEL.get(self.side, self.side)
-        # 裸拖连线（Out↔In）；Ctrl+拖 = 改边 / 同边调序（减交叉）
+        # 字段不在 paint 里查；右键 / 双击「查看类型」
         self.setToolTip(
             f"{tip_dir}: {port_label(self.service)} ({tip} · {side_l})\n"
-            + t("拖拽连线 · Ctrl+拖：改边或同边调序 · 右键选边")
+            + t("拖拽连线 · Ctrl+拖：改边或同边调序 · 右键查看类型")
         )
         s = self.SIZE
         if self.direction == "in":
@@ -579,10 +579,18 @@ class PortItem(QGraphicsEllipseItem):
                 return
         super().mouseReleaseEvent(event)
 
+    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self.card.graph is not None:
+            self.card.graph.inspect_type(self.service)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
     def contextMenuEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if self.card.graph is None:
             return
         menu = QMenu()
+        act_fields = menu.addAction(t("查看类型…"))
         menu.addAction(f"{short_service(self.service)} — move to:").setEnabled(False)
         for s in _PORT_SIDES:
             act = menu.addAction(f"  {_SIDE_LABEL[s]}")
@@ -591,7 +599,9 @@ class PortItem(QGraphicsEllipseItem):
                 act.setCheckable(True)
                 act.setChecked(True)
         chosen = menu.exec(event.screenPos())
-        if chosen is not None and chosen.data():
+        if chosen is act_fields:
+            self.card.graph.inspect_type(self.service)
+        elif chosen is not None and chosen.data():
             self.card.graph.set_single_port_side(self, str(chosen.data()))
         event.accept()
 
@@ -1111,13 +1121,6 @@ class ProcessCard(QGraphicsItem):
                             ):
                                 sib.update_path()
                                 touched.append(sib)
-                    if self.graph is not None:
-                        deconflict_edge_labels(
-                            [
-                                *(getattr(self.graph, "_edges", None) or []),
-                                *(getattr(self.graph, "_channel_edges", None) or []),
-                            ]
-                        )
                 finally:
                     self._updating_links = False
             if self.graph is not None:
@@ -1247,10 +1250,11 @@ class EdgeCurve(QGraphicsPathItem):
         if not _qt_alive(self):
             return
         self._apply_style()
-        self.update_path()
 
     def _apply_style(self) -> None:
         selected = self.isSelected()
+        self._label.setZValue(2 if (self._highlight or selected) else 1)
+        self.setZValue(1 if selected else (0 if self._highlight else -1))
         if selected:
             # 选中线本身：亮黄 + 显示路径点
             color = QColor("#f7dc6f")
@@ -1559,7 +1563,6 @@ class MissingEdge(QGraphicsPathItem):
         if not _qt_alive(self):
             return
         self._apply_style()
-        self.update_path()
 
     def shape(self) -> QPainterPath:
         stroker = QPainterPathStroker()
@@ -1666,7 +1669,6 @@ class McuPeerLink(QGraphicsPathItem):
         if not _qt_alive(self):
             return
         self._apply_style()
-        self.update_path()
 
     def _apply_style(self) -> None:
         selected = self.isSelected()
@@ -1782,7 +1784,6 @@ class ChannelEdge(QGraphicsPathItem):
         if not _qt_alive(self):
             return
         self._apply_style()
-        self.update_path()
 
     def _apply_style(self) -> None:
         selected = self.isSelected()

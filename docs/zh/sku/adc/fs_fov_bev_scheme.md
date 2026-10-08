@@ -103,7 +103,7 @@ mount 默认 front：`x=0.55, z=1.35, pitch=-5°, fov=100°, 2048×1536`（≈3M
 |------|------|------|
 | **gf-config** `frame_ingest` 各槽 `mount.{x,y,z,pitch,yaw,roll,fov}` | compose → `camera_contract.json` + `kMount*` / 每槽 mount | Host pygame、板端 ingest、光学楔 |
 | 产品默认（未改配置时） | ADC/AFC **front.fov = 100°**（挡风玻璃） | 前视楔默认 |
-| 包络距离 cal（SOR 分解冻结；目标进 compose 生成） | [`fs_envelope_cal.hpp`](../../../../projects/adc/interfaces/fs_envelope/fs_envelope_cal.hpp) | surround Near、driving fuse；**禁止**业务里再写一套 7/35/15/120 |
+| 包络距离 cal（SOR 分解冻结；目标进 compose 生成） | [`fs_envelope_cal.hpp`](../../../../projects/adc/generated/include/fs_envelope/fs_envelope_cal.hpp) | surround Near、driving fuse；**禁止**业务里再写一套 7/35/15/120 |
 
 ### 1.1 前 / 侧 / 后：谁拥有什么（禁止混谈）
 

@@ -71,7 +71,7 @@ parse hpp structs  +  import oem(dbc)  +  apply wiring  +  merge req  →  gf.so
 
 ## 4. 模块工程师：只交 io_types.hpp
 
-示例目录：[projects/afc/interfaces/](../../../projects/afc/interfaces/)
+示例目录：[projects/afc/generated/include/](../../../projects/afc/generated/include/)
 
 ```cpp
 // perception_driving/io_types.hpp — 只描述数据形状

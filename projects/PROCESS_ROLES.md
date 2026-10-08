@@ -37,7 +37,7 @@ EgoMotion ──► sensing.uss ──► UssZones ──► perception.parking 
 
 ## 本仓模块示例 ↔ 进程
 
-> **接口布局：** 各交付项目的 `interfaces/` 下维护 `io_types.hpp`（无顶层共享目录）。  
+> **接口布局：** 各交付项目的 `generated/include/` 下维护模块头（无顶层共享目录、无长期 `interfaces/`）。  
 > `wiring.yaml` 的 `modules[].hpp` **只写路径引用**。详见 [MODULE_INTERFACE_LAYOUT.md](MODULE_INTERFACE_LAYOUT.md)。  
 > `middleware/ucm`、`middleware/diag` 是平台 API，**不是**模块 `io_types.hpp`。
 

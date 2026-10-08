@@ -4,7 +4,6 @@ target_link_libraries(gf_mode_drive_park PRIVATE
   gf_ara::com_iceoryx
   gf_ara::runtime
   gf_ara::sm
-  gf_channel::channel
 )
 add_dependencies(gf_mode_drive_park iox-roudi)
 if(NOT GF_USE_GENERATED)

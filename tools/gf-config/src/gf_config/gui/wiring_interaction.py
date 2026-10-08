@@ -24,6 +24,9 @@ from gf_config.core import (
 )
 from gf_config.gui.cursors import port_move_cursor, wire_link_cursor
 from gf_config.gui.wiring_graph_items import (
+    ChannelEdge,
+    EdgeCurve,
+    MissingEdge,
     PortItem,
     ProcessCard,
     _norm_side,
@@ -199,7 +202,14 @@ class WiringInteractionMixin:
             if not ok:
                 QMessageBox.information(self, t("连线"), t("该 GfChannel 边已存在"))
                 return
-            self.rebuild()
+            if out_port.card.is_external() or in_port.card.is_external():
+                self.rebuild()
+            else:
+                self._commit_channel_edge_visual(
+                    out_port.card.process_name,
+                    in_port.card.process_name,
+                    slot,
+                )
             self.changed.emit()
             return
 
@@ -241,8 +251,159 @@ class WiringInteractionMixin:
         if not ok:
             QMessageBox.information(self, t("连线"), t("该 dataflow 已存在"))
             return
-        self.rebuild()
+        src_name = out_port.card.process_name
+        dst_name = in_port.card.process_name
+        if out_port.card.is_external() or in_port.card.is_external():
+            self.rebuild()
+        else:
+            self._commit_soa_edge_visual(src_name, dst_name, out_svc)
         self.changed.emit()
+
+    def _sync_card_ports_from_session(self, name: str) -> None:
+        """Refresh one card's In/Out from session without scene.clear()."""
+        card = self._nodes.get(name)
+        session = self._session
+        if card is None or session is None or card.is_frame_ingest():
+            return
+        dep = next(
+            (
+                d
+                for d in session.deployments()
+                if isinstance(d, dict) and str(d.get("process") or "") == name
+            ),
+            None,
+        )
+        provides = [
+            str(x)
+            for x in ((dep or {}).get("provides") or [])
+            if not is_channel_svc(str(x))
+        ]
+        requires = [
+            str(x)
+            for x in ((dep or {}).get("requires") or [])
+            if not is_channel_svc(str(x))
+        ]
+        for fl in session.channel_flows():
+            if str(fl.get("to") or "") != name:
+                continue
+            slot = str(fl.get("slot") or "").strip()
+            frm = str(fl.get("from") or "")
+            if not slot and frm.startswith("camera."):
+                slot = ProjectSession.gf_channel_slot_name(
+                    ProjectSession.slot_id_from_camera_process(frm)
+                )
+            if slot and slot not in requires:
+                requires.append(slot)
+        card.set_ports(provides, requires)
+
+    def _mark_pair_linked(self, src_name: str, dst_name: str, key: str) -> None:
+        src = self._nodes.get(src_name)
+        dst = self._nodes.get(dst_name)
+        if src is not None:
+            src.set_link_status(
+                linked_out=src._linked_out | {key},
+                linked_in=src._linked_in,
+            )
+        if dst is not None:
+            dst.set_link_status(
+                linked_out=dst._linked_out,
+                linked_in=dst._linked_in | {key},
+            )
+
+    def _drop_missing_for(self, src_name: str, dst_name: str, service: str) -> None:
+        short = short_service(service)
+        keep: list[Any] = []
+        for m in list(self._missing):
+            if (
+                isinstance(m, MissingEdge)
+                and m.src.process_name == src_name
+                and m.dst.process_name == dst_name
+                and short_service(m.service) == short
+            ):
+                if _qt_alive(m):
+                    m.remove_label()
+                    sc = m.scene()
+                    if sc is not None:
+                        sc.removeItem(m)
+                continue
+            keep.append(m)
+        self._missing = keep
+
+    def _commit_soa_edge_visual(self, src_name: str, dst_name: str, service: str) -> None:
+        session = self._session
+        if session is None:
+            return
+        self._sync_card_ports_from_session(src_name)
+        self._sync_card_ports_from_session(dst_name)
+        src = self._nodes.get(src_name)
+        dst = self._nodes.get(dst_name)
+        if src is None or dst is None:
+            self.rebuild()
+            return
+        svc_short = short_service(service)
+        flow = next(
+            (
+                f
+                for f in reversed(session.dataflows())
+                if str(f.get("from") or "") == src_name
+                and str(f.get("to") or "") == dst_name
+                and short_service(str(f.get("service") or "")) == svc_short
+            ),
+            None,
+        )
+        if flow is None:
+            self.rebuild()
+            return
+        siblings = [
+            e
+            for e in self._edges
+            if isinstance(e, EdgeCurve)
+            and e.src is src
+            and short_service(e.service) == svc_short
+        ]
+        n = len(siblings) + 1
+        for i, e in enumerate(siblings):
+            e.fan_index = i
+            e.fan_count = n
+            if _qt_alive(e):
+                e.update_path()
+        edge = EdgeCurve(src, dst, str(flow.get("service") or service), flow, n - 1, n, graph=self)
+        self._scene.addItem(edge)
+        edge.update_path()
+        self._edges.append(edge)
+        self._mark_pair_linked(src_name, dst_name, port_link_key(service))
+        self._drop_missing_for(src_name, dst_name, service)
+        self.relayout_edge_labels()
+
+    def _commit_channel_edge_visual(self, src_name: str, dst_name: str, slot: str) -> None:
+        session = self._session
+        if session is None:
+            return
+        self._sync_card_ports_from_session(dst_name)
+        src = self._nodes.get(src_name)
+        dst = self._nodes.get(dst_name)
+        if src is None or dst is None:
+            self.rebuild()
+            return
+        flow = next(
+            (
+                f
+                for f in reversed(session.channel_flows())
+                if str(f.get("from") or "") == src_name
+                and str(f.get("to") or "") == dst_name
+                and (not slot or str(f.get("slot") or "") == slot)
+            ),
+            None,
+        )
+        if flow is None:
+            self.rebuild()
+            return
+        cedge = ChannelEdge(src, dst, slot, flow, graph=self)
+        self._scene.addItem(cedge)
+        cedge.update_path()
+        self._channel_edges.append(cedge)
+        self._mark_pair_linked(src_name, dst_name, port_link_key(slot))
+        self.relayout_edge_labels()
 
     def _merge_channel_requires(self, process: str, requires: list[str]) -> list[str]:
         """Keep existing channel In slots from channel_flows when editing SOA ports."""

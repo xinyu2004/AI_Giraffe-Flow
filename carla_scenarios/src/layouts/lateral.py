@@ -10,6 +10,8 @@ from spawn.place import spawn_ego_only, spawn_named
 from spawn.roles import ROLE_LEAD
 from _verdict import CmdProbe, release_ego
 
+ROLE_SIDE = "side"
+
 
 def layout_lka_curve_entry(
     session: Any,
@@ -131,6 +133,45 @@ def layout_lcc_straight(
         "layout": "lcc_straight",
         "ego_mps": mps,
         "const_vel": False,
+        "ic": "giraffe_only",
+    }
+
+
+def layout_assist_lc(
+    session: Any,
+    *,
+    keep_ego: bool = False,
+    ego_mps: float = 10.0,
+) -> Tuple[Any, Optional[Any], dict[str, Any]]:
+    """Straight + adjacent-lane scene car. CARLA does not steer ego."""
+    world = session.world
+    carla_mod = session.carla
+    ego_tf, _ = pick_follow_transforms(world, lead_gap_m=25.0, require_straight=True)
+    ego = spawn_ego_only(world, ego_tf=ego_tf, keep_ego=keep_ego)
+    release_ego(carla_mod, ego, session=session)
+    side_tf = offset_transform(ego_tf, forward_m=14.0, right_m=-3.5)
+    side = spawn_named(
+        world,
+        role=ROLE_SIDE,
+        transform=side_tf,
+        bp_filter="vehicle.tesla.model3",
+        destroy_existing=True,
+        clear_radius_m=6.0,
+    )
+    try:
+        session.ap_on(side)
+        session.tm.auto_lane_change(side, False)
+        session.tm.vehicle_percentage_speed_difference(side, 5.0)
+    except Exception:  # noqa: BLE001
+        pass
+    print(
+        f"[layout] ASSIST_LC ego={ego.id} side={side.id} (scene car; Giraffe drives ego)",
+        flush=True,
+    )
+    return ego, side, {
+        "layout": "assist_lc",
+        "side_id": int(side.id),
+        "ego_mps": float(ego_mps),
         "ic": "giraffe_only",
     }
 

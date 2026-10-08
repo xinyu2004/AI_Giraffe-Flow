@@ -4,8 +4,8 @@
 #include "gf_ara/com/binding/iceoryx/runtime.hpp"
 #include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
-#include "gf_gen/proxy/ego_motion_proxy.hpp"
-#include "gf_gen/skeleton/perception__rear__out__st_skeleton.hpp"
+#include "gf_gen/ego_motion.hpp"
+#include "gf_gen/perception__rear__out__st.hpp"
 #include "gf_channel/gf_channel.h"
 #include "gf_channel/boundary_pods.h"
 

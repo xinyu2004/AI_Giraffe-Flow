@@ -3,6 +3,7 @@
 MainWindow (and tests) should call these instead of duplicating flush+gate logic.
 
 Principle: controls → memory → validate → disk (fail keeps memory, no write).
+Each bag flushes independently; harvest must not author display defaults.
 """
 
 from __future__ import annotations

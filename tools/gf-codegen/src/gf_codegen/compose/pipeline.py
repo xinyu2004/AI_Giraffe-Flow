@@ -18,9 +18,13 @@ from gf_codegen.compose.emit_iox import emit_iox_assets
 from gf_codegen.compose.emit_log_config import emit_log_config
 from gf_codegen.compose.emit_ara_cfg_tables import emit_ara_cfg_tables
 from gf_codegen.compose.emit_runtime_freeze import emit_runtime_freeze
-from gf_codegen.compose.import_oem import import_oem
 from gf_codegen.compose.lineage import run_lineage
 from gf_codegen.compose.load_project import ProjectPaths, load_project
+from gf_codegen.compose.types_store import (
+    load_mappings_yaml,
+    load_types_yaml,
+    merge_types_into_sor,
+)
 from gf_codegen.compose.mem_budget import fmt_bytes
 from gf_codegen.compose.merge_platform import merge_platform
 from gf_codegen.compose.merge_req import merge_req
@@ -58,8 +62,7 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     # Validate inputs exist
     for label, p in [
         ("base", paths.base_sor),
-        ("dbc", paths.dbc),
-        ("manifest", paths.manifest),
+        ("types", paths.types_yaml),
         ("wiring", paths.wiring),
         ("req", paths.req),
     ]:
@@ -74,14 +77,9 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
     if str(sor.get("schema_version", "")).endswith("-skeleton"):
         sor["schema_version"] = "0.2.0"
 
-    oem_overlay = import_oem(paths.dbc, paths.manifest)
-    _merge_overlay(sor, oem_overlay)
-
-    warnings = apply_wiring(
-        sor, paths.wiring, repo_root=paths.repo_root, project_dir=paths.project_dir
-    )
-
-    policy_warnings = merge_req(sor, paths.req)
+    merge_types_into_sor(sor, load_types_yaml(paths.types_yaml))
+    if paths.mappings_yaml.is_file():
+        _merge_overlay(sor, load_mappings_yaml(paths.mappings_yaml))
 
     with paths.req.open(encoding="utf-8") as f:
         req = yaml.safe_load(f) or {}
@@ -92,6 +90,16 @@ def compose_project(project_file: Path, *, repo_root: Path | None = None, out: P
         wiring = yaml.safe_load(f) or {}
     if not isinstance(wiring, dict):
         wiring = {}
+
+    warnings = apply_wiring(
+        sor,
+        paths.wiring,
+        repo_root=paths.repo_root,
+        project_dir=paths.project_dir,
+        wiring=wiring,
+    )
+
+    policy_warnings = merge_req(sor, paths.req)
 
     plat_errors, plat_warnings, plat_checks = merge_platform(
         sor, paths, req, wiring=wiring

@@ -6,10 +6,12 @@
 #include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/com/binding/iceoryx/period_timer.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
-#include "gf_gen/proxy/parking_trajectory_proxy.hpp"
-#include "gf_gen/proxy/trajectory_proxy.hpp"
-#include "gf_gen/skeleton/ego_motion_skeleton.hpp"
-#include "gf_gen/skeleton/perception__in__st_skeleton.hpp"
+#include "gf_gen/parking_trajectory.hpp"
+#include "gf_gen/driving_trajectory.hpp"
+#include "gf_gen/ego_motion.hpp"
+#include "gf_gen/perception__in__st.hpp"
+#include "gf_gen/parking_slot.hpp"
+#include "gf_gen/apa_status.hpp"
 #include "gf_gen/frame_ingest_config.hpp"
 #include "gf_gen/publish_policy.hpp"
 
@@ -186,6 +188,35 @@ void StubTick(std::uint64_t in_seq, VehicleState* st) {
   st->valid = true;
 }
 
+bool IngestModeHint(GfChannel* ch, std::uint64_t* last_seq, uint8_t* apa, uint8_t* confirm,
+                    float p[6]) {
+  if (!ch || !last_seq || !apa || !confirm || !p) {
+    return false;
+  }
+  GfModeHintPod pod{};
+  std::uint32_t got = 0;
+  std::uint64_t ts = 0;
+  std::uint32_t w = 0;
+  std::uint32_t h = 0;
+  std::uint16_t fmt = 0;
+  const int n =
+      gf_channel_latest(ch, &pod, sizeof(pod), &got, last_seq, &ts, &w, &h, &fmt);
+  if (n <= 0 || got < 24 || pod.magic != GF_CH_MODE_HINT_MAGIC || pod.version < 1) {
+    return false;
+  }
+  *apa = pod.apa_armed ? 1 : 0;
+  *confirm = pod.slot_confirmed ? 1 : 0;
+  if (pod.version >= 2 && got >= sizeof(pod)) {
+    p[0] = pod.fParkingSlot_P0X;
+    p[1] = pod.fParkingSlot_P0Y;
+    p[2] = pod.fParkingSlot_P1X;
+    p[3] = pod.fParkingSlot_P1Y;
+    p[4] = pod.fParkingSlot_P2X;
+    p[5] = pod.fParkingSlot_P2Y;
+  }
+  return true;
+}
+
 void PublishCmd(GfChannel* ch, const char* lane, const VehicleState& st,
                 const CtrlSnapshot& ctrl, std::uint64_t seq) {
   // Caller gates on ctrl.has — never invent thr/steer before first Trajectory.
@@ -229,12 +260,36 @@ int main(int argc, char** argv) {
 
   gf_gen::EgoMotionSkeleton ego_pub{};
   gf_gen::Perception_In_StSkeleton perc_in_pub{};
-  gf_gen::TrajectoryProxy traj_sub{};
+  gf_gen::ParkingSlotSkeleton slot_pub{};
+  gf_gen::ApaStatusSkeleton apa_pub{};
+  gf_gen::DrivingTrajectoryProxy traj_sub{};
   gf_gen::ParkingTrajectoryProxy park_traj_sub{};
   // VehicleMode is observational only; DriveParkFG set-diff selects the live planner.
+  // HMI P* + confirmed land on ParkingSlot (gold fields), not VehicleMode / IPC_CanInfo.
 
   GfChannel* state_ch = nullptr;
   GfChannel* cmd_ch = nullptr;
+  const char* hint_slot = std::getenv("GF_MODE_HINT_SLOT");
+  if (!hint_slot || !hint_slot[0]) {
+    hint_slot = "gf.channel.mode_hint";
+  }
+  GfChannel* hint_ch = gf_channel_open(hint_slot);
+  std::uint64_t hint_seq = 0;
+  uint8_t hint_apa = 0;
+  uint8_t hint_confirm = 0;
+  float hint_p[6] = {};
+  if (const char* a = std::getenv("GF_APA_ARMED"); a && a[0] == '1') {
+    hint_apa = 1;
+  }
+  if (const char* c = std::getenv("GF_SLOT_CONFIRMED"); c && c[0] == '1') {
+    hint_confirm = 1;
+  }
+  uint8_t last_slot_apa = 255;
+  uint8_t last_slot_confirm = 255;
+  float last_slot_p[6] = {};
+  uint8_t last_apa_on = 255;
+  uint8_t last_apa_st = 255;
+  bool have_slot_src = (hint_apa != 0 || hint_confirm != 0);
   const bool want_channel = (ego_src == "carla" || ego_src == "inject" ||
                              ego_src == "vehicle_bus" || ego_src == "channel");
   if (want_channel) {
@@ -283,7 +338,7 @@ int main(int argc, char** argv) {
   rx_state.Init("gw", "rx.vehicle_state");
   rx_state.BindChannel("vehicle_state");
   rx_traj.Init("gw", "rx.traj");
-  rx_traj.BindService("Trajectory");
+  rx_traj.BindService("DrivingTrajectory");
   tx_cmd.Init("gw", "tx.cmd");
   tx_cmd.BindChannel("vehicle_cmd");
   tx_cmd.EnablePeriodSilence();
@@ -299,6 +354,7 @@ int main(int argc, char** argv) {
             << " hold-last (seq/ts advance; speed=0 is not stale)"
             << " ingest_timeout_ms=" << ingest_timeout_ms
             << " cmd period_ms=" << cmd_period_ms
+            << " ParkingSlot/ApaStatus on_change"
             << " traj forward=DriveParkFG set-diff (no VehicleMode mux)"
             << "; EventWaitSet+PeriodTimer (no private 1ms sleep)"
             << "; frame_watch=identity+budget ego[" << tx_ego.PolicyHint()
@@ -346,6 +402,37 @@ int main(int argc, char** argv) {
     }
   };
 
+  auto publish_slot = [&](std::uint64_t now) {
+    gf_gen::ParkingSlot out{};
+    out.timestamp_ns = now;
+    out.fParkingSlot_P0X = hint_p[0];
+    out.fParkingSlot_P0Y = hint_p[1];
+    out.fParkingSlot_P1X = hint_p[2];
+    out.fParkingSlot_P1Y = hint_p[3];
+    out.fParkingSlot_P2X = hint_p[4];
+    out.fParkingSlot_P2Y = hint_p[5];
+    out.uiAPAOnOff = hint_apa;
+    out.uiAPAStatus = hint_confirm;
+    if (static_cast<bool>(slot_pub.Send(out))) {
+      last_slot_apa = hint_apa;
+      last_slot_confirm = hint_confirm;
+      for (int i = 0; i < 6; ++i) {
+        last_slot_p[i] = hint_p[i];
+      }
+    }
+  };
+
+  auto publish_apa = [&](std::uint64_t now) {
+    gf_gen::ApaStatus out{};
+    out.timestamp_ns = now;
+    out.uiAPAOnOff = hint_apa;
+    out.uiAPAStatus = hint_confirm;
+    if (static_cast<bool>(apa_pub.Send(out))) {
+      last_apa_on = hint_apa;
+      last_apa_st = hint_confirm;
+    }
+  };
+
   auto publish_cmd = [&]() {
     // period hold-last; caller also invokes on new Traj (AEB edge). Not freeze.
     if (!cmd_ch || !last_ctrl.has) {
@@ -370,8 +457,44 @@ int main(int argc, char** argv) {
     if (want_channel && !state_ch) {
       state_ch = gf_channel_open(kSlotVehicleState);
     }
+    if (!hint_ch) {
+      hint_ch = gf_channel_open(hint_slot);
+    }
 
     const std::uint64_t now = now_ns();
+    uint8_t apa_h = hint_apa;
+    uint8_t confirm_h = hint_confirm;
+    float p_h[6] = {};
+    for (int i = 0; i < 6; ++i) {
+      p_h[i] = hint_p[i];
+    }
+    if (IngestModeHint(hint_ch, &hint_seq, &apa_h, &confirm_h, p_h)) {
+      hint_apa = apa_h;
+      hint_confirm = confirm_h;
+      for (int i = 0; i < 6; ++i) {
+        hint_p[i] = p_h[i];
+      }
+      have_slot_src = true;
+    }
+    bool slot_changed = have_slot_src && (last_slot_apa == 255 || hint_apa != last_slot_apa ||
+                                          hint_confirm != last_slot_confirm);
+    if (!slot_changed && have_slot_src) {
+      for (int i = 0; i < 6; ++i) {
+        if (std::fabs(hint_p[i] - last_slot_p[i]) > 0.01f) {
+          slot_changed = true;
+          break;
+        }
+      }
+    }
+    if (slot_changed) {
+      publish_slot(now);
+    }
+    const bool apa_changed =
+        have_slot_src && (last_apa_on == 255 || hint_apa != last_apa_on ||
+                          hint_confirm != last_apa_st);
+    if (apa_changed) {
+      publish_apa(now);
+    }
     bool state_fresh = false;
     if (state_ch) {
       state_fresh = IngestFromChannel(state_ch, &state_seq, &state);
@@ -472,6 +595,9 @@ int main(int argc, char** argv) {
         if (state_ch) {
           gf_channel_close(state_ch);
         }
+        if (hint_ch) {
+          gf_channel_close(hint_ch);
+        }
         return EXIT_SUCCESS;
       }
     } else if (PeriodDue(last_cmd_pub_ns, cmd_period_ms, now)) {
@@ -486,6 +612,9 @@ int main(int argc, char** argv) {
   }
   if (state_ch) {
     gf_channel_close(state_ch);
+  }
+  if (hint_ch) {
+    gf_channel_close(hint_ch);
   }
   return EXIT_SUCCESS;
 }

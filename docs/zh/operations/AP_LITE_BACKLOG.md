@@ -31,6 +31,7 @@
 | BL-STAGE-PY-MTIME | stage 对 SIL 主机侧 frame-bridge / scenario py 做 mtime 增量拷贝 | deferred | SIL 工具链卫生 | 仅影响**宿主机** SIL；与 BL-BOARD-NO-PY 正交。`tools/carla_bridge/` 已移除——对象改为仍会 stage 的主机侧 `.py`（若有）。今日改 py 后 `compile_sil` 常 skip stage → 仍跑旧拷贝 |
 | BL-BEV-PY | 删 Python ego BEV（`gf_gmt.bev_compose`）；Host 改 C `gf_host_bev_ws` | **done** | 观测收口 | 金源 = `gf_foxglove_paint`/`bev_compose.cpp`；SIL=`gf_foxglove_ws`；Host=`gf_host_bev_ws`（NDJSON）。`BL-GMT-FOX-PY` 前置切片已完成 |
 | BL-GMT-FOX-PY | Python Foxglove 收口（JSONL 回放 / MCAP 辅助 / Host `octave_bridge/foxglove_ws.py`） | deferred | 观测收口 | SIL 直播已是 C `gf_foxglove_ws`；`BL-BEV-PY` **done**（Host BEV 亦 C）。余量：C 读 JSONL 后再删 `bridge_foxglove.py` / Host `foxglove_ws.py` |
+| BL-APP-DAQ | **EM 拉起的 App 间 DAQ**（底层环缓，非旁路 tap） | deferred | 泊车收口后再细化 | **现在没有。** 原意：SOA App 之间可采；最好挂 com/runtime。现有 tap/Foxglove/GMT ≠ 本条；collector ≠ 信号 DAQ。稿：[DAQ_APP_PLAN.md](DAQ_APP_PLAN.md) |
 
 ## 本波已延后（AFC 产品债 · 勿当本轮阻塞）
 

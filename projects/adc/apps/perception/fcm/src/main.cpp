@@ -5,9 +5,9 @@
 #include "gf_ara/com/binding/iceoryx/wait_set.hpp"
 #include "gf_ara/log/logger.hpp"
 #include "gf_ara/runtime/process_bringup.hpp"
-#include "gf_gen/proxy/perception__in__st_proxy.hpp"
-#include "gf_gen/proxy/ego_motion_proxy.hpp"
-#include "gf_gen/skeleton/perception_message__out__st_skeleton.hpp"
+#include "gf_gen/perception__in__st.hpp"
+#include "gf_gen/ego_motion.hpp"
+#include "gf_gen/perception_message__out__st.hpp"
 
 #if __has_include("gf_gen/frame_ingest_config.hpp")
 #include "gf_gen/frame_ingest_config.hpp"

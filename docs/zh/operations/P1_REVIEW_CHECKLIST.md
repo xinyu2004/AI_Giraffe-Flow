@@ -66,7 +66,7 @@ python -m gf_codegen.compose --project projects/afc/giraffe.yaml
 | # | 检查项 | 怎么验 | 通过 | 需改 | 延后 | 备注 |
 |---|--------|--------|:----:|:----:|:----:|------|
 | R3.1 | parse_fidl 单测 | `pytest tools/gf-codegen/tests/test_parse_fidl.py -q` | □ | □ | □ | |
-| R3.2 | 样例 fidl | `projects/afc/interfaces/demo_fidl/VehicleStatus.fidl` 候选含 VehiclePose / SpeedChanged 等 | □ | □ | □ | |
+| R3.2 | 样例 fidl | `projects/afc/generated/include/demo_fidl/VehicleStatus.fidl` 候选含 VehiclePose / SpeedChanged 等 | □ | □ | □ | |
 | R3.3 | GUI 导入写回 | Save 后 `wiring.modules[].fidl` + provides/requires | □ | □ | □ | |
 | R3.4 | compose 合类型 | modules 挂 fidl 后 SOR types 有对应 struct | □ | □ | □ | |
 | R3.5 | parse_fdepl | `pytest tools/gf-codegen/tests/test_parse_fdepl.py -q`；样例 `.fdepl` ServiceID=0x1234 | □ | □ | □ | |

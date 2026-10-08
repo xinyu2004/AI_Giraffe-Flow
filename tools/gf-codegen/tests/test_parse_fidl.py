@@ -5,8 +5,26 @@ from pathlib import Path
 from gf_codegen.compose.parse_fidl import fidl_structs_to_sor_types, parse_fidl_file
 
 
-def test_parse_sample_vehicle_status(repo_root: Path) -> None:
-    fidl = repo_root / "projects/afc/interfaces/demo_fidl/VehicleStatus.fidl"
+def test_parse_sample_vehicle_status(tmp_path: Path) -> None:
+    fidl = tmp_path / "VehicleStatus.fidl"
+    fidl.write_text(
+        """
+package afc.demo
+interface VehicleStatus {
+  version { major 1 minor 0 }
+  method getPose { out { VehiclePose pose } }
+  broadcast SpeedChanged { out { Float speed } }
+}
+typeCollection Types {
+  struct VehiclePose {
+    Float x
+    Float y
+    Float yaw
+  }
+}
+""",
+        encoding="utf-8",
+    )
     parsed = parse_fidl_file(fidl)
     assert parsed["package"] == "afc.demo"
     assert {i["name"] for i in parsed["interfaces"]} == {"VehicleStatus"}

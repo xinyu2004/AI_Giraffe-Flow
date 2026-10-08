@@ -1,0 +1,46 @@
+{
+  "profile": "vehicle-debug",
+  "live_tap": {
+    "enabled": true,
+    "mode": "wiring_all",
+    "services": [
+      "VehicleBus",
+      "Perception_In_St",
+      "EgoMotion",
+      "Perception_MESSAGE_Out_St",
+      "VehicleMode",
+      "ParkingSlot",
+      "ApaStatus",
+      "FreespaceNear",
+      "SurroundWorld",
+      "Perception_Rear_Out_St",
+      "DrivingTrajectory",
+      "ParkingTrajectory",
+      "Freespace",
+      "semantic.VehicleBus",
+      "semantic.DrivingTrajectory",
+      "semantic.VehicleMode",
+      "semantic.ParkingTrajectory",
+      "semantic.EgoMotion",
+      "semantic.Perception_In_St",
+      "semantic.ParkingSlot",
+      "semantic.ApaStatus",
+      "semantic.Perception_MESSAGE_Out_St",
+      "semantic.SurroundWorld",
+      "semantic.FreespaceNear",
+      "semantic.Perception_Rear_Out_St",
+      "semantic.Freespace"
+    ]
+  },
+  "record": {
+    "mode": "minimal",
+    "services": [
+      "EgoMotion",
+      "Perception_MESSAGE_Out_St",
+      "DrivingTrajectory",
+      "Freespace",
+      "FreespaceNear",
+      "VehicleMode"
+    ]
+  }
+}

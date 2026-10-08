@@ -17,7 +17,8 @@ _SERVICE_ALIASES = {
     "EgoMotion": "services.semantic.EgoMotion",
     "Perception_In_St": "services.semantic.Perception_In_St",
     "Perception_MESSAGE_Out_St": "services.semantic.Perception_MESSAGE_Out_St",
-    "Trajectory": "services.semantic.Trajectory",
+    "Trajectory": "services.semantic.DrivingTrajectory",
+    "DrivingTrajectory": "services.semantic.DrivingTrajectory",
     "VehicleBus": "services.semantic.VehicleBus",
 }
 

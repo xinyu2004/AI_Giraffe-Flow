@@ -105,6 +105,12 @@ class AtomCase:
             "keep_ego": keep_ego,
             "preserve_ego": preserve_ego,
         }
+        try:
+            from _surround_truth import clear_parking_bays
+
+            clear_parking_bays()
+        except Exception:  # noqa: BLE001
+            pass
         weather_cfg = None
         if self.weather_preset is not None:
             weather_cfg = load_weather(self.weather_preset, snap=snap)
