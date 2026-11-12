@@ -1072,11 +1072,86 @@ _EN: dict[str, str] = {
     "填入示意": "Fill example",
     "tsync.yaml：backend 与 pretend_synchronized 是现有字段。"
     "门控表写在 network 下，未改本页时不会出现这个键。"
-    "Q7 是 GateStates 的 bit 7。HIL / 区域端点要求 linuxptp，且不能假装已同步。": (
+    "Q7 是 GateStates 的 bit 7。各段之和必须等于周期。"
+    "可抢占和最大帧长默认不写，也不会下到硬件。"
+    "流过滤和监管是单独两张表，不是第二张门控表；没添加行就不会写入。"
+    "HIL / 区域端点要求 linuxptp，且不能假装已同步。": (
         "tsync.yaml: backend and pretend_synchronized already exist. "
         "The gate list lives under network and stays absent until this page is edited. "
-        "Q7 is GateStates bit 7. HIL / zonal requires linuxptp and pretend off."
+        "Q7 is GateStates bit 7. Interval durations must sum to the cycle. "
+        "Preemption and max frame size stay unwritten and are not applied to hardware. "
+        "Stream filters and flow meters are separate tables, not a second gate list; "
+        "they stay unwritten until a row is added. "
+        "HIL / zonal requires linuxptp and pretend off."
     ),
+    "队列属性（意图）": "Queue properties (intent)",
+    "可抢占是本机网卡的抢占意图（802.1Qbu / 802.3br）。"
+    "最大帧长是按队列的上限，流过滤在上面单独配置。"
+    "默认不写进 tsync.yaml，也不会下到硬件。"
+    "有队列标成可抢占时，全关的保护带可以只留残片。": (
+        "Preemptable is the local MAC preemption intent (802.1Qbu / 802.3br). "
+        "Max frame size is a per-queue cap. Stream filters are configured separately above. "
+        "Both stay out of tsync.yaml until set, and are not applied to hardware. "
+        "With a preemptable queue, an all-closed guard band can shrink to a fragment."
+    ),
+    "可抢占": "Preemptable",
+    "最大帧长": "Max frame",
+    "不写": "omit",
+    "时间 / 门控 · 周期未对齐": "Time / gates · cycle mismatch",
+    "还差 {0} µs。表上没写的这段会沿用最后一行的门；"
+    "最后一行开着就会一直开到周期结束。Verify 不会通过。": (
+        "Short by {0} µs. The gap keeps the last row's gates; "
+        "an open last row stays open until the cycle ends. Verify will fail."
+    ),
+    "多出 {0} µs。超出周期的段不会执行。Verify 不会通过。": (
+        "Over by {0} µs. Entries past the cycle do not run. Verify will fail."
+    ),
+    "流过滤与监管": "Stream filter and policing",
+    "流过滤与监管是交给相邻交换机入口的 802.1Qci 意图，不是第二张门控表。"
+    "Giraffe 是端点，这里不会下到本机网卡。"
+    "流过滤按 PCP 匹配，可以只限帧长，也可以挂一个监管器。"
+    "监管器是双速令牌桶：承诺速率 CIR、承诺突发 CBS，可选超额速率 EIR、超额突发 EBS。"
+    "没有行就不会写入 tsync.yaml。": (
+        "Stream filter and policing are 802.1Qci intent for the adjacent switch ingress, "
+        "not a second gate list. Giraffe is an endpoint and does not apply this to the local NIC. "
+        "A filter matches a PCP, limits frame size, and may attach a flow meter. "
+        "A meter is a two-rate token bucket: CIR, CBS, and optional EIR, EBS. "
+        "No rows means nothing is written to tsync.yaml."
+    ),
+    "流过滤": "Stream filters",
+    "PCP": "PCP",
+    "监管器": "Flow meter",
+    "监管": "Policing",
+    "名称": "Name",
+    "黄色丢弃": "Drop yellow",
+    "耦合": "Coupling",
+    "色敏感": "Color aware",
+    "不监管": "No meter",
+    "不超额": "no excess",
+    "添加过滤": "Add filter",
+    "添加监管": "Add meter",
+    "未编写流过滤和监管。保存不会写入这两张表。": (
+        "No stream filters or meters yet. Save will not write either table."
+    ),
+    "PCP {0} 重复。": "PCP {0} is duplicated.",
+    "监管器名称不能空。": "A flow meter name is empty.",
+    "监管器 {0} 重复。": "Flow meter {0} is duplicated.",
+    "监管器 {0}：承诺速率和承诺突发都必须大于 0。": (
+        "Meter {0}: CIR and CBS must both be greater than 0."
+    ),
+    "监管器 {0}：没有超额速率时，超额突发也必须为 0。": (
+        "Meter {0}: when EIR is 0, EBS must be 0 too."
+    ),
+    "监管器 {0}：有超额速率时，超额突发必须大于 0。": (
+        "Meter {0}: when EIR is above 0, EBS must be above 0."
+    ),
+    "流过滤引用的监管器 {0} 不存在。": "Stream filter references missing meter {0}.",
+    " Verify 不会通过。": " Verify will fail.",
+    "流过滤 {0} 条，监管器 {1} 个。": "{0} stream filters, {1} flow meters.",
+    "门控表是空的。已改的队列属性或流过滤仍会写入 network。": (
+        "The gate list is empty. Edited queue properties or stream filters are still written to network."
+    ),
+    "时间 / 门控 · 流过滤未对齐": "Time / gates · stream filter mismatch",
     "未编写门控表。保存不会往 tsync.yaml 写入 network。": (
         "No gate list yet. Save will not write network into tsync.yaml."
     ),

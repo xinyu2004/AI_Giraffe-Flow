@@ -384,6 +384,7 @@ class AraCfgEditor(
         if not enabled:
             self._empty.setVisible(True)
             self._stack.setVisible(False)
+            self._refresh_tsync_sum()
             return
 
         self._empty.setVisible(False)
@@ -396,6 +397,7 @@ class AraCfgEditor(
                     break
         self._nav.setCurrentRow(pick)
         self._show_key(enabled[pick][0])
+        self._refresh_tsync_sum()
 
     def _on_nav_item(
         self, current: QListWidgetItem | None, _previous: QListWidgetItem | None

@@ -515,6 +515,49 @@ class AraLoadMixin:
             else:
                 self._tsync_admin_base = "epoch_second"
 
+            preempt = _gate_int(net.get("preemptable_mask"), 0) if "preemptable_mask" in net else 0
+            for bit, box in self._tsync_preempt.items():
+                box.blockSignals(True)
+                box.setChecked((preempt & (1 << bit)) != 0)
+                box.blockSignals(False)
+            sdu = _sdu_map(net.get("max_sdu"))
+            for bit, spin in self._tsync_sdu.items():
+                spin.blockSignals(True)
+                spin.setValue(sdu.get(bit, 0))
+                spin.blockSignals(False)
+
+            self._tsync_meters.setRowCount(0)
+            self._tsync_meter_raw = []
+            meters = net.get("flow_meters") if isinstance(net.get("flow_meters"), list) else []
+            for row in meters:
+                if not isinstance(row, dict):
+                    continue
+                self._tsync_meter_raw.append(dict(row))
+                self._append_meter_row(
+                    str(row.get("name") or "") if isinstance(row.get("name"), str) else "",
+                    _gate_int(row.get("cir_kbps"), 1000),
+                    _gate_int(row.get("cbs_bytes"), 2000),
+                    _gate_int(row.get("eir_kbps"), 0),
+                    _gate_int(row.get("ebs_bytes"), 0),
+                    drop_on_yellow=row.get("drop_on_yellow") is not False,
+                    coupling=row.get("coupling") is True,
+                    color_aware=row.get("color_aware") is True,
+                )
+
+            self._tsync_filters.setRowCount(0)
+            self._tsync_filter_raw = []
+            filters = net.get("stream_filters") if isinstance(net.get("stream_filters"), list) else []
+            for row in filters:
+                if not isinstance(row, dict):
+                    continue
+                meter = row.get("meter")
+                self._tsync_filter_raw.append(dict(row))
+                self._append_filter_row(
+                    _gate_int(row.get("pcp"), 0),
+                    _gate_int(row.get("max_sdu"), 1500),
+                    str(meter) if isinstance(meter, str) else "",
+                )
+
             self._tsync_gates.setRowCount(0)
             self._tsync_gate_raw = []
             gates = net.get("gate_list") if isinstance(net.get("gate_list"), list) else []
@@ -551,4 +594,18 @@ def _gate_mask(row: dict[str, Any]) -> int:
     if "gate_states" in row:
         return _gate_int(row.get("gate_states"), 0) & 0xFF
     return _gate_int(row.get("mask"), 0) & 0xFF
+
+
+def _sdu_map(value: Any) -> dict[int, int]:
+    out: dict[int, int] = {}
+    if not isinstance(value, list):
+        return out
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+        queue = _gate_int(row.get("queue"), -1)
+        size = _gate_int(row.get("bytes"), 0)
+        if 0 <= queue <= 7 and size > 0:
+            out[queue] = size
+    return out
 

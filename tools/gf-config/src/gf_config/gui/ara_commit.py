@@ -561,6 +561,8 @@ class AraCommitMixin:
             fields["network"] = network
         if fields:
             self._session.update_ara_doc("tsync", **fields)
+            if network is not None:
+                self._drop_cleared_queue_intent()
         self._mark("tsync")
         if not self._coalesce_sender():
             self._end_doc_edit()
@@ -579,7 +581,19 @@ class AraCommitMixin:
             base["interval_us"] = interval
             base["gate_states"] = self._gate_row_mask(index)
             rows.append(base)
-        authored = bool(profile_s) or bool(rows) or cycle != TSYNC_CYCLE_DEFAULT
+        preempt = self._preempt_mask()
+        sdu = self._max_sdu_rows()
+        filters = self._filter_rows()
+        meters = self._meter_rows()
+        authored = (
+            bool(profile_s)
+            or bool(rows)
+            or cycle != TSYNC_CYCLE_DEFAULT
+            or preempt != 0
+            or bool(sdu)
+            or bool(filters)
+            or bool(meters)
+        )
         if not authored:
             return None
         net: dict[str, Any] = {
@@ -590,5 +604,53 @@ class AraCommitMixin:
         existing = doc.get("network") if isinstance(doc.get("network"), dict) else None
         if existing is None or "admin_base" in existing:
             net["admin_base"] = self._tsync_admin_base or "epoch_second"
+        if preempt:
+            net["preemptable_mask"] = preempt
+        if sdu:
+            net["max_sdu"] = sdu
+        if filters:
+            net["stream_filters"] = filters
+        if meters:
+            net["flow_meters"] = meters
         return net
+
+    def _drop_cleared_queue_intent(self) -> None:
+        """Drop optional network keys once the editor is back to the unset default.
+
+        ``update_ara_doc`` keeps nested keys the form omits, so a cleared mask
+        or a meter flag returned to its default would otherwise stay.
+        """
+        if self._session is None:
+            return
+        doc = self._session.ara_cfg.get("tsync")
+        if not isinstance(doc, dict):
+            return
+        net = doc.get("network")
+        if not isinstance(net, dict):
+            return
+        changed = False
+        if self._preempt_mask() == 0 and "preemptable_mask" in net:
+            net.pop("preemptable_mask", None)
+            changed = True
+        if not self._max_sdu_rows() and "max_sdu" in net:
+            net.pop("max_sdu", None)
+            changed = True
+        filters = self._filter_rows()
+        if filters:
+            if net.get("stream_filters") != filters:
+                net["stream_filters"] = filters
+                changed = True
+        elif "stream_filters" in net:
+            net.pop("stream_filters", None)
+            changed = True
+        meters = self._meter_rows()
+        if meters:
+            if net.get("flow_meters") != meters:
+                net["flow_meters"] = meters
+                changed = True
+        elif "flow_meters" in net:
+            net.pop("flow_meters", None)
+            changed = True
+        if changed:
+            self._session.mark_ara_cfg_dirty("tsync")
 

@@ -112,4 +112,4 @@ gf-config projects/afc/giraffe.yaml
 | `collector` / phm / diag | 事件收集 · `collector.yaml` | ring buffer / cp_dem stub |
 | `diag` / `log` / `ucm` | 各子页 | DoIP·UDS / 日志 / OTA 编排（SIL；真刷写仍 stub） |
 | `per` | （暂无子页） | 仅 `runtime_modules` 勾选 → 编入镜像（KV） |
-| `tsync` | 时间 / 门控 · `tsync.yaml` | 现有 backend；`network` 门控表仅在改过该页后写入 |
+| `tsync` | 时间 / 门控 · `tsync.yaml` | 门控表、可抢占、最大帧长、流过滤和监管都只在改过之后写入；周期或流过滤对不齐时左侧标红 |

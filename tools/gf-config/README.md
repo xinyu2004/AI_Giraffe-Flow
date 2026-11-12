@@ -110,4 +110,4 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 | `collector` / phm / diag | Event collector · `collector.yaml` | ring / cp_dem stub |
 | `diag` / `log` / `ucm` | respective pages | DoIP·UDS / log / OTA orchestrator (SIL; flash still stub) |
 | `per` | (no subpage yet) | checkbox → compile into image (KV) |
-| `tsync` | Time / gates · `tsync.yaml` | existing backend; `network` gate list is written only after that page is edited |
+| `tsync` | Time / gates · `tsync.yaml` | gate list, preemption, max frame size, stream filters, and flow meters are written only after edit; a cycle or stream-filter mismatch stays marked on the nav |

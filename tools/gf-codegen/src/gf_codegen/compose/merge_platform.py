@@ -327,9 +327,41 @@ def tsync_network_problems(doc: dict[str, Any]) -> list[str] | None:
         if mask is None or mask < 0 or mask > 255:
             problems.append(f"gate_list[{i}].gate_states must be an integer 0..255")
     if cycle_ok is not None and gates and total != cycle_ok:
-        problems.append(
-            f"gate_list intervals sum to {total} µs but cycle_us is {cycle_ok}"
-        )
+        if total < cycle_ok:
+            problems.append(
+                f"gate_list intervals sum to {total} µs, {cycle_ok - total} µs short of cycle_us {cycle_ok}; "
+                "the gap keeps the last entry's gate state"
+            )
+        else:
+            problems.append(
+                f"gate_list intervals sum to {total} µs, {total - cycle_ok} µs over cycle_us {cycle_ok}; "
+                "entries past the cycle do not run"
+            )
+    if "preemptable_mask" in net:
+        pmask = _as_uint(net.get("preemptable_mask"))
+        if pmask is None or pmask > 255:
+            problems.append("preemptable_mask must be an integer 0..255")
+    if "max_sdu" in net:
+        sdu = net.get("max_sdu")
+        if not isinstance(sdu, list):
+            problems.append("max_sdu must be a list")
+        else:
+            seen: set[int] = set()
+            for i, row in enumerate(sdu):
+                if not isinstance(row, dict):
+                    problems.append(f"max_sdu[{i}] not an object")
+                    continue
+                queue = _as_uint(row.get("queue"))
+                size = _as_uint(row.get("bytes"))
+                if queue is None or queue > 7:
+                    problems.append(f"max_sdu[{i}].queue must be an integer 0..7")
+                elif queue in seen:
+                    problems.append(f"max_sdu queue {queue} is duplicated")
+                else:
+                    seen.add(queue)
+                if size is None or size <= 0:
+                    problems.append(f"max_sdu[{i}].bytes must be a positive integer")
+    problems.extend(_tsync_psfp_problems(net))
     if profile in {"hil_slave", "zonal"}:
         if doc.get("pretend_synchronized") is True:
             problems.append(
@@ -339,6 +371,90 @@ def tsync_network_problems(doc: dict[str, Any]) -> list[str] | None:
             problems.append(
                 "backend must be linuxptp when profile is hil_slave or zonal"
             )
+    return problems
+
+
+def _tsync_psfp_problems(net: dict[str, Any]) -> list[str]:
+    """Stream-filter and flow-meter problems. Absent keys add nothing."""
+    problems: list[str] = []
+    filters = net.get("stream_filters")
+    meters = net.get("flow_meters")
+    filter_rows: list[dict[str, Any]] = []
+    meter_rows: list[dict[str, Any]] = []
+    if "stream_filters" in net:
+        if not isinstance(filters, list):
+            problems.append("stream_filters must be a list")
+        else:
+            filter_rows = [row for row in filters if isinstance(row, dict)]
+            for i, row in enumerate(filters):
+                if not isinstance(row, dict):
+                    problems.append(f"stream_filters[{i}] not an object")
+    if "flow_meters" in net:
+        if not isinstance(meters, list):
+            problems.append("flow_meters must be a list")
+        else:
+            meter_rows = [row for row in meters if isinstance(row, dict)]
+            for i, row in enumerate(meters):
+                if not isinstance(row, dict):
+                    problems.append(f"flow_meters[{i}] not an object")
+    seen_pcp: set[int] = set()
+    for i, row in enumerate(filter_rows):
+        pcp = _as_uint(row.get("pcp"))
+        if pcp is None or pcp > 7:
+            problems.append(f"stream_filters[{i}].pcp must be an integer 0..7")
+        elif pcp in seen_pcp:
+            problems.append(f"stream_filters pcp {pcp} is duplicated")
+        else:
+            seen_pcp.add(pcp)
+        size = _as_uint(row.get("max_sdu"))
+        if size is None or size <= 0:
+            problems.append(f"stream_filters[{i}].max_sdu must be a positive integer")
+        if "meter" in row:
+            meter_name = row.get("meter")
+            if not isinstance(meter_name, str) or not meter_name.strip():
+                problems.append(f"stream_filters[{i}].meter must be a non-empty string")
+    names: set[str] = set()
+    for i, row in enumerate(meter_rows):
+        raw_name = row.get("name")
+        name = raw_name.strip() if isinstance(raw_name, str) else ""
+        if not name:
+            problems.append(f"flow_meters[{i}].name must be a non-empty string")
+        elif name in names:
+            problems.append(f"flow meter {name!r} is duplicated")
+        else:
+            names.add(name)
+        cir = _as_uint(row.get("cir_kbps"))
+        cbs = _as_uint(row.get("cbs_bytes"))
+        if cir is None or cir <= 0:
+            problems.append(f"flow_meters[{i}].cir_kbps must be a positive integer")
+        if cbs is None or cbs <= 0:
+            problems.append(f"flow_meters[{i}].cbs_bytes must be a positive integer")
+        eir = 0
+        ebs = 0
+        if "eir_kbps" in row:
+            parsed = _as_uint(row.get("eir_kbps"))
+            if parsed is None:
+                problems.append(f"flow_meters[{i}].eir_kbps must be an integer >= 0")
+            else:
+                eir = parsed
+        if "ebs_bytes" in row:
+            parsed = _as_uint(row.get("ebs_bytes"))
+            if parsed is None:
+                problems.append(f"flow_meters[{i}].ebs_bytes must be an integer >= 0")
+            else:
+                ebs = parsed
+        label = name or f"#{i}"
+        if eir == 0 and ebs > 0:
+            problems.append(f"flow meter {label}: EIR is 0 so EBS must be 0")
+        elif eir > 0 and ebs <= 0:
+            problems.append(f"flow meter {label}: EIR > 0 so EBS must be > 0")
+        for flag in ("drop_on_yellow", "coupling", "color_aware"):
+            if flag in row and not isinstance(row.get(flag), bool):
+                problems.append(f"flow_meters[{i}].{flag} must be a bool")
+    for i, row in enumerate(filter_rows):
+        meter_name = row.get("meter")
+        if isinstance(meter_name, str) and meter_name.strip() and meter_name not in names:
+            problems.append(f"stream_filters[{i}].meter {meter_name!r} is not a flow meter")
     return problems
 
 

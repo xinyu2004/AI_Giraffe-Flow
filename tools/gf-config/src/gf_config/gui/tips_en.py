@@ -871,4 +871,47 @@ TIP_EN: dict[str, str] = {
     "bit 2。大载荷。": "Bit 2. Bulk payload.",
     "bit 1。诊断。": "Bit 1. Diagnostics.",
     "bit 0。尽力而为。": "Bit 0. Best effort.",
+    "勾选后这一队可以被打断。默认全不勾，不写入 preemptable_mask。": (
+        "Check to mark this queue preemptable. All unchecked writes no preemptable_mask."
+    ),
+    "这一队允许的最大帧长（字节）。0 表示不配置，不写入 max_sdu。": (
+        "Max frame size for this queue, in bytes. 0 omits it from max_sdu."
+    ),
+    "按优先级匹配进入交换机的帧。同一 PCP 只能有一条流过滤。": (
+        "Match ingress frames by priority. Each PCP can have only one stream filter."
+    ),
+    "超过这个字节数的帧在入口丢掉。这是 802.1Qci 的 Maximum SDU。": (
+        "Frames larger than this are dropped at ingress. This is the 802.1Qci Maximum SDU."
+    ),
+    "不监管表示只做帧长过滤。选中的名字必须在监管表里。": (
+        "No meter means only the frame-size filter applies. A chosen name must exist in the meter table."
+    ),
+    "追加一条流过滤。没添加时不写入 stream_filters。": (
+        "Append a stream filter. stream_filters stays unwritten until a row is added."
+    ),
+    "删掉选中的流过滤。": "Delete the selected stream filters.",
+    "监管器名字，给上面的流过滤引用。": "Meter name, referenced by a stream filter above.",
+    "承诺速率，单位 kbit/s。桶里有令牌才算绿色。": (
+        "Committed information rate, in kbit/s. Frames are green while the bucket has tokens."
+    ),
+    "承诺突发，单位字节。": "Committed burst size, in bytes.",
+    "超额速率。0 表示不给黄色额度。": "Excess information rate. 0 means no yellow bandwidth.",
+    "超额突发，单位字节。没有超额速率时必须为 0。": (
+        "Excess burst size, in bytes. Must be 0 when there is no excess rate."
+    ),
+    "勾选后黄色帧也丢掉。默认丢掉，不写入。": (
+        "Drop yellow frames too. This is the default and stays unwritten."
+    ),
+    "勾选后没用完的承诺带宽可以借给超额桶。默认不勾，不写入。": (
+        "Unused committed bandwidth can fill the excess bucket. Unchecked by default and unwritten."
+    ),
+    "勾选后按帧自带的颜色监管。默认色盲，不写入。": (
+        "Police using the frame's existing color. Color-blind is the default and stays unwritten."
+    ),
+    "追加一个监管器。没添加时不写入 flow_meters。": (
+        "Append a flow meter. flow_meters stays unwritten until a row is added."
+    ),
+    "删掉选中的监管器。仍被流过滤引用时，左侧会标成未对齐。": (
+        "Delete the selected flow meters. A filter that still references one stays marked on the nav."
+    ),
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -856,6 +857,8 @@ class AraPagesMixin:
         """
         self._tsync_mute = False
         self._tsync_gate_raw: list[dict[str, Any]] = []
+        self._tsync_filter_raw: list[dict[str, Any]] = []
+        self._tsync_meter_raw: list[dict[str, Any]] = []
         self._tsync_admin_base = "epoch_second"
 
         inner = QWidget(self)
@@ -864,7 +867,10 @@ class AraPagesMixin:
             t(
                 "tsync.yaml：backend 与 pretend_synchronized 是现有字段。"
                 "门控表写在 network 下，未改本页时不会出现这个键。"
-                "Q7 是 GateStates 的 bit 7。HIL / 区域端点要求 linuxptp，且不能假装已同步。"
+                "Q7 是 GateStates 的 bit 7。各段之和必须等于周期。"
+                "可抢占和最大帧长默认不写，也不会下到硬件。"
+                "流过滤和监管是单独两张表，不是第二张门控表；没添加行就不会写入。"
+                "HIL / 区域端点要求 linuxptp，且不能假装已同步。"
             )
         )
         hint.setWordWrap(True)
@@ -968,9 +974,456 @@ class AraPagesMixin:
         btns.addStretch(1)
         box_l.addLayout(btns)
         lay.addWidget(box)
+        lay.addWidget(self._build_tsync_psfp())
+        lay.addWidget(self._build_tsync_queue_intent())
         lay.addStretch(1)
         self._refresh_tsync_sum()
         return _PlatformScrollPage(inner, self)
+
+    def _build_tsync_queue_intent(self) -> QWidget:
+        """Per-queue preemption and max SDU. Omitted from YAML until edited."""
+        box = QGroupBox(t("队列属性（意图）"))
+        outer = QVBoxLayout(box)
+        note = QLabel(
+            t(
+                "可抢占是本机网卡的抢占意图（802.1Qbu / 802.3br）。"
+                "最大帧长是按队列的上限，流过滤在上面单独配置。"
+                "默认不写进 tsync.yaml，也不会下到硬件。"
+                "有队列标成可抢占时，全关的保护带可以只留残片。"
+            )
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color:#666;")
+        outer.addWidget(note)
+        grid = QGridLayout()
+        grid.addWidget(QLabel(""), 0, 0)
+        grid.addWidget(QLabel(t("可抢占")), 1, 0)
+        grid.addWidget(QLabel(t("最大帧长")), 2, 0)
+        self._tsync_preempt: dict[int, QCheckBox] = {}
+        self._tsync_sdu: dict[int, QSpinBox] = {}
+        for col, bit in enumerate(TSYNC_QUEUE_BITS, start=1):
+            grid.addWidget(
+                QLabel(f"Q{bit}"),
+                0,
+                col,
+                alignment=Qt.AlignmentFlag.AlignCenter,
+            )
+            check = QCheckBox()
+            tipify(check, "勾选后这一队可以被打断。默认全不勾，不写入 preemptable_mask。")
+            check.toggled.connect(self._on_tsync_changed)
+            self._tsync_preempt[bit] = check
+            grid.addWidget(check, 1, col, alignment=Qt.AlignmentFlag.AlignCenter)
+            spin = QSpinBox()
+            spin.setRange(0, 16384)
+            spin.setSingleStep(64)
+            spin.setSpecialValueText(t("不写"))
+            tipify(spin, "这一队允许的最大帧长（字节）。0 表示不配置，不写入 max_sdu。")
+            bind_dirty_spin(spin)
+            spin.valueChanged.connect(self._on_tsync_changed)
+            spin.editingFinished.connect(self._end_doc_edit)
+            self._tsync_sdu[bit] = spin
+            grid.addWidget(spin, 2, col)
+        outer.addLayout(grid)
+        return box
+
+    def _build_tsync_psfp(self) -> QWidget:
+        """802.1Qci stream filters and flow meters. Omitted until a row is added.
+
+        This is switch-ingress intent. It is not a second gate-control list,
+        and Giraffe does not apply it to the local NIC.
+        """
+        box = QGroupBox(t("流过滤与监管"))
+        outer = QVBoxLayout(box)
+        note = QLabel(
+            t(
+                "流过滤与监管是交给相邻交换机入口的 802.1Qci 意图，不是第二张门控表。"
+                "Giraffe 是端点，这里不会下到本机网卡。"
+                "流过滤按 PCP 匹配，可以只限帧长，也可以挂一个监管器。"
+                "监管器是双速令牌桶：承诺速率 CIR、承诺突发 CBS，可选超额速率 EIR、超额突发 EBS。"
+                "没有行就不会写入 tsync.yaml。"
+            )
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color:#666;")
+        outer.addWidget(note)
+
+        outer.addWidget(QLabel(t("流过滤")))
+        filter_headers = [t("PCP"), t("最大帧长"), t("监管器")]
+        self._tsync_filters = QTableWidget(0, len(filter_headers))
+        self._tsync_filters.setHorizontalHeaderLabels(filter_headers)
+        set_header_tips(
+            self._tsync_filters,
+            [
+                "按优先级匹配进入交换机的帧。同一 PCP 只能有一条流过滤。",
+                "超过这个字节数的帧在入口丢掉。这是 802.1Qci 的 Maximum SDU。",
+                "不监管表示只做帧长过滤。选中的名字必须在监管表里。",
+            ],
+        )
+        self._tsync_filters.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        enable_table_row_selection(self._tsync_filters)
+        self._tsync_filters.setMinimumHeight(120)
+        outer.addWidget(self._tsync_filters)
+        filter_btns = QHBoxLayout()
+        add_filter = QPushButton(t("添加过滤"))
+        tipify(add_filter, "追加一条流过滤。没添加时不写入 stream_filters。")
+        add_filter.clicked.connect(lambda: self._add_tsync_filter_row())
+        del_filter = QPushButton(t("删除选中"))
+        tipify(del_filter, "删掉选中的流过滤。")
+        del_filter.clicked.connect(self._del_tsync_filter_rows)
+        filter_btns.addWidget(add_filter)
+        filter_btns.addWidget(del_filter)
+        filter_btns.addStretch(1)
+        outer.addLayout(filter_btns)
+
+        outer.addWidget(QLabel(t("监管")))
+        meter_headers = [
+            t("名称"),
+            "CIR kbit/s",
+            "CBS",
+            "EIR kbit/s",
+            "EBS",
+            t("黄色丢弃"),
+            t("耦合"),
+            t("色敏感"),
+        ]
+        self._tsync_meters = QTableWidget(0, len(meter_headers))
+        self._tsync_meters.setHorizontalHeaderLabels(meter_headers)
+        set_header_tips(
+            self._tsync_meters,
+            [
+                "监管器名字，给上面的流过滤引用。",
+                "承诺速率，单位 kbit/s。桶里有令牌才算绿色。",
+                "承诺突发，单位字节。",
+                "超额速率。0 表示不给黄色额度。",
+                "超额突发，单位字节。没有超额速率时必须为 0。",
+                "勾选后黄色帧也丢掉。默认丢掉，不写入。",
+                "勾选后没用完的承诺带宽可以借给超额桶。默认不勾，不写入。",
+                "勾选后按帧自带的颜色监管。默认色盲，不写入。",
+            ],
+        )
+        self._tsync_meters.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        enable_table_row_selection(self._tsync_meters)
+        self._tsync_meters.setMinimumHeight(120)
+        outer.addWidget(self._tsync_meters)
+        meter_btns = QHBoxLayout()
+        add_meter = QPushButton(t("添加监管"))
+        tipify(add_meter, "追加一个监管器。没添加时不写入 flow_meters。")
+        add_meter.clicked.connect(lambda: self._add_tsync_meter_row())
+        del_meter = QPushButton(t("删除选中"))
+        tipify(del_meter, "删掉选中的监管器。仍被流过滤引用时，左侧会标成未对齐。")
+        del_meter.clicked.connect(self._del_tsync_meter_rows)
+        meter_btns.addWidget(add_meter)
+        meter_btns.addWidget(del_meter)
+        meter_btns.addStretch(1)
+        outer.addLayout(meter_btns)
+
+        self._tsync_psfp = QLabel("")
+        self._tsync_psfp.setWordWrap(True)
+        outer.addWidget(self._tsync_psfp)
+        return box
+
+    def _add_tsync_filter_row(self, pcp: int = 5, max_sdu: int = 1500, meter: str = "") -> None:
+        self._tsync_filter_raw.append({})
+        self._tsync_mute = True
+        try:
+            self._append_filter_row(pcp, max_sdu, meter)
+        finally:
+            self._tsync_mute = False
+        self._on_tsync_changed()
+
+    def _append_filter_row(self, pcp: int, max_sdu: int, meter: str) -> None:
+        table = self._tsync_filters
+        row = table.rowCount()
+        table.insertRow(row)
+        pcp_spin = QSpinBox(table)
+        pcp_spin.setRange(0, 7)
+        pcp_spin.setValue(max(0, min(7, int(pcp))))
+        bind_dirty_spin(pcp_spin)
+        pcp_spin.valueChanged.connect(self._on_tsync_changed)
+        pcp_spin.editingFinished.connect(self._end_doc_edit)
+        table.setCellWidget(row, 0, pcp_spin)
+        sdu = QSpinBox(table)
+        sdu.setRange(1, 16384)
+        sdu.setSingleStep(64)
+        sdu.setValue(max(1, min(16384, int(max_sdu))))
+        bind_dirty_spin(sdu)
+        sdu.valueChanged.connect(self._on_tsync_changed)
+        sdu.editingFinished.connect(self._end_doc_edit)
+        table.setCellWidget(row, 1, sdu)
+        combo = QComboBox(table)
+        self._fill_meter_combo(combo, meter)
+        combo.currentIndexChanged.connect(self._on_tsync_changed)
+        table.setCellWidget(row, 2, combo)
+
+    def _del_tsync_filter_rows(self) -> None:
+        rows = sorted({item.row() for item in self._tsync_filters.selectedIndexes()}, reverse=True)
+        if not rows:
+            return
+        self._tsync_mute = True
+        try:
+            for row in rows:
+                self._tsync_filters.removeRow(row)
+                if 0 <= row < len(self._tsync_filter_raw):
+                    self._tsync_filter_raw.pop(row)
+        finally:
+            self._tsync_mute = False
+        self._on_tsync_changed()
+
+    def _add_tsync_meter_row(
+        self,
+        name: str = "",
+        cir_kbps: int = 1000,
+        cbs_bytes: int = 2000,
+        eir_kbps: int = 0,
+        ebs_bytes: int = 0,
+        *,
+        drop_on_yellow: bool = True,
+        coupling: bool = False,
+        color_aware: bool = False,
+    ) -> None:
+        if not name:
+            name = self._next_meter_name()
+        self._tsync_meter_raw.append({})
+        self._tsync_mute = True
+        try:
+            self._append_meter_row(
+                name,
+                cir_kbps,
+                cbs_bytes,
+                eir_kbps,
+                ebs_bytes,
+                drop_on_yellow=drop_on_yellow,
+                coupling=coupling,
+                color_aware=color_aware,
+            )
+        finally:
+            self._tsync_mute = False
+        self._on_tsync_changed()
+
+    def _append_meter_row(
+        self,
+        name: str,
+        cir_kbps: int,
+        cbs_bytes: int,
+        eir_kbps: int,
+        ebs_bytes: int,
+        *,
+        drop_on_yellow: bool,
+        coupling: bool,
+        color_aware: bool,
+    ) -> None:
+        table = self._tsync_meters
+        row = table.rowCount()
+        table.insertRow(row)
+        edit = QLineEdit(table)
+        edit.setText(name)
+        edit.textChanged.connect(self._on_tsync_changed)
+        edit.editingFinished.connect(self._end_doc_edit)
+        table.setCellWidget(row, 0, edit)
+        specs = (
+            (1, 0, 10_000_000, 100, cir_kbps, ""),
+            (2, 0, 10_000_000, 64, cbs_bytes, ""),
+            (3, 0, 10_000_000, 100, eir_kbps, t("不超额")),
+            (4, 0, 10_000_000, 64, ebs_bytes, t("不写")),
+        )
+        for col, low, high, step, value, special in specs:
+            spin = QSpinBox(table)
+            spin.setRange(low, high)
+            spin.setSingleStep(step)
+            if special:
+                spin.setSpecialValueText(special)
+            spin.setValue(max(low, min(high, int(value))))
+            bind_dirty_spin(spin)
+            spin.valueChanged.connect(self._on_tsync_changed)
+            spin.editingFinished.connect(self._end_doc_edit)
+            table.setCellWidget(row, col, spin)
+        for col, on in ((5, drop_on_yellow), (6, coupling), (7, color_aware)):
+            table.setCellWidget(row, col, self._gate_check_widget(on))
+
+    def _del_tsync_meter_rows(self) -> None:
+        rows = sorted({item.row() for item in self._tsync_meters.selectedIndexes()}, reverse=True)
+        if not rows:
+            return
+        self._tsync_mute = True
+        try:
+            for row in rows:
+                self._tsync_meters.removeRow(row)
+                if 0 <= row < len(self._tsync_meter_raw):
+                    self._tsync_meter_raw.pop(row)
+        finally:
+            self._tsync_mute = False
+        self._on_tsync_changed()
+
+    def _next_meter_name(self) -> str:
+        existing = set(self._meter_names())
+        index = 1
+        while f"m{index}" in existing:
+            index += 1
+        return f"m{index}"
+
+    def _meter_names(self) -> list[str]:
+        table = getattr(self, "_tsync_meters", None)
+        if table is None:
+            return []
+        names: list[str] = []
+        for row in range(table.rowCount()):
+            edit = table.cellWidget(row, 0)
+            if not isinstance(edit, QLineEdit):
+                continue
+            name = edit.text().strip()
+            if name and name not in names:
+                names.append(name)
+        return names
+
+    def _fill_meter_combo(self, combo: QComboBox, selected: str) -> None:
+        names = self._meter_names()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem(t("不监管"), "")
+        for name in names:
+            combo.addItem(name, name)
+        if selected and selected not in names:
+            combo.addItem(selected, selected)
+        found = combo.findData(selected)
+        combo.setCurrentIndex(found if found >= 0 else 0)
+        combo.blockSignals(False)
+
+    def _refresh_meter_combos(self) -> None:
+        table = getattr(self, "_tsync_filters", None)
+        if table is None:
+            return
+        for row in range(table.rowCount()):
+            combo = table.cellWidget(row, 2)
+            if isinstance(combo, QComboBox):
+                current = combo.currentData()
+                selected = "" if current is None else str(current)
+                self._fill_meter_combo(combo, selected)
+
+    def _filter_rows(self) -> list[dict[str, Any]]:
+        table = getattr(self, "_tsync_filters", None)
+        if table is None:
+            return []
+        rows: list[dict[str, Any]] = []
+        for index in range(table.rowCount()):
+            base = dict(self._tsync_filter_raw[index]) if index < len(self._tsync_filter_raw) else {}
+            base.pop("pcp", None)
+            base.pop("max_sdu", None)
+            base.pop("meter", None)
+            pcp = table.cellWidget(index, 0)
+            sdu = table.cellWidget(index, 1)
+            meter = table.cellWidget(index, 2)
+            base["pcp"] = int(pcp.value()) if isinstance(pcp, QSpinBox) else 0
+            base["max_sdu"] = int(sdu.value()) if isinstance(sdu, QSpinBox) else 1
+            name = ""
+            if isinstance(meter, QComboBox):
+                data = meter.currentData()
+                name = "" if data is None else str(data)
+            if name:
+                base["meter"] = name
+            rows.append(base)
+        return rows
+
+    def _meter_rows(self) -> list[dict[str, Any]]:
+        table = getattr(self, "_tsync_meters", None)
+        if table is None:
+            return []
+        rows: list[dict[str, Any]] = []
+        for index in range(table.rowCount()):
+            base = dict(self._tsync_meter_raw[index]) if index < len(self._tsync_meter_raw) else {}
+            for key in (
+                "name",
+                "cir_kbps",
+                "cbs_bytes",
+                "eir_kbps",
+                "ebs_bytes",
+                "drop_on_yellow",
+                "coupling",
+                "color_aware",
+            ):
+                base.pop(key, None)
+            edit = table.cellWidget(index, 0)
+            base["name"] = edit.text().strip() if isinstance(edit, QLineEdit) else ""
+            cir = table.cellWidget(index, 1)
+            cbs = table.cellWidget(index, 2)
+            eir = table.cellWidget(index, 3)
+            ebs = table.cellWidget(index, 4)
+            base["cir_kbps"] = int(cir.value()) if isinstance(cir, QSpinBox) else 1
+            base["cbs_bytes"] = int(cbs.value()) if isinstance(cbs, QSpinBox) else 1
+            eir_v = int(eir.value()) if isinstance(eir, QSpinBox) else 0
+            ebs_v = int(ebs.value()) if isinstance(ebs, QSpinBox) else 0
+            if eir_v:
+                base["eir_kbps"] = eir_v
+            if ebs_v:
+                base["ebs_bytes"] = ebs_v
+            if not self._cell_checked(table, index, 5):
+                base["drop_on_yellow"] = False
+            if self._cell_checked(table, index, 6):
+                base["coupling"] = True
+            if self._cell_checked(table, index, 7):
+                base["color_aware"] = True
+            rows.append(base)
+        return rows
+
+    def _cell_checked(self, table: QTableWidget, row: int, col: int) -> bool:
+        wrap = table.cellWidget(row, col)
+        if wrap is None:
+            return False
+        box = wrap.findChild(QCheckBox)
+        return box is not None and box.isChecked()
+
+    def _psfp_banner(self) -> tuple[bool, str]:
+        filters = self._filter_rows()
+        meters = self._meter_rows()
+        if not filters and not meters:
+            return False, t("未编写流过滤和监管。保存不会写入这两张表。")
+        problems: list[str] = []
+        seen_pcp: set[int] = set()
+        dup_pcp: set[int] = set()
+        for row in filters:
+            pcp = int(row["pcp"])
+            if pcp in seen_pcp:
+                dup_pcp.add(pcp)
+            seen_pcp.add(pcp)
+        for pcp in sorted(dup_pcp):
+            problems.append(t("PCP {0} 重复。").format(pcp))
+        names: list[str] = []
+        dup_names: set[str] = set()
+        empty_name = False
+        for row in meters:
+            name = str(row.get("name") or "")
+            if not name:
+                empty_name = True
+                continue
+            if name in names:
+                dup_names.add(name)
+            else:
+                names.append(name)
+            label = name
+            cir = int(row.get("cir_kbps") or 0)
+            cbs = int(row.get("cbs_bytes") or 0)
+            if cir <= 0 or cbs <= 0:
+                problems.append(t("监管器 {0}：承诺速率和承诺突发都必须大于 0。").format(label))
+            eir = int(row.get("eir_kbps") or 0)
+            ebs = int(row.get("ebs_bytes") or 0)
+            if eir == 0 and ebs > 0:
+                problems.append(t("监管器 {0}：没有超额速率时，超额突发也必须为 0。").format(label))
+            elif eir > 0 and ebs <= 0:
+                problems.append(t("监管器 {0}：有超额速率时，超额突发必须大于 0。").format(label))
+        if empty_name:
+            problems.append(t("监管器名称不能空。"))
+        for name in sorted(dup_names):
+            problems.append(t("监管器 {0} 重复。").format(name))
+        known = set(names)
+        missing: list[str] = []
+        for row in filters:
+            meter = str(row.get("meter") or "")
+            if meter and meter not in known and meter not in missing:
+                missing.append(meter)
+        for meter in missing:
+            problems.append(t("流过滤引用的监管器 {0} 不存在。").format(meter))
+        if problems:
+            return True, " ".join(problems) + t(" Verify 不会通过。")
+        return False, t("流过滤 {0} 条，监管器 {1} 个。").format(len(filters), len(meters))
 
     def _gate_check_widget(self, on: bool) -> QWidget:
         wrap = QWidget()
@@ -1056,23 +1509,111 @@ class AraPagesMixin:
                 total += int(spin.value())
         cycle = int(self._tsync_cycle.value())
         profile = self._tsync_profile.currentData()
-        authored = bool(profile) or self._tsync_gates.rowCount() > 0 or cycle != TSYNC_CYCLE_DEFAULT
+        gate_rows = self._tsync_gates.rowCount() > 0
+        other = self._tsync_other_intent()
+        authored = bool(profile) or gate_rows or cycle != TSYNC_CYCLE_DEFAULT or other
         if not authored:
             text = t("未编写门控表。保存不会往 tsync.yaml 写入 network。")
-            color = "#666"
-        elif self._tsync_gates.rowCount() == 0:
+            style = "color:#666; padding:4px 0;"
+            bad = False
+        elif not gate_rows and other and not profile and cycle == TSYNC_CYCLE_DEFAULT:
+            text = t("门控表是空的。已改的队列属性或流过滤仍会写入 network。")
+            style = "color:#666; padding:4px 0;"
+            bad = False
+        elif not gate_rows:
             text = t("已选预设，门控表还是空的。")
-            color = "#666"
+            style = "color:#666; padding:4px 0;"
+            bad = False
         elif total == cycle:
             text = t("各段之和 {0} µs，等于周期。").format(total)
-            color = "#1b5e20"
+            style = "color:#1b5e20; padding:4px 0;"
+            bad = False
         else:
-            text = t("各段之和 {0} µs，周期 {1} µs。Verify 不会通过。").format(total, cycle)
-            color = "#a15c00"
+            gap = cycle - total
+            if gap > 0:
+                text = t(
+                    "还差 {0} µs。表上没写的这段会沿用最后一行的门；"
+                    "最后一行开着就会一直开到周期结束。Verify 不会通过。"
+                ).format(gap)
+            else:
+                text = t(
+                    "多出 {0} µs。超出周期的段不会执行。Verify 不会通过。"
+                ).format(-gap)
+            style = (
+                "color:#b71c1c; background:#fdecea; border:1px solid #e53935; "
+                "padding:8px 10px; font-size:13px; font-weight:600;"
+            )
+            bad = True
         if profile in ("hil_slave", "zonal"):
             backend = str(self._tsync_backend.currentData() or "")
             if self._tsync_pretend.isChecked() or backend != "linuxptp":
                 text += t(" HIL / 区域端点还要把 backend 设为 linuxptp，并关闭假装同步。")
         self._tsync_sum.setText(text)
-        self._tsync_sum.setStyleSheet(f"color:{color};")
+        self._tsync_sum.setStyleSheet(style)
+        self._refresh_meter_combos()
+        psfp_bad = False
+        if hasattr(self, "_tsync_psfp"):
+            psfp_bad, psfp_text = self._psfp_banner()
+            self._tsync_psfp.setText(psfp_text)
+            if psfp_bad:
+                self._tsync_psfp.setStyleSheet(
+                    "color:#b71c1c; background:#fdecea; border:1px solid #e53935; "
+                    "padding:8px 10px; font-size:13px; font-weight:600;"
+                )
+            elif self._filter_rows() or self._meter_rows():
+                self._tsync_psfp.setStyleSheet("color:#1b5e20; padding:4px 0;")
+            else:
+                self._tsync_psfp.setStyleSheet("color:#666; padding:4px 0;")
+        if bad:
+            kind = "cycle"
+        elif psfp_bad:
+            kind = "psfp"
+        else:
+            kind = ""
+        self._sync_tsync_nav(kind)
+
+    def _tsync_other_intent(self) -> bool:
+        if self._preempt_mask() != 0 or bool(self._max_sdu_rows()):
+            return True
+        filters = getattr(self, "_tsync_filters", None)
+        meters = getattr(self, "_tsync_meters", None)
+        if filters is not None and filters.rowCount() > 0:
+            return True
+        return meters is not None and meters.rowCount() > 0
+
+    def _preempt_mask(self) -> int:
+        mask = 0
+        for bit, box in self._tsync_preempt.items():
+            if box.isChecked():
+                mask |= 1 << bit
+        return mask
+
+    def _max_sdu_rows(self) -> list[dict[str, int]]:
+        rows: list[dict[str, int]] = []
+        for bit in range(8):
+            spin = self._tsync_sdu.get(bit)
+            if spin is None:
+                continue
+            size = int(spin.value())
+            if size > 0:
+                rows.append({"queue": bit, "bytes": size})
+        return rows
+
+    def _sync_tsync_nav(self, kind: str) -> None:
+        nav = getattr(self, "_nav", None)
+        if nav is None:
+            return
+        if kind == "cycle":
+            title = t("时间 / 门控 · 周期未对齐")
+        elif kind == "psfp":
+            title = t("时间 / 门控 · 流过滤未对齐")
+        else:
+            title = t("时间 / 门控")
+        normal = nav.palette().color(QPalette.ColorRole.Text)
+        for index in range(nav.count()):
+            item = nav.item(index)
+            if item is None or item.data(Qt.ItemDataRole.UserRole) != "tsync":
+                continue
+            item.setText(title)
+            item.setForeground(Qt.GlobalColor.red if kind else normal)
 

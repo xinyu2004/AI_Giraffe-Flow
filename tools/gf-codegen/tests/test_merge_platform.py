@@ -234,6 +234,80 @@ def test_tsync_gate_sum_must_match_cycle() -> None:
     )
 
 
+def test_tsync_queue_intent_is_optional() -> None:
+    base = {
+        "tsync": {
+            "backend": "osal_monotonic",
+            "pretend_synchronized": True,
+            "network": {
+                "profile": "sil_vlan",
+                "cycle_us": 100,
+                "gate_list": [{"interval_us": 100, "gate_states": 1}],
+            },
+        }
+    }
+    errors, _warnings, checks = validate_platform(base, ap_processes=set())
+    assert not any(item.startswith("platform.tsync:") for item in errors)
+    assert any(item.get("id") == "platform_tsync_network" and item.get("status") == "pass" for item in checks)
+
+    bad = {
+        "tsync": {
+            "backend": "osal_monotonic",
+            "network": {
+                "profile": "gates_only",
+                "cycle_us": 100,
+                "gate_list": [{"interval_us": 100, "gate_states": 1}],
+                "preemptable_mask": 256,
+                "max_sdu": [{"queue": 9, "bytes": 0}],
+            },
+        }
+    }
+    errors, _warnings, _checks = validate_platform(bad, ap_processes=set())
+    assert any("preemptable_mask" in item for item in errors)
+    assert any("max_sdu" in item for item in errors)
+
+
+def test_tsync_stream_filter_and_meter() -> None:
+    ok = {
+        "tsync": {
+            "backend": "osal_monotonic",
+            "pretend_synchronized": True,
+            "network": {
+                "profile": "gates_only",
+                "cycle_us": 100,
+                "gate_list": [{"interval_us": 100, "gate_states": 1}],
+                "stream_filters": [{"pcp": 5, "max_sdu": 1500, "meter": "ctrl"}],
+                "flow_meters": [{"name": "ctrl", "cir_kbps": 1000, "cbs_bytes": 2000}],
+            },
+        }
+    }
+    errors, _warnings, checks = validate_platform(ok, ap_processes=set())
+    assert not any(item.startswith("platform.tsync:") for item in errors)
+    assert any(item.get("id") == "platform_tsync_network" and item.get("status") == "pass" for item in checks)
+
+    bad = {
+        "tsync": {
+            "backend": "osal_monotonic",
+            "network": {
+                "profile": "gates_only",
+                "cycle_us": 100,
+                "gate_list": [{"interval_us": 100, "gate_states": 1}],
+                "stream_filters": [
+                    {"pcp": 5, "max_sdu": 0, "meter": "gone"},
+                    {"pcp": 5, "max_sdu": 100},
+                ],
+                "flow_meters": [{"name": "ctrl", "cir_kbps": 0, "cbs_bytes": 10, "eir_kbps": 100}],
+            },
+        }
+    }
+    errors, _warnings, _checks = validate_platform(bad, ap_processes=set())
+    assert any("max_sdu" in item for item in errors)
+    assert any("duplicated" in item for item in errors)
+    assert any("not a flow meter" in item for item in errors)
+    assert any("cir_kbps" in item for item in errors)
+    assert any("EBS must be > 0" in item for item in errors)
+
+
 def test_tsync_demo_schedule_passes() -> None:
     errors, _warnings, checks = validate_platform(
         {
