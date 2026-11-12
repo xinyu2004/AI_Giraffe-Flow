@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QComboBox, QLineEdit, QSpinBox
 from gf_codegen.compose.mem_budget import mem_section_gates
 from gf_codegen.compose.merge_platform import is_host_platform_process
 from gf_config.gui.ara_constants import (
+    TSYNC_CYCLE_DEFAULT,
     _DEFAULT_ALIVE_PERIOD_MS,
     _DEFAULT_ALIVE_TIMEOUT_MS,
     _DEFAULT_DEADLINE_MS,
@@ -44,6 +45,7 @@ class AraCommitMixin:
             self._on_ucm_changed()
             self._on_collector_changed()
             self._on_bounds_changed()
+            self._on_tsync_changed()
         finally:
             self._flushing = False
 
@@ -535,4 +537,58 @@ class AraCommitMixin:
         self._refresh_mem_estimate()
         if not coalesce:
             self._end_doc_edit()
+
+    def _on_tsync_changed(self, *_a: object) -> None:
+        if self._loading or getattr(self, "_tsync_mute", False) or not self._session:
+            return
+        if not hasattr(self, "_tsync_gates"):
+            return
+        self._checkpoint(coalesce=self._coalesce_sender())
+        self._refresh_tsync_sum()
+        doc = self._session.get_ara_doc("tsync")
+        fields: dict[str, Any] = {}
+        backend = str(self._tsync_backend.currentData() or self._tsync_backend.currentText())
+        if "backend" in doc or backend != "osal_monotonic":
+            fields["backend"] = backend
+        pretend = bool(self._tsync_pretend.isChecked())
+        if "pretend_synchronized" in doc or pretend is not True:
+            fields["pretend_synchronized"] = pretend
+        network = self._harvest_tsync_network(doc)
+        if network is None:
+            if "network" in doc:
+                fields["network"] = None
+        else:
+            fields["network"] = network
+        if fields:
+            self._session.update_ara_doc("tsync", **fields)
+        self._mark("tsync")
+        if not self._coalesce_sender():
+            self._end_doc_edit()
+
+    def _harvest_tsync_network(self, doc: dict[str, Any]) -> dict[str, Any] | None:
+        profile = self._tsync_profile.currentData()
+        profile_s = "" if profile is None else str(profile)
+        cycle = int(self._tsync_cycle.value())
+        rows: list[dict[str, Any]] = []
+        for index in range(self._tsync_gates.rowCount()):
+            spin = self._tsync_gates.cellWidget(index, 0)
+            interval = int(spin.value()) if isinstance(spin, QSpinBox) else 20
+            base = dict(self._tsync_gate_raw[index]) if index < len(self._tsync_gate_raw) else {}
+            base.pop("us", None)
+            base.pop("mask", None)
+            base["interval_us"] = interval
+            base["gate_states"] = self._gate_row_mask(index)
+            rows.append(base)
+        authored = bool(profile_s) or bool(rows) or cycle != TSYNC_CYCLE_DEFAULT
+        if not authored:
+            return None
+        net: dict[str, Any] = {
+            "profile": profile_s or "gates_only",
+            "cycle_us": cycle,
+            "gate_list": rows,
+        }
+        existing = doc.get("network") if isinstance(doc.get("network"), dict) else None
+        if existing is None or "admin_base" in existing:
+            net["admin_base"] = self._tsync_admin_base or "epoch_second"
+        return net
 

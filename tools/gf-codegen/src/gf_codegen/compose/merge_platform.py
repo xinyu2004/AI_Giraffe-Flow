@@ -248,7 +248,98 @@ def validate_platform(
         }
     )
 
+    if "tsync" in loaded:
+        problems = tsync_network_problems(loaded["tsync"])
+        if problems is not None:
+            if problems:
+                errors.extend(f"platform.tsync: {item}" for item in problems)
+                checks.append(
+                    {
+                        "id": "platform_tsync_network",
+                        "status": "fail",
+                        "detail": problems,
+                    }
+                )
+            else:
+                checks.append({"id": "platform_tsync_network", "status": "pass"})
+
     return errors, warnings, checks
+
+
+_TSYNC_PROFILES = frozenset({"sil_vlan", "hil_slave", "zonal", "gates_only"})
+
+
+def _as_uint(value: Any) -> int | None:
+    """Positive-or-zero int. Rejects bool. Accepts 0x hex strings."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return int(text, 0)
+        except ValueError:
+            return None
+    return None
+
+
+def tsync_network_problems(doc: dict[str, Any]) -> list[str] | None:
+    """Problems in tsync.network.
+
+    ``None`` when the schedule is not authored (current projects). An empty
+    list means the section is present and consistent.
+    """
+    if not isinstance(doc, dict) or "network" not in doc:
+        return None
+    net = doc.get("network")
+    if not isinstance(net, dict):
+        return ["network must be a mapping"]
+    problems: list[str] = []
+    profile = str(net.get("profile") or "")
+    if profile not in _TSYNC_PROFILES:
+        problems.append(f"network.profile unsupported: {profile or '(empty)'}")
+    cycle = _as_uint(net.get("cycle_us"))
+    if cycle is None or cycle <= 0:
+        problems.append("network.cycle_us must be a positive integer")
+        cycle_ok: int | None = None
+    else:
+        cycle_ok = cycle
+    gates = net.get("gate_list")
+    if gates is None:
+        gates = []
+    if not isinstance(gates, list):
+        problems.append("network.gate_list must be a list")
+        gates = []
+    total = 0
+    for i, row in enumerate(gates):
+        if not isinstance(row, dict):
+            problems.append(f"gate_list[{i}] not an object")
+            continue
+        interval = _as_uint(row.get("interval_us"))
+        if interval is None or interval <= 0:
+            problems.append(f"gate_list[{i}].interval_us must be a positive integer")
+        else:
+            total += interval
+        mask = _as_uint(row.get("gate_states"))
+        if mask is None or mask < 0 or mask > 255:
+            problems.append(f"gate_list[{i}].gate_states must be an integer 0..255")
+    if cycle_ok is not None and gates and total != cycle_ok:
+        problems.append(
+            f"gate_list intervals sum to {total} µs but cycle_us is {cycle_ok}"
+        )
+    if profile in {"hil_slave", "zonal"}:
+        if doc.get("pretend_synchronized") is True:
+            problems.append(
+                "pretend_synchronized must be false when profile is hil_slave or zonal"
+            )
+        if str(doc.get("backend") or "") != "linuxptp":
+            problems.append(
+                "backend must be linuxptp when profile is hil_slave or zonal"
+            )
+    return problems
 
 
 def build_gf_ara_cfg_manifest(loaded: dict[str, dict[str, Any]]) -> dict[str, Any]:

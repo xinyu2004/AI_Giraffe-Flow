@@ -11,6 +11,7 @@ pytest.importorskip("PySide6")
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from gf_config.core import ProjectSession  # noqa: E402
@@ -53,6 +54,44 @@ def test_open_flush_stay_clean(qapp: QApplication, sku: str) -> None:
         f"{sku} flush dirtied req={sess.dirty_req} wiring={sess.dirty_wiring} "
         f"ara={sorted(sess.dirty_ara_cfg or [])}"
     )
+
+
+def test_tsync_page_flush_does_not_invent_network(qapp: QApplication) -> None:
+    sess = _open("afc")
+    ara = AraCfgEditor()
+    ara.set_session(sess)
+    keys = [
+        ara._nav.item(i).data(Qt.ItemDataRole.UserRole) for i in range(ara._nav.count())
+    ]
+    assert "tsync" in keys
+    ara.flush_to_session()
+    assert "tsync" not in (sess.dirty_ara_cfg or set())
+    assert "network" not in sess.get_ara_doc("tsync")
+    assert sess.get_ara_doc("tsync")["backend"] == "osal_monotonic"
+    assert sess.get_ara_doc("tsync")["pretend_synchronized"] is True
+
+
+def test_tsync_gate_row_roundtrip(qapp: QApplication) -> None:
+    sess = _open("afc")
+    ara = AraCfgEditor()
+    ara.set_session(sess)
+    ara._add_tsync_gate_row(80, 0x80)
+    net = sess.get_ara_doc("tsync")["network"]
+    assert net["profile"] == "gates_only"
+    assert net["cycle_us"] == 1000
+    assert net["gate_list"] == [{"interval_us": 80, "gate_states": 0x80}]
+    assert sess.get_ara_doc("tsync")["backend"] == "osal_monotonic"
+    assert sess.dirty_ara_cfg is not None and "tsync" in sess.dirty_ara_cfg
+    sess.dirty_ara_cfg.clear()
+    ara.set_session(sess)
+    ara.flush_to_session()
+    assert not sess.dirty_ara_cfg
+    assert sess.get_ara_doc("tsync")["network"]["gate_list"] == [
+        {"interval_us": 80, "gate_states": 0x80}
+    ]
+    ara._tsync_gates.selectRow(0)
+    ara._del_tsync_gate_rows()
+    assert "network" not in sess.get_ara_doc("tsync")
 
 
 def test_afc_log_file_max_edit_dirties(qapp: QApplication) -> None:

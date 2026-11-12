@@ -197,6 +197,72 @@ def test_validate_rejects_external_process() -> None:
     assert any(c.get("id") == "platform_exec_processes" and c.get("status") == "fail" for c in checks)
 
 
+def test_tsync_without_network_adds_no_check() -> None:
+    errors, _warnings, checks = validate_platform(
+        {
+            "tsync": {
+                "schema_version": "0.1",
+                "backend": "osal_monotonic",
+                "pretend_synchronized": True,
+            }
+        },
+        ap_processes=set(),
+    )
+    assert not any(item.startswith("platform.tsync:") for item in errors)
+    assert not any(item.get("id") == "platform_tsync_network" for item in checks)
+
+
+def test_tsync_gate_sum_must_match_cycle() -> None:
+    errors, _warnings, checks = validate_platform(
+        {
+            "tsync": {
+                "backend": "osal_monotonic",
+                "pretend_synchronized": True,
+                "network": {
+                    "profile": "sil_vlan",
+                    "cycle_us": 1000,
+                    "gate_list": [{"interval_us": 100, "gate_states": 1}],
+                },
+            }
+        },
+        ap_processes=set(),
+    )
+    assert any("sum to 100" in item for item in errors)
+    assert any(
+        item.get("id") == "platform_tsync_network" and item.get("status") == "fail"
+        for item in checks
+    )
+
+
+def test_tsync_demo_schedule_passes() -> None:
+    errors, _warnings, checks = validate_platform(
+        {
+            "tsync": {
+                "backend": "linuxptp",
+                "pretend_synchronized": False,
+                "network": {
+                    "profile": "hil_slave",
+                    "cycle_us": 1000,
+                    "admin_base": "epoch_second",
+                    "gate_list": [
+                        {"interval_us": 80, "gate_states": 0x80},
+                        {"interval_us": 200, "gate_states": 0x60},
+                        {"interval_us": 40, "gate_states": 0},
+                        {"interval_us": 480, "gate_states": 0x04},
+                        {"interval_us": 200, "gate_states": 0x03},
+                    ],
+                },
+            }
+        },
+        ap_processes=set(),
+    )
+    assert not any(item.startswith("platform.tsync:") for item in errors)
+    assert any(
+        item.get("id") == "platform_tsync_network" and item.get("status") == "pass"
+        for item in checks
+    )
+
+
 def test_adc_loads_gf_ara_cfg(repo_root: Path, tmp_path: Path) -> None:
     """adc giraffe.yaml indexes gf_ara_cfg → compose writes gf_ara_cfg_manifest."""
     project = repo_root / "projects/adc/giraffe.yaml"

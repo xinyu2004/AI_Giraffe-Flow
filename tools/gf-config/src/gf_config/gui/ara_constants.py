@@ -67,7 +67,27 @@ NAV = [
     ("log", "日志", frozenset({"log"})),
     ("ucm", "OTA ucm", frozenset({"ucm"})),
     ("collector", "事件收集", frozenset({"collector"})),
+    ("tsync", "时间 / 门控", frozenset({"tsync"})),
     ("bounds", "有界内存", frozenset({"com", "per", "log", "collector", "diag"})),
+]
+
+# tsync.yaml · network. Key absent means the schedule is not authored.
+TSYNC_BACKENDS = ["osal_monotonic", "linuxptp"]
+TSYNC_PROFILES: list[tuple[str, str]] = [
+    ("", "不启用"),
+    ("sil_vlan", "桌面 VLAN"),
+    ("hil_slave", "HIL 从钟"),
+    ("zonal", "区域端点"),
+]
+TSYNC_QUEUE_BITS = (7, 6, 5, 4, 3, 2, 1, 0)
+TSYNC_CYCLE_DEFAULT = 1000
+# (interval_us, gate_states). Bit 7 is Q7. Intervals sum to the default cycle.
+TSYNC_DEMO_GATES: list[tuple[int, int]] = [
+    (80, 0x80),
+    (200, 0x60),
+    (40, 0x00),
+    (480, 0x04),
+    (200, 0x03),
 ]
 
 LOG_LEVELS = ["FATAL", "ERROR", "WARN", "INFO", "DEBUG", "VERBOSE"]

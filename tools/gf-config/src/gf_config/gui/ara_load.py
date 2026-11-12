@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QCheckBox, QComboBox, QSpinBox
 from gf_codegen.compose.merge_platform import is_host_platform_process
 from gf_config.gui import tips as T
 from gf_config.gui.ara_constants import (
+    TSYNC_CYCLE_DEFAULT,
     KNOWN_MODULES,
     _COLLECTOR_SOURCES,
     _DEFAULT_ALIVE_PERIOD_MS,
@@ -472,4 +473,82 @@ class AraLoadMixin:
             _set_cell(self._iox_pool_table, r, 0, str(p.get("size") or 256))
             _set_cell(self._iox_pool_table, r, 1, str(p.get("count") or 1))
         self._iox_pool_table.blockSignals(False)
+
+    def _load_tsync(self, data: dict[str, Any]) -> None:
+        self._tsync_mute = True
+        try:
+            backend = str(data.get("backend") or "osal_monotonic")
+            if self._tsync_backend.findData(backend) < 0:
+                self._tsync_backend.addItem(backend, backend)
+            self._tsync_backend.blockSignals(True)
+            found = self._tsync_backend.findData(backend)
+            self._tsync_backend.setCurrentIndex(found if found >= 0 else 0)
+            self._tsync_backend.blockSignals(False)
+
+            self._tsync_pretend.blockSignals(True)
+            if "pretend_synchronized" in data:
+                self._tsync_pretend.setChecked(bool(data.get("pretend_synchronized")))
+            else:
+                self._tsync_pretend.setChecked(True)
+            self._tsync_pretend.blockSignals(False)
+
+            net = data.get("network") if isinstance(data.get("network"), dict) else {}
+            profile = str(net.get("profile") or "")
+            if profile in ("gates_only", "custom"):
+                profile = ""
+            self._tsync_profile.blockSignals(True)
+            picked = self._tsync_profile.findData(profile)
+            self._tsync_profile.setCurrentIndex(picked if picked >= 0 else 0)
+            self._tsync_profile.blockSignals(False)
+
+            cycle_raw = net.get("cycle_us", TSYNC_CYCLE_DEFAULT) if net else TSYNC_CYCLE_DEFAULT
+            try:
+                cycle = int(cycle_raw)
+            except (TypeError, ValueError):
+                cycle = TSYNC_CYCLE_DEFAULT
+            self._tsync_cycle.blockSignals(True)
+            self._tsync_cycle.setValue(cycle if cycle > 0 else TSYNC_CYCLE_DEFAULT)
+            self._tsync_cycle.blockSignals(False)
+
+            if isinstance(data.get("network"), dict) and "admin_base" in data["network"]:
+                self._tsync_admin_base = str(data["network"].get("admin_base") or "epoch_second")
+            else:
+                self._tsync_admin_base = "epoch_second"
+
+            self._tsync_gates.setRowCount(0)
+            self._tsync_gate_raw = []
+            gates = net.get("gate_list") if isinstance(net.get("gate_list"), list) else []
+            for row in gates:
+                if not isinstance(row, dict):
+                    continue
+                self._tsync_gate_raw.append(dict(row))
+                self._append_gate_row(_gate_interval(row), _gate_mask(row))
+        finally:
+            self._tsync_mute = False
+        self._refresh_tsync_sum()
+
+
+def _gate_int(value: Any, default: int) -> int:
+    if isinstance(value, bool) or value is None:
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value.strip(), 0)
+        except ValueError:
+            return default
+    return default
+
+
+def _gate_interval(row: dict[str, Any]) -> int:
+    if "interval_us" in row:
+        return _gate_int(row.get("interval_us"), 20)
+    return _gate_int(row.get("us"), 20)
+
+
+def _gate_mask(row: dict[str, Any]) -> int:
+    if "gate_states" in row:
+        return _gate_int(row.get("gate_states"), 0) & 0xFF
+    return _gate_int(row.get("mask"), 0) & 0xFF
 

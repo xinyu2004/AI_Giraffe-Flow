@@ -48,7 +48,7 @@ gf-config projects/afc/giraffe.yaml
 | Tab | Role |
 |-----|------|
 | **1 · Signals & apps** (default) | **Left thin SKU open**; canvas; **right Lineage collapsed** (◀ to expand) |
-| **2 · Platform config** | Top `runtime_modules` (incl. trimable **per / tsync**); subpages: exec/FG · **EM launch map** · PHM · diag · **log** · OTA · **Event collector** · **Memory bounds** |
+| **2 · Platform config** | Top `runtime_modules` (incl. trimable **per / tsync**); subpages: exec/FG · **EM launch map** · PHM · diag · **log** · OTA · **Event collector** · **Time / gates** · **Memory bounds** |
 
 Switch tabs via the tab bar. Verify / Generate returns to tab 1 Lineage.  
 **Edit menu:** Undo / Redo (Ctrl+Z / Ctrl+Y) — jumps to the changed page (incl. platform subpages); status-bar hint is i18n’d.
@@ -109,4 +109,5 @@ Also: click edges (incl. missing dashed) to select; search box; import hpp / **f
 | `phm` | Health · `phm.yaml` | Alive; `restart` → EM |
 | `collector` / phm / diag | Event collector · `collector.yaml` | ring / cp_dem stub |
 | `diag` / `log` / `ucm` | respective pages | DoIP·UDS / log / OTA orchestrator (SIL; flash still stub) |
-| `per` / `tsync` | (no subpage yet) | checkbox → compile into image (KV / time-sync skeleton) |
+| `per` | (no subpage yet) | checkbox → compile into image (KV) |
+| `tsync` | Time / gates · `tsync.yaml` | existing backend; `network` gate list is written only after that page is edited |

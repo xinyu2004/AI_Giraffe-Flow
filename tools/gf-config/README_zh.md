@@ -48,7 +48,7 @@ gf-config projects/afc/giraffe.yaml
 | 页签 | 作用 |
 |------|------|
 | **1 · 信号与应用**（默认） | **左侧薄 SKU 默认展开**；中央画布；**右侧连线/Lineage 默认收起**（点 ◀ 展开） |
-| **2 · 平台配置** | 顶部 `runtime_modules`（含可裁剪 **per / tsync**）；子页：执行/FG · **EM 启动表** · PHM · 诊断 · **日志** · OTA · **事件收集** · **有界内存** |
+| **2 · 平台配置** | 顶部 `runtime_modules`（含可裁剪 **per / tsync**）；子页：执行/FG · **EM 启动表** · PHM · 诊断 · **日志** · OTA · **事件收集** · **时间 / 门控** · **有界内存** |
 
 用页签切页。Verify / Generate 后自动回页 1 右侧 Lineage。  
 **编辑菜单：** 撤销 / 重做（Ctrl+Z / Ctrl+Y）— 跳到变更所在页（含平台子页），底栏提示中英 i18n。
@@ -111,4 +111,5 @@ gf-config projects/afc/giraffe.yaml
 | `sm` | （与 exec 同页 FG） | StateClient / NotifyHealthFault |
 | `collector` / phm / diag | 事件收集 · `collector.yaml` | ring buffer / cp_dem stub |
 | `diag` / `log` / `ucm` | 各子页 | DoIP·UDS / 日志 / OTA 编排（SIL；真刷写仍 stub） |
-| `per` / `tsync` | （暂无子页） | 仅 `runtime_modules` 勾选 → 编入镜像（KV / 时间同步骨架） |
+| `per` | （暂无子页） | 仅 `runtime_modules` 勾选 → 编入镜像（KV） |
+| `tsync` | 时间 / 门控 · `tsync.yaml` | 现有 backend；`network` 门控表仅在改过该页后写入 |

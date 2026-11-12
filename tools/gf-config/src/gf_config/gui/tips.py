@@ -54,6 +54,7 @@ MODULE: dict[str, str] = {
     "tsync": (
         "时间同步 lite：cfg/gf_ara_cfg/tsync.yaml；SIL 用 osal mock，"
         "板上配 linuxptp/ptp4l，本模块用 pmc 读状态。"
+        "勾选后解锁「时间 / 门控」。未改该页时不会多写 network。"
     ),
 }
 

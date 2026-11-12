@@ -60,9 +60,11 @@ TIP_EN: dict[str, str] = {
         "Auto-checked when collector/ucm need cross-reboot DTC or version."
     ),
     "时间同步 lite：cfg/gf_ara_cfg/tsync.yaml；SIL 用 osal mock，"
-    "板上配 linuxptp/ptp4l，本模块用 pmc 读状态。": (
+    "板上配 linuxptp/ptp4l，本模块用 pmc 读状态。"
+    "勾选后解锁「时间 / 门控」。未改该页时不会多写 network。": (
         "Time-sync lite: cfg/gf_ara_cfg/tsync.yaml; SIL uses osal mock; "
-        "on-target use linuxptp/ptp4l, this module reads status via pmc."
+        "on-target use linuxptp/ptp4l, this module reads status via pmc. "
+        "Unlocks Time / gates. Leaving that page untouched does not write network."
     ),
     "时序/trace 导出到 VCD / GMT，偏调试路径；"
     "production-release 剖面下通常关掉观测相关能力。": (
@@ -839,4 +841,34 @@ TIP_EN: dict[str, str] = {
         "Removed: vehicle control is not JSON. SIL egress = "
         "GfChannel vehicle_cmd → cosim → giraffe_client."
     ),
+    "osal_monotonic：桌面单调钟。linuxptp：板上由 ptp4l 锁 PHC，本模块用 pmc 读状态。": (
+        "osal_monotonic: desktop monotonic clock. linuxptp: ptp4l disciplines the PHC; "
+        "this module reads status via pmc."
+    ),
+    "SIL 把状态报成已同步。HIL 从钟和区域端点必须关掉，否则 Verify 失败。": (
+        "SIL reports the clock as synchronized. HIL slave and zonal must turn this off "
+        "or Verify fails."
+    ),
+    "不启用：不写 network，当前 SIL 流程不变。其余预设才会把门控表写入 tsync.yaml。": (
+        "Off: do not write network; the current SIL flow stays unchanged. "
+        "Other profiles write the gate list into tsync.yaml."
+    ),
+    "AdminCycleTime。各段时长之和必须等于这个周期，Verify 才通过。": (
+        "AdminCycleTime. Interval durations must sum to this cycle or Verify fails."
+    ),
+    "追加一段全关的门。保存后才会写入 network.gate_list。": (
+        "Append a closed gate interval. network.gate_list is written on save."
+    ),
+    "填入一套和为 1000 µs 的示意门控，会写入 tsync.yaml。": (
+        "Fill an example schedule that sums to 1000 µs. This writes tsync.yaml."
+    ),
+    "这一段开门的时长，单位微秒。": "How long this interval stays open, in microseconds.",
+    "bit 7。gPTP 队列，业务不要占用。": "Bit 7. gPTP queue; application traffic should not use it.",
+    "bit 6。服务发现。": "Bit 6. Service discovery.",
+    "bit 5。周期控制。": "Bit 5. Cyclic control.",
+    "bit 4。保留。": "Bit 4. Reserved.",
+    "bit 3。保留。": "Bit 3. Reserved.",
+    "bit 2。大载荷。": "Bit 2. Bulk payload.",
+    "bit 1。诊断。": "Bit 1. Diagnostics.",
+    "bit 0。尽力而为。": "Bit 0. Best effort.",
 }

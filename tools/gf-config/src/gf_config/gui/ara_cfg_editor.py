@@ -165,6 +165,7 @@ class AraCfgEditor(
         self._pages["ucm"] = self._build_ucm_page()
         self._pages["collector"] = self._build_collector_page()
         self._pages["bounds"] = self._build_bounds_page()
+        self._pages["tsync"] = self._build_tsync_page()
         for key, _title, _mods in _NAV:
             self._stack.addWidget(self._pages[key])
 
@@ -214,6 +215,7 @@ class AraCfgEditor(
             self._iox_chunk_sub,
             self._iox_iface,
             self._iox_bud_shm,
+            self._tsync_cycle,
         ):
             w.editingFinished.connect(self._end_doc_edit)
 
@@ -240,6 +242,7 @@ class AraCfgEditor(
         self._load_ucm(session.get_ara_doc("ucm"))
         self._load_collector(session.get_ara_doc("collector"))
         self._load_bounds(session.get_ara_doc("bounds"))
+        self._load_tsync(session.get_ara_doc("tsync"))
         self._loading = False
         self.sync_capability_hosts()
         self._refresh_bounds_gates()

@@ -1051,6 +1051,43 @@ _EN: dict[str, str] = {
     "拖拽连线 · Ctrl+拖：改边或同边调序 · 右键查看类型": (
         "Drag to wire · Ctrl+drag: move/reorder · right-click to view type"
     ),
+    "时间 / 门控": "Time / gates",
+    "不启用": "Off",
+    "桌面 VLAN": "Desktop VLAN",
+    "HIL 从钟": "HIL slave",
+    "区域端点": "Zonal endpoint",
+    "假装已同步": "Pretend synchronized",
+    "网络预设": "Network profile",
+    "周期": "Cycle",
+    "AdminControlList": "AdminControlList",
+    "时长 µs": "Duration µs",
+    "Q6 发现": "Q6 discovery",
+    "Q5 控制": "Q5 control",
+    "Q4 保留": "Q4 reserved",
+    "Q3 保留": "Q3 reserved",
+    "Q2 大载荷": "Q2 bulk",
+    "Q1 诊断": "Q1 diag",
+    "Q0 尽力": "Q0 best-effort",
+    "添加一段": "Add interval",
+    "填入示意": "Fill example",
+    "tsync.yaml：backend 与 pretend_synchronized 是现有字段。"
+    "门控表写在 network 下，未改本页时不会出现这个键。"
+    "Q7 是 GateStates 的 bit 7。HIL / 区域端点要求 linuxptp，且不能假装已同步。": (
+        "tsync.yaml: backend and pretend_synchronized already exist. "
+        "The gate list lives under network and stays absent until this page is edited. "
+        "Q7 is GateStates bit 7. HIL / zonal requires linuxptp and pretend off."
+    ),
+    "未编写门控表。保存不会往 tsync.yaml 写入 network。": (
+        "No gate list yet. Save will not write network into tsync.yaml."
+    ),
+    "已选预设，门控表还是空的。": "Profile selected; the gate list is still empty.",
+    "各段之和 {0} µs，等于周期。": "Intervals sum to {0} µs, matching the cycle.",
+    "各段之和 {0} µs，周期 {1} µs。Verify 不会通过。": (
+        "Intervals sum to {0} µs, cycle is {1} µs. Verify will fail."
+    ),
+    " HIL / 区域端点还要把 backend 设为 linuxptp，并关闭假装同步。": (
+        " HIL / zonal also needs backend linuxptp and pretend synchronized off."
+    ),
 }
 
 # Authoritative field tips (gf_config.gui.tips) — purpose/effect, not enum noise.

@@ -31,6 +31,11 @@ from gf_codegen.compose.mem_budget import (
 )
 from gf_config.gui import tips as T
 from gf_config.gui.ara_constants import (
+    TSYNC_BACKENDS,
+    TSYNC_CYCLE_DEFAULT,
+    TSYNC_DEMO_GATES,
+    TSYNC_PROFILES,
+    TSYNC_QUEUE_BITS,
     _COLLECTOR_SOURCES,
     _FORWARD_MODES,
     _LOG_LEVELS,
@@ -842,4 +847,232 @@ class AraPagesMixin:
         lay.addWidget(est_box)
         lay.addStretch(1)
         return _PlatformScrollPage(inner, self)
+
+    def _build_tsync_page(self) -> QWidget:
+        """Clock fields already in tsync.yaml, plus an optional gate list.
+
+        ``network`` stays absent until this page is edited, so open/save of
+        current projects does not rewrite tsync.yaml.
+        """
+        self._tsync_mute = False
+        self._tsync_gate_raw: list[dict[str, Any]] = []
+        self._tsync_admin_base = "epoch_second"
+
+        inner = QWidget(self)
+        lay = QVBoxLayout(inner)
+        hint = QLabel(
+            t(
+                "tsync.yaml：backend 与 pretend_synchronized 是现有字段。"
+                "门控表写在 network 下，未改本页时不会出现这个键。"
+                "Q7 是 GateStates 的 bit 7。HIL / 区域端点要求 linuxptp，且不能假装已同步。"
+            )
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#666;")
+        lay.addWidget(hint)
+
+        form = QFormLayout()
+        self._tsync_backend = QComboBox()
+        for name in TSYNC_BACKENDS:
+            self._tsync_backend.addItem(name, name)
+        tipify(
+            self._tsync_backend,
+            "osal_monotonic：桌面单调钟。linuxptp：板上由 ptp4l 锁 PHC，本模块用 pmc 读状态。",
+        )
+        self._tsync_backend.currentIndexChanged.connect(self._on_tsync_changed)
+        form.addRow("backend", self._tsync_backend)
+
+        self._tsync_pretend = QCheckBox(t("假装已同步"))
+        tipify(
+            self._tsync_pretend,
+            "SIL 把状态报成已同步。HIL 从钟和区域端点必须关掉，否则 Verify 失败。",
+        )
+        self._tsync_pretend.setChecked(True)
+        self._tsync_pretend.toggled.connect(self._on_tsync_changed)
+        form.addRow("pretend_synchronized", self._tsync_pretend)
+
+        self._tsync_profile = QComboBox()
+        for value, label in TSYNC_PROFILES:
+            self._tsync_profile.addItem(t(label), value)
+        tipify(
+            self._tsync_profile,
+            "不启用：不写 network，当前 SIL 流程不变。其余预设才会把门控表写入 tsync.yaml。",
+        )
+        self._tsync_profile.currentIndexChanged.connect(self._on_tsync_changed)
+        form.addRow(t("网络预设"), self._tsync_profile)
+
+        self._tsync_cycle = QSpinBox()
+        self._tsync_cycle.setRange(20, 10_000_000)
+        self._tsync_cycle.setSingleStep(10)
+        self._tsync_cycle.setSuffix(" µs")
+        self._tsync_cycle.setValue(TSYNC_CYCLE_DEFAULT)
+        bind_dirty_spin(self._tsync_cycle)
+        tipify(self._tsync_cycle, "AdminCycleTime。各段时长之和必须等于这个周期，Verify 才通过。")
+        self._tsync_cycle.valueChanged.connect(self._on_tsync_changed)
+        form.addRow(t("周期"), self._tsync_cycle)
+        lay.addLayout(form)
+
+        self._tsync_sum = QLabel("")
+        self._tsync_sum.setWordWrap(True)
+        self._tsync_sum.setStyleSheet("color:#666;")
+        lay.addWidget(self._tsync_sum)
+
+        box = QGroupBox(t("AdminControlList"))
+        box_l = QVBoxLayout(box)
+        headers = [
+            t("时长 µs"),
+            "Q7 gPTP",
+            t("Q6 发现"),
+            t("Q5 控制"),
+            t("Q4 保留"),
+            t("Q3 保留"),
+            t("Q2 大载荷"),
+            t("Q1 诊断"),
+            t("Q0 尽力"),
+        ]
+        self._tsync_gates = QTableWidget(0, len(headers))
+        self._tsync_gates.setHorizontalHeaderLabels(headers)
+        set_header_tips(
+            self._tsync_gates,
+            [
+                "这一段开门的时长，单位微秒。",
+                "bit 7。gPTP 队列，业务不要占用。",
+                "bit 6。服务发现。",
+                "bit 5。周期控制。",
+                "bit 4。保留。",
+                "bit 3。保留。",
+                "bit 2。大载荷。",
+                "bit 1。诊断。",
+                "bit 0。尽力而为。",
+            ],
+        )
+        self._tsync_gates.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        enable_table_row_selection(self._tsync_gates)
+        self._tsync_gates.setMinimumHeight(160)
+        box_l.addWidget(self._tsync_gates)
+        btns = QHBoxLayout()
+        add = QPushButton(t("添加一段"))
+        tipify(add, "追加一段全关的门。保存后才会写入 network.gate_list。")
+        add.clicked.connect(lambda: self._add_tsync_gate_row())
+        demo = QPushButton(t("填入示意"))
+        tipify(demo, "填入一套和为 1000 µs 的示意门控，会写入 tsync.yaml。")
+        demo.clicked.connect(self._fill_tsync_demo)
+        delete = QPushButton(t("删除选中"))
+        tipify(delete, T.BTN_DEL_ROW)
+        delete.clicked.connect(self._del_tsync_gate_rows)
+        btns.addWidget(add)
+        btns.addWidget(demo)
+        btns.addWidget(delete)
+        btns.addStretch(1)
+        box_l.addLayout(btns)
+        lay.addWidget(box)
+        lay.addStretch(1)
+        self._refresh_tsync_sum()
+        return _PlatformScrollPage(inner, self)
+
+    def _gate_check_widget(self, on: bool) -> QWidget:
+        wrap = QWidget()
+        row = QHBoxLayout(wrap)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        box = QCheckBox()
+        box.setChecked(on)
+        box.toggled.connect(self._on_tsync_changed)
+        row.addWidget(box)
+        return wrap
+
+    def _append_gate_row(self, interval_us: int, mask: int) -> None:
+        table = self._tsync_gates
+        row = table.rowCount()
+        table.insertRow(row)
+        spin = QSpinBox(table)
+        spin.setRange(20, 10_000_000)
+        spin.setSingleStep(20)
+        spin.setValue(max(20, int(interval_us)))
+        bind_dirty_spin(spin)
+        spin.valueChanged.connect(self._on_tsync_changed)
+        spin.editingFinished.connect(self._end_doc_edit)
+        table.setCellWidget(row, 0, spin)
+        for index, bit in enumerate(TSYNC_QUEUE_BITS):
+            table.setCellWidget(
+                row, 1 + index, self._gate_check_widget((int(mask) & (1 << bit)) != 0)
+            )
+
+    def _add_tsync_gate_row(self, interval_us: int = 40, mask: int = 0) -> None:
+        self._tsync_gate_raw.append({})
+        self._tsync_mute = True
+        try:
+            self._append_gate_row(interval_us, mask)
+        finally:
+            self._tsync_mute = False
+        self._on_tsync_changed()
+
+    def _fill_tsync_demo(self) -> None:
+        self._tsync_mute = True
+        try:
+            self._tsync_gates.setRowCount(0)
+            self._tsync_gate_raw = []
+            for interval_us, mask in TSYNC_DEMO_GATES:
+                self._tsync_gate_raw.append({})
+                self._append_gate_row(interval_us, mask)
+        finally:
+            self._tsync_mute = False
+        self._on_tsync_changed()
+
+    def _del_tsync_gate_rows(self) -> None:
+        rows = sorted({item.row() for item in self._tsync_gates.selectedIndexes()}, reverse=True)
+        if not rows:
+            return
+        self._tsync_mute = True
+        try:
+            for row in rows:
+                self._tsync_gates.removeRow(row)
+                if 0 <= row < len(self._tsync_gate_raw):
+                    self._tsync_gate_raw.pop(row)
+        finally:
+            self._tsync_mute = False
+        self._on_tsync_changed()
+
+    def _gate_row_mask(self, row: int) -> int:
+        mask = 0
+        for index, bit in enumerate(TSYNC_QUEUE_BITS):
+            wrap = self._tsync_gates.cellWidget(row, 1 + index)
+            if wrap is None:
+                continue
+            box = wrap.findChild(QCheckBox)
+            if box is not None and box.isChecked():
+                mask |= 1 << bit
+        return mask
+
+    def _refresh_tsync_sum(self) -> None:
+        if not hasattr(self, "_tsync_sum"):
+            return
+        total = 0
+        for row in range(self._tsync_gates.rowCount()):
+            spin = self._tsync_gates.cellWidget(row, 0)
+            if isinstance(spin, QSpinBox):
+                total += int(spin.value())
+        cycle = int(self._tsync_cycle.value())
+        profile = self._tsync_profile.currentData()
+        authored = bool(profile) or self._tsync_gates.rowCount() > 0 or cycle != TSYNC_CYCLE_DEFAULT
+        if not authored:
+            text = t("未编写门控表。保存不会往 tsync.yaml 写入 network。")
+            color = "#666"
+        elif self._tsync_gates.rowCount() == 0:
+            text = t("已选预设，门控表还是空的。")
+            color = "#666"
+        elif total == cycle:
+            text = t("各段之和 {0} µs，等于周期。").format(total)
+            color = "#1b5e20"
+        else:
+            text = t("各段之和 {0} µs，周期 {1} µs。Verify 不会通过。").format(total, cycle)
+            color = "#a15c00"
+        if profile in ("hil_slave", "zonal"):
+            backend = str(self._tsync_backend.currentData() or "")
+            if self._tsync_pretend.isChecked() or backend != "linuxptp":
+                text += t(" HIL / 区域端点还要把 backend 设为 linuxptp，并关闭假装同步。")
+        self._tsync_sum.setText(text)
+        self._tsync_sum.setStyleSheet(f"color:{color};")
 
