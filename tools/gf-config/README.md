@@ -50,6 +50,17 @@ gf-config projects/afc/giraffe.yaml
 | **1 · Signals & apps** (default) | **Left thin SKU open**; canvas; **right Lineage collapsed** (◀ to expand) |
 | **2 · Platform config** | Top `runtime_modules` (incl. trimable **per / tsync**); subpages: exec/FG · **EM launch map** · PHM · diag · **log** · OTA · **Event collector** · **Time / gates** · **Memory bounds** |
 
+### Tab 2 · TSN (`tsync.yaml`)
+
+Entry: check **tsync**, then open **Time / gates**. Walkthrough: [docs/zh/tsn/index.html](../../docs/zh/tsn/index.html) (open in a browser; the page is in Chinese and starts playing on its own).
+
+- An untouched project does not grow a `network` key. Save writes it only after this page is edited.
+- **Gate list** (`gate_list`): each row is `interval_us` plus `gate_states`. The sum must equal `cycle_us`. A short list would keep the last row's gates until the cycle ends; a long list would not run the tail. Verify rejects both (`platform_tsync_network`), and the nav stays marked.
+- **Preemption** (`preemptable_mask`) and **per-queue max frame** (`max_sdu`) stay omitted at the default. They are intent, and are not applied to the NIC.
+- **Stream filter and policing** (`stream_filters`, `flow_meters`) are 802.1Qci intent for the adjacent switch ingress: match a PCP, limit the frame, then a CIR/CBS token bucket. Giraffe does not execute them. Empty tables are omitted.
+- Access and trunk — which frame is tagged on the way in and on the way out — are not fields on this page.
+- The runtime parser still reads only `backend` and `pretend_synchronized`. CNC and AVTP are not pages.
+
 Switch tabs via the tab bar. Verify / Generate returns to tab 1 Lineage.  
 **Edit menu:** Undo / Redo (Ctrl+Z / Ctrl+Y) — jumps to the changed page (incl. platform subpages); status-bar hint is i18n’d.
 

@@ -50,6 +50,17 @@ gf-config projects/afc/giraffe.yaml
 | **1 · 信号与应用**（默认） | **左侧薄 SKU 默认展开**；中央画布；**右侧连线/Lineage 默认收起**（点 ◀ 展开） |
 | **2 · 平台配置** | 顶部 `runtime_modules`（含可裁剪 **per / tsync**）；子页：执行/FG · **EM 启动表** · PHM · 诊断 · **日志** · OTA · **事件收集** · **时间 / 门控** · **有界内存** |
 
+### 页 2 · TSN（`tsync.yaml`）
+
+入口：勾选 **tsync**，打开 **时间 / 门控**。动画：[docs/zh/tsn/index.html](../../docs/zh/tsn/index.html)（用浏览器打开，打开即播）。
+
+- 没改过这一页时，保存不会写出 `network`。
+- **门控表**（`gate_list`）：每行是 `interval_us` 和 `gate_states`，各段之和必须等于 `cycle_us`。少了会沿用最后一行的门，直到周期结束；多了，超出的段不执行。两种 Verify 都不通过（`platform_tsync_network`），左侧保持标红。
+- **可抢占**（`preemptable_mask`）和 **按队列的最大帧长**（`max_sdu`）停在默认就不写。这是意图，不下到网卡。
+- **流过滤与监管**（`stream_filters`、`flow_meters`）是交给相邻交换机入口的 802.1Qci 意图：按 PCP 匹配，限制帧长，再用 CIR/CBS 令牌桶。Giraffe 不执行。没有行就不写。
+- Access / Trunk（帧进、帧出时带不带标签）还不是这一页的字段。
+- 运行时仍然只读 `backend` 和 `pretend_synchronized`。CNC 和 AVTP 没有页面。
+
 用页签切页。Verify / Generate 后自动回页 1 右侧 Lineage。  
 **编辑菜单：** 撤销 / 重做（Ctrl+Z / Ctrl+Y）— 跳到变更所在页（含平台子页），底栏提示中英 i18n。
 

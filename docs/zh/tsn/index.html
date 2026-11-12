@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TSN 动画</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --faint: #8a8a8a;
+      --line: #d9d9d4;
+      --paper: #f6f6f3;
+      --card: #fff;
+      --shut: #ecece8;
+      --tail: #d5d5d0;
+      --accent: #1f4b99;
+      --on: #fff;
+      --bad: #b71c1c;
+      --bad-bg: #fdecea;
+      --ok: #1b5e20;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.55 "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 28px 20px 64px; }
+    h1 { font-size: 28px; line-height: 1.25; margin: 0 0 8px; }
+    h2 { font-size: 20px; margin: 28px 0 8px; }
+    p { margin: 0 0 10px; }
+    a { color: var(--accent); }
+    .lede { color: var(--muted); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, select {
+      font: inherit;
+      color: var(--ink);
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 6px 10px;
+    }
+    button.primary { background: var(--accent); color: var(--on); border-color: var(--accent); }
+    button.on { background: var(--accent); color: var(--on); border-color: var(--accent); }
+    button:disabled { opacity: 0.45; }
+    .bar { height: 6px; background: var(--shut); margin: 12px 0; }
+    .bar > i { display: block; height: 100%; background: var(--accent); }
+    .stage {
+      min-height: 250px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+    }
+    .stage > div { width: 100%; }
+    .cells { display: flex; gap: 4px; min-height: 74px; width: 100%; }
+    .cell { flex: 1 1 0; padding: 10px 8px; background: var(--shut); overflow: hidden; }
+    .cell.hot { background: var(--accent); color: var(--on); }
+    .cell b { display: block; font-size: 13px; white-space: nowrap; }
+    .cell span { display: block; font-size: 11px; margin-top: 6px; white-space: nowrap; }
+    .qrow { display: flex; gap: 8px; align-items: center; margin: 3px 0; }
+    .qrow > span { width: 88px; font-size: 13px; flex: none; }
+    .track { position: relative; flex: 1; height: 16px; display: flex; background: var(--shut); }
+    .track i { display: block; height: 100%; }
+    .track b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); }
+    .slices { display: flex; gap: 4px; min-height: 64px; }
+    .slices div { padding: 12px 8px; background: var(--shut); font-weight: 600; font-size: 13px; }
+    .slices .hot { background: var(--accent); color: var(--on); }
+    .note { color: var(--muted); font-size: 14px; margin-top: 8px; }
+    .callout { padding: 10px 12px; margin: 10px 0; }
+    .callout.ok { color: var(--ok); }
+    .callout.bad {
+      color: var(--bad);
+      background: var(--bad-bg);
+      border: 1px solid #e53935;
+      font-weight: 600;
+    }
+    table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 14px; }
+    th, td { border-bottom: 1px solid var(--line); text-align: left; padding: 8px 10px; vertical-align: top; }
+    th { font-weight: 600; }
+    .meter { flex: 1; height: 14px; background: var(--shut); }
+    .meter i { display: block; height: 100%; background: var(--accent); }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
+    .tiny { color: var(--faint); font-size: 13px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>TSN 动画</h1>
+  <p class="lede">用浏览器打开本文件就会播放。数字只留在这一页，不写进 tsync.yaml。配置入口在 <a href="../../../tools/gf-config/README_zh.md">gf-config 中文说明</a> 的「时间 / 门控」。</p>
+
+  <div class="row" id="controls"></div>
+  <div class="bar"><i id="progress"></i></div>
+  <h2 id="title"></h2>
+  <div class="stage"><div id="stage"></div></div>
+  <p id="line"></p>
+
+  <hr>
+  <h2>Access / Trunk</h2>
+  <p>交换机口决定帧进和帧出时带不带标签。Giraffe 是端点。自己插入 PCP 和 VID 时，对面那一口按 trunk 收发，优先级才能留给下一跳的门控。页 2 还没有这个字段。</p>
+  <div class="row" id="port-controls"></div>
+  <div id="port-view"></div>
+
+  <hr>
+  <h2>门控表</h2>
+  <p>这就是页 2「时间 / 门控」里的 AdminControlList。每一行是时长，加上 8 位 GateStates。没改页 2 时，tsync.yaml 里不会出现 network。</p>
+  <div id="gate-view"></div>
+  <p class="tiny">页 2 保存的是 Admin 表。把表写进网卡、再读回正在跑的 Oper 表，页面上还没有。运行时目前只读 backend 和 pretend_synchronized。</p>
+
+  <hr>
+  <h2>流过滤与监管</h2>
+  <p>按 PCP 匹配，先看最大帧长，再看令牌桶。示意固定为 PCP 5、最大帧长 1500、CIR 1000 kbit/s、CBS 2000 字节。页 2 没添加行时不写入 stream_filters 和 flow_meters。</p>
+  <div class="row" id="psfp-controls"></div>
+  <p id="psfp-line" class="note"></p>
+
+  <hr>
+  <h2>CNC 和 AVTP</h2>
+  <table>
+    <thead><tr><th>名字</th><th>它是什么</th><th>Giraffe 里怎么放</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>CNC</td>
+        <td>Central Network Controller，IEEE 802.1Qcc 里的集中网络控制器。它掌握拓扑和每条流的周期，算出每一台交换机端口的门控表并下发。</td>
+        <td>不做成页面。页 2 写下的 stream_filters 和 flow_meters 是交给交换机入口的意图，本机不执行。</td>
+      </tr>
+      <tr>
+        <td>CUC</td>
+        <td>Centralized User Configuration。发送端和接收端把流的周期、大小登记给它，再由它告诉 CNC。</td>
+        <td>不做成页面。</td>
+      </tr>
+      <tr>
+        <td>AVTP</td>
+        <td>Audio Video Transport Protocol，IEEE 1722。样本直接装在以太网帧里，EtherType 0x22F0，不经 IP。AVB 用它传声音和图像。</td>
+        <td>协议栈不实现。图像走共享内存，跨 ECU 的服务走 SOME/IP。历史动画里保留它，用来说明 TSN 的来路。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>页 2「时间 / 门控」现在有什么</h2>
+  <p>勾选 tsync 后打开这一页。没改过时，tsync.yaml 里不会出现 network。信号图仍只表示谁跟谁说话。</p>
+  <table>
+    <thead><tr><th>落在哪</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>已经在页面上</td><td>门控表、可抢占、按队列的最大帧长、流过滤、监管。周期或流过滤对不齐时左侧标红，Verify 不通过。</td></tr>
+      <tr><td>只写意图</td><td>可抢占、流过滤和监管不下到本机网卡。Giraffe 是端点，流过滤交给相邻交换机入口。</td></tr>
+      <tr><td>页面上还没有</td><td>access / trunk、测距 P2P、com.e2e、phc2sys 的启动顺序、把表写进网卡、读回 Oper 表。</td></tr>
+      <tr><td>不做</td><td>CNC、CUC、AVTP，以及逐流的时间门表。</td></tr>
+    </tbody>
+  </table>
+  <p class="note">现有 afc / adc 打开再保存，仍然没有 network。HIL 和区域端点要求 linuxptp，并且不能假装已同步。</p>
+</main>
+<script>
+const QNAME = ["尽力", "诊断", "大载荷", "保留", "保留", "控制", "发现", "gPTP"];
+const DEMO = [
+  { us: 80, mask: 1 << 7 },
+  { us: 200, mask: (1 << 6) | (1 << 5) },
+  { us: 40, mask: 0 },
+  { us: 480, mask: 1 << 2 },
+  { us: 200, mask: (1 << 1) | 1 }
+];
+const FILM = [
+  { id: "frame", label: "普通帧", start: 0, end: 7000, title: "普通以太网帧", line: "目的 MAC、源 MAC、类型、载荷、校验。SOME/IP 在载荷里，外面还有 UDP 和 IP。这帧上还没有优先级，交换机只能按 MAC 转发。头在 FCS 前是 14 字节。" },
+  { id: "qtag", label: "802.1Q", start: 7000, end: 15000, title: "插入 802.1Q 标签", line: "在源 MAC 和类型之间插入 4 字节。前 2 字节固定 0x8100。后 2 字节里，PCP 占 3 位，用来选 8 个队列之一；VID 占 12 位，是 VLAN。类型仍是 0x0800，IP 看不到这 4 字节。头在 FCS 前变成 18 字节。门控不再往帧上加字段。" },
+  { id: "port", label: "端口", start: 15000, end: 27000, title: "Access 与 Trunk：什么帧进，什么帧出", line: "Access 收普通帧，归进这口的 PVID，出去时把标签剥掉。Trunk 收发都带着 0x8100，VID 和 PCP 留在帧上；没标签的进出归 native VLAN。Giraffe 自己插标签时，交换机那一口按 trunk。页 2 还没有这一项。" },
+  { id: "history", label: "变迁", start: 27000, end: 35000, title: "从 VLAN 到 AVB 再到 TSN", line: "VLAN 先让一物理口分成多个广播域。AVB 加上全网时钟和带宽整形，音视频用 AVTP 直接装在以太网帧里。工作组改名 TSN 之后，同一套桥用来送控制数据。2016 年的门控让队列按同一时刻开合。" },
+  { id: "gates", label: "门控", start: 35000, end: 45000, title: "一张门控表沿周期播放", line: "每一行是一个发送队列。深色表示这段时间门开着，浅色表示关着，竖线是当前时刻。标准里你编写的这张表叫 AdminControlList。下面的编辑器就是页 2「时间 / 门控」里的那一张，编的是本机网卡。" },
+  { id: "cycle", label: "周期", start: 45000, end: 54000, title: "各段之和必须等于周期", line: "少了，表上没写的那段会沿用最后一行的门：最后一行开着，就一直开到周期结束。多了，超出周期的段不会执行。两种都过不了 Verify。" },
+  { id: "preempt", label: "抢占", start: 54000, end: 63000, title: "可抢占是队列上的一个勾", line: "这不是另一张时间表。有队列标成可抢占时，全关的保护带可以缩成残片，高优先级帧能打断长帧。页 2 里全不勾就不写入 preemptable_mask，也不会下到网卡。" },
+  { id: "psfp", label: "过滤", start: 63000, end: 73000, title: "流过滤与监管在交换机入口", line: "按 PCP 匹配，超过最大帧长就丢。监管是 CIR/CBS 令牌桶。这是交给相邻交换机入口的意图。Giraffe 是端点，本机不执行，也没有逐流的时间门。" },
+  { id: "path", label: "通路", start: 73000, end: 81000, title: "业务帧经过的硬件", line: "SOME/IP 从应用出来，经 UDP/IP，由套接字优先级选中流量类，网卡插入 PCP，帧进入对应队列，门开时才从 PHY 发出。gPTP 是另一类帧，类型 0x88F7，用来把这些门的时刻对齐。" },
+  { id: "p2p", label: "P2P / E2E", start: 81000, end: 90000, title: "逐跳测距，以及两个 E2E", line: "车载 gPTP 每一跳用 Pdelay 测量本段链路，这叫 P2P。PTP 里还有一种从钟直接向主钟量整段的测法，也叫 E2E。AUTOSAR 的 E2E 是载荷里的计数器和 CRC，用来发现丢失和错序。页 2 还没有这两个字段。" }
+];
+const LOOP = FILM[FILM.length - 1].end;
+const ERAS = [
+  ["1998", "VLAN", "帧上多出 VID，广播域可以切开"],
+  ["PCP", "8 个优先级", "队列有了编号，时刻还没对齐"],
+  ["2009", "AVB", "gPTP + 信用整形。音视频走 AVTP"],
+  ["2012", "改名 TSN", "同一套桥扩展到控制"],
+  ["2016", "门控 Qbv", "队列按全网同一时刻开合"]
+];
+const PORT_STEPS = [
+  ["access", "in", "plain", "Access 进 · 普通帧"],
+  ["access", "in", "priority", "Access 进 · 优先级标签"],
+  ["access", "out", "plain", "Access 出 · 标签已剥"],
+  ["trunk", "in", "tagged", "Trunk 进 · 标签帧"],
+  ["trunk", "in", "plain", "Trunk 进 · 无标签"],
+  ["trunk", "out", "tagged", "Trunk 出 · 标签还在"],
+  ["trunk", "out", "plain", "Trunk 出 · native"]
+];
+
+let ms = 0;
+let playing = true;
+const entries = DEMO.map((row) => ({ us: row.us, mask: row.mask }));
+let cycleUs = 1000;
+let preempt = 0;
+let portMode = "access";
+let portDir = "in";
+let portKind = "plain";
+let portEth = "0x0800";
+let psfpBytes = "300";
+let psfpBucket = "full";
+
+function esc(text) {
+  return String(text).replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
+}
+function openQueues(mask) {
+  const names = [];
+  for (let bit = 7; bit >= 0; bit -= 1) {
+    if (mask & (1 << bit)) names.push("Q" + bit + " " + QNAME[bit]);
+  }
+  return names.length ? names.join("、") : "全关，保护带";
+}
+function sceneAt(time) {
+  const t = ((time % LOOP) + LOOP) % LOOP;
+  return FILM.find((item) => t >= item.start && t < item.end) || FILM[0];
+}
+function cells(items) {
+  return '<div class="cells">' + items.map((cell) => (
+    '<div class="cell' + (cell.hot ? " hot" : "") + '"><b>' + esc(cell.label) + "</b><span>" + esc(cell.sub) + "</span></div>"
+  )).join("") + "</div>";
+}
+function wire(kind, ethertype) {
+  const items = [
+    { label: "目的 MAC", sub: "6 字节" },
+    { label: "源 MAC", sub: "6 字节" }
+  ];
+  if (kind === "tagged") {
+    items.push({ label: "0x8100", sub: "TPID", hot: true });
+    items.push({ label: "PCP · VID", sub: "TCI", hot: true });
+  } else if (kind === "priority") {
+    items.push({ label: "0x8100", sub: "TPID", hot: true });
+    items.push({ label: "PCP · VID 0", sub: "优先级标签", hot: true });
+  }
+  items.push({ label: "类型", sub: ethertype });
+  items.push({ label: "载荷", sub: ethertype === "0x88F7" ? "gPTP" : "SOME/IP" });
+  items.push({ label: "FCS", sub: "4 字节" });
+  const head = kind === "plain" ? "头在 FCS 前 14 字节" : "头在 FCS 前 18 字节";
+  return cells(items) + '<p class="tiny">' + head + "</p>";
+}
+function portCaption(mode, dir, kind) {
+  if (mode === "access" && dir === "in" && kind === "plain") return "普通帧进来。交换机归进 PVID，优先级用端口默认值。头在 FCS 前是 14 字节。";
+  if (mode === "access" && dir === "in" && kind === "priority") return "优先级标签进来。VID 为 0，改成 PVID，PCP 保留。队列仍按这 3 位选。";
+  if (mode === "access" && dir === "in" && kind === "tagged") return "带了别的 VID 的标签帧在 access 口丢掉。";
+  if (mode === "access" && dir === "out") return "出端口把标签剥掉。端点看到普通帧，看不到 VID，也看不到 PCP。";
+  if (mode === "trunk" && dir === "in" && kind === "plain") return "Trunk 上的普通帧归进 native VLAN。";
+  if (mode === "trunk" && dir === "in" && kind === "priority") return "VID 为 0 的优先级标签。PCP 保留，VLAN 用这一口的 native。";
+  if (mode === "trunk" && dir === "in" && kind === "tagged") return "标签帧进来。VID 决定 VLAN，PCP 决定队列。头在 FCS 前是 18 字节。";
+  if (mode === "trunk" && dir === "out" && kind === "plain") return "native VLAN 出去时去掉标签，线上是普通帧。";
+  if (mode === "trunk" && dir === "out" && kind === "tagged") return "标签还在。VID 和 PCP 都留在帧上，下一跳的门控看到的仍是这一队。";
+  return "优先级标签可以带 VID 0 离开 trunk。PCP 还在，对端按优先级标签处理。";
+}
+function gateChart(rows, cycle, cursor) {
+  const span = Math.max(cycle, rows.reduce((sum, row) => sum + row.us, 0), 1);
+  const pct = Math.min(100, (cursor / span) * 100);
+  const body = [7, 6, 5, 4, 3, 2, 1, 0].map((queue) => {
+    const segs = rows.map((row) => {
+      const open = (row.mask & (1 << queue)) !== 0;
+      return '<i style="width:' + ((row.us / span) * 100) + "%;background:" + (open ? "var(--accent)" : "var(--shut)") + '"></i>';
+    }).join("");
+    return '<div class="qrow"><span>Q' + queue + " " + QNAME[queue] + '</span><div class="track">' + segs + '<b style="left:' + pct + '%"></b></div></div>';
+  }).join("");
+  return '<p class="tiny">0 µs …… 播放头 ' + Math.round(Math.min(cursor, span)) + " µs · 深色 = 门开，浅色 = 门关</p>" + body;
+}
+function stageHtml(id, local) {
+  if (id === "frame" || id === "qtag") {
+    const insert = id === "qtag" ? Math.min(1, local / 0.45) : 0;
+    const items = [
+      { label: "目的 MAC", sub: "6 字节" },
+      { label: "源 MAC", sub: "6 字节" }
+    ];
+    if (insert > 0.04) {
+      items.push({ label: "802.1Q", sub: insert > 0.7 ? "PCP · VID" : "4 字节", hot: true });
+    }
+    items.push({ label: "类型", sub: "0x0800" }, { label: "SOME/IP", sub: "在 UDP/IP 里" }, { label: "FCS", sub: "4 字节" });
+    const hint = insert > 0.7
+      ? "TPID = 0x8100。TCI 共 16 位：PCP 3 位 + DEI 1 位 + VID 12 位。gPTP 若走这条口，类型位置是 0x88F7。"
+      : "标签会从源 MAC 和类型之间长出来。";
+    return cells(items) + '<p class="note">' + hint + "</p>";
+  }
+  if (id === "port") {
+    const step = PORT_STEPS[Math.min(PORT_STEPS.length - 1, Math.floor(local * PORT_STEPS.length))];
+    return "<p><b>" + esc(step[3]) + "</b></p>" + wire(step[2], "0x0800") + '<p class="note">' + esc(portCaption(step[0], step[1], step[2])) + "</p>";
+  }
+  if (id === "history") {
+    const active = Math.min(ERAS.length - 1, Math.floor(local * ERAS.length));
+    const cols = ERAS.map((era, index) => (
+      '<div style="flex:1"><div class="tiny">' + esc(era[0]) + "</div><div" + (index === active ? ' style="font-weight:600"' : "") + ">" + esc(era[1]) + '</div><div class="note">' + esc(era[2]) + "</div></div>"
+    )).join("");
+    return '<div class="bar"><i style="width:' + (((active + 1) / ERAS.length) * 100) + '%"></i></div><div class="row" style="align-items:flex-start">' + cols + "</div>" +
+      '<p class="note">AVTP 是 IEEE 1722：音频和图像样本直接放进以太网载荷，类型 0x22F0，不经 IP。Giraffe 的图像走共享内存，跨 ECU 服务走 SOME/IP，协议栈不实现 AVTP。</p>';
+  }
+  if (id === "gates") return gateChart(DEMO, 1000, local * 1000);
+  if (id === "cycle") {
+    const short = local < 0.5;
+    const cursor = short ? (local / 0.5) * 1000 : ((local - 0.5) / 0.5) * 1200;
+    const title = short
+      ? "还差 920 µs。表在 80 µs 结束，后面沿用最后一行：Q7 一直开着。"
+      : "多出 200 µs。1000 µs 之后的那段不执行。";
+    const rows = [7, 6, 5, 4, 3, 2, 1, 0].map((queue) => {
+      let segs;
+      if (short) {
+        const open = queue === 7 ? "var(--accent)" : "var(--shut)";
+        const held = queue === 7 ? "var(--accent)" : "var(--tail)";
+        segs = '<i style="width:8%;background:' + open + '"></i><i style="width:92%;background:' + held + ';outline:1px solid #666"></i>';
+      } else {
+        const parts = DEMO.map((row) => {
+          const open = (row.mask & (1 << queue)) !== 0;
+          return '<i style="width:' + ((row.us / 1200) * 100) + "%;background:" + (open ? "var(--accent)" : "var(--shut)") + '"></i>';
+        }).join("");
+        segs = parts + '<i style="width:' + ((200 / 1200) * 100) + '%;background:var(--tail)"></i>';
+      }
+      const pct = Math.min(100, (cursor / (short ? 1000 : 1200)) * 100);
+      return '<div class="qrow"><span>Q' + queue + " " + QNAME[queue] + '</span><div class="track">' + segs + '<b style="left:' + pct + '%"></b></div></div>';
+    }).join("");
+    const foot = short
+      ? "描边的后段不在表上。Q7 与表内最后一行同色，表示门保持开。其余队列保持关。"
+      : "浅色尾巴是超出周期的段。播放头越过 1000 µs 之后，这段不再发出。";
+    return "<p><b>" + title + "</b></p>" + rows + '<p class="note">' + foot + "</p>";
+  }
+  if (id === "preempt") {
+    const on = local >= 0.5;
+    const slices = on
+      ? [["Q0 残片", false, 2], ["Q7 gPTP", true, 1.3], ["Q0 剩余", false, 4]]
+      : [["Q0 整帧", false, 6], ["保护带 全关", false, 1.6], ["Q7 还在等", true, 1.6]];
+    return "<p><b>" + (on ? "Q0 可抢占：保护带缩成残片" : "没有可抢占队列：保护带要把整帧收完") + "</b></p>" +
+      '<div class="slices">' + slices.map((slice) => (
+        '<div class="' + (slice[1] ? "hot" : "") + '" style="flex:' + slice[2] + '">' + esc(slice[0]) + "</div>"
+      )).join("") + "</div>" +
+      '<p class="note">勾在队列上，不另排一张时间表。页 2 的默认是全不勾，preemptable_mask 不出现。</p>';
+  }
+  if (id === "psfp") {
+    const phase = Math.min(2, Math.floor(local * 3));
+    const beats = [
+      ["PCP 5 · 300 字节 · 桶里有令牌", "通过", "最大帧长 1500。CIR/CBS 还有令牌，这一帧算绿色，进入对应队列。", "70%"],
+      ["PCP 5 · 2000 字节", "过滤丢掉", "超过最大帧长。交换机入口在监管之前丢掉。", "70%"],
+      ["PCP 5 · 300 字节 · 桶是空的", "监管丢掉", "黄色丢弃开着。令牌不够时这帧进不了队列。", "0%"]
+    ];
+    const beat = beats[phase];
+    return "<p><b>" + esc(beat[0]) + "</b> · " + esc(beat[1]) + '</p><div class="row"><span>令牌</span><div class="meter"><i style="width:' + beat[3] + '"></i></div></div><p class="note">' + esc(beat[2]) + " 这是交换机入口的意图。Giraffe 本机不执行，也没有逐流门控表。</p>";
+  }
+  if (id === "path") {
+    const stops = ["应用", "SOME/IP", "UDP/IP", "802.1Q", "队列", "门", "PHY", "交换机"];
+    const index = Math.min(stops.length - 1, Math.floor(local * stops.length));
+    return '<div class="bar"><i style="width:' + (local * 100) + '%"></i></div><div class="row">' + stops.map((name, stop) => (
+      "<span" + (stop === index ? ' style="font-weight:600"' : ' class="tiny"') + ">" + esc(name) + "</span>"
+    )).join("") + "</div>" + '<p class="note">当前站：' + esc(stops[index]) + "。机内感知和规划仍走 iceoryx，不进入这条网卡通路。</p>";
+  }
+  const nodes = ["从钟", "桥 1", "桥 2", "主钟"];
+  const hop = Math.min(2, Math.floor(local * 3));
+  const hops = nodes.map((name, index) => {
+    const hot = index === hop || index === hop + 1;
+    return '<span class="' + (hot ? "cell hot" : "cell") + '" style="flex:none;padding:8px 10px"><b>' + esc(name) + "</b></span>" +
+      (index < nodes.length - 1 ? '<i style="flex:1;height:4px;background:' + (index === hop ? "var(--accent)" : "var(--shut)") + '"></i>' : "");
+  }).join("");
+  return "<p><b>P2P：亮着的那一段正在测本跳延迟</b></p>" + '<div class="row" style="align-items:center">' + hops + "</div>" +
+    '<p style="margin-top:14px"><b>PTP 的 E2E：从钟到主钟一次量完整段</b></p><div class="bar"><i style="width:100%;background:var(--faint)"></i></div>' +
+    '<p class="note">车载该用 P2P。载荷保护是另一件事，内容是计数器、CRC 和 DataID。页 2 还没有测距字段，也没有 com.e2e。</p>';
+}
+
+let chromeKey = "";
+function renderChrome(scene) {
+  const key = (playing ? "1" : "0") + ":" + scene.id;
+  if (key === chromeKey) return;
+  chromeKey = key;
+  document.getElementById("controls").innerHTML =
+    '<button class="primary" id="play" type="button">' + (playing ? "暂停" : "播放") + "</button>" +
+    '<button type="button" id="restart">重头</button>' +
+    FILM.map((item) => (
+      '<button type="button" class="' + (item.id === scene.id ? "on" : "") + '" data-start="' + item.start + '">' + esc(item.label) + "</button>"
+    )).join("");
+  document.getElementById("play").onclick = () => { playing = !playing; renderFilm(); };
+  document.getElementById("restart").onclick = () => { ms = 0; playing = true; renderFilm(); };
+  document.querySelectorAll("#controls [data-start]").forEach((button) => {
+    button.onclick = () => { ms = Number(button.getAttribute("data-start")); renderFilm(); };
+  });
+}
+function renderFilm() {
+  const scene = sceneAt(ms);
+  const local = Math.min(1, Math.max(0, (ms - scene.start) / (scene.end - scene.start)));
+  document.getElementById("title").textContent = scene.title;
+  document.getElementById("line").textContent = scene.line;
+  document.getElementById("stage").innerHTML = stageHtml(scene.id, local);
+  document.getElementById("progress").style.width = ((ms / LOOP) * 100) + "%";
+  renderChrome(scene);
+}
+
+function renderPort() {
+  const select = (id, value, options) => (
+    '<select id="' + id + '">' + options.map((opt) => (
+      '<option value="' + opt[0] + '"' + (opt[0] === value ? " selected" : "") + ">" + esc(opt[1]) + "</option>"
+    )).join("") + "</select>"
+  );
+  document.getElementById("port-controls").innerHTML =
+    select("port-mode", portMode, [["access", "Access"], ["trunk", "Trunk"]]) +
+    select("port-dir", portDir, [["in", "进"], ["out", "出"]]) +
+    select("port-kind", portKind, [["plain", "普通帧"], ["priority", "优先级标签 VID 0"], ["tagged", "标签帧"]]) +
+    select("port-eth", portEth, [["0x0800", "SOME/IP 0x0800"], ["0x88F7", "gPTP 0x88F7"]]);
+  document.getElementById("port-view").innerHTML = wire(portKind, portEth) + "<p>" + esc(portCaption(portMode, portDir, portKind)) + "</p>";
+  ["port-mode", "port-dir", "port-kind", "port-eth"].forEach((id) => {
+    document.getElementById(id).onchange = (event) => {
+      const value = event.target.value;
+      if (id === "port-mode") portMode = value;
+      if (id === "port-dir") portDir = value;
+      if (id === "port-kind") portKind = value;
+      if (id === "port-eth") portEth = value;
+      renderPort();
+    };
+  });
+}
+
+function renderGate() {
+  const sum = entries.reduce((total, row) => total + row.us, 0);
+  let callout;
+  if (!entries.length) {
+    callout = '<p class="note">门控表是空的。</p>';
+  } else if (sum === cycleUs) {
+    callout = '<p class="callout ok">各段之和 ' + sum + " µs，等于周期。全关的那一段是写在表上的保护带。</p>";
+  } else if (cycleUs > sum) {
+    callout = '<p class="callout bad">还差 ' + (cycleUs - sum) + " µs。表上没写的这段会沿用最后一行的门；最后一行开着就会一直开到周期结束。Verify 不会通过。</p>";
+  } else {
+    callout = '<p class="callout bad">多出 ' + (sum - cycleUs) + " µs。超出周期的段不会执行。Verify 不会通过。</p>";
+  }
+  const preemptLine = preempt
+    ? "已标可抢占：" + openQueues(preempt) + "。全关的保护带可以只留残片。页 2 里这是 preemptable_mask，全不勾就不写入，也不会下到网卡。"
+    : "可抢占默认全不勾。勾上之后，全关的保护带可以缩成残片。这不是另一张时间表。";
+  const rows = entries.map((row, index) => {
+    const bits = [7, 6, 5, 4, 3, 2, 1, 0].map((bit) => (
+      '<button type="button" data-bit="' + index + ":" + bit + '" class="' + ((row.mask & (1 << bit)) ? "on" : "") + '">Q' + bit + "</button>"
+    )).join("");
+    return '<div class="row"><b>' + index + "</b><span>" + row.us + ' µs</span><button type="button" data-us="' + index + ':-20">−20</button><button type="button" data-us="' + index + ':20">+20</button>' + bits + '<button type="button" data-del="' + index + '"' + (entries.length < 2 ? " disabled" : "") + ">删除</button></div>";
+  }).join("");
+  const bits = [7, 6, 5, 4, 3, 2, 1, 0].map((bit) => (
+    '<button type="button" data-pre="' + bit + '" class="' + ((preempt & (1 << bit)) ? "on" : "") + '">Q' + bit + "</button>"
+  )).join("");
+  const table = entries.map((row, index) => (
+    "<tr><td>" + index + "</td><td>" + row.us + " µs</td><td>" + esc(openQueues(row.mask)) + "</td><td>0x" + (row.mask & 255).toString(16).padStart(2, "0").toUpperCase() + "</td></tr>"
+  )).join("");
+  document.getElementById("gate-view").innerHTML =
+    '<div class="row"><span>周期</span><select id="cycle">' +
+    [250, 500, 1000].map((value) => '<option value="' + value + '"' + (value === cycleUs ? " selected" : "") + ">" + value + " µs</option>").join("") +
+    "</select><span>各段之和 " + sum + ' µs</span><button type="button" id="add-row">加一段</button><button type="button" id="reset-demo">恢复示意</button></div>' +
+    callout +
+    '<div class="row"><span>可抢占</span>' + bits + "</div><p class=\"note\">" + esc(preemptLine) + "</p>" +
+    gateChart(entries, cycleUs, 0) + rows +
+    "<table><thead><tr><th>序号</th><th>TimeInterval</th><th>开门队列</th><th>GateStates</th></tr></thead><tbody>" + table + "</tbody></table>";
+  document.getElementById("cycle").onchange = (event) => { cycleUs = Number(event.target.value); renderGate(); };
+  document.getElementById("add-row").onclick = () => { entries.push({ us: 40, mask: 0 }); renderGate(); };
+  document.getElementById("reset-demo").onclick = () => {
+    entries.splice(0, entries.length, ...DEMO.map((row) => ({ us: row.us, mask: row.mask })));
+    cycleUs = 1000;
+    preempt = 0;
+    renderGate();
+  };
+  document.querySelectorAll("[data-us]").forEach((button) => {
+    button.onclick = () => {
+      const [index, delta] = button.getAttribute("data-us").split(":").map(Number);
+      entries[index].us = Math.max(20, entries[index].us + delta);
+      renderGate();
+    };
+  });
+  document.querySelectorAll("[data-bit]").forEach((button) => {
+    button.onclick = () => {
+      const [index, bit] = button.getAttribute("data-bit").split(":").map(Number);
+      entries[index].mask ^= 1 << bit;
+      renderGate();
+    };
+  });
+  document.querySelectorAll("[data-del]").forEach((button) => {
+    button.onclick = () => {
+      entries.splice(Number(button.getAttribute("data-del")), 1);
+      renderGate();
+    };
+  });
+  document.querySelectorAll("[data-pre]").forEach((button) => {
+    button.onclick = () => {
+      preempt ^= 1 << Number(button.getAttribute("data-pre"));
+      renderGate();
+    };
+  });
+}
+
+function renderPsfp() {
+  const size = Number(psfpBytes);
+  const droppedByFilter = size > 1500;
+  const droppedByMeter = !droppedByFilter && psfpBucket === "empty";
+  const result = droppedByFilter ? "过滤丢掉" : droppedByMeter ? "监管丢掉" : "通过";
+  const detail = droppedByFilter
+    ? "2000 字节大于 1500，入口在监管之前丢掉。"
+    : droppedByMeter
+      ? "帧长够，令牌不够。黄色丢弃开着，这帧进不了队列。"
+      : "帧长在限制内，桶里有令牌，帧算绿色。";
+  document.getElementById("psfp-controls").innerHTML =
+    '<select id="psfp-bytes">' +
+    [["300", "帧长 300 字节"], ["1500", "帧长 1500 字节"], ["2000", "帧长 2000 字节"]].map((opt) => (
+      '<option value="' + opt[0] + '"' + (opt[0] === psfpBytes ? " selected" : "") + ">" + opt[1] + "</option>"
+    )).join("") +
+    '</select><select id="psfp-bucket">' +
+    [["full", "桶里有令牌"], ["empty", "桶是空的"]].map((opt) => (
+      '<option value="' + opt[0] + '"' + (opt[0] === psfpBucket ? " selected" : "") + ">" + opt[1] + "</option>"
+    )).join("") +
+    "</select><b>" + result + "</b>";
+  document.getElementById("psfp-line").textContent = detail + "数字只在这篇动画里，不写进 tsync.yaml。";
+  document.getElementById("psfp-bytes").onchange = (event) => { psfpBytes = event.target.value; renderPsfp(); };
+  document.getElementById("psfp-bucket").onchange = (event) => { psfpBucket = event.target.value; renderPsfp(); };
+}
+
+renderFilm();
+renderPort();
+renderGate();
+renderPsfp();
+setInterval(() => {
+  if (!playing) return;
+  ms = (ms + 40) % LOOP;
+  renderFilm();
+}, 40);
+</script>
+</body>
+</html>
