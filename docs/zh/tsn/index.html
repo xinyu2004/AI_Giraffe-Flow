@@ -3,23 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TSN 动画</title>
+  <title>TSN</title>
   <style>
     :root {
       color-scheme: light;
-      --ink: #1a1a1a;
+      --ink: #1b1b1b;
       --muted: #5c5c5c;
-      --faint: #8a8a8a;
-      --line: #d9d9d4;
-      --paper: #f6f6f3;
+      --line: #e4e0d8;
+      --paper: #f4f2ec;
       --card: #fff;
-      --shut: #ecece8;
-      --tail: #d5d5d0;
-      --accent: #1f4b99;
+      --shut: #e7e4de;
+      --l7: #5c4d8a;
+      --l6: #8d6e97;
+      --l5: #a68462;
+      --l4: #1d6f82;
+      --l3: #c56a12;
+      --l2: #1f4b99;
+      --l1: #243038;
+      --vlan: #1e7a4a;
+      --gptp: #0e6b5c;
       --on: #fff;
-      --bad: #b71c1c;
-      --bad-bg: #fdecea;
-      --ok: #1b5e20;
     }
     * { box-sizing: border-box; }
     body {
@@ -28,131 +31,731 @@
       color: var(--ink);
       font: 16px/1.55 "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
     }
-    main { max-width: 980px; margin: 0 auto; padding: 28px 20px 64px; }
-    h1 { font-size: 28px; line-height: 1.25; margin: 0 0 8px; }
-    h2 { font-size: 20px; margin: 28px 0 8px; }
-    p { margin: 0 0 10px; }
-    a { color: var(--accent); }
-    .lede { color: var(--muted); }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    main { max-width: 1080px; margin: 0 auto; padding: 32px 24px 72px; }
+    h1 { font-size: 34px; margin: 0 0 6px; letter-spacing: -0.03em; }
+    h2 { font-size: 22px; margin: 36px 0 12px; }
+    h3 { font-size: 18px; margin: 0 0 10px; }
+    a { color: var(--l2); }
+    p { margin: 0; }
+    .lede { color: var(--muted); margin-bottom: 22px; }
     button, select {
       font: inherit;
-      color: var(--ink);
       background: var(--card);
+      color: var(--ink);
       border: 1px solid var(--line);
-      padding: 6px 10px;
+      padding: 7px 12px;
+      cursor: pointer;
     }
-    button.primary { background: var(--accent); color: var(--on); border-color: var(--accent); }
-    button.on { background: var(--accent); color: var(--on); border-color: var(--accent); }
-    button:disabled { opacity: 0.45; }
-    .bar { height: 6px; background: var(--shut); margin: 12px 0; }
-    .bar > i { display: block; height: 100%; background: var(--accent); }
-    .stage {
-      min-height: 250px;
+    button.on { background: var(--l2); color: var(--on); border-color: var(--l2); }
+    .line { display: flex; gap: 0; margin: 8px 0 22px; }
+    .line button {
+      flex: 1;
+      border-radius: 0;
+      border-left-width: 0;
+      text-align: left;
+      padding: 12px 14px;
+      background: var(--card);
+    }
+    .line button:first-child { border-left-width: 1px; }
+    .line button b { display: block; font-size: 18px; }
+    .line button span { color: var(--muted); font-size: 13px; }
+    .line button.on {
+      background: var(--l2);
+      color: #fff;
+      border-color: var(--l2);
+    }
+    .line button.on b,
+    .line button.on span { color: #fff; }
+    .station { display: none; }
+    .station.show { display: block; }
+    .osi {
+      display: grid;
+      grid-template-columns: minmax(240px, 320px) 1fr;
+      column-gap: 18px;
+      align-items: start;
+      margin-top: 12px;
+    }
+    .stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .framecol {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      min-width: 0;
+    }
+    .lead-full { margin: 0 0 12px; }
+    .layer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      height: 52px;
+      min-height: 0;
+      padding: 6px 12px;
+      color: var(--on);
+      border: 0;
+      text-align: left;
+      overflow: hidden;
+      box-sizing: border-box;
+      flex: none;
+    }
+    .layer small { display: block; opacity: 0.85; font-size: 12px; white-space: nowrap; }
+    .layer .mark {
+      font-size: 12px;
+      border: 1px solid var(--on);
+      padding: 1px 6px;
+      white-space: nowrap;
+    }
+    .layer.pick { outline: 3px solid #111; outline-offset: 2px; }
+    .packet { width: 100%; box-sizing: border-box; }
+    .packet > .wrap,
+    .packet .wrap {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 4px;
+      box-sizing: border-box;
+    }
+    .packet > .wrap { height: 100%; }
+    .packet .inner {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 0;
+    }
+    .packet .inner > .wrap,
+    .packet .inner > .payload { flex: 0 0 auto; }
+    .packet > .frame-l2 > .ethhead {
+      flex: 1 1 46px;
+      min-height: 46px;
+      margin: 0;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.16);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .packet .ethhead b,
+    .packet .ethhead span { display: block; }
+    .packet .ethhead span { font-size: 12px; line-height: 1.35; opacity: 0.92; }
+    .packet .dsfield { flex: 0 0 auto; }
+    .packet .wrap { padding: 4px 8px; }
+    .packet .wrap .label b { font-size: 14px; line-height: 1.2; }
+    .packet .payload {
+      flex: 0 0 auto;
+      min-height: 0;
+      padding: 4px 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .packet > .frame-l2 > .tagband {
+      flex: 1 1 46px;
+      min-height: 46px;
+      height: auto;
+      overflow: visible;
+      margin-top: 0;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .packet > .frame-l2 > .tagband.plain {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner > .wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner > .wrap > .inner {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner > .wrap > .inner > .wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner > .wrap > .inner > .wrap > .inner,
+    .packet > .frame-l2:has(> .tagband.plain) .payload {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .packet > .frame-l2 > .fcs {
+      height: auto;
+      flex: 0 0 auto;
+      overflow: visible;
+      margin-top: 0;
+      padding: 6px 8px;
+    }
+    .packet .tagband b,
+    .packet .fcs b,
+    .packet .payload b { line-height: 1.2; }
+    .packet .tagband span,
+    .packet .fcs span,
+    .packet .payload span { white-space: normal; line-height: 1.25; }
+    .packet .dsfield { margin-top: 2px; gap: 12px; }
+    .packet .dsfield .grp b { font-size: 12px; margin-bottom: 2px; }
+    .packet .dsfield .sum { font-size: 11px; margin-top: 1px; line-height: 1.2; }
+    .packet .bits { gap: 3px; }
+    .packet .bits .bit { width: 20px; min-height: 22px; gap: 0; }
+    .packet .bits .bit b { font-size: 12px; line-height: 1; }
+    .packet .bits .bit em { font-size: 9px; line-height: 1; }
+    .packet > .frame-l3 > .label b { font-size: 16px; }
+    .packet > .frame-l3 > .label span { font-size: 14px; }
+    .packet > .frame-l3 .dsfield .grp b { font-size: 14px; margin-bottom: 4px; }
+    .packet > .frame-l3 .dsfield .sum { font-size: 13px; margin-top: 4px; }
+    .packet > .frame-l3 .bits { gap: 4px; }
+    .packet > .frame-l3 .bits .bit { width: 28px; min-height: 34px; }
+    .packet > .frame-l3 .bits .bit b { font-size: 16px; }
+    .packet > .frame-l3 .bits .bit em { font-size: 11px; }
+    .packet > .frame-l3 > .inner {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l3 .dsfield {
+      flex: 1 1 auto;
+      align-items: center;
+    }
+    .packet > .frame-l3 > .inner > .wrap {
+      flex: 0 0 calc((52px * 5 + 6px * 4) * 2 / 5);
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l3 .inner > .wrap > .label { flex: 0 0 auto; }
+    .packet > .frame-l3 .inner > .wrap > .inner {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l3 .payload { flex: 1 1 auto; justify-content: center; }
+    .wrap { color: var(--on); padding: 8px 10px; }
+    .wrap .label { display: flex; justify-content: flex-start; gap: 12px; align-items: baseline; }
+    .wrap .label b { font-size: 15px; }
+    .wrap .label span { font-size: 12px; opacity: 0.92; }
+    .payload span, .fcs span { display: block; font-size: 12px; opacity: 0.92; }
+    .wrap .inner { margin-top: 8px; }
+    .packet .wrap .inner { margin-top: 0; }
+    .payload { color: var(--on); padding: 14px 12px; text-align: center; }
+    .payload b, .fcs b { display: block; }
+    .fcs { margin-top: 8px; height: 58px; box-sizing: border-box; background: rgba(255,255,255,0.16); padding: 8px 10px; }
+    .tagband { margin-top: 8px; height: 58px; box-sizing: border-box; background: var(--vlan); color: var(--on); padding: 8px 10px; overflow: hidden; }
+    .tagband.plain { background: rgba(255,255,255,0.14); }
+    input[type="number"] { font: inherit; width: 5.5em; padding: 6px 8px; border: 1px solid var(--line); }
+    .node.host { cursor: pointer; }
+    .node.pick { outline: 2px solid #111; outline-offset: 2px; }
+    .tagband b, .tagband span { display: block; }
+    .tagband span { font-size: 12px; opacity: 0.92; }
+    .dsfield { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; margin-top: 10px; }
+    .dsfield .grp b { display: block; font-size: 13px; margin-bottom: 6px; }
+    .dsfield .sum { display: block; margin-top: 6px; font-size: 12px; }
+    .dsfield .ecn { padding-left: 16px; border-left: 2px solid #d7d2c8; }
+    .dsfield.ink { color: #fff; }
+    .dsfield.ink .ecn { border-left-color: rgba(255,255,255,0.55); }
+    .bits { display: flex; gap: 4px; }
+    .bits .bit {
+      width: 36px;
+      min-height: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 0;
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+      background: #f3e6d4;
+      color: var(--l3);
+    }
+    .bits .bit b { font-size: 14px; }
+    .bits .bit em { font-size: 10px; font-style: normal; opacity: 0.8; }
+    .bits .bit.fill { background: var(--l3); color: #fff; }
+    .ecn .bits .bit { background: #d5e4ea; color: var(--l4); }
+    .ecn .bits .bit.fill { background: var(--l4); color: #fff; }
+    .dsfield.ink .bits .bit { background: rgba(255,255,255,0.28); color: #fff; }
+    .dsfield.ink .bits .bit.fill { background: #fff; color: var(--l3); }
+    .dsfield.ink .ecn .bits .bit { background: rgba(0,0,0,0.28); color: #fff; }
+    .dsfield.ink .ecn .bits .bit.fill { background: #fff; color: var(--l4); }
+    .node label { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; }
+    .node .sw-vlans { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .node.vother { box-shadow: inset 0 4px 0 var(--vlan); }
+    .node.vother.hot { background: var(--vlan); }
+    #net-hops { margin-top: 12px; }
+    .node.sw .portline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; font-size: 12px; }
+    .node.sw select { font: inherit; padding: 2px 4px; }
+    .portline .allows { display: flex; flex-wrap: wrap; gap: 8px; }
+    .node button { margin-top: 6px; padding: 4px 8px; }
+    .cap { color: var(--muted); margin-top: 12px; max-width: 70ch; }
+    figure {
+      margin: 14px 0 0;
       background: var(--card);
       border: 1px solid var(--line);
       padding: 16px;
-      display: flex;
-      align-items: center;
     }
-    .stage > div { width: 100%; }
-    .cells { display: flex; gap: 4px; min-height: 74px; width: 100%; }
-    .cell { flex: 1 1 0; padding: 10px 8px; background: var(--shut); overflow: hidden; }
-    .cell.hot { background: var(--accent); color: var(--on); }
-    .cell b { display: block; font-size: 13px; white-space: nowrap; }
-    .cell span { display: block; font-size: 11px; margin-top: 6px; white-space: nowrap; }
+    figcaption { color: var(--muted); margin-top: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .cells { display: flex; flex-wrap: wrap; gap: 4px; }
+    .cell { flex: 1 1 120px; min-width: 120px; padding: 10px 8px; color: var(--on); }
+    .cell b, .cell span { display: block; white-space: normal; overflow: visible; }
+    .cell span { font-size: 12px; margin-top: 6px; opacity: 0.92; }
+    .block { margin-top: 28px; }
+    .rack { margin-bottom: 14px; }
+    .band, .jacks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+    .wires { height: 64px; }
+    .wire { position: relative; display: flex; justify-content: center; height: 100%; }
+    .wire i { width: 3px; background: var(--vc, transparent); }
+    .wire.live i { width: 7px; }
+    .token, .badge {
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.4;
+      white-space: nowrap;
+      background: #111;
+      color: #fff;
+      padding: 0 6px;
+    }
+    .token {
+      position: absolute;
+      left: 50%;
+      width: 56px;
+      margin-left: -28px;
+      text-align: center;
+      top: 0;
+      z-index: 2;
+      transition: top .6s ease;
+    }
+    .token.drop, .badge.drop { background: #8a2a2a; }
+    #wires-top .token.host { top: 0; }
+    #wires-top .token.sw { top: calc(100% - 18px); }
+    #wires-bot .token.sw { top: 0; }
+    #wires-bot .token.host { top: calc(100% - 18px); }
+    .badge { display: block; text-align: center; }
+    .chassis {
+      background: #d5dee8;
+      color: var(--ink);
+      border: 3px solid #243038;
+      border-radius: 14px;
+      box-shadow: 0 8px 0 rgba(36, 48, 56, 0.12);
+    }
+    .swtitle { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 14px 0; }
+    .swtitle b { font-size: 18px; letter-spacing: 0.12em; }
+    .sw-note { margin: 6px 14px 8px; min-height: 2.8em; color: var(--muted); font-size: 13px; }
+    .vchips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .vchip { color: #fff; font-size: 12px; font-weight: 700; padding: 1px 7px; }
+    .jack { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 0 10px; }
+    .jacks.bot .jack { flex-direction: column-reverse; padding: 10px 0 0; }
+    .plug {
+      width: 54px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      background: var(--vc, var(--shut));
+      color: #fff;
+      font-weight: 700;
+      box-shadow: inset 0 -10px 0 rgba(0, 0, 0, 0.22);
+    }
+    .jack .pcfg { width: min(100%, 132px); display: flex; flex-direction: column; gap: 4px; }
+    .jack select { font: inherit; font-size: 12px; padding: 2px 4px; width: 100%; }
+    .jack select.port-pvid { border-left: 4px solid var(--vc); }
+    .node.toned input[type="number"] { border-left: 4px solid var(--vc); }
+    .jack .allows { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; font-size: 12px; font-weight: 700; }
+    .jack.on .plug { outline: 2px solid var(--ink); outline-offset: 2px; }
+    .jack.drop .plug { outline: 2px solid #e15b4c; outline-offset: 2px; }
+    .node {
+      width: auto;
+      padding: 10px;
+      background: var(--shut);
+      color: var(--ink);
+    }
+    .node b { display: block; }
+    .node small { color: var(--muted); }
+    .node.toned { box-shadow: inset 0 5px 0 var(--vc); }
+    .node.hot { color: #fff; background: var(--vc); }
+    .node.hot small, .node.hot label { color: #fff; }
+    .node.hot input, .node.hot button, .jack.on select { color: var(--ink); background: #fff; }
+    .rack .node input[type="number"] { width: 4.2em; padding: 4px 6px; }
     .qrow { display: flex; gap: 8px; align-items: center; margin: 3px 0; }
-    .qrow > span { width: 88px; font-size: 13px; flex: none; }
-    .track { position: relative; flex: 1; height: 16px; display: flex; background: var(--shut); }
+    .qrow > span { width: 108px; flex: none; font-size: 13px; }
+    .track { flex: 1; height: 18px; display: flex; background: var(--shut); }
     .track i { display: block; height: 100%; }
-    .track b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); }
-    .slices { display: flex; gap: 4px; min-height: 64px; }
-    .slices div { padding: 12px 8px; background: var(--shut); font-weight: 600; font-size: 13px; }
-    .slices .hot { background: var(--accent); color: var(--on); }
-    .note { color: var(--muted); font-size: 14px; margin-top: 8px; }
-    .callout { padding: 10px 12px; margin: 10px 0; }
-    .callout.ok { color: var(--ok); }
-    .callout.bad {
-      color: var(--bad);
-      background: var(--bad-bg);
-      border: 1px solid #e53935;
-      font-weight: 600;
+    .slices { display: flex; gap: 6px; min-height: 72px; }
+    .slices div { color: var(--on); padding: 12px; font-weight: 650; }
+    .meter { flex: 1; height: 16px; background: var(--shut); }
+    .meter i { display: block; height: 100%; background: var(--l3); }
+    .qscale { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; }
+    .qscale > span { width: 108px; flex: none; }
+    .qscale .track { height: 18px; background: transparent; overflow: visible; }
+    .qscale i { position: relative; }
+    .qscale em {
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-style: normal;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      color: var(--ink);
     }
-    table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 14px; }
-    th, td { border-bottom: 1px solid var(--line); text-align: left; padding: 8px 10px; vertical-align: top; }
-    th { font-weight: 600; }
-    .meter { flex: 1; height: 14px; background: var(--shut); }
-    .meter i { display: block; height: 100%; background: var(--accent); }
-    hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
-    .tiny { color: var(--faint); font-size: 13px; }
+    .walk { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .walk li { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 14px; align-items: center; margin: 0; padding: 0; }
+    .walk li .step { display: flex; gap: 10px; align-items: center; padding: 8px 12px; min-height: 40px; }
+    .walk li b { width: 1.2em; flex: none; font-variant-numeric: tabular-nums; }
+    .walk li p { margin: 0; color: var(--ink); }
+    .walk li.on .step { outline: 2px solid var(--ink); outline-offset: 1px; }
+    #time-hops { margin-top: 22px; }
+    #time-hops i { position: relative; }
+    #time-hops i em {
+      position: absolute;
+      left: 50%;
+      top: -18px;
+      transform: translateX(-50%);
+      font-style: normal;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      color: var(--ink);
+    }
+    .chain-wrap { overflow-x: auto; }
+    .chain {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      min-width: 880px;
+    }
+    .chain .part {
+      flex: 1 1 0;
+      min-width: 0;
+      background: var(--shut);
+      padding: 10px;
+    }
+    .chain .part b { display: block; }
+    .chain .part > small { display: block; color: var(--muted); margin-bottom: 6px; }
+    .chain .part label small { display: block; color: var(--muted); font-size: 12px; margin: 0; font-weight: 400; }
+    .stds { list-style: none; margin: 8px 0 10px 1.5em; padding: 0; }
+    .stds li { margin: 0 0 8px; max-width: 68ch; }
+    .chain .part.mac { box-shadow: inset 0 4px 0 var(--l2); }
+    .chain .part.phy { box-shadow: inset 0 4px 0 var(--l1); }
+    .chain .part.sw {
+      flex: 1.35 1 0;
+      background: #d5dee8;
+      border: 3px solid #243038;
+      border-radius: 12px;
+      box-shadow: none;
+    }
+    .chain .join { flex: 0 0 18px; display: flex; align-items: center; }
+    .chain .join i { display: block; width: 100%; height: 3px; background: #243038; }
+    .chain .part .row { margin-top: 8px; }
+    .chain .part .row button { flex: 1; padding: 6px 4px; font-size: 13px; }
+    .chain .part label { display: flex; align-items: flex-start; gap: 4px; margin-top: 6px; font-size: 13px; }
+    .verdict { list-style: none; margin: 12px 0 0; padding: 0; }
+    .verdict li { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 6px; padding: 8px 10px; }
+    .verdict li .mark { flex: 0 0 auto; width: 1.2em; font-weight: 700; line-height: 1.45; }
+    .verdict li.ok { background: #e5f2ea; }
+    .verdict li.ok .mark { color: var(--vlan); }
+    .verdict li.bad { background: #f8e6e4; }
+    .verdict li.bad .mark { color: #8a2a2a; }
+    .dim { opacity: 0.38; }
+    .hops { display: flex; align-items: center; }
+    .hops b { background: var(--shut); color: var(--ink); padding: 8px 10px; font-size: 13px; }
+    .hops b.on { background: var(--vlan); color: #fff; }
+    .hops i { flex: 1; height: 8px; background: var(--shut); }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .cards div { background: var(--card); border: 1px solid var(--line); padding: 14px; }
+    .cards b { display: block; margin-bottom: 6px; }
+    .pair { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 18px; align-items: start; margin-top: 14px; }
+    .meanings { list-style: none; margin: 0; padding: 0; }
+    .meanings li { margin: 0 0 4px; padding: 6px 8px; border-left: 3px solid transparent; color: var(--muted); }
+    #dscp-mean li { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    #dscp-mean li > span:first-child { flex: 1 1 auto; min-width: 0; }
+    #dscp-mean .q {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      color: var(--l3);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .meanings li.on { color: var(--ink); background: #f3e6d4; border-left-color: var(--l3); }
+    .meanings.ecn li.on { background: #d5e4ea; border-left-color: var(--l4); }
+    .meanings .q { display: block; }
+    .pair.off .q {
+      text-decoration: line-through;
+      text-decoration-color: var(--ink);
+      text-decoration-thickness: 2px;
+      text-decoration-skip-ink: none;
+    }
+    .policy { list-style: none; margin: 8px 0 0; padding: 0; }
+    .policy li { margin: 0 0 4px; padding: 6px 8px; border-left: 3px solid transparent; color: var(--muted); }
+    .policy li.on { color: var(--ink); background: #e7eef8; border-left-color: var(--l2); }
+    .swbox { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--line); background: var(--card); }
+    .swbox > b { display: block; margin-bottom: 6px; }
+    .swbox .pair { margin-top: 8px; }
+    .swbox .rule { color: var(--muted); margin: 8px 0 0; }
+    .field { margin-top: 14px; }
+    .field + .field { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .field .rule { margin: 0; }
+    .field .pair { margin-top: 8px; }
+    @media (max-width: 800px) {
+      .osi, .cards, .pair { grid-template-columns: 1fr; }
+      .line { flex-direction: column; }
+      .line button { border-left-width: 1px; }
+      .rack { overflow-x: auto; }
+      .band, .jacks { min-width: 680px; }
+      .walk li { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
 <main>
-  <h1>TSN 动画</h1>
-  <p class="lede">用浏览器打开本文件就会播放。数字只留在这一页，不写进 tsync.yaml。配置入口在 <a href="../../../tools/gf-config/README_zh.md">gf-config 中文说明</a> 的「时间 / 门控」。</p>
+  <h1>TSN</h1>
+  <p class="lede">配置在 <a href="../../../tools/gf-config/README_zh.md">gf-config「时间 / 门控」</a>。点时间线上的一站。</p>
 
-  <div class="row" id="controls"></div>
-  <div class="bar"><i id="progress"></i></div>
-  <h2 id="title"></h2>
-  <div class="stage"><div id="stage"></div></div>
-  <p id="line"></p>
+  <section>
+    <h2>OSI 七层模型</h2>
+    <p class="lead-full">自上而下是应用层、表示层、会话层、传输层、网络层、数据链路层、物理层。应用层以 SOME/IP 为例，传输层是 UDP，网络层是 IPv4。表示层和会话层不增加首部或尾部。数据链路层在 1982 年的 Ethernet II 中写出目的 MAC、源 MAC、EtherType，并在帧尾加上 FCS。1998 年的 802.1Q 在源 MAC 与 EtherType 之间插入 4 字节。</p>
+    <div class="osi">
+      <div class="stack" id="stack"></div>
+      <div class="framecol">
+        <div class="packet" id="packet"></div>
+      </div>
+    </div>
+  </section>
 
-  <hr>
-  <h2>Access / Trunk</h2>
-  <p>交换机口决定帧进和帧出时带不带标签。Giraffe 是端点。自己插入 PCP 和 VID 时，对面那一口按 trunk 收发，优先级才能留给下一跳的门控。页 2 还没有这个字段。</p>
-  <div class="row" id="port-controls"></div>
-  <div id="port-view"></div>
+  <h2>时间线</h2>
+  <div class="line" id="line">
+    <button type="button" data-station="frame"><b>1982</b><span>普通帧</span></button>
+    <button type="button" data-station="vlan"><b>1998</b><span>VLAN</span></button>
+    <button type="button" data-station="avb"><b>2009</b><span>AVB</span></button>
+    <button type="button" data-station="tsn"><b>2012</b><span>TSN</span></button>
+  </div>
 
-  <hr>
-  <h2>门控表</h2>
-  <p>这就是页 2「时间 / 门控」里的 AdminControlList。每一行是时长，加上 8 位 GateStates。没改页 2 时，tsync.yaml 里不会出现 network。</p>
-  <div id="gate-view"></div>
-  <p class="tiny">页 2 保存的是 Admin 表。把表写进网卡、再读回正在跑的 Oper 表，页面上还没有。运行时目前只读 backend 和 pretend_synchronized。</p>
+  <article class="station" id="st-frame">
+    <h2>1982 · Ethernet II</h2>
+    <figure>
+      <div id="frame-cells"></div>
+      <div class="field">
+        <p class="rule">DSCP（Differentiated Services Code Point，区分服务码点）的后 3 位是 000 时，是类选择 CS（Class Selector），类号是前 3 位，信任时进入同号队列。CS7 是 111000 = 56，进入队列 7；CS0 要前 3 位也是 000。末位是 0 的其余值在标准池：有名字的是 AF（Assured Forwarding）、EF（Expedited Forwarding）、VA（Voice-Admit）、LE（Lower Effort），没有名字的也留在标准池。末两位是 01 的是实验或本地码点。末两位是 11 的留给以后的标准。EF 单独标在队列 5。AF、VA、LE、没有名字的标准码点和本地码点不按类号入队。</p>
+        <div class="pair" id="dscp-pair">
+          <div id="dscp-bits"></div>
+          <ul id="dscp-mean" class="meanings"></ul>
+        </div>
+      </div>
+      <div class="field">
+        <p class="rule">ECN（Explicit Congestion Notification，显式拥塞通知）是这 2 位。ECT（ECN-Capable Transport）表示端点接受拥塞标记，路由器可以写成 11 而不丢弃。01 ECT(1) 和 10 ECT(0) 在经典路由器上同样处理。L4S 低时延队列只把 01 当作可扩展控制，标记更早、更密；10 是经典 ECN，发送端通常置 10。00 不使用 ECN，拥塞就丢弃。11 CE（Congestion Experienced）是路由器已经写下拥塞，接收端通知发送端降低速率。</p>
+        <div class="pair">
+          <div id="ecn-bits"></div>
+          <ul id="ecn-mean" class="meanings ecn"></ul>
+        </div>
+      </div>
+      <div class="swbox">
+        <b>交换机入口</b>
+        <label><input id="trust" type="checkbox" checked> 信任 DSCP</label>
+        <p class="rule">入口只读 DSCP 的 6 位来选队列，不改这 6 位，也不看 ECN。帧仍按目的 MAC 转发。</p>
+        <ul class="policy" id="trust-policy">
+          <li id="trust-on"><b>信任。</b>类选择进入同号队列，EF 进入队列 5。上面右边的队列号这时生效。</li>
+          <li id="trust-off"><b>不信任。</b>不读这 6 位。队列与 DSCP 无关，只按目的 MAC 转发。</li>
+        </ul>
+      </div>
+    </figure>
+  </article>
 
-  <hr>
-  <h2>流过滤与监管</h2>
-  <p>按 PCP 匹配，先看最大帧长，再看令牌桶。示意固定为 PCP 5、最大帧长 1500、CIR 1000 kbit/s、CBS 2000 字节。页 2 没添加行时不写入 stream_filters 和 flow_meters。</p>
-  <div class="row" id="psfp-controls"></div>
-  <p id="psfp-line" class="note"></p>
+  <article class="station" id="st-vlan">
+    <h2>1998 · 802.1Q VLAN</h2>
+    <figure>
+      <div id="tag-cells"></div>
+      <figcaption>802.1Q 标签插在源 MAC 与 EtherType 之间，共 4 字节。TPID 为 0x8100。TCI 为 PCP 3 位、DEI 1 位、VID 12 位。帧首由 14 字节变为 18 字节。FCS 仍在帧尾，覆盖加长后的帧。</figcaption>
+    </figure>
+    <div class="block">
+      <h3>802.1Q VLAN 组网</h3>
+      <figure>
+        <div class="rack">
+          <div class="band">
+            <div class="node host" id="node-a1" data-host="a1"><b>A1</b><label><input class="host-tag" data-host="a1" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a1" type="number" min="0" max="4095" step="1" value="10"></label><button type="button" class="host-send" data-host="a1">发送</button></div>
+            <div class="node host" id="node-a2" data-host="a2"><b>A2</b><label><input class="host-tag" data-host="a2" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a2" type="number" min="0" max="4095" step="1" value="10"></label><button type="button" class="host-send" data-host="a2">发送</button></div>
+            <div class="node host" id="node-a3" data-host="a3"><b>A3</b><label><input class="host-tag" data-host="a3" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a3" type="number" min="0" max="4095" step="1" value="10"></label><button type="button" class="host-send" data-host="a3">发送</button></div>
+            <div class="slot"></div>
+          </div>
+          <div class="band wires" id="wires-top"></div>
+          <div class="chassis" id="node-sw">
+            <div class="jacks" id="jacks-top"></div>
+            <div class="swtitle"><b>Switch</b><span class="vchips" id="sw-vlans"></span></div>
+            <p class="sw-note" id="sw-note"></p>
+            <div class="jacks bot" id="jacks-bot"></div>
+          </div>
+          <div class="band wires" id="wires-bot"></div>
+          <div class="band">
+            <div class="node host" id="node-b1" data-host="b1"><b>B1</b><label><input class="host-tag" data-host="b1" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b1" type="number" min="0" max="4095" step="1" value="20"></label><button type="button" class="host-send" data-host="b1">发送</button></div>
+            <div class="node host" id="node-b2" data-host="b2"><b>B2</b><label><input class="host-tag" data-host="b2" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b2" type="number" min="0" max="4095" step="1" value="20"></label><button type="button" class="host-send" data-host="b2">发送</button></div>
+            <div class="node host" id="node-b3" data-host="b3"><b>B3</b><label><input class="host-tag" data-host="b3" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b3" type="number" min="0" max="4095" step="1" value="20"></label><button type="button" class="host-send" data-host="b3">发送</button></div>
+            <div class="slot"></div>
+          </div>
+        </div>
+      </figure>
+    </div>
+  </article>
 
-  <hr>
-  <h2>CNC 和 AVTP</h2>
-  <table>
-    <thead><tr><th>名字</th><th>它是什么</th><th>Giraffe 里怎么放</th></tr></thead>
-    <tbody>
-      <tr>
-        <td>CNC</td>
-        <td>Central Network Controller，IEEE 802.1Qcc 里的集中网络控制器。它掌握拓扑和每条流的周期，算出每一台交换机端口的门控表并下发。</td>
-        <td>不做成页面。页 2 写下的 stream_filters 和 flow_meters 是交给交换机入口的意图，本机不执行。</td>
-      </tr>
-      <tr>
-        <td>CUC</td>
-        <td>Centralized User Configuration。发送端和接收端把流的周期、大小登记给它，再由它告诉 CNC。</td>
-        <td>不做成页面。</td>
-      </tr>
-      <tr>
-        <td>AVTP</td>
-        <td>Audio Video Transport Protocol，IEEE 1722。样本直接装在以太网帧里，EtherType 0x22F0，不经 IP。AVB 用它传声音和图像。</td>
-        <td>协议栈不实现。图像走共享内存，跨 ECU 的服务走 SOME/IP。历史动画里保留它，用来说明 TSN 的来路。</td>
-      </tr>
-    </tbody>
-  </table>
+  <article class="station" id="st-avb">
+    <h2>2009 · AVB</h2>
+    <figure>
+      <div class="slices">
+        <div style="flex:1.2;background:var(--gptp)">gPTP<span style="display:block;font-weight:400;font-size:13px">0x88F7 · 高优先级</span></div>
+        <div style="flex:3;background:var(--l7)">预留流<span style="display:block;font-weight:400;font-size:13px">信用够了才继续发</span></div>
+        <div style="flex:2;background:#8a847a">其余<span style="display:block;font-weight:400;font-size:13px">用剩下的带宽</span></div>
+      </div>
+      <p class="cap">AVTP 类型 0x22F0，音视频直接放进以太网载荷。这套桥后来用来送控制。</p>
+    </figure>
+  </article>
 
-  <h2>页 2「时间 / 门控」现在有什么</h2>
-  <p>勾选 tsync 后打开这一页。没改过时，tsync.yaml 里不会出现 network。信号图仍只表示谁跟谁说话。</p>
-  <table>
-    <thead><tr><th>落在哪</th><th>内容</th></tr></thead>
-    <tbody>
-      <tr><td>已经在页面上</td><td>门控表、可抢占、按队列的最大帧长、流过滤、监管。周期或流过滤对不齐时左侧标红，Verify 不通过。</td></tr>
-      <tr><td>只写意图</td><td>可抢占、流过滤和监管不下到本机网卡。Giraffe 是端点，流过滤交给相邻交换机入口。</td></tr>
-      <tr><td>页面上还没有</td><td>access / trunk、测距 P2P、com.e2e、phc2sys 的启动顺序、把表写进网卡、读回 Oper 表。</td></tr>
-      <tr><td>不做</td><td>CNC、CUC、AVTP，以及逐流的时间门表。</td></tr>
-    </tbody>
-  </table>
-  <p class="note">现有 afc / adc 打开再保存，仍然没有 network。HIL 和区域端点要求 linuxptp，并且不能假装已同步。</p>
+  <article class="station" id="st-tsn">
+    <h2>2012 · TSN</h2>
+    <p class="cap" style="margin-bottom:8px">同一套桥用来送控制。先看这一跳的器件能不能测时，再看时间门、抢占和流过滤。门控和抢占是 2016，流过滤是 2017，都在这一站里。</p>
+
+    <div class="block">
+      <h3>这一跳的器件</h3>
+      <figure>
+        <p class="rule"><a href="https://1.ieee802.org/tsn/802-1as/" target="_blank" rel="noopener">802.1AS</a>（gPTP）在每一跳上测链路时延，Switch 把自己的驻留时间修正掉。两端都要做这种逐跳测时，时间门才能对齐。</p>
+        <ul class="stds">
+          <li><a href="https://1.ieee802.org/tsn/802-1qbv/" target="_blank" rel="noopener">802.1Qbv</a> Enhancements for Scheduled Traffic。出口按时间表开门、关门，手册上写成 Time-Aware Shaper。Q7 通常留给 gPTP。没有这块，后面的门控不会发生。</li>
+          <li><a href="https://1.ieee802.org/tsn/802-1qci/" target="_blank" rel="noopener">802.1Qci</a> Per-Stream Filtering and Policing。入口先认流，帧超过最大长度就丢掉，令牌不够也丢掉。手册上写成 PSFP。这块在 Switch 入口，不在 PHY。</li>
+          <li><a href="https://1.ieee802.org/tsn/802-3br-interspersing-express-traffic/" target="_blank" rel="noopener">802.3br</a> Interspersing Express Traffic。正在发送的普通帧可以被切开，高优先级帧插进去。PHY 手册要写能转发 mPacket。只一边 MAC 写了 802.1Qbu，这一跳仍然抢占不了。</li>
+        </ul>
+        <p class="rule" style="margin-top:8px"><a href="https://standards.ieee.org/ieee/1588/6825/" target="_blank" rel="noopener">IEEE 1588</a> 的 E2E 只在从钟和主钟之间测整段时延。中间的 Switch 不按跳修正，门对不齐。</p>
+        <div class="chain-wrap">
+          <div class="chain">
+            <div class="part mac">
+              <b>MAC</b><small>端 A</small>
+              <label><input id="a-phc" type="checkbox" checked><span>PTP Hardware Clock<small>时戳写进这个时钟</small></span></label>
+              <label><input id="a-mac" type="checkbox" checked><span>802.1Qbu Frame Preemption<small>MAC 能把普通帧切开</small></span></label>
+            </div>
+            <div class="join"><i></i></div>
+            <div class="part phy">
+              <b>PHY</b><small>端 A</small>
+              <label><input id="a-phy" type="checkbox" checked><span>IEEE 1588 Timestamp<small>在靠近线的地方锁存</small></span></label>
+              <label><input id="a-frag" type="checkbox" checked><span>802.3br mPacket<small>被切开的帧片段过得去</small></span></label>
+            </div>
+            <div class="join"><i></i></div>
+            <div class="part sw">
+              <b>Switch</b><small>802.1AS peer delay，或 IEEE 1588 E2E delay</small>
+              <div class="row">
+                <button type="button" id="dly-as" class="on">802.1AS</button>
+                <button type="button" id="dly-e2e">IEEE 1588 E2E</button>
+              </div>
+              <label><input id="hw-qbv" type="checkbox" checked><span>802.1Qbv Time-Aware Shaper<small>出口按时间表开门</small></span></label>
+              <label><input id="hw-qci" type="checkbox" checked><span>802.1Qci PSFP<small>入口按流过滤和监管</small></span></label>
+            </div>
+            <div class="join"><i></i></div>
+            <div class="part phy">
+              <b>PHY</b><small>端 B</small>
+              <label><input id="b-phy" type="checkbox" checked><span>IEEE 1588 Timestamp<small>在靠近线的地方锁存</small></span></label>
+              <label><input id="b-frag" type="checkbox" checked><span>802.3br mPacket<small>被切开的帧片段过得去</small></span></label>
+            </div>
+            <div class="join"><i></i></div>
+            <div class="part mac">
+              <b>MAC</b><small>端 B</small>
+              <label><input id="b-phc" type="checkbox" checked><span>PTP Hardware Clock<small>时戳写进这个时钟</small></span></label>
+              <label><input id="b-mac" type="checkbox" checked><span>802.1Qbu Frame Preemption<small>MAC 能把普通帧切开</small></span></label>
+            </div>
+          </div>
+        </div>
+        <ul class="verdict" id="hw-cap"></ul>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>测时 · <a href="https://1.ieee802.org/tsn/802-1as/" target="_blank" rel="noopener">802.1AS</a> / <a href="https://standards.ieee.org/ieee/1588/6825/" target="_blank" rel="noopener">IEEE 1588</a></h3>
+      <figure>
+        <div class="hops" id="time-hops"></div>
+        <figcaption id="time-cap"></figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>门控 · <a href="https://1.ieee802.org/tsn/802-1qbv/" target="_blank" rel="noopener">802.1Qbv</a></h3>
+      <figure>
+        <div id="gate-fit"></div>
+        <figcaption id="gate-cap">每一行是一个队列。深色是这段时间门开着，帧可以发出去。浅色是这个队列关着，别的队列可能还开着。斜线那一段八个队列全关，叫保护带，这里是 40 µs，放在 Q2 开门之前。前面如果已经开始发一帧，用这 40 µs 把它发完。Q2 开门时线上是空的，不会有半截帧挡在后面。没有抢占时，保护带要够发完最长的一帧。有抢占时，只要够发完切开后的最后一小段。</figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>周期 · <a href="https://1.ieee802.org/tsn/802-1qbv/" target="_blank" rel="noopener">802.1Qbv</a></h3>
+      <figure>
+        <div class="row">
+          <button type="button" id="cy-fit" class="on">对齐</button>
+          <button type="button" id="cy-short">少 500 µs</button>
+          <button type="button" id="cy-long">多 200 µs</button>
+        </div>
+        <div id="gate-cycle" style="margin-top:12px"></div>
+        <figcaption id="cy-cap"></figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>抢占 · <a href="https://1.ieee802.org/tsn/802-3br-interspersing-express-traffic/" target="_blank" rel="noopener">802.3br</a></h3>
+      <figure>
+        <button type="button" id="pre-toggle">看 Q0 可抢占</button>
+        <div class="slices" id="pre-fig" style="margin-top:12px"></div>
+        <figcaption id="pre-cap"></figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>流过滤与监管 · <a href="https://1.ieee802.org/tsn/802-1qci/" target="_blank" rel="noopener">802.1Qci</a></h3>
+      <figure>
+        <p class="cap">Switch 入口先做两步。第一步看帧长，这条流最多 1500 字节，超了就丢掉。没超，再看令牌桶：令牌按这条流允许的带宽慢慢补充，桶里有令牌才放进队列。</p>
+        <div class="row">
+          <select id="psfp">
+            <option value="pass">300 字节，桶里有令牌</option>
+            <option value="sdu">2000 字节，超过 1500</option>
+            <option value="meter">300 字节，桶是空的</option>
+          </select>
+          <b id="psfp-result"></b>
+        </div>
+        <div class="row" style="margin-top:10px"><span>令牌</span><div class="meter"><i id="psfp-bar"></i></div></div>
+        <figcaption id="psfp-cap"></figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>帧怎么走</h3>
+      <figure>
+        <div class="row">
+          <button type="button" id="walk-ctrl" class="on">控制帧</button>
+          <button type="button" id="walk-gptp">gPTP</button>
+          <button type="button" id="walk-go">走一帧</button>
+        </div>
+        <p class="cap">点走一帧。每一步的说明留在右边。</p>
+        <ol class="walk" id="walk-steps"></ol>
+      </figure>
+    </div>
+  </article>
 </main>
 <script>
+const LAYERS = [
+  { id: 7, name: "应用层", sub: "SOME/IP", color: "var(--l7)", width: "46%" },
+  { id: 6, name: "表示层", sub: "无新增字段", color: "var(--l6)", width: "54%" },
+  { id: 5, name: "会话层", sub: "无新增字段", color: "var(--l5)", width: "62%" },
+  { id: 4, name: "传输层", sub: "UDP", color: "var(--l4)", width: "70%" },
+  { id: 3, name: "网络层", sub: "IPv4 · DSCP", color: "var(--l3)", width: "78%", here: true },
+  { id: 2, name: "数据链路层", sub: "Ethernet II · FCS", color: "var(--l2)", width: "88%", here: true },
+  { id: 1, name: "物理层", sub: "前导码 · 比特", color: "var(--l1)", width: "100%" }
+];
+const QCOLOR = ["#8a847a", "#5c4d8a", "#c56a12", "#cfcabe", "#cfcabe", "#1d6f82", "#1f4b99", "#0e6b5c"];
 const QNAME = ["尽力", "诊断", "大载荷", "保留", "保留", "控制", "发现", "gPTP"];
 const DEMO = [
   { us: 80, mask: 1 << 7 },
@@ -161,361 +764,746 @@ const DEMO = [
   { us: 480, mask: 1 << 2 },
   { us: 200, mask: (1 << 1) | 1 }
 ];
-const FILM = [
-  { id: "frame", label: "普通帧", start: 0, end: 7000, title: "普通以太网帧", line: "目的 MAC、源 MAC、类型、载荷、校验。SOME/IP 在载荷里，外面还有 UDP 和 IP。这帧上还没有优先级，交换机只能按 MAC 转发。头在 FCS 前是 14 字节。" },
-  { id: "qtag", label: "802.1Q", start: 7000, end: 15000, title: "插入 802.1Q 标签", line: "在源 MAC 和类型之间插入 4 字节。前 2 字节固定 0x8100。后 2 字节里，PCP 占 3 位，用来选 8 个队列之一；VID 占 12 位，是 VLAN。类型仍是 0x0800，IP 看不到这 4 字节。头在 FCS 前变成 18 字节。门控不再往帧上加字段。" },
-  { id: "port", label: "端口", start: 15000, end: 27000, title: "Access 与 Trunk：什么帧进，什么帧出", line: "Access 收普通帧，归进这口的 PVID，出去时把标签剥掉。Trunk 收发都带着 0x8100，VID 和 PCP 留在帧上；没标签的进出归 native VLAN。Giraffe 自己插标签时，交换机那一口按 trunk。页 2 还没有这一项。" },
-  { id: "history", label: "变迁", start: 27000, end: 35000, title: "从 VLAN 到 AVB 再到 TSN", line: "VLAN 先让一物理口分成多个广播域。AVB 加上全网时钟和带宽整形，音视频用 AVTP 直接装在以太网帧里。工作组改名 TSN 之后，同一套桥用来送控制数据。2016 年的门控让队列按同一时刻开合。" },
-  { id: "gates", label: "门控", start: 35000, end: 45000, title: "一张门控表沿周期播放", line: "每一行是一个发送队列。深色表示这段时间门开着，浅色表示关着，竖线是当前时刻。标准里你编写的这张表叫 AdminControlList。下面的编辑器就是页 2「时间 / 门控」里的那一张，编的是本机网卡。" },
-  { id: "cycle", label: "周期", start: 45000, end: 54000, title: "各段之和必须等于周期", line: "少了，表上没写的那段会沿用最后一行的门：最后一行开着，就一直开到周期结束。多了，超出周期的段不会执行。两种都过不了 Verify。" },
-  { id: "preempt", label: "抢占", start: 54000, end: 63000, title: "可抢占是队列上的一个勾", line: "这不是另一张时间表。有队列标成可抢占时，全关的保护带可以缩成残片，高优先级帧能打断长帧。页 2 里全不勾就不写入 preemptable_mask，也不会下到网卡。" },
-  { id: "psfp", label: "过滤", start: 63000, end: 73000, title: "流过滤与监管在交换机入口", line: "按 PCP 匹配，超过最大帧长就丢。监管是 CIR/CBS 令牌桶。这是交给相邻交换机入口的意图。Giraffe 是端点，本机不执行，也没有逐流的时间门。" },
-  { id: "path", label: "通路", start: 73000, end: 81000, title: "业务帧经过的硬件", line: "SOME/IP 从应用出来，经 UDP/IP，由套接字优先级选中流量类，网卡插入 PCP，帧进入对应队列，门开时才从 PHY 发出。gPTP 是另一类帧，类型 0x88F7，用来把这些门的时刻对齐。" },
-  { id: "p2p", label: "P2P / E2E", start: 81000, end: 90000, title: "逐跳测距，以及两个 E2E", line: "车载 gPTP 每一跳用 Pdelay 测量本段链路，这叫 P2P。PTP 里还有一种从钟直接向主钟量整段的测法，也叫 E2E。AUTOSAR 的 E2E 是载荷里的计数器和 CRC，用来发现丢失和错序。页 2 还没有这两个字段。" }
-];
-const LOOP = FILM[FILM.length - 1].end;
-const ERAS = [
-  ["1998", "VLAN", "帧上多出 VID，广播域可以切开"],
-  ["PCP", "8 个优先级", "队列有了编号，时刻还没对齐"],
-  ["2009", "AVB", "gPTP + 信用整形。音视频走 AVTP"],
-  ["2012", "改名 TSN", "同一套桥扩展到控制"],
-  ["2016", "门控 Qbv", "队列按全网同一时刻开合"]
-];
-const PORT_STEPS = [
-  ["access", "in", "plain", "Access 进 · 普通帧"],
-  ["access", "in", "priority", "Access 进 · 优先级标签"],
-  ["access", "out", "plain", "Access 出 · 标签已剥"],
-  ["trunk", "in", "tagged", "Trunk 进 · 标签帧"],
-  ["trunk", "in", "plain", "Trunk 进 · 无标签"],
-  ["trunk", "out", "tagged", "Trunk 出 · 标签还在"],
-  ["trunk", "out", "plain", "Trunk 出 · native"]
-];
+const DSCP_NAME = {};
 
-let ms = 0;
-let playing = true;
-const entries = DEMO.map((row) => ({ us: row.us, mask: row.mask }));
-let cycleUs = 1000;
-let preempt = 0;
-let portMode = "access";
-let portDir = "in";
-let portKind = "plain";
-let portEth = "0x0800";
-let psfpBytes = "300";
-let psfpBucket = "full";
+const hosts = {
+  a1: { tag: false, vid: 10, port: 1 },
+  a2: { tag: false, vid: 10, port: 2 },
+  a3: { tag: false, vid: 10, port: 3 },
+  b1: { tag: false, vid: 20, port: 5 },
+  b2: { tag: false, vid: 20, port: 6 },
+  b3: { tag: false, vid: 20, port: 7 }
+};
+const ports = {};
+for (let index = 1; index <= 8; index += 1) {
+  ports[index] = { mode: "access", pvid: index >= 5 ? 20 : 10, allow: {} };
+}
+const VLAN_PALETTE = ["#1f4b99", "#c56a12", "#1e7a4a", "#1d6f82", "#5c4d8a", "#0e6b5c", "#a68462", "#8d6e97"];
+const vlanColorOf = {};
+function colorFor(vid) {
+  const key = String(vid);
+  if (!vlanColorOf[key]) vlanColorOf[key] = VLAN_PALETTE[Object.keys(vlanColorOf).length % VLAN_PALETTE.length];
+  return vlanColorOf[key];
+}
+colorFor(10);
+colorFor(20);
 
-function esc(text) {
-  return String(text).replace(/[&<>]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
+let dscpBits = 46;
+let ecnBits = 0;
+const ECN_NAME = { 0: "Not-ECT", 1: "ECT(1)", 2: "ECT(0)", 3: "CE" };
+let focus = 2;
+let station = "frame";
+let selected = "a1";
+let action = null;
+let flow = 0;
+let cycleMode = "fit";
+let preemptOn = false;
+let walkKind = "ctrl";
+let walkAt = -1;
+let walkToken = 0;
+const WALKS = {
+  ctrl: [
+    { title: "应用写下 SOME/IP", text: "控制数据从应用发出。这一帧的载荷是 SOME/IP。", color: "var(--l7)" },
+    { title: "装进 UDP", text: "SOME/IP 装进 UDP。这一步不选队列。", color: "var(--l4)" },
+    { title: "IP 头写下 DSCP", text: "DSCP 是 IP 头里的优先级，6 位。1982 那一站讲过。", color: "var(--l3)" },
+    { title: "PCP 选队列", text: "802.1Q 标签里的 PCP 是另一处优先级。Switch 用 PCP 决定进哪个队列。DSCP 还留在 IP 头里。", color: "var(--l2)" },
+    { title: "入口做 802.1Qci", text: "进队列之前先看帧长，再看令牌桶。超长或桶是空的，这帧丢掉。", color: "var(--vlan)" },
+    { title: "出口等门开", text: "出了队列还要等 802.1Qbv 的门打开。门前面的保护带用来把前一帧发完。", color: "var(--gptp)" },
+    { title: "PHY 送到线上", text: "门开了，PHY 把比特送到线上。", color: "var(--l1)" }
+  ],
+  gptp: [
+    { title: "以太类型 0x88F7", text: "类型是帧头里的 EtherType。1982 那一站的 0x0800 表示里面是 IPv4。gPTP 写成 0x88F7，表示里面是对时报文。", color: "var(--gptp)" },
+    { title: "没有 IP 头", text: "0x88F7 后面不是 IP，所以没有 DSCP，也没有 UDP。Switch 不能按 1982 那一站的办法给它选队列。", color: "var(--l3)" },
+    { title: "直接进 queue 7", text: "Switch 认出 0x88F7，把这帧放进 queue 7。queue 7 是留给 gPTP 的队列，不跟控制帧抢。", color: "var(--l2)" },
+    { title: "把门对齐", text: "queue 7 里的报文测量每一跳花了多少时间。各口的时间门按这个时间对齐，控制帧才知道哪一扇门什么时候开。", color: "var(--gptp)" }
+  ]
+};
+
+function bitButton(bit, attr, index, weight) {
+  return '<button type="button" class="bit' + (bit === "1" ? " fill" : "") + '" ' + attr + '="' + index + '"><b>' + bit + "</b>" +
+    (weight == null ? "" : "<em>" + weight + "</em>") + "</button>";
 }
-function openQueues(mask) {
-  const names = [];
-  for (let bit = 7; bit >= 0; bit -= 1) {
-    if (mask & (1 << bit)) names.push("Q" + bit + " " + QNAME[bit]);
-  }
-  return names.length ? names.join("、") : "全关，保护带";
+function dscpGroup(value) {
+  const bits = (value & 63).toString(2).padStart(6, "0").split("");
+  const weights = [32, 16, 8, 4, 2, 1];
+  const used = bits.map((bit, index) => (bit === "1" ? weights[index] : 0)).filter((weight) => weight > 0);
+  const name = DSCP_NAME[value] ? " · " + DSCP_NAME[value] : " · 无标准 PHB 名";
+  const dscp = bits.map((bit, index) => bitButton(bit, "data-bit", index, weights[index])).join("");
+  const sum = used.length ? used.join("+") + " = " + value : "0";
+  return '<div class="grp"><b>DSCP · 6 bit</b><div class="bits">' + dscp + "</div><span class=\"sum\">" + bits.join("") + " = " + sum + name + "</span></div>";
 }
-function sceneAt(time) {
-  const t = ((time % LOOP) + LOOP) % LOOP;
-  return FILM.find((item) => t >= item.start && t < item.end) || FILM[0];
+function ecnGroup() {
+  const ecnText = ((ecnBits >> 1) & 1).toString() + (ecnBits & 1).toString();
+  const ecn = [0, 1].map((index) => bitButton(((ecnBits >> (1 - index)) & 1).toString(), "data-ecn", index)).join("");
+  return '<div class="grp ecn"><b>ECN · 2 bit</b><div class="bits">' + ecn + "</div><span class=\"sum\">" + ecnText + " " + ECN_NAME[ecnBits] + "</span></div>";
 }
-function cells(items) {
-  return '<div class="cells">' + items.map((cell) => (
-    '<div class="cell' + (cell.hot ? " hot" : "") + '"><b>' + esc(cell.label) + "</b><span>" + esc(cell.sub) + "</span></div>"
-  )).join("") + "</div>";
+function dsField(value, tone) {
+  return '<div class="dsfield ' + tone + '">' + dscpGroup(value) + ecnGroup() + "</div>";
 }
-function wire(kind, ethertype) {
-  const items = [
-    { label: "目的 MAC", sub: "6 字节" },
-    { label: "源 MAC", sub: "6 字节" }
+function cell(label, sub, color) {
+  return '<div class="cell" style="background:' + color + '"><b>' + label + "</b><span>" + sub + "</span></div>";
+}
+function frameHtml(opts) {
+  const parts = [
+    cell("目的 MAC", "6 字节", "#4a5568"),
+    cell("源 MAC", "6 字节", "#4a5568")
   ];
-  if (kind === "tagged") {
-    items.push({ label: "0x8100", sub: "TPID", hot: true });
-    items.push({ label: "PCP · VID", sub: "TCI", hot: true });
-  } else if (kind === "priority") {
-    items.push({ label: "0x8100", sub: "TPID", hot: true });
-    items.push({ label: "PCP · VID 0", sub: "优先级标签", hot: true });
+  if (opts.tagged) {
+    parts.push(cell("0x8100", "TPID", "var(--vlan)"));
+    parts.push(cell("PCP " + (opts.pcp == null ? "·" : opts.pcp) + " · VID " + (opts.vid == null ? "·" : opts.vid), "TCI", "var(--vlan)"));
   }
-  items.push({ label: "类型", sub: ethertype });
-  items.push({ label: "载荷", sub: ethertype === "0x88F7" ? "gPTP" : "SOME/IP" });
-  items.push({ label: "FCS", sub: "4 字节" });
-  const head = kind === "plain" ? "头在 FCS 前 14 字节" : "头在 FCS 前 18 字节";
-  return cells(items) + '<p class="tiny">' + head + "</p>";
+  parts.push(cell("EtherType", opts.eth || "0x0800", "var(--l2)"));
+  if (opts.dscp != null) {
+    parts.push(cell("IPv4", "DSCP " + opts.dscp, "var(--l3)"));
+    parts.push(cell("UDP", "传输层", "var(--l4)"));
+  }
+  parts.push(cell(opts.eth === "0x88F7" ? "gPTP" : "SOME/IP", opts.eth === "0x88F7" ? "无 IP 头" : "应用层载荷", opts.eth === "0x88F7" ? "var(--gptp)" : "var(--l7)"));
+  parts.push(cell("FCS", "CRC-32 · 4 字节", "var(--l2)"));
+  return '<div class="cells">' + parts.join("") + "</div>" + (opts.fields ? dsField(opts.dscp, "paper") : "");
 }
-function portCaption(mode, dir, kind) {
-  if (mode === "access" && dir === "in" && kind === "plain") return "普通帧进来。交换机归进 PVID，优先级用端口默认值。头在 FCS 前是 14 字节。";
-  if (mode === "access" && dir === "in" && kind === "priority") return "优先级标签进来。VID 为 0，改成 PVID，PCP 保留。队列仍按这 3 位选。";
-  if (mode === "access" && dir === "in" && kind === "tagged") return "带了别的 VID 的标签帧在 access 口丢掉。";
-  if (mode === "access" && dir === "out") return "出端口把标签剥掉。端点看到普通帧，看不到 VID，也看不到 PCP。";
-  if (mode === "trunk" && dir === "in" && kind === "plain") return "Trunk 上的普通帧归进 native VLAN。";
-  if (mode === "trunk" && dir === "in" && kind === "priority") return "VID 为 0 的优先级标签。PCP 保留，VLAN 用这一口的 native。";
-  if (mode === "trunk" && dir === "in" && kind === "tagged") return "标签帧进来。VID 决定 VLAN，PCP 决定队列。头在 FCS 前是 18 字节。";
-  if (mode === "trunk" && dir === "out" && kind === "plain") return "native VLAN 出去时去掉标签，线上是普通帧。";
-  if (mode === "trunk" && dir === "out" && kind === "tagged") return "标签还在。VID 和 PCP 都留在帧上，下一跳的门控看到的仍是这一队。";
-  return "优先级标签可以带 VID 0 离开 trunk。PCP 还在，对端按优先级标签处理。";
+
+function vlanOn() { return station !== "frame"; }
+
+function nest(color, title, sub, inner, cls) {
+  return '<div class="wrap' + (cls ? " " + cls : "") + '" style="background:' + color + '">' +
+    '<div class="label"><b>' + title + "</b>" + (sub ? "<span>" + sub + "</span>" : "") + "</div>" +
+    (inner ? '<div class="inner">' + inner + "</div>" : "") +
+    "</div>";
 }
-function gateChart(rows, cycle, cursor) {
-  const span = Math.max(cycle, rows.reduce((sum, row) => sum + row.us, 0), 1);
-  const pct = Math.min(100, (cursor / span) * 100);
-  const body = [7, 6, 5, 4, 3, 2, 1, 0].map((queue) => {
+
+function renderOsi() {
+  const tagged = vlanOn();
+  document.getElementById("stack").innerHTML = LAYERS.map((layer) => {
+    const sub = layer.id === 2 ? (tagged ? "Ethernet II · 802.1Q · FCS" : "Ethernet II · FCS") : layer.sub;
+    return '<button type="button" class="layer' + (layer.id === focus ? " pick" : "") + '" data-layer="' + layer.id + '" style="background:' + layer.color + ";width:" + layer.width + '">' +
+      "<span><b>" + layer.id + " " + layer.name + "</b><small>" + sub + "</small></span>" +
+      (layer.here ? '<span class="mark">这里</span>' : "") +
+    "</button>";
+  }).join("");
+  let html = '<div class="payload" style="background:var(--l7)"><b>应用层 · SOME/IP</b><span>载荷</span></div>';
+  if (focus <= 4) html = nest("var(--l4)", "传输层 · UDP", "UDP 头", html);
+  if (focus <= 3) html = nest("var(--l3)", "网络层 · IPv4", "DSCP 6 bit · ECN 2 bit", dsField(dscpBits, "ink") + html, focus === 3 ? "frame-l3" : "");
+  if (focus <= 2) {
+    const tag = tagged
+      ? '<div class="ethhead"><b>Ethernet 头</b><span>目的 MAC 6 字节 · 源 MAC 6 字节 · EtherType 0x0800</span></div>' +
+        '<div class="tagband"><b>802.1Q</b><span>插在源 MAC 与 EtherType 之间 · 4 字节 · TPID 0x8100 · TCI = PCP + DEI + VID · 帧首 18 字节</span></div>'
+      : '<div class="tagband plain"><b>Ethernet II</b><span>目的 MAC · 源 MAC · EtherType 0x0800 · 帧首 14 字节，EtherType 紧跟源 MAC</span></div>';
+    html = '<div class="wrap frame-l2" style="background:var(--l2)">' +
+      '<div class="label"><b>数据链路层 · Ethernet II</b></div>' +
+      tag +
+      '<div class="inner">' + html + "</div>" +
+      '<div class="fcs"><b>FCS</b><span>CRC-32 · 4 字节</span></div>' +
+      "</div>";
+  }
+  if (focus === 1) html = nest("var(--l1)", "物理层", "前导码 · SFD", html);
+  const packet = document.getElementById("packet");
+  const rows = { 7: 1, 6: 1, 5: 1, 4: 4, 3: 5, 2: 6, 1: 7 }[focus];
+  packet.style.height = "calc(52px * " + rows + " + 6px * " + (rows - 1) + ")";
+  packet.innerHTML = html;
+  document.querySelectorAll(".layer").forEach((button) => {
+    button.onclick = () => { focus = Number(button.getAttribute("data-layer")); renderOsi(); };
+  });
+  bindBits();
+}
+
+function bindBits() {
+  document.querySelectorAll(".bits .bit[data-bit]").forEach((button) => {
+    button.onclick = () => {
+      dscpBits ^= 1 << (5 - Number(button.getAttribute("data-bit")));
+      dscpBits &= 63;
+      renderFrame();
+      renderOsi();
+    };
+  });
+  document.querySelectorAll(".bits .bit[data-ecn]").forEach((button) => {
+    button.onclick = () => {
+      ecnBits ^= 1 << (1 - Number(button.getAttribute("data-ecn")));
+      ecnBits &= 3;
+      renderFrame();
+      renderOsi();
+    };
+  });
+}
+
+function afOf(value) {
+  if ((value & 1) !== 0) return null;
+  const cls = value >> 3;
+  const drop = (value >> 1) & 3;
+  if (cls < 1 || cls > 4 || drop < 1 || drop > 3) return null;
+  return "AF" + cls + drop;
+}
+function standardName(value) {
+  if (value === 0) return "CS0 · DF · BE";
+  if (value === 1) return "LE";
+  if (value === 46) return "EF";
+  if (value === 44) return "VA";
+  if ((value & 7) === 0 && value >= 8 && value <= 56) return "CS" + (value >> 3);
+  return afOf(value) || "";
+}
+for (let code = 0; code < 64; code++) {
+  const title = standardName(code);
+  if (title) DSCP_NAME[code] = title;
+}
+function queueOf(value) {
+  if ((value & 7) === 0) return value >> 3;
+  if (value === 46) return 5;
+  return null;
+}
+function dscpItems(value) {
+  const bits = (value & 63).toString(2).padStart(6, "0");
+  const items = [
+    { on: value === 56, name: "CS7 · 56 · 111000", text: "Class Selector，类选择 7。前 3 位是 111。", queue: 7 },
+    { on: value === 48, name: "CS6 · 48 · 110000", text: "Class Selector，类选择 6。前 3 位是 110。", queue: 6 },
+    { on: value === 46, name: "EF · 46 · 101110", text: "Expedited Forwarding，加速转发。后 3 位是 110，不是类选择。", queue: 5 },
+    { on: value === 0, name: "CS0 · DF · BE · 0 · 000000", text: "Class Selector 0。DF 是 Default Forwarding，BE 是 Best Effort。前 3 位也是 000，这三个名字只指码点 0。", queue: 0 }
+  ];
+  if (!items.some((item) => item.on)) {
+    const named = standardName(value);
+    const af = afOf(value);
+    let text;
+    if (af) text = "Assured Forwarding。类 " + (value >> 3) + "，丢弃优先级 " + ((value >> 1) & 3) + "。同类里数字越大越先丢。";
+    else if ((value & 7) === 0) text = "Class Selector。类号是前 3 位。";
+    else if (value === 44) text = "Voice-Admit。";
+    else if (value === 1) text = "Lower Effort。";
+    else if ((value & 3) === 1) text = "末两位是 01，实验或本地码点。";
+    else if ((value & 1) === 0) text = "标准池里还没有 PHB 名字。";
+    else text = "末两位是 11。";
+    items.push({ on: true, name: (named || "当前") + " · " + value + " · " + bits, text: text, queue: queueOf(value) });
+  }
+  return items;
+}
+const ECN_ROWS = [
+  { value: 0, name: "00 Not-ECT", text: "端点不使用 ECN。拥塞时路由器丢弃。" },
+  { value: 1, name: "01 ECT(1)", text: "L4S 用这一档。标记更早、更密。" },
+  { value: 2, name: "10 ECT(0)", text: "经典 ECN。发送端通常置 10。" },
+  { value: 3, name: "11 CE", text: "路由器已经写下拥塞。接收端通知发送端降低速率。" }
+];
+
+function renderFrame() {
+  const trust = document.getElementById("trust").checked;
+  document.getElementById("frame-cells").innerHTML = frameHtml({ tagged: false, dscp: dscpBits, eth: "0x0800", fields: false });
+  document.getElementById("dscp-bits").innerHTML = '<div class="dsfield paper">' + dscpGroup(dscpBits) + "</div>";
+  document.getElementById("ecn-bits").innerHTML = '<div class="dsfield paper">' + ecnGroup() + "</div>";
+  document.getElementById("dscp-pair").classList.toggle("off", !trust);
+  document.getElementById("dscp-mean").innerHTML = dscpItems(dscpBits).map((item) =>
+    '<li class="' + (item.on ? "on" : "") + '"><span><b>' + item.name + "</b> " + item.text + "</span>" +
+    (item.queue == null ? "" : '<span class="q">队列 ' + item.queue + "</span>") + "</li>"
+  ).join("");
+  document.getElementById("ecn-mean").innerHTML = ECN_ROWS.map((row) =>
+    '<li class="' + (row.value === ecnBits ? "on" : "") + '"><b>' + row.name + "</b> " + row.text + "</li>"
+  ).join("");
+  document.getElementById("trust-on").classList.toggle("on", trust);
+  document.getElementById("trust-off").classList.toggle("on", !trust);
+  bindBits();
+}
+
+function tagPreview() {
+  document.getElementById("tag-cells").innerHTML = frameHtml({ tagged: true, pcp: 5, vid: 10, dscp: 46, eth: "0x0800" });
+}
+
+function bars(rows, cycle, hold) {
+  const sum = rows.reduce((total, row) => total + row.us, 0);
+  const span = hold ? cycle : Math.max(cycle, sum, 1);
+  const pastRow = (row) => !hold && sum > cycle && row === rows[rows.length - 1] && rows.length > DEMO.length;
+  const widthOf = (us) => (us / span) * 100;
+  const guard = "repeating-linear-gradient(135deg,#b7b2a8,#b7b2a8 2px,#e7e4de 2px,#e7e4de 5px)";
+  const queues = [7, 6, 5, 4, 3, 2, 1, 0].map((queue) => {
     const segs = rows.map((row) => {
-      const open = (row.mask & (1 << queue)) !== 0;
-      return '<i style="width:' + ((row.us / span) * 100) + "%;background:" + (open ? "var(--accent)" : "var(--shut)") + '"></i>';
+      const past = pastRow(row);
+      const open = !past && (row.mask & (1 << queue)) !== 0;
+      const color = past ? "#d9d4cc" : row.mask === 0 ? guard : open ? QCOLOR[queue] : "var(--shut)";
+      return '<i style="width:' + widthOf(row.us) + "%;background:" + color + '"></i>';
     }).join("");
-    return '<div class="qrow"><span>Q' + queue + " " + QNAME[queue] + '</span><div class="track">' + segs + '<b style="left:' + pct + '%"></b></div></div>';
+    const extra = hold
+      ? '<i style="width:' + widthOf(cycle - sum) + "%;background:" + ((rows[rows.length - 1].mask & (1 << queue)) ? QCOLOR[queue] : "#d9d4cc") + ';outline:1px solid #8a8a8a"></i>'
+      : "";
+    return '<div class="qrow"><span style="color:' + QCOLOR[queue] + '">Q' + queue + " " + QNAME[queue] + '</span><div class="track">' + segs + extra + "</div></div>";
   }).join("");
-  return '<p class="tiny">0 µs …… 播放头 ' + Math.round(Math.min(cursor, span)) + " µs · 深色 = 门开，浅色 = 门关</p>" + body;
+  const scale = rows.map((row) => (
+    '<i style="width:' + widthOf(row.us) + '%">' + (row.mask === 0 && !pastRow(row) ? "<em>保护带</em>" : "") + "</i>"
+  )).join("") + (hold ? '<i style="width:' + widthOf(cycle - sum) + '%"></i>' : "");
+  return queues + '<div class="qscale"><span></span><div class="track">' + scale + "</div></div>";
 }
-function stageHtml(id, local) {
-  if (id === "frame" || id === "qtag") {
-    const insert = id === "qtag" ? Math.min(1, local / 0.45) : 0;
-    const items = [
-      { label: "目的 MAC", sub: "6 字节" },
-      { label: "源 MAC", sub: "6 字节" }
-    ];
-    if (insert > 0.04) {
-      items.push({ label: "802.1Q", sub: insert > 0.7 ? "PCP · VID" : "4 字节", hot: true });
+
+const NET_IDLE = "点发送。帧沿这根线进交换机，再从能过的口出去。";
+
+function allows(store, vid) { return store[vid] !== false; }
+function seenVids() {
+  const set = new Set();
+  Object.keys(hosts).forEach((id) => {
+    const vid = hosts[id].vid;
+    if (vid >= 1 && vid <= 4094) set.add(vid);
+  });
+  return [...set].sort((a, b) => a - b);
+}
+function hostOn(port) {
+  return Object.keys(hosts).find((id) => hosts[id].port === port) || "";
+}
+function ingressOf(id) {
+  const host = hosts[id];
+  const port = ports[host.port];
+  const name = id.toUpperCase();
+  const emit = host.tag ? { tagged: true, pcp: 0, vid: host.vid, dscp: 46, eth: "0x0800" } : { dscp: 46, eth: "0x0800" };
+  const opened = name + (host.tag ? " 发出 VID " + host.vid + "。" : " 发出不带 802.1Q 的帧。");
+  if (host.tag && host.vid === 4095) return { drop: true, emit: emit, opened: opened, text: "VID 4095 保留。入口丢弃。" };
+  if (port.mode === "access") {
+    if (host.tag && host.vid !== 0 && (host.vid < 1 || host.vid > 4094 || host.vid !== port.pvid)) {
+      return { drop: true, emit: emit, opened: opened, text: "这个 Access 口是 VLAN " + port.pvid + "。VID " + host.vid + " 进不了。" };
     }
-    items.push({ label: "类型", sub: "0x0800" }, { label: "SOME/IP", sub: "在 UDP/IP 里" }, { label: "FCS", sub: "4 字节" });
-    const hint = insert > 0.7
-      ? "TPID = 0x8100。TCI 共 16 位：PCP 3 位 + DEI 1 位 + VID 12 位。gPTP 若走这条口，类型位置是 0x88F7。"
-      : "标签会从源 MAC 和类型之间长出来。";
-    return cells(items) + '<p class="note">' + hint + "</p>";
+    const vlan = !host.tag || host.vid === 0 ? port.pvid : host.vid;
+    const how = !host.tag
+      ? "无标签进入 Access。入口写入 VLAN " + port.pvid + "。"
+      : host.vid === 0
+        ? "VID 0 是优先级标签。VLAN 用这个口的 " + port.pvid + "。"
+        : "标签里的 VID 与这个口的 VLAN 一致。";
+    return { vlan: vlan, emit: emit, opened: opened, how: how, internal: { tagged: true, pcp: 0, vid: vlan, dscp: 46, eth: "0x0800" } };
   }
-  if (id === "port") {
-    const step = PORT_STEPS[Math.min(PORT_STEPS.length - 1, Math.floor(local * PORT_STEPS.length))];
-    return "<p><b>" + esc(step[3]) + "</b></p>" + wire(step[2], "0x0800") + '<p class="note">' + esc(portCaption(step[0], step[1], step[2])) + "</p>";
-  }
-  if (id === "history") {
-    const active = Math.min(ERAS.length - 1, Math.floor(local * ERAS.length));
-    const cols = ERAS.map((era, index) => (
-      '<div style="flex:1"><div class="tiny">' + esc(era[0]) + "</div><div" + (index === active ? ' style="font-weight:600"' : "") + ">" + esc(era[1]) + '</div><div class="note">' + esc(era[2]) + "</div></div>"
-    )).join("");
-    return '<div class="bar"><i style="width:' + (((active + 1) / ERAS.length) * 100) + '%"></i></div><div class="row" style="align-items:flex-start">' + cols + "</div>" +
-      '<p class="note">AVTP 是 IEEE 1722：音频和图像样本直接放进以太网载荷，类型 0x22F0，不经 IP。Giraffe 的图像走共享内存，跨 ECU 服务走 SOME/IP，协议栈不实现 AVTP。</p>';
-  }
-  if (id === "gates") return gateChart(DEMO, 1000, local * 1000);
-  if (id === "cycle") {
-    const short = local < 0.5;
-    const cursor = short ? (local / 0.5) * 1000 : ((local - 0.5) / 0.5) * 1200;
-    const title = short
-      ? "还差 920 µs。表在 80 µs 结束，后面沿用最后一行：Q7 一直开着。"
-      : "多出 200 µs。1000 µs 之后的那段不执行。";
-    const rows = [7, 6, 5, 4, 3, 2, 1, 0].map((queue) => {
-      let segs;
-      if (short) {
-        const open = queue === 7 ? "var(--accent)" : "var(--shut)";
-        const held = queue === 7 ? "var(--accent)" : "var(--tail)";
-        segs = '<i style="width:8%;background:' + open + '"></i><i style="width:92%;background:' + held + ';outline:1px solid #666"></i>';
-      } else {
-        const parts = DEMO.map((row) => {
-          const open = (row.mask & (1 << queue)) !== 0;
-          return '<i style="width:' + ((row.us / 1200) * 100) + "%;background:" + (open ? "var(--accent)" : "var(--shut)") + '"></i>';
-        }).join("");
-        segs = parts + '<i style="width:' + ((200 / 1200) * 100) + '%;background:var(--tail)"></i>';
-      }
-      const pct = Math.min(100, (cursor / (short ? 1000 : 1200)) * 100);
-      return '<div class="qrow"><span>Q' + queue + " " + QNAME[queue] + '</span><div class="track">' + segs + '<b style="left:' + pct + '%"></b></div></div>';
-    }).join("");
-    const foot = short
-      ? "描边的后段不在表上。Q7 与表内最后一行同色，表示门保持开。其余队列保持关。"
-      : "浅色尾巴是超出周期的段。播放头越过 1000 µs 之后，这段不再发出。";
-    return "<p><b>" + title + "</b></p>" + rows + '<p class="note">' + foot + "</p>";
-  }
-  if (id === "preempt") {
-    const on = local >= 0.5;
-    const slices = on
-      ? [["Q0 残片", false, 2], ["Q7 gPTP", true, 1.3], ["Q0 剩余", false, 4]]
-      : [["Q0 整帧", false, 6], ["保护带 全关", false, 1.6], ["Q7 还在等", true, 1.6]];
-    return "<p><b>" + (on ? "Q0 可抢占：保护带缩成残片" : "没有可抢占队列：保护带要把整帧收完") + "</b></p>" +
-      '<div class="slices">' + slices.map((slice) => (
-        '<div class="' + (slice[1] ? "hot" : "") + '" style="flex:' + slice[2] + '">' + esc(slice[0]) + "</div>"
-      )).join("") + "</div>" +
-      '<p class="note">勾在队列上，不另排一张时间表。页 2 的默认是全不勾，preemptable_mask 不出现。</p>';
-  }
-  if (id === "psfp") {
-    const phase = Math.min(2, Math.floor(local * 3));
-    const beats = [
-      ["PCP 5 · 300 字节 · 桶里有令牌", "通过", "最大帧长 1500。CIR/CBS 还有令牌，这一帧算绿色，进入对应队列。", "70%"],
-      ["PCP 5 · 2000 字节", "过滤丢掉", "超过最大帧长。交换机入口在监管之前丢掉。", "70%"],
-      ["PCP 5 · 300 字节 · 桶是空的", "监管丢掉", "黄色丢弃开着。令牌不够时这帧进不了队列。", "0%"]
-    ];
-    const beat = beats[phase];
-    return "<p><b>" + esc(beat[0]) + "</b> · " + esc(beat[1]) + '</p><div class="row"><span>令牌</span><div class="meter"><i style="width:' + beat[3] + '"></i></div></div><p class="note">' + esc(beat[2]) + " 这是交换机入口的意图。Giraffe 本机不执行，也没有逐流门控表。</p>";
-  }
-  if (id === "path") {
-    const stops = ["应用", "SOME/IP", "UDP/IP", "802.1Q", "队列", "门", "PHY", "交换机"];
-    const index = Math.min(stops.length - 1, Math.floor(local * stops.length));
-    return '<div class="bar"><i style="width:' + (local * 100) + '%"></i></div><div class="row">' + stops.map((name, stop) => (
-      "<span" + (stop === index ? ' style="font-weight:600"' : ' class="tiny"') + ">" + esc(name) + "</span>"
-    )).join("") + "</div>" + '<p class="note">当前站：' + esc(stops[index]) + "。机内感知和规划仍走 iceoryx，不进入这条网卡通路。</p>";
-  }
-  const nodes = ["从钟", "桥 1", "桥 2", "主钟"];
-  const hop = Math.min(2, Math.floor(local * 3));
-  const hops = nodes.map((name, index) => {
-    const hot = index === hop || index === hop + 1;
-    return '<span class="' + (hot ? "cell hot" : "cell") + '" style="flex:none;padding:8px 10px"><b>' + esc(name) + "</b></span>" +
-      (index < nodes.length - 1 ? '<i style="flex:1;height:4px;background:' + (index === hop ? "var(--accent)" : "var(--shut)") + '"></i>' : "");
-  }).join("");
-  return "<p><b>P2P：亮着的那一段正在测本跳延迟</b></p>" + '<div class="row" style="align-items:center">' + hops + "</div>" +
-    '<p style="margin-top:14px"><b>PTP 的 E2E：从钟到主钟一次量完整段</b></p><div class="bar"><i style="width:100%;background:var(--faint)"></i></div>' +
-    '<p class="note">车载该用 P2P。载荷保护是另一件事，内容是计数器、CRC 和 DataID。页 2 还没有测距字段，也没有 com.e2e。</p>';
-}
-
-let chromeKey = "";
-function renderChrome(scene) {
-  const key = (playing ? "1" : "0") + ":" + scene.id;
-  if (key === chromeKey) return;
-  chromeKey = key;
-  document.getElementById("controls").innerHTML =
-    '<button class="primary" id="play" type="button">' + (playing ? "暂停" : "播放") + "</button>" +
-    '<button type="button" id="restart">重头</button>' +
-    FILM.map((item) => (
-      '<button type="button" class="' + (item.id === scene.id ? "on" : "") + '" data-start="' + item.start + '">' + esc(item.label) + "</button>"
-    )).join("");
-  document.getElementById("play").onclick = () => { playing = !playing; renderFilm(); };
-  document.getElementById("restart").onclick = () => { ms = 0; playing = true; renderFilm(); };
-  document.querySelectorAll("#controls [data-start]").forEach((button) => {
-    button.onclick = () => { ms = Number(button.getAttribute("data-start")); renderFilm(); };
-  });
-}
-function renderFilm() {
-  const scene = sceneAt(ms);
-  const local = Math.min(1, Math.max(0, (ms - scene.start) / (scene.end - scene.start)));
-  document.getElementById("title").textContent = scene.title;
-  document.getElementById("line").textContent = scene.line;
-  document.getElementById("stage").innerHTML = stageHtml(scene.id, local);
-  document.getElementById("progress").style.width = ((ms / LOOP) * 100) + "%";
-  renderChrome(scene);
-}
-
-function renderPort() {
-  const select = (id, value, options) => (
-    '<select id="' + id + '">' + options.map((opt) => (
-      '<option value="' + opt[0] + '"' + (opt[0] === value ? " selected" : "") + ">" + esc(opt[1]) + "</option>"
-    )).join("") + "</select>"
-  );
-  document.getElementById("port-controls").innerHTML =
-    select("port-mode", portMode, [["access", "Access"], ["trunk", "Trunk"]]) +
-    select("port-dir", portDir, [["in", "进"], ["out", "出"]]) +
-    select("port-kind", portKind, [["plain", "普通帧"], ["priority", "优先级标签 VID 0"], ["tagged", "标签帧"]]) +
-    select("port-eth", portEth, [["0x0800", "SOME/IP 0x0800"], ["0x88F7", "gPTP 0x88F7"]]);
-  document.getElementById("port-view").innerHTML = wire(portKind, portEth) + "<p>" + esc(portCaption(portMode, portDir, portKind)) + "</p>";
-  ["port-mode", "port-dir", "port-kind", "port-eth"].forEach((id) => {
-    document.getElementById(id).onchange = (event) => {
-      const value = event.target.value;
-      if (id === "port-mode") portMode = value;
-      if (id === "port-dir") portDir = value;
-      if (id === "port-kind") portKind = value;
-      if (id === "port-eth") portEth = value;
-      renderPort();
-    };
-  });
-}
-
-function renderGate() {
-  const sum = entries.reduce((total, row) => total + row.us, 0);
-  let callout;
-  if (!entries.length) {
-    callout = '<p class="note">门控表是空的。</p>';
-  } else if (sum === cycleUs) {
-    callout = '<p class="callout ok">各段之和 ' + sum + " µs，等于周期。全关的那一段是写在表上的保护带。</p>";
-  } else if (cycleUs > sum) {
-    callout = '<p class="callout bad">还差 ' + (cycleUs - sum) + " µs。表上没写的这段会沿用最后一行的门；最后一行开着就会一直开到周期结束。Verify 不会通过。</p>";
+  let vlan;
+  let how;
+  if (!host.tag || host.vid === 0) {
+    vlan = port.pvid;
+    if (!allows(port.allow, vlan)) return { drop: true, emit: emit, opened: opened, text: "这个 Trunk 口没有放行 VLAN " + vlan + "。入口丢弃。" };
+    how = "无标签进入 Trunk。入口先写入 VLAN " + vlan + "。";
+  } else if (host.vid < 1 || host.vid > 4094) {
+    return { drop: true, emit: emit, opened: opened, text: "VID " + host.vid + " 不能作为 VLAN。入口丢弃。" };
+  } else if (!allows(port.allow, host.vid)) {
+    return { drop: true, emit: emit, opened: opened, text: "这个 Trunk 口没有放行 VID " + host.vid + "。入口丢弃。" };
   } else {
-    callout = '<p class="callout bad">多出 ' + (sum - cycleUs) + " µs。超出周期的段不会执行。Verify 不会通过。</p>";
+    vlan = host.vid;
+    how = "Trunk 入口保留 VID " + vlan + "。";
   }
-  const preemptLine = preempt
-    ? "已标可抢占：" + openQueues(preempt) + "。全关的保护带可以只留残片。页 2 里这是 preemptable_mask，全不勾就不写入，也不会下到网卡。"
-    : "可抢占默认全不勾。勾上之后，全关的保护带可以缩成残片。这不是另一张时间表。";
-  const rows = entries.map((row, index) => {
-    const bits = [7, 6, 5, 4, 3, 2, 1, 0].map((bit) => (
-      '<button type="button" data-bit="' + index + ":" + bit + '" class="' + ((row.mask & (1 << bit)) ? "on" : "") + '">Q' + bit + "</button>"
-    )).join("");
-    return '<div class="row"><b>' + index + "</b><span>" + row.us + ' µs</span><button type="button" data-us="' + index + ':-20">−20</button><button type="button" data-us="' + index + ':20">+20</button>' + bits + '<button type="button" data-del="' + index + '"' + (entries.length < 2 ? " disabled" : "") + ">删除</button></div>";
+  return { vlan: vlan, emit: emit, opened: opened, how: how, internal: { tagged: true, pcp: 0, vid: vlan, dscp: 46, eth: "0x0800" } };
+}
+function egressOf(id, vlan) {
+  const src = hosts[id].port;
+  const access = [];
+  const trunk = [];
+  Object.keys(ports).forEach((key) => {
+    const number = Number(key);
+    if (number === src) return;
+    const port = ports[number];
+    if (port.mode === "access" && port.pvid === vlan && hostOn(number)) access.push(number);
+    if (port.mode === "trunk" && allows(port.allow, vlan)) trunk.push(number);
+  });
+  return { access: access, trunk: trunk };
+}
+function note(text) {
+  document.getElementById("sw-note").textContent = text;
+}
+function later(ms, token, fn) {
+  window.setTimeout(() => { if (token === flow) fn(); }, ms);
+}
+function placeToken(port, at, text, drop) {
+  const wire = document.getElementById("wire-" + port);
+  if (!wire || !hostOn(port)) return;
+  let token = wire.querySelector(".token");
+  const fresh = !token;
+  if (!token) {
+    token = document.createElement("b");
+    token.className = "token";
+    wire.appendChild(token);
+  }
+  token.textContent = text;
+  token.classList.toggle("drop", !!drop);
+  if (fresh) token.style.transition = "none";
+  token.classList.toggle("host", at === "host");
+  token.classList.toggle("sw", at === "sw");
+  if (fresh) {
+    void token.offsetWidth;
+    token.style.transition = "";
+  }
+  wire.classList.add("live");
+}
+function retitle(port, text, drop) {
+  const token = document.querySelector("#wire-" + port + " .token");
+  if (!token) return;
+  token.textContent = text;
+  token.classList.toggle("drop", !!drop);
+}
+function placeBadge(port, text) {
+  const jack = document.getElementById("port-" + port);
+  if (!jack) return;
+  let badge = jack.querySelector(".badge");
+  if (!badge) {
+    badge = document.createElement("b");
+    badge.className = "badge";
+    jack.querySelector(".plug").insertAdjacentElement("afterend", badge);
+  }
+  badge.textContent = text;
+  jack.classList.add("on");
+}
+function play(id) {
+  flow += 1;
+  const token = flow;
+  selected = id;
+  action = "send";
+  paintRack();
+  const ing = ingressOf(id);
+  const portNo = hosts[id].port;
+  const emitted = ing.emit.tagged ? "VID " + ing.emit.vid : "无标签";
+  document.getElementById("node-" + id).classList.add("hot");
+  placeToken(portNo, "host", emitted, false);
+  note(ing.opened);
+  later(700, token, () => {
+    placeToken(portNo, "sw", emitted, false);
+    later(650, token, () => {
+      const inside = ing.drop ? "丢弃" : "VID " + ing.vlan;
+      retitle(portNo, inside, ing.drop);
+      document.getElementById("port-" + portNo).classList.add(ing.drop ? "drop" : "on");
+      note(ing.drop ? ing.text : "口 " + portNo + "。" + ing.how);
+      if (ing.drop) return;
+      later(700, token, () => {
+        const eg = egressOf(id, ing.vlan);
+        eg.access.forEach((number) => {
+          placeToken(number, "sw", "无标签", false);
+          document.getElementById("port-" + number).classList.add("on");
+        });
+        eg.trunk.forEach((number) => {
+          if (hostOn(number)) placeToken(number, "sw", "VID " + ing.vlan, false);
+          else placeBadge(number, "VID " + ing.vlan);
+          document.getElementById("port-" + number).classList.add("on");
+        });
+        const parts = [];
+        if (eg.access.length) parts.push("Access 口出去是无标签");
+        if (eg.trunk.length) parts.push("Trunk 口出去仍带 VID " + ing.vlan);
+        note(parts.length ? parts.join("。") + "。" : "没有能出去的口。");
+        later(60, token, () => {
+          eg.access.forEach((number) => placeToken(number, "host", "无标签", false));
+          eg.trunk.forEach((number) => {
+            if (hostOn(number)) placeToken(number, "host", "VID " + ing.vlan, false);
+          });
+        });
+        later(700, token, () => {
+          const names = [];
+          eg.access.concat(eg.trunk).forEach((number) => {
+            const who = hostOn(number);
+            if (!who) return;
+            document.getElementById("node-" + who).classList.add("hot");
+            names.push(who.toUpperCase());
+          });
+          const parked = eg.trunk.some((number) => !hostOn(number));
+          if (names.length && parked) note(names.join("、") + " 收到。空着的 Trunk 口，帧停在口上。");
+          else if (names.length) note(names.join("、") + " 收到。");
+          else if (parked) note("Trunk 口上没有主机，帧停在口上。");
+        });
+      });
+    });
+  });
+}
+function portColor(number) {
+  const port = ports[number];
+  if (port.mode !== "access" || port.pvid < 1 || port.pvid > 4094) return "#243038";
+  return colorFor(port.pvid);
+}
+function wireBand(start) {
+  return [0, 1, 2, 3].map((offset) => {
+    const number = start + offset;
+    if (!hostOn(number)) return '<div class="wire" id="wire-' + number + '"></div>';
+    return '<div class="wire" id="wire-' + number + '" style="--vc:' + portColor(number) + '"><i></i></div>';
   }).join("");
-  const bits = [7, 6, 5, 4, 3, 2, 1, 0].map((bit) => (
-    '<button type="button" data-pre="' + bit + '" class="' + ((preempt & (1 << bit)) ? "on" : "") + '">Q' + bit + "</button>"
+}
+function jack(number) {
+  const port = ports[number];
+  const vids = seenVids();
+  const mode = '<select class="port-mode" data-port="' + number + '"><option value="access"' +
+    (port.mode === "access" ? " selected" : "") + ">Access</option><option value=\"trunk\"" +
+    (port.mode === "trunk" ? " selected" : "") + ">Trunk</option></select>";
+  const vlan = port.mode === "access"
+    ? '<select class="port-pvid" data-port="' + number + '">' + vids.map((vid) =>
+      '<option value="' + vid + '"' + (vid === port.pvid ? " selected" : "") + ">" + vid + "</option>"
+    ).join("") + "</select>"
+    : '<span class="allows">' + vids.map((vid) =>
+      '<label class="vchip" style="background:' + colorFor(vid) + '"><input class="port-allow" data-port="' + number + '" data-vid="' + vid + '" type="checkbox"' +
+      (allows(port.allow, vid) ? " checked" : "") + "> " + vid + "</label>"
+    ).join("") + "</span>";
+  return '<div class="jack" id="port-' + number + '" style="--vc:' + portColor(number) + '"><b class="plug">' + number + '</b><div class="pcfg">' + mode + vlan + "</div></div>";
+}
+function paintRack() {
+  const vids = seenVids();
+  Object.keys(ports).forEach((number) => {
+    if (vids.length && vids.indexOf(ports[number].pvid) < 0) ports[number].pvid = vids[0];
+  });
+  Object.keys(hosts).forEach((id) => {
+    const host = hosts[id];
+    const node = document.getElementById("node-" + id);
+    document.querySelector('.host-tag[data-host="' + id + '"]').checked = host.tag;
+    document.querySelector('.host-vid[data-host="' + id + '"]').value = host.vid;
+    node.classList.remove("hot");
+    node.classList.toggle("toned", host.vid >= 1 && host.vid <= 4094);
+    if (host.vid >= 1 && host.vid <= 4094) node.style.setProperty("--vc", colorFor(host.vid));
+  });
+  document.getElementById("sw-vlans").innerHTML = vids.map((vid) =>
+    '<i class="vchip" style="background:' + colorFor(vid) + '">' + vid + "</i>"
+  ).join("");
+  document.getElementById("jacks-top").innerHTML = [1, 2, 3, 4].map(jack).join("");
+  document.getElementById("jacks-bot").innerHTML = [5, 6, 7, 8].map(jack).join("");
+  document.getElementById("wires-top").innerHTML = wireBand(1);
+  document.getElementById("wires-bot").innerHTML = wireBand(5);
+  if (action !== "send") note(NET_IDLE);
+}
+const hop = {
+  a: { phy: true, phc: true, mac: true, frag: true },
+  b: { phy: true, phc: true, mac: true, frag: true },
+  as: true,
+  qbv: true,
+  qci: true
+};
+function hopTime() {
+  return hop.a.phy && hop.b.phy && hop.a.phc && hop.b.phc;
+}
+function hopCut() {
+  return hop.a.mac && hop.b.mac && hop.a.frag && hop.b.frag;
+}
+function gateWhy() {
+  if (!hop.qbv) return "这个出口没有 802.1Qbv Time-Aware Shaper。时间门在 Switch 或网卡的出口，不在 PHY。";
+  if (!hopTime()) return "这一跳没有对上的时戳，时间门不开。";
+  if (!hop.as) return "这不是 802.1AS，门对不齐。";
+  return "";
+}
+function renderTime() {
+  const host = document.getElementById("time-hops");
+  const cap = document.getElementById("time-cap");
+  const aside = "载荷里的计数器和 CRC 是 AUTOSAR 的 E2E，用来发现数据有没有被改过。它不测量这一跳花了多少时间。";
+  if (!hopTime()) {
+    host.innerHTML = "<b>从钟 P1</b><i></i><b>桥 1 P1</b><i></i><b>桥 2</b><i></i><b>主钟</b>";
+    const miss = [];
+    if (!hop.a.phy || !hop.b.phy) miss.push("两端 PHY 都要有 IEEE 1588 Timestamp");
+    if (!hop.a.phc || !hop.b.phc) miss.push("两端 MAC 都要有 PTP Hardware Clock 接着这个数");
+    cap.textContent = "这一跳没有纳秒数。" + miss.join("。") + "。";
+    return;
+  }
+  if (!hop.as) {
+    host.innerHTML = '<b class="on">从钟 P1</b><i style="background:var(--l3);flex:3"><em>4.8 µs</em></i><b class="on">主钟</b>';
+    cap.textContent = "从钟到主钟只得到一个时间，4.8 µs。桥 1 和桥 2 停了多久分不出来。这不是 802.1AS，各口的门对不齐。" + aside;
+    return;
+  }
+  host.innerHTML = '<b class="on">从钟 P1</b><i style="background:var(--l3)"><em>180 ns</em></i><b class="on">桥 1 P1</b><i style="background:var(--l3)"><em>240 ns</em></i><b class="on">桥 2</b><i style="background:var(--l3)"><em>150 ns</em></i><b class="on">主钟</b>';
+  cap.textContent = "每一跳一个时间。桥 1 在转发时自己还停了 2.4 µs，桥 2 停了 1.8 µs。从钟把路上的时间和桥里停下的时间加在一起。网卡上的时钟对好以后，系统时钟再跟着它。" + aside;
+}
+function renderHw() {
+  ["a", "b"].forEach((side) => {
+    document.getElementById(side + "-phy").checked = hop[side].phy;
+    document.getElementById(side + "-phc").checked = hop[side].phc;
+    document.getElementById(side + "-mac").checked = hop[side].mac;
+    document.getElementById(side + "-frag").checked = hop[side].frag;
+  });
+  document.getElementById("hw-qbv").checked = hop.qbv;
+  document.getElementById("hw-qci").checked = hop.qci;
+  document.getElementById("dly-as").classList.toggle("on", hop.as);
+  document.getElementById("dly-e2e").classList.toggle("on", !hop.as);
+  const items = [];
+  if (!hopTime()) {
+    const miss = [];
+    if (!hop.a.phy) miss.push("端 A PHY 的 IEEE 1588 Timestamp");
+    if (!hop.b.phy) miss.push("端 B PHY 的 IEEE 1588 Timestamp");
+    if (!hop.a.phc) miss.push("端 A MAC 的 PTP Hardware Clock");
+    if (!hop.b.phc) miss.push("端 B MAC 的 PTP Hardware Clock");
+    items.push({ ok: false, text: "测时不成立，缺 " + miss.join("、") + "。" });
+  } else if (hop.as) {
+    items.push({ ok: true, text: "802.1AS：逐跳测时。从钟 P1 180 ns，再到桥 2 是 240 ns，到主钟是 150 ns。" });
+  } else {
+    items.push({ ok: false, text: "1588 E2E：整段 4.8 µs。Switch 不按跳修正，时间门对不齐。" });
+  }
+  if (!hop.qbv) items.push({ ok: false, text: "时间门不成立。Switch 手册上没有 802.1Qbv Time-Aware Shaper。" });
+  else if (!hopTime() || !hop.as) items.push({ ok: false, text: "时间门开不起来。要先有 802.1AS peer delay 的逐跳时戳。" });
+  else items.push({ ok: true, text: "802.1Qbv 可以按表打开。Q7 留给 gPTP。" });
+  if (hopCut()) items.push({ ok: true, text: "抢占可以做。两端 MAC 有 802.1Qbu，两端 PHY 转发 mPacket。" });
+  else {
+    const miss = [];
+    if (!hop.a.mac) miss.push("端 A MAC 的 802.1Qbu");
+    if (!hop.b.mac) miss.push("端 B MAC 的 802.1Qbu");
+    if (!hop.a.frag) miss.push("端 A PHY 的 mPacket");
+    if (!hop.b.frag) miss.push("端 B PHY 的 mPacket");
+    items.push({ ok: false, text: "抢占不成立，缺 " + miss.join("、") + "。保护带仍收完整帧。" });
+  }
+  items.push(hop.qci
+    ? { ok: true, text: "802.1Qci PSFP 在 Switch 入口生效。" }
+    : { ok: false, text: "流过滤不成立。Switch 手册上没有 802.1Qci PSFP。" });
+  document.getElementById("hw-cap").innerHTML = items.map((item) =>
+    '<li class="' + (item.ok ? "ok" : "bad") + '"><b class="mark">' + (item.ok ? "✓" : "×") + "</b><span>" + item.text + "</span></li>"
+  ).join("");
+  renderTime();
+  renderGates();
+  renderCycle();
+  renderPre();
+  renderPsfp();
+}
+function renderGates() {
+  const why = gateWhy();
+  const fit = document.getElementById("gate-fit");
+  fit.innerHTML = bars(DEMO, 1000, false);
+  fit.classList.toggle("dim", !!why);
+  document.getElementById("gate-cap").textContent = why || "每一行是一个队列。深色是这段时间门开着，帧可以发出去。浅色是这个队列关着，别的队列可能还开着。斜线那一段八个队列全关，叫保护带，这里是 40 µs，放在 Q2 开门之前。前面如果已经开始发一帧，用这 40 µs 把它发完。Q2 开门时线上是空的，不会有半截帧挡在后面。没有抢占时，保护带要够发完最长的一帧。有抢占时，只要够发完切开后的最后一小段。";
+}
+function renderCycle() {
+  ["fit", "short", "long"].forEach((mode) => {
+    document.getElementById("cy-" + mode).classList.toggle("on", cycleMode === mode);
+  });
+  const host = document.getElementById("gate-cycle");
+  const cap = document.getElementById("cy-cap");
+  const why = gateWhy();
+  host.classList.toggle("dim", !!why);
+  if (why) {
+    host.innerHTML = bars(DEMO, 1000, false);
+    cap.textContent = why;
+    return;
+  }
+  if (cycleMode === "short") {
+    host.innerHTML = bars(DEMO, 1500, true);
+    cap.textContent = "表上各段加起来是 1000 µs，周期是 1500 µs，还空着 500 µs。没写到的这段继续用最后一行：Q1 和 Q0 开着，一直开到周期结束。";
+  } else if (cycleMode === "long") {
+    host.innerHTML = bars(DEMO.concat([{ us: 200, mask: 1 }]), 1000, false);
+    cap.textContent = "表上的时间比周期多出 200 µs。灰色的那段已经超出周期，到点就停，不会再执行。";
+  } else {
+    host.innerHTML = bars(DEMO, 1000, false);
+    cap.textContent = "表上各段加起来正好 1000 µs，和周期一样长。";
+  }
+}
+
+function renderPre() {
+  const can = hopCut();
+  const show = preemptOn && can;
+  const slices = show
+    ? [["Q0 残片", "#8a847a", 2], ["Q7 gPTP", "var(--gptp)", 1.3], ["Q0 剩余", "#8a847a", 4]]
+    : [["Q0 整帧", "#8a847a", 6], ["保护带", "#d9d4cc", 1.4], ["Q7 还在等", "var(--gptp)", 1.6]];
+  document.getElementById("pre-fig").innerHTML = slices.map((slice) => (
+    '<div style="flex:' + slice[2] + ";background:" + slice[1] + ";" + (slice[1] === "#d9d4cc" ? "color:#1b1b1b" : "") + '">' + slice[0] + "</div>"
   )).join("");
-  const table = entries.map((row, index) => (
-    "<tr><td>" + index + "</td><td>" + row.us + " µs</td><td>" + esc(openQueues(row.mask)) + "</td><td>0x" + (row.mask & 255).toString(16).padStart(2, "0").toUpperCase() + "</td></tr>"
-  )).join("");
-  document.getElementById("gate-view").innerHTML =
-    '<div class="row"><span>周期</span><select id="cycle">' +
-    [250, 500, 1000].map((value) => '<option value="' + value + '"' + (value === cycleUs ? " selected" : "") + ">" + value + " µs</option>").join("") +
-    "</select><span>各段之和 " + sum + ' µs</span><button type="button" id="add-row">加一段</button><button type="button" id="reset-demo">恢复示意</button></div>' +
-    callout +
-    '<div class="row"><span>可抢占</span>' + bits + "</div><p class=\"note\">" + esc(preemptLine) + "</p>" +
-    gateChart(entries, cycleUs, 0) + rows +
-    "<table><thead><tr><th>序号</th><th>TimeInterval</th><th>开门队列</th><th>GateStates</th></tr></thead><tbody>" + table + "</tbody></table>";
-  document.getElementById("cycle").onchange = (event) => { cycleUs = Number(event.target.value); renderGate(); };
-  document.getElementById("add-row").onclick = () => { entries.push({ us: 40, mask: 0 }); renderGate(); };
-  document.getElementById("reset-demo").onclick = () => {
-    entries.splice(0, entries.length, ...DEMO.map((row) => ({ us: row.us, mask: row.mask })));
-    cycleUs = 1000;
-    preempt = 0;
-    renderGate();
-  };
-  document.querySelectorAll("[data-us]").forEach((button) => {
-    button.onclick = () => {
-      const [index, delta] = button.getAttribute("data-us").split(":").map(Number);
-      entries[index].us = Math.max(20, entries[index].us + delta);
-      renderGate();
-    };
-  });
-  document.querySelectorAll("[data-bit]").forEach((button) => {
-    button.onclick = () => {
-      const [index, bit] = button.getAttribute("data-bit").split(":").map(Number);
-      entries[index].mask ^= 1 << bit;
-      renderGate();
-    };
-  });
-  document.querySelectorAll("[data-del]").forEach((button) => {
-    button.onclick = () => {
-      entries.splice(Number(button.getAttribute("data-del")), 1);
-      renderGate();
-    };
-  });
-  document.querySelectorAll("[data-pre]").forEach((button) => {
-    button.onclick = () => {
-      preempt ^= 1 << Number(button.getAttribute("data-pre"));
-      renderGate();
-    };
-  });
+  const toggle = document.getElementById("pre-toggle");
+  toggle.disabled = !can;
+  if (!can) {
+    const miss = [];
+    if (!hop.a.mac || !hop.b.mac) miss.push("两端 MAC 都要有 802.1Qbu Frame Preemption");
+    if (!hop.a.frag || !hop.b.frag) miss.push("两端 PHY 都要转发 802.3br mPacket");
+    document.getElementById("pre-cap").textContent = miss.join("。") + "。这一跳切不开帧。保护带要盖住 Q0 整帧，gPTP 还在等。";
+    toggle.textContent = "这一跳不能抢占";
+    return;
+  }
+  document.getElementById("pre-cap").textContent = show
+    ? "Q0 被切开。保护带只盖住最后一小段，gPTP 从中间插进去，不用等整帧发完。"
+    : "灰色是保护带。Q0 这一整帧要在保护带里发完，Q7 才能开。gPTP 还在后面等。";
+  toggle.textContent = show ? "看没有抢占" : "看 Q0 可抢占";
 }
 
 function renderPsfp() {
-  const size = Number(psfpBytes);
-  const droppedByFilter = size > 1500;
-  const droppedByMeter = !droppedByFilter && psfpBucket === "empty";
-  const result = droppedByFilter ? "过滤丢掉" : droppedByMeter ? "监管丢掉" : "通过";
-  const detail = droppedByFilter
-    ? "2000 字节大于 1500，入口在监管之前丢掉。"
-    : droppedByMeter
-      ? "帧长够，令牌不够。黄色丢弃开着，这帧进不了队列。"
-      : "帧长在限制内，桶里有令牌，帧算绿色。";
-  document.getElementById("psfp-controls").innerHTML =
-    '<select id="psfp-bytes">' +
-    [["300", "帧长 300 字节"], ["1500", "帧长 1500 字节"], ["2000", "帧长 2000 字节"]].map((opt) => (
-      '<option value="' + opt[0] + '"' + (opt[0] === psfpBytes ? " selected" : "") + ">" + opt[1] + "</option>"
-    )).join("") +
-    '</select><select id="psfp-bucket">' +
-    [["full", "桶里有令牌"], ["empty", "桶是空的"]].map((opt) => (
-      '<option value="' + opt[0] + '"' + (opt[0] === psfpBucket ? " selected" : "") + ">" + opt[1] + "</option>"
-    )).join("") +
-    "</select><b>" + result + "</b>";
-  document.getElementById("psfp-line").textContent = detail + "数字只在这篇动画里，不写进 tsync.yaml。";
-  document.getElementById("psfp-bytes").onchange = (event) => { psfpBytes = event.target.value; renderPsfp(); };
-  document.getElementById("psfp-bucket").onchange = (event) => { psfpBucket = event.target.value; renderPsfp(); };
+  const pick = document.getElementById("psfp");
+  if (!hop.qci) {
+    pick.disabled = true;
+    document.getElementById("psfp-result").textContent = "没有流过滤";
+    document.getElementById("psfp-bar").style.width = "0%";
+    document.getElementById("psfp-cap").textContent = "Switch 上没有勾 802.1Qci PSFP。入口不检查帧长，也不看令牌桶。";
+    return;
+  }
+  pick.disabled = false;
+  const mode = pick.value;
+  const text = {
+    pass: ["放进队列", "70%", "300 字节，没有超过 1500。桶里还有令牌，这帧放进队列。"],
+    sdu: ["按帧长丢掉", "70%", "2000 字节，已经超过 1500。入口直接丢掉，还没轮到看令牌。"],
+    meter: ["按令牌丢掉", "0%", "300 字节，长度没问题。桶是空的，这帧丢掉，进不了队列。"]
+  }[mode];
+  document.getElementById("psfp-result").textContent = text[0];
+  document.getElementById("psfp-bar").style.width = text[1];
+  document.getElementById("psfp-cap").textContent = text[2];
 }
 
-renderFilm();
-renderPort();
-renderGate();
-renderPsfp();
-setInterval(() => {
-  if (!playing) return;
-  ms = (ms + 40) % LOOP;
-  renderFilm();
-}, 40);
+function renderWalk() {
+  document.getElementById("walk-ctrl").classList.toggle("on", walkKind === "ctrl");
+  document.getElementById("walk-gptp").classList.toggle("on", walkKind === "gptp");
+  const steps = WALKS[walkKind];
+  document.getElementById("walk-steps").innerHTML = steps.map((step, index) => {
+    const state = index < walkAt ? "done" : index === walkAt ? "on" : "";
+    const bg = state ? step.color : "var(--shut)";
+    const fg = state ? "#fff" : "var(--ink)";
+    const shown = index <= walkAt ? step.text : "";
+    return '<li class="' + state + '"><div class="step" style="background:' + bg + ";color:" + fg + '"><b>' + (index + 1) + "</b><span>" + step.title + '</span></div><p>' + shown + "</p></li>";
+  }).join("");
+}
+function playWalk() {
+  const token = ++walkToken;
+  const steps = WALKS[walkKind];
+  walkAt = -1;
+  renderWalk();
+  steps.forEach((_, index) => {
+    setTimeout(() => {
+      if (token !== walkToken) return;
+      walkAt = index;
+      renderWalk();
+    }, 80 + index * 700);
+  });
+}
+function show(id) {
+  station = id;
+  document.querySelectorAll(".station").forEach((node) => node.classList.toggle("show", node.id === "st-" + id));
+  document.querySelectorAll("#line button").forEach((button) => {
+    button.classList.toggle("on", button.getAttribute("data-station") === id);
+  });
+  renderOsi();
+}
+
+document.querySelectorAll("#line button").forEach((button) => {
+  button.onclick = () => show(button.getAttribute("data-station"));
+});
+document.getElementById("trust").onchange = () => { renderFrame(); renderOsi(); };
+document.querySelectorAll(".host-tag").forEach((box) => {
+  box.onchange = () => { hosts[box.getAttribute("data-host")].tag = box.checked; flow += 1; action = null; paintRack(); };
+});
+document.querySelectorAll(".host-vid").forEach((input) => {
+  input.onchange = () => {
+    const vid = Math.max(0, Math.min(4095, Number(input.value) || 0));
+    hosts[input.getAttribute("data-host")].vid = vid;
+    action = null;
+    flow += 1;
+    paintRack();
+  };
+});
+document.querySelectorAll(".host-send").forEach((button) => {
+  button.onclick = () => play(button.getAttribute("data-host"));
+});
+document.getElementById("st-vlan").addEventListener("change", (event) => {
+  const target = event.target;
+  const port = ports[target.getAttribute("data-port")];
+  if (!port) return;
+  if (target.classList.contains("port-mode")) port.mode = target.value;
+  else if (target.classList.contains("port-pvid")) port.pvid = Number(target.value);
+  else if (target.classList.contains("port-allow")) port.allow[Number(target.getAttribute("data-vid"))] = target.checked;
+  else return;
+  action = null;
+  flow += 1;
+  paintRack();
+});
+document.getElementById("cy-fit").onclick = () => { cycleMode = "fit"; renderCycle(); };
+document.getElementById("cy-short").onclick = () => { cycleMode = "short"; renderCycle(); };
+document.getElementById("cy-long").onclick = () => { cycleMode = "long"; renderCycle(); };
+document.getElementById("st-tsn").addEventListener("change", (event) => {
+  const id = event.target.id;
+  if (id === "a-phy") hop.a.phy = event.target.checked;
+  else if (id === "a-phc") hop.a.phc = event.target.checked;
+  else if (id === "a-mac") hop.a.mac = event.target.checked;
+  else if (id === "b-phy") hop.b.phy = event.target.checked;
+  else if (id === "b-phc") hop.b.phc = event.target.checked;
+  else if (id === "b-mac") hop.b.mac = event.target.checked;
+  else if (id === "hw-qbv") hop.qbv = event.target.checked;
+  else if (id === "hw-qci") hop.qci = event.target.checked;
+  else if (id === "a-frag") hop.a.frag = event.target.checked;
+  else if (id === "b-frag") hop.b.frag = event.target.checked;
+  else return;
+  renderHw();
+});
+document.getElementById("dly-as").onclick = () => { hop.as = true; renderHw(); };
+document.getElementById("dly-e2e").onclick = () => { hop.as = false; renderHw(); };
+document.getElementById("pre-toggle").onclick = () => { if (hopCut()) { preemptOn = !preemptOn; renderPre(); } };
+document.getElementById("psfp").onchange = renderPsfp;
+document.getElementById("walk-ctrl").onclick = () => { walkKind = "ctrl"; walkAt = -1; walkToken += 1; renderWalk(); };
+document.getElementById("walk-gptp").onclick = () => { walkKind = "gptp"; walkAt = -1; walkToken += 1; renderWalk(); };
+document.getElementById("walk-go").onclick = playWalk;
+
+renderOsi();
+renderFrame();
+tagPreview();
+renderHw();
+renderWalk();
+paintRack();
+show("frame");
 </script>
 </body>
 </html>

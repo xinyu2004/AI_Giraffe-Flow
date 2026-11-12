@@ -52,7 +52,7 @@ gf-config projects/afc/giraffe.yaml
 
 ### Tab 2 · TSN (`tsync.yaml`)
 
-Entry: check **tsync**, then open **Time / gates**. Walkthrough: [docs/zh/tsn/index.html](../../docs/zh/tsn/index.html) (open in a browser; the page is in Chinese and starts playing on its own).
+Entry: check **tsync**, then open **Time / gates**. Walkthrough: [docs/zh/tsn/index.html](../../docs/zh/tsn/index.html) (open in a browser; the page is in Chinese and follows the timeline).
 
 - An untouched project does not grow a `network` key. Save writes it only after this page is edited.
 - **Gate list** (`gate_list`): each row is `interval_us` plus `gate_states`. The sum must equal `cycle_us`. A short list would keep the last row's gates until the cycle ends; a long list would not run the tail. Verify rejects both (`platform_tsync_network`), and the nav stays marked.
