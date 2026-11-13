@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TSN</title>
+  <title>TSN · Time-Sensitive Networking</title>
   <style>
     :root {
       color-scheme: light;
@@ -33,6 +33,7 @@
     }
     main { max-width: 1080px; margin: 0 auto; padding: 32px 24px 72px; }
     h1 { font-size: 34px; margin: 0 0 6px; letter-spacing: -0.03em; }
+    h1 small { display: block; margin-top: 2px; font-size: 15px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
     h2 { font-size: 22px; margin: 36px 0 12px; }
     h3 { font-size: 18px; margin: 0 0 10px; }
     a { color: var(--l2); }
@@ -323,10 +324,10 @@
     .block { margin-top: 28px; }
     .rack { margin-bottom: 14px; }
     .band, .jacks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
-    .wires { height: 64px; }
-    .wire { position: relative; display: flex; justify-content: center; height: 100%; }
-    .wire i { width: 3px; background: var(--vc, transparent); }
-    .wire.live i { width: 7px; }
+    .wires { height: 88px; }
+    .wire { position: relative; display: flex; justify-content: center; height: 100%; color: var(--vc, transparent); }
+    .wire .twist { display: block; width: 18px; height: 100%; }
+    .wire.live .twist path { stroke-width: 2.6; }
     .token, .badge {
       font-size: 11px;
       font-weight: 700;
@@ -340,42 +341,66 @@
       position: absolute;
       left: 50%;
       width: 56px;
+      height: 28px;
       margin-left: -28px;
+      line-height: 14px;
       text-align: center;
       top: 0;
-      z-index: 2;
+      z-index: 3;
       transition: top .6s ease;
     }
+    .token.dir-down { padding: 1px 4px 10px; clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%); }
+    .token.dir-up { padding: 10px 4px 1px; clip-path: polygon(50% 0, 100% 38%, 100% 100%, 0 100%, 0 38%); }
     .token.drop, .badge.drop { background: #8a2a2a; }
-    #wires-top .token.host { top: 0; }
-    #wires-top .token.sw { top: calc(100% - 18px); }
+    #wires-top .token.host,
     #wires-bot .token.sw { top: 0; }
-    #wires-bot .token.host { top: calc(100% - 18px); }
+    #wires-top .token.sw,
+    #wires-bot .token.host { top: calc(100% - 28px); }
     .badge { display: block; text-align: center; }
     .chassis {
       background: #d5dee8;
       color: var(--ink);
       border: 3px solid #243038;
       border-radius: 14px;
-      box-shadow: 0 8px 0 rgba(36, 48, 56, 0.12);
+      box-shadow: 0 4px 0 rgba(36, 48, 56, 0.12);
     }
-    .swtitle { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 14px 0; }
+    .swtitle { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 2px 14px 0; }
     .swtitle b { font-size: 18px; letter-spacing: 0.12em; }
-    .sw-note { margin: 6px 14px 8px; min-height: 2.8em; color: var(--muted); font-size: 13px; }
+    .sw-note { margin: 2px 14px 2px; min-height: 2.2em; color: var(--muted); font-size: 13px; }
     .vchips { display: flex; flex-wrap: wrap; gap: 6px; }
     .vchip { color: #fff; font-size: 12px; font-weight: 700; padding: 1px 7px; }
-    .jack { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 0 10px; }
-    .jacks.bot .jack { flex-direction: column-reverse; padding: 10px 0 0; }
+    .jack { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 0 2px; }
+    .jacks.bot .jack { flex-direction: column-reverse; padding: 2px 0 0; }
     .plug {
-      width: 54px;
-      height: 34px;
-      display: grid;
-      place-items: center;
-      background: var(--vc, var(--shut));
-      color: #fff;
-      font-weight: 700;
-      box-shadow: inset 0 -10px 0 rgba(0, 0, 0, 0.22);
+      width: 44px;
+      height: 32px;
+      display: block;
+      position: relative;
+      background: linear-gradient(#3c4652, #243038);
+      border-radius: 2px 2px 5px 5px;
+      box-shadow: inset 0 4px 0 var(--vc, #5c6570), inset 0 0 0 1px #12181d;
     }
+    .plug i {
+      position: absolute;
+      left: 5px;
+      right: 5px;
+      top: 7px;
+      height: 12px;
+      background: #0c1014;
+      border-radius: 1px;
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.08);
+    }
+    .plug s {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      top: 17px;
+      height: 7px;
+      background: repeating-linear-gradient(90deg, #e6d7a2 0 1.5px, transparent 1.5px 3.6px);
+      text-decoration: none;
+    }
+    .jacks.bot .plug { transform: rotate(180deg); }
+    .pnum { font-style: normal; font-size: 12px; font-weight: 700; }
     .jack .pcfg { width: min(100%, 132px); display: flex; flex-direction: column; gap: 4px; }
     .jack select { font: inherit; font-size: 12px; padding: 2px 4px; width: 100%; }
     .jack select.port-pvid { border-left: 4px solid var(--vc); }
@@ -437,38 +462,69 @@
       white-space: nowrap;
       color: var(--ink);
     }
-    .chain-wrap { overflow-x: auto; }
+    .chain-wrap { overflow: visible; }
     .chain {
       display: flex;
-      align-items: stretch;
+      align-items: center;
       gap: 0;
-      min-width: 880px;
+      width: 100%;
+      min-width: 0;
     }
     .chain .part {
       flex: 1 1 0;
       min-width: 0;
       background: var(--shut);
-      padding: 10px;
+      padding: 8px 6px;
     }
-    .chain .part b { display: block; }
-    .chain .part > small { display: block; color: var(--muted); margin-bottom: 6px; }
+    .chain .part.mac b,
+    .chain .part.phy b { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .chain .ic { width: 26px; height: 26px; flex: none; }
+    .chain .part.phy .ic { width: 40px; height: 40px; }
+    .chain .ic.flip { transform: scaleX(-1); }
+    .chain .part.phy {
+      position: relative;
+      color: #f4f2ec;
+      background: #1f7a45;
+    }
+    .chain .part.phy::before,
+    .chain .part.phy::after {
+      content: "";
+      position: absolute;
+      left: 7px;
+      right: 7px;
+      height: 7px;
+      background: repeating-linear-gradient(90deg, #243038 0 4px, transparent 4px 10px);
+      pointer-events: none;
+    }
+    .chain .part.phy::before { top: -7px; }
+    .chain .part.phy::after { bottom: -7px; }
+    .chain .part.phy > small,
+    .chain .part.phy label,
+    .chain .part.phy label small { color: #f4f2ec; }
+    .chain .part > small { display: block; color: var(--muted); margin-bottom: 4px; line-height: 1.35; }
     .chain .part label small { display: block; color: var(--muted); font-size: 12px; margin: 0; font-weight: 400; }
+    .chain .part label span { min-width: 0; overflow-wrap: break-word; }
     .stds { list-style: none; margin: 8px 0 10px 1.5em; padding: 0; }
     .stds li { margin: 0 0 8px; max-width: 68ch; }
-    .chain .part.mac { box-shadow: inset 0 4px 0 var(--l2); }
-    .chain .part.phy { box-shadow: inset 0 4px 0 var(--l1); }
     .chain .part.sw {
-      flex: 1.35 1 0;
+      flex: 1.15 1 0;
       background: #d5dee8;
       border: 3px solid #243038;
       border-radius: 12px;
       box-shadow: none;
     }
-    .chain .join { flex: 0 0 18px; display: flex; align-items: center; }
-    .chain .join i { display: block; width: 100%; height: 3px; background: #243038; }
-    .chain .part .row { margin-top: 8px; }
-    .chain .part .row button { flex: 1; padding: 6px 4px; font-size: 13px; }
-    .chain .part label { display: flex; align-items: flex-start; gap: 4px; margin-top: 6px; font-size: 13px; }
+    .chain .join {
+      flex: 0 0 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .chain .join.rgmii .bus { width: 100%; display: flex; flex-direction: column; gap: 5px; }
+    .chain .join.rgmii i { display: block; height: 2px; background: #243038; }
+    .chain .join.pair svg { display: block; width: 100%; height: 28px; }
+    .chain .part .row { margin-top: 6px; flex-direction: column; align-items: stretch; }
+    .chain .part .row button { flex: none; width: 100%; padding: 4px 4px; font-size: 12px; }
+    .chain .part label { display: flex; align-items: flex-start; gap: 4px; margin-top: 6px; min-width: 0; font-size: 12px; }
     .verdict { list-style: none; margin: 12px 0 0; padding: 0; }
     .verdict li { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 6px; padding: 8px 10px; }
     .verdict li .mark { flex: 0 0 auto; width: 1.2em; font-weight: 700; line-height: 1.45; }
@@ -507,8 +563,14 @@
     }
     .policy { list-style: none; margin: 8px 0 0; padding: 0; }
     .policy li { margin: 0 0 4px; padding: 6px 8px; border-left: 3px solid transparent; color: var(--muted); }
-    .policy li.on { color: var(--ink); background: #e7eef8; border-left-color: var(--l2); }
-    .swbox { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--line); background: var(--card); }
+    .policy li.on { color: var(--ink); background: #f6d98a; border-left-color: #8a5a10; }
+    .swbox {
+      margin-top: 18px;
+      padding: 12px 14px;
+      background: #d5dee8;
+      border: 3px solid #243038;
+      border-radius: 14px;
+    }
     .swbox > b { display: block; margin-bottom: 6px; }
     .swbox .pair { margin-top: 8px; }
     .swbox .rule { color: var(--muted); margin: 8px 0 0; }
@@ -528,7 +590,7 @@
 </head>
 <body>
 <main>
-  <h1>TSN</h1>
+  <h1>TSN<small>Time-Sensitive Networking · 时间敏感网络</small></h1>
   <p class="lede">配置在 <a href="../../../tools/gf-config/README_zh.md">gf-config「时间 / 门控」</a>。点时间线上的一站。</p>
 
   <section>
@@ -547,13 +609,22 @@
     <button type="button" data-station="frame"><b>1982</b><span>普通帧</span></button>
     <button type="button" data-station="vlan"><b>1998</b><span>VLAN</span></button>
     <button type="button" data-station="avb"><b>2009</b><span>AVB</span></button>
-    <button type="button" data-station="tsn"><b>2012</b><span>TSN</span></button>
+    <button type="button" data-station="tsn"><b>2012</b><span>时间敏感网络</span></button>
   </div>
 
   <article class="station" id="st-frame">
     <h2>1982 · Ethernet II</h2>
     <figure>
       <div id="frame-cells"></div>
+      <div class="swbox">
+        <b>交换机入口</b>
+        <label><input id="trust" type="checkbox" checked> 信任 DSCP</label>
+        <p class="rule">入口只读 DSCP 的 6 位来选队列，不改这 6 位，也不看 ECN。帧仍按目的 MAC 转发。</p>
+        <ul class="policy" id="trust-policy">
+          <li id="trust-on"><b>信任。</b>类选择进入同号队列，EF 进入队列 5。下面右边的队列号这时生效。</li>
+          <li id="trust-off"><b>不信任。</b>不读这 6 位。队列与 DSCP 无关，只按目的 MAC 转发。</li>
+        </ul>
+      </div>
       <div class="field">
         <p class="rule">DSCP（Differentiated Services Code Point，区分服务码点）的后 3 位是 000 时，是类选择 CS（Class Selector），类号是前 3 位，信任时进入同号队列。CS7 是 111000 = 56，进入队列 7；CS0 要前 3 位也是 000。末位是 0 的其余值在标准池：有名字的是 AF（Assured Forwarding）、EF（Expedited Forwarding）、VA（Voice-Admit）、LE（Lower Effort），没有名字的也留在标准池。末两位是 01 的是实验或本地码点。末两位是 11 的留给以后的标准。EF 单独标在队列 5。AF、VA、LE、没有名字的标准码点和本地码点不按类号入队。</p>
         <div class="pair" id="dscp-pair">
@@ -568,15 +639,6 @@
           <ul id="ecn-mean" class="meanings ecn"></ul>
         </div>
       </div>
-      <div class="swbox">
-        <b>交换机入口</b>
-        <label><input id="trust" type="checkbox" checked> 信任 DSCP</label>
-        <p class="rule">入口只读 DSCP 的 6 位来选队列，不改这 6 位，也不看 ECN。帧仍按目的 MAC 转发。</p>
-        <ul class="policy" id="trust-policy">
-          <li id="trust-on"><b>信任。</b>类选择进入同号队列，EF 进入队列 5。上面右边的队列号这时生效。</li>
-          <li id="trust-off"><b>不信任。</b>不读这 6 位。队列与 DSCP 无关，只按目的 MAC 转发。</li>
-        </ul>
-      </div>
     </figure>
   </article>
 
@@ -587,14 +649,14 @@
       <figcaption>802.1Q 标签插在源 MAC 与 EtherType 之间，共 4 字节。TPID 为 0x8100。TCI 为 PCP 3 位、DEI 1 位、VID 12 位。帧首由 14 字节变为 18 字节。FCS 仍在帧尾，覆盖加长后的帧。</figcaption>
     </figure>
     <div class="block">
-      <h3>802.1Q VLAN 组网</h3>
+      <h3>802.1Q VLAN 组网 · 8 口</h3>
       <figure>
         <div class="rack">
           <div class="band">
             <div class="node host" id="node-a1" data-host="a1"><b>A1</b><label><input class="host-tag" data-host="a1" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a1" type="number" min="0" max="4095" step="1" value="10"></label><button type="button" class="host-send" data-host="a1">发送</button></div>
             <div class="node host" id="node-a2" data-host="a2"><b>A2</b><label><input class="host-tag" data-host="a2" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a2" type="number" min="0" max="4095" step="1" value="10"></label><button type="button" class="host-send" data-host="a2">发送</button></div>
             <div class="node host" id="node-a3" data-host="a3"><b>A3</b><label><input class="host-tag" data-host="a3" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a3" type="number" min="0" max="4095" step="1" value="10"></label><button type="button" class="host-send" data-host="a3">发送</button></div>
-            <div class="slot"></div>
+            <div class="node host" id="node-a4" data-host="a4"><b>A4</b><label><input class="host-tag" data-host="a4" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a4" type="number" min="0" max="4095" step="1" value="0"></label><button type="button" class="host-send" data-host="a4">发送</button></div>
           </div>
           <div class="band wires" id="wires-top"></div>
           <div class="chassis" id="node-sw">
@@ -608,7 +670,7 @@
             <div class="node host" id="node-b1" data-host="b1"><b>B1</b><label><input class="host-tag" data-host="b1" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b1" type="number" min="0" max="4095" step="1" value="20"></label><button type="button" class="host-send" data-host="b1">发送</button></div>
             <div class="node host" id="node-b2" data-host="b2"><b>B2</b><label><input class="host-tag" data-host="b2" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b2" type="number" min="0" max="4095" step="1" value="20"></label><button type="button" class="host-send" data-host="b2">发送</button></div>
             <div class="node host" id="node-b3" data-host="b3"><b>B3</b><label><input class="host-tag" data-host="b3" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b3" type="number" min="0" max="4095" step="1" value="20"></label><button type="button" class="host-send" data-host="b3">发送</button></div>
-            <div class="slot"></div>
+            <div class="node host" id="node-b4" data-host="b4"><b>B4</b><label><input class="host-tag" data-host="b4" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b4" type="number" min="0" max="4095" step="1" value="0"></label><button type="button" class="host-send" data-host="b4">发送</button></div>
           </div>
         </div>
       </figure>
@@ -628,7 +690,7 @@
   </article>
 
   <article class="station" id="st-tsn">
-    <h2>2012 · TSN</h2>
+    <h2>2012 · Time-Sensitive Networking</h2>
     <p class="cap" style="margin-bottom:8px">同一套桥用来送控制。先看这一跳的器件能不能测时，再看时间门、抢占和流过滤。门控和抢占是 2016，流过滤是 2017，都在这一站里。</p>
 
     <div class="block">
@@ -644,17 +706,17 @@
         <div class="chain-wrap">
           <div class="chain">
             <div class="part mac">
-              <b>MAC</b><small>端 A</small>
+              <b>MAC<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><g fill="#243038"><rect x="6" y="0" width="2" height="4"/><rect x="11" y="0" width="2" height="4"/><rect x="16" y="0" width="2" height="4"/><rect x="6" y="20" width="2" height="4"/><rect x="11" y="20" width="2" height="4"/><rect x="16" y="20" width="2" height="4"/><rect x="0" y="6" width="4" height="2"/><rect x="0" y="11" width="4" height="2"/><rect x="0" y="16" width="4" height="2"/><rect x="20" y="6" width="4" height="2"/><rect x="20" y="11" width="4" height="2"/><rect x="20" y="16" width="4" height="2"/></g><rect x="4.5" y="4.5" width="15" height="15" fill="#d5dee8" stroke="#243038"/></svg></b><small>端 A</small>
               <label><input id="a-phc" type="checkbox" checked><span>PTP Hardware Clock<small>时戳写进这个时钟</small></span></label>
               <label><input id="a-mac" type="checkbox" checked><span>802.1Qbu Frame Preemption<small>MAC 能把普通帧切开</small></span></label>
             </div>
-            <div class="join"><i></i></div>
+            <div class="join rgmii"><div class="bus"><i></i><i></i><i></i><i></i></div></div>
             <div class="part phy">
-              <b>PHY</b><small>端 A</small>
+              <b>PHY<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="3" width="16" height="18" rx="1.5" fill="#d5dee8" stroke="#243038" stroke-width="1.3"/><rect x="3.5" y="7" width="11" height="8" fill="#0c1014"/><g fill="#c6a15a"><rect x="4.6" y="12" width="1.6" height="6"/><rect x="7.2" y="12" width="1.6" height="6"/><rect x="9.8" y="12" width="1.6" height="6"/><rect x="12.4" y="12" width="1.6" height="6"/></g><rect x="17" y="10" width="6" height="4" fill="#243038"/></svg></b><small>端 A</small>
               <label><input id="a-phy" type="checkbox" checked><span>IEEE 1588 Timestamp<small>在靠近线的地方锁存</small></span></label>
               <label><input id="a-frag" type="checkbox" checked><span>802.3br mPacket<small>被切开的帧片段过得去</small></span></label>
             </div>
-            <div class="join"><i></i></div>
+            <div class="join pair"><svg viewBox="0 0 64 28" aria-hidden="true"><path d="M0 6C16 6 16 22 32 22C48 22 48 6 64 6" fill="none" stroke="#243038" stroke-width="2"/><path d="M0 22C16 22 16 6 32 6C48 6 48 22 64 22" fill="none" stroke="#8aa0b4" stroke-width="2"/></svg></div>
             <div class="part sw">
               <b>Switch</b><small>802.1AS peer delay，或 IEEE 1588 E2E delay</small>
               <div class="row">
@@ -664,15 +726,15 @@
               <label><input id="hw-qbv" type="checkbox" checked><span>802.1Qbv Time-Aware Shaper<small>出口按时间表开门</small></span></label>
               <label><input id="hw-qci" type="checkbox" checked><span>802.1Qci PSFP<small>入口按流过滤和监管</small></span></label>
             </div>
-            <div class="join"><i></i></div>
+            <div class="join pair"><svg viewBox="0 0 64 28" aria-hidden="true"><path d="M0 6C16 6 16 22 32 22C48 22 48 6 64 6" fill="none" stroke="#243038" stroke-width="2"/><path d="M0 22C16 22 16 6 32 6C48 6 48 22 64 22" fill="none" stroke="#8aa0b4" stroke-width="2"/></svg></div>
             <div class="part phy">
-              <b>PHY</b><small>端 B</small>
+              <b>PHY<svg class="ic flip" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="3" width="16" height="18" rx="1.5" fill="#d5dee8" stroke="#243038" stroke-width="1.3"/><rect x="3.5" y="7" width="11" height="8" fill="#0c1014"/><g fill="#c6a15a"><rect x="4.6" y="12" width="1.6" height="6"/><rect x="7.2" y="12" width="1.6" height="6"/><rect x="9.8" y="12" width="1.6" height="6"/><rect x="12.4" y="12" width="1.6" height="6"/></g><rect x="17" y="10" width="6" height="4" fill="#243038"/></svg></b><small>端 B</small>
               <label><input id="b-phy" type="checkbox" checked><span>IEEE 1588 Timestamp<small>在靠近线的地方锁存</small></span></label>
               <label><input id="b-frag" type="checkbox" checked><span>802.3br mPacket<small>被切开的帧片段过得去</small></span></label>
             </div>
-            <div class="join"><i></i></div>
+            <div class="join rgmii"><div class="bus"><i></i><i></i><i></i><i></i></div></div>
             <div class="part mac">
-              <b>MAC</b><small>端 B</small>
+              <b>MAC<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><g fill="#243038"><rect x="6" y="0" width="2" height="4"/><rect x="11" y="0" width="2" height="4"/><rect x="16" y="0" width="2" height="4"/><rect x="6" y="20" width="2" height="4"/><rect x="11" y="20" width="2" height="4"/><rect x="16" y="20" width="2" height="4"/><rect x="0" y="6" width="4" height="2"/><rect x="0" y="11" width="4" height="2"/><rect x="0" y="16" width="4" height="2"/><rect x="20" y="6" width="4" height="2"/><rect x="20" y="11" width="4" height="2"/><rect x="20" y="16" width="4" height="2"/></g><rect x="4.5" y="4.5" width="15" height="15" fill="#d5dee8" stroke="#243038"/></svg></b><small>端 B</small>
               <label><input id="b-phc" type="checkbox" checked><span>PTP Hardware Clock<small>时戳写进这个时钟</small></span></label>
               <label><input id="b-mac" type="checkbox" checked><span>802.1Qbu Frame Preemption<small>MAC 能把普通帧切开</small></span></label>
             </div>
@@ -770,13 +832,15 @@ const hosts = {
   a1: { tag: false, vid: 10, port: 1 },
   a2: { tag: false, vid: 10, port: 2 },
   a3: { tag: false, vid: 10, port: 3 },
+  a4: { tag: false, vid: 0, port: 4 },
   b1: { tag: false, vid: 20, port: 5 },
   b2: { tag: false, vid: 20, port: 6 },
-  b3: { tag: false, vid: 20, port: 7 }
+  b3: { tag: false, vid: 20, port: 7 },
+  b4: { tag: false, vid: 0, port: 8 }
 };
 const ports = {};
 for (let index = 1; index <= 8; index += 1) {
-  ports[index] = { mode: "access", pvid: index >= 5 ? 20 : 10, allow: {} };
+  ports[index] = { mode: "access", pvid: index === 4 || index === 8 ? 0 : index >= 5 ? 20 : 10, allow: {} };
 }
 const VLAN_PALETTE = ["#1f4b99", "#c56a12", "#1e7a4a", "#1d6f82", "#5c4d8a", "#0e6b5c", "#a68462", "#8d6e97"];
 const vlanColorOf = {};
@@ -1093,7 +1157,7 @@ function note(text) {
 function later(ms, token, fn) {
   window.setTimeout(() => { if (token === flow) fn(); }, ms);
 }
-function placeToken(port, at, text, drop) {
+function placeToken(port, at, text, drop, toward) {
   const wire = document.getElementById("wire-" + port);
   if (!wire || !hostOn(port)) return;
   let token = wire.querySelector(".token");
@@ -1105,6 +1169,10 @@ function placeToken(port, at, text, drop) {
   }
   token.textContent = text;
   token.classList.toggle("drop", !!drop);
+  const dest = toward || at;
+  const down = (port <= 4) === (dest === "sw");
+  token.classList.toggle("dir-down", down);
+  token.classList.toggle("dir-up", !down);
   if (fresh) token.style.transition = "none";
   token.classList.toggle("host", at === "host");
   token.classList.toggle("sw", at === "sw");
@@ -1142,7 +1210,7 @@ function play(id) {
   const portNo = hosts[id].port;
   const emitted = ing.emit.tagged ? "VID " + ing.emit.vid : "无标签";
   document.getElementById("node-" + id).classList.add("hot");
-  placeToken(portNo, "host", emitted, false);
+  placeToken(portNo, "host", emitted, false, "sw");
   note(ing.opened);
   later(700, token, () => {
     placeToken(portNo, "sw", emitted, false);
@@ -1155,11 +1223,11 @@ function play(id) {
       later(700, token, () => {
         const eg = egressOf(id, ing.vlan);
         eg.access.forEach((number) => {
-          placeToken(number, "sw", "无标签", false);
+          placeToken(number, "sw", "无标签", false, "host");
           document.getElementById("port-" + number).classList.add("on");
         });
         eg.trunk.forEach((number) => {
-          if (hostOn(number)) placeToken(number, "sw", "VID " + ing.vlan, false);
+          if (hostOn(number)) placeToken(number, "sw", "VID " + ing.vlan, false, "host");
           else placeBadge(number, "VID " + ing.vlan);
           document.getElementById("port-" + number).classList.add("on");
         });
@@ -1195,11 +1263,17 @@ function portColor(number) {
   if (port.mode !== "access" || port.pvid < 1 || port.pvid > 4094) return "#243038";
   return colorFor(port.pvid);
 }
+function twistSvg() {
+  return '<svg class="twist" viewBox="0 0 18 88" preserveAspectRatio="none" aria-hidden="true">' +
+    '<path d="M4 0C4 8 14 8 14 16S4 24 4 32S14 40 14 48S4 56 4 64S14 72 14 80S4 88 4 88" fill="none" stroke="currentColor" stroke-width="1.8"/>' +
+    '<path d="M14 0C14 8 4 8 4 16S14 24 14 32S4 40 4 48S14 56 14 64S4 72 4 80S14 88 14 88" fill="none" stroke="currentColor" stroke-width="1.8" opacity="0.4"/>' +
+    "</svg>";
+}
 function wireBand(start) {
   return [0, 1, 2, 3].map((offset) => {
     const number = start + offset;
     if (!hostOn(number)) return '<div class="wire" id="wire-' + number + '"></div>';
-    return '<div class="wire" id="wire-' + number + '" style="--vc:' + portColor(number) + '"><i></i></div>';
+    return '<div class="wire" id="wire-' + number + '" style="--vc:' + portColor(number) + '">' + twistSvg() + "</div>";
   }).join("");
 }
 function jack(number) {
@@ -1208,20 +1282,22 @@ function jack(number) {
   const mode = '<select class="port-mode" data-port="' + number + '"><option value="access"' +
     (port.mode === "access" ? " selected" : "") + ">Access</option><option value=\"trunk\"" +
     (port.mode === "trunk" ? " selected" : "") + ">Trunk</option></select>";
+  const choices = [0].concat(vids);
   const vlan = port.mode === "access"
-    ? '<select class="port-pvid" data-port="' + number + '">' + vids.map((vid) =>
+    ? '<select class="port-pvid" data-port="' + number + '">' + choices.map((vid) =>
       '<option value="' + vid + '"' + (vid === port.pvid ? " selected" : "") + ">" + vid + "</option>"
     ).join("") + "</select>"
     : '<span class="allows">' + vids.map((vid) =>
       '<label class="vchip" style="background:' + colorFor(vid) + '"><input class="port-allow" data-port="' + number + '" data-vid="' + vid + '" type="checkbox"' +
       (allows(port.allow, vid) ? " checked" : "") + "> " + vid + "</label>"
     ).join("") + "</span>";
-  return '<div class="jack" id="port-' + number + '" style="--vc:' + portColor(number) + '"><b class="plug">' + number + '</b><div class="pcfg">' + mode + vlan + "</div></div>";
+  return '<div class="jack" id="port-' + number + '" style="--vc:' + portColor(number) + '"><b class="plug"><i></i><s></s></b><em class="pnum">' + number + '</em><div class="pcfg">' + mode + vlan + "</div></div>";
 }
 function paintRack() {
   const vids = seenVids();
   Object.keys(ports).forEach((number) => {
-    if (vids.length && vids.indexOf(ports[number].pvid) < 0) ports[number].pvid = vids[0];
+    const pvid = ports[number].pvid;
+    if (pvid !== 0 && vids.length && vids.indexOf(pvid) < 0) ports[number].pvid = vids[0];
   });
   Object.keys(hosts).forEach((id) => {
     const host = hosts[id];
