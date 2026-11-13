@@ -443,12 +443,38 @@
       white-space: nowrap;
       color: var(--ink);
     }
-    .walk { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-    .walk li { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 14px; align-items: center; margin: 0; padding: 0; }
-    .walk li .step { display: flex; gap: 10px; align-items: center; padding: 8px 12px; min-height: 40px; }
-    .walk li b { width: 1.2em; flex: none; font-variant-numeric: tabular-nums; }
-    .walk li p { margin: 0; color: var(--ink); }
-    .walk li.on .step { outline: 2px solid var(--ink); outline-offset: 1px; }
+    .walk-frame {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      width: min(520px, 100%);
+      margin: 12px auto 0;
+    }
+    .walk-frame .fld {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 48px;
+      padding: 8px 12px;
+      box-sizing: border-box;
+      color: #fff;
+    }
+    .walk-shell {
+      box-sizing: border-box;
+      padding: 8px 12px 12px;
+      background: var(--l2);
+      color: #fff;
+    }
+    .walk-shell > b { display: block; margin-bottom: 8px; font-size: 15px; }
+    .walk-shell .fld { width: 100%; }
+    .walk-shell .fld.plain { background: transparent; }
+    .walk-shell .fld + .fld { margin-top: 6px; }
+    .walk-frame .fld b { flex: none; min-width: 8.2em; font-size: 15px; }
+    .walk-frame .fld b em { font-style: normal; display: inline-block; width: 1.2em; }
+    .walk-frame .fld .txt { display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.35; font-weight: 400; }
+    .walk-frame .fld .txt i { font-style: normal; }
+    .walk-frame .fld.on { outline: 2px solid var(--ink); outline-offset: 1px; }
     #time-hops { margin-top: 22px; }
     #time-hops i { position: relative; }
     #time-hops i em {
@@ -578,13 +604,86 @@
     .field + .field { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
     .field .rule { margin: 0; }
     .field .pair { margin-top: 8px; }
+    .ecn-run {
+      margin-top: 16px;
+      padding: 10px 12px 8px;
+      background: #e7eef0;
+      border-radius: 12px;
+    }
+    .ecn-run::before {
+      content: "ECN exchange";
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--l4);
+    }
+    .ecn-board { position: relative; margin-top: 12px; padding-bottom: 64px; }
+    .ecn-nodes {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 28px;
+      position: relative;
+      z-index: 1;
+    }
+    .ecn-node {
+      background: var(--card);
+      border: 2px solid #243038;
+      border-radius: 10px;
+      padding: 8px 4px;
+      text-align: center;
+      font-size: 13px;
+    }
+    .ecn-node.sw { background: #d5dee8; }
+    .ecn-node b { display: block; }
+    .ecn-node small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.35; }
+    .ecn-node .saw:empty, .ecn-node .act:empty { display: none; }
+    .ecn-node .saw { color: var(--ink); }
+    .ecn-node .act { color: var(--l3); font-weight: 700; }
+    .ecn-node.on { outline: 2px solid var(--ink); outline-offset: 1px; }
+    .ecn-node.bad { background: #f8e6e4; }
+    .ecn-card {
+      margin-top: 8px;
+      padding: 6px 10px;
+      background: var(--card);
+      border: 2px solid #243038;
+      border-radius: 10px;
+      line-height: 1.45;
+    }
+    .ecn-card p { margin: 0; }
+    .ecn-card p + p { margin-top: 2px; }
+    .ecn-card .id b { margin-right: 6px; font-size: 20px; line-height: 1; }
+    .ecn-card .udp { background: var(--l4); color: #fff; font-size: 11px; font-style: normal; font-weight: 700; padding: 1px 6px; margin-right: 8px; }
+    .ecn-card span + span { margin-left: 0.75em; }
+    .ecn-card .aside { color: var(--muted); }
+    .ecn-card .links a { margin-right: 10px; }
+    .ecn-line { position: absolute; left: 8%; right: 8%; height: 2px; background: #243038; }
+    .ecn-line.fwd { bottom: 40px; }
+    .ecn-line.back { bottom: 12px; background: #8aa0b4; }
+    .ecn-line.down { left: auto; right: auto; bottom: auto; width: 2px; background: #8aa0b4; }
+    .ecn-token {
+      position: absolute;
+      z-index: 2;
+      width: 54px;
+      height: 22px;
+      margin-left: -27px;
+      line-height: 22px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--l4);
+      transition: left .55s ease, top .55s ease;
+    }
+    .ecn-token.back { background: var(--l3); }
+    .ecn-token.drop { background: #8a2a2a; }
     @media (max-width: 800px) {
       .osi, .cards, .pair { grid-template-columns: 1fr; }
       .line { flex-direction: column; }
       .line button { border-left-width: 1px; }
       .rack { overflow-x: auto; }
       .band, .jacks { min-width: 680px; }
-      .walk li { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -637,6 +736,29 @@
         <div class="pair">
           <div id="ecn-bits"></div>
           <ul id="ecn-mean" class="meanings ecn"></ul>
+        </div>
+        <div class="ecn-run">
+          <div class="row">
+            <button type="button" id="ecn-tcp" class="on">TCP</button>
+            <button type="button" id="ecn-quic">QUIC</button>
+            <button type="button" id="ecn-roce">RoCEv2</button>
+            <button type="button" id="ecn-rtp">RTP</button>
+            <button type="button" id="ecn-go">Send one</button>
+          </div>
+          <article class="ecn-card" id="ecn-card"></article>
+          <div class="ecn-board" id="ecn-board">
+            <div class="ecn-nodes">
+              <div class="ecn-node" data-hop="tx"><b>Sender</b><small class="saw"></small><small class="act"></small></div>
+              <div class="ecn-node sw" data-hop="sw1"><b>Switch 1</b><small class="saw"></small></div>
+              <div class="ecn-node sw" data-hop="sw2"><b>Switch 2</b><small>congested</small><small class="saw"></small></div>
+              <div class="ecn-node sw" data-hop="sw3"><b>Switch 3</b><small class="saw"></small></div>
+              <div class="ecn-node" data-hop="rx"><b>Receiver</b><small class="saw"></small></div>
+            </div>
+            <i class="ecn-line fwd"></i>
+            <i class="ecn-line down"></i>
+            <i class="ecn-line back"></i>
+            <b class="ecn-token" id="ecn-token" hidden>00</b>
+          </div>
         </div>
       </div>
     </figure>
@@ -799,10 +921,10 @@
         <div class="row">
           <button type="button" id="walk-ctrl" class="on">Control frame</button>
           <button type="button" id="walk-gptp">gPTP</button>
-          <button type="button" id="walk-go">Step</button>
+          <button type="button" id="walk-go">Walk</button>
         </div>
-        <p class="cap">Click Step. Each step keeps its note on the right.</p>
-        <ol class="walk" id="walk-steps"></ol>
+        <p class="cap">Click Walk. The note appears on the layer you reach.</p>
+        <div class="walk-frame" id="walk-steps"></div>
       </figure>
     </div>
   </article>
@@ -867,19 +989,36 @@ let walkAt = -1;
 let walkToken = 0;
 const WALKS = {
   ctrl: [
-    { title: "Application writes SOME/IP", text: "Control data leaves the application. The payload of this frame is SOME/IP.", color: "var(--l7)" },
-    { title: "Packed into UDP", text: "SOME/IP is packed into UDP. This step does not pick a queue.", color: "var(--l4)" },
-    { title: "IP header writes DSCP", text: "DSCP is the priority in the IP header, 6 bits. The 1982 station covers it.", color: "var(--l3)" },
-    { title: "PCP picks the queue", text: "PCP in the 802.1Q tag is a second priority. The switch uses PCP to choose the queue. DSCP stays in the IP header.", color: "var(--l2)" },
-    { title: "Ingress runs 802.1Qci", text: "Before the queue, check the frame length, then the token bucket. Too long, or an empty bucket, and the frame is dropped.", color: "var(--vlan)" },
-    { title: "Egress waits for the gate", text: "Leaving the queue still waits for the 802.1Qbv gate to open. The guard band in front of the gate finishes the previous frame.", color: "var(--gptp)" },
-    { title: "PHY puts it on the wire", text: "The gate is open. The PHY puts the bits on the wire.", color: "var(--l1)" }
+    { text: "Control data leaves the application. The payload of this frame is SOME/IP." },
+    { text: "SOME/IP is packed into UDP. This step does not pick a queue." },
+    { text: "DSCP is the priority in the IP header, 6 bits. The 1982 station covers it." },
+    { text: "PCP in the tag picks the queue. DSCP stays in the IP header." },
+    { text: "Ingress checks the frame length, then the token bucket. Too long, or an empty bucket, and the frame is dropped." },
+    { text: "The frame waits for the gate. The guard band in front finishes the previous frame." },
+    { text: "The gate is open. The PHY puts the bits on the wire." }
   ],
   gptp: [
-    { title: "EtherType 0x88F7", text: "The type is the EtherType in the frame header. On the 1982 station, 0x0800 means IPv4 is inside. gPTP writes 0x88F7, which means a time-sync message is inside.", color: "var(--gptp)" },
-    { title: "No IP header", text: "What follows 0x88F7 is not IP, so there is no DSCP and no UDP. The switch cannot pick its queue the way the 1982 station does.", color: "var(--l3)" },
-    { title: "Straight into queue 7", text: "The switch recognizes 0x88F7 and places the frame in queue 7. Queue 7 is reserved for gPTP and does not compete with the control frame.", color: "var(--l2)" },
-    { title: "Line the gates up", text: "The message in queue 7 measures how long each hop took. Each port lines its time gate up to that time, so a control frame knows which gate opens when.", color: "var(--gptp)" }
+    { text: "The EtherType is 0x88F7, so a time-sync message is inside. What follows is not IP, so there is no DSCP and no UDP." },
+    { text: "The switch recognizes 0x88F7 and places the frame in queue 7. That queue is reserved for gPTP and does not compete with the control frame." },
+    { text: "Queue 7 measures how long each hop took. Each port lines its gate up to that time." }
+  ]
+};
+const WALK_ROWS = {
+  ctrl: [
+    { name: "Application", width: 46, color: "var(--l7)", hold: "SOME/IP", at: [0] },
+    { name: "Presentation", width: 54, color: "var(--l6)", hold: "no header", at: [] },
+    { name: "Session", width: 62, color: "var(--l5)", hold: "no header", at: [] },
+    { name: "Transport", width: 70, color: "var(--l4)", hold: "UDP", at: [1] },
+    { name: "Network", width: 78, color: "var(--l3)", hold: "IPv4", at: [2] },
+    { group: "Data link", n: "1", name: "802.1Q", width: 88, color: "var(--vlan)", hold: "PCP", at: [3] },
+    { group: "Data link", n: "2", name: "802.1Qci", width: 88, color: "var(--vlan)", hold: "ingress", at: [4] },
+    { group: "Data link", n: "3", name: "802.1Qbv", width: 88, color: "var(--gptp)", hold: "gate", at: [5] },
+    { name: "Physical", width: 100, color: "var(--l1)", hold: "PHY", at: [6] }
+  ],
+  gptp: [
+    { group: "Data link", n: "1", name: "0x88F7", width: 88, plain: true, hold: "EtherType", at: [0] },
+    { group: "Data link", n: "2", name: "queue 7", width: 88, plain: true, hold: "enqueue", at: [1] },
+    { group: "Data link", n: "3", name: "802.1Qbv", width: 88, color: "var(--gptp)", hold: "gate", at: [2] }
   ]
 };
 
@@ -1059,6 +1198,7 @@ function renderFrame() {
   document.getElementById("trust-on").classList.toggle("on", trust);
   document.getElementById("trust-off").classList.toggle("on", !trust);
   bindBits();
+  if (typeof syncEcn === "function") syncEcn();
 }
 
 function tagPreview() {
@@ -1486,13 +1626,37 @@ function renderWalk() {
   document.getElementById("walk-ctrl").classList.toggle("on", walkKind === "ctrl");
   document.getElementById("walk-gptp").classList.toggle("on", walkKind === "gptp");
   const steps = WALKS[walkKind];
-  document.getElementById("walk-steps").innerHTML = steps.map((step, index) => {
-    const state = index < walkAt ? "done" : index === walkAt ? "on" : "";
-    const bg = state ? step.color : "var(--shut)";
-    const fg = state ? "#fff" : "var(--ink)";
-    const shown = index <= walkAt ? step.text : "";
-    return '<li class="' + state + '"><div class="step" style="background:' + bg + ";color:" + fg + '"><b>' + (index + 1) + "</b><span>" + step.title + '</span></div><p>' + shown + "</p></li>";
-  }).join("");
+  const rows = WALK_ROWS[walkKind];
+  function fld(row) {
+    const hits = row.at.filter((index) => index <= walkAt);
+    const body = (hits.length ? hits : [null]).map((index) => {
+      if (index == null) return "<i>" + row.hold + "</i>";
+      const step = steps[index];
+      return "<i>" + (step.tag ? step.tag + ": " + step.text : step.text) + "</i>";
+    }).join("");
+    const state = row.at.includes(walkAt) ? "on" : "";
+    const num = row.n ? "<em>" + row.n + "</em>" : "";
+    const style = row.group ? (row.plain ? "" : "background:" + row.color) : "background:" + row.color + ";width:" + row.width + "%";
+    return '<div class="fld ' + state + (row.plain ? " plain" : "") + '" style="' + style + '"><b>' + num + row.name + '</b><span class="txt">' + body + "</span></div>";
+  }
+  let html = "";
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    if (!row.group) {
+      html += fld(row);
+      continue;
+    }
+    let inner = "";
+    const width = row.width;
+    const name = row.group;
+    while (index < rows.length && rows[index].group === name) {
+      inner += fld(rows[index]);
+      index += 1;
+    }
+    index -= 1;
+    html += '<div class="walk-shell" style="width:' + width + '%"><b>' + name + "</b>" + inner + "</div>";
+  }
+  document.getElementById("walk-steps").innerHTML = html;
 }
 function playWalk() {
   const token = ++walkToken;
@@ -1514,6 +1678,7 @@ function show(id) {
     button.classList.toggle("on", button.getAttribute("data-station") === id);
   });
   renderOsi();
+  if (id === "frame") layoutEcnLeg();
 }
 
 document.querySelectorAll("#line button").forEach((button) => {
@@ -1572,6 +1737,204 @@ document.getElementById("psfp").onchange = renderPsfp;
 document.getElementById("walk-ctrl").onclick = () => { walkKind = "ctrl"; walkAt = -1; walkToken += 1; renderWalk(); };
 document.getElementById("walk-gptp").onclick = () => { walkKind = "gptp"; walkAt = -1; walkToken += 1; renderWalk(); };
 document.getElementById("walk-go").onclick = playWalk;
+
+const ECN_KIND = {
+  tcp: {
+    name: "TCP", udp: false,
+    what: "Reliable transport on IP.",
+    where: "the web, mail, and file download.",
+    back: "ECE in the TCP ACK",
+    mark: "ECE",
+    act: "shrink the congestion window, and put CWR on the next packet",
+    links: [["RFC 3168", "https://www.rfc-editor.org/rfc/rfc3168.html"]]
+  },
+  quic: {
+    name: "QUIC", udp: true,
+    what: "A user-space transport. It does its own congestion control and retransmission.",
+    where: "the web, short video (Douyin/YouTube), and cloud services.",
+    back: "an ACK frame on UDP, with the CE count up by one",
+    mark: "CE+1",
+    act: "lower the send rate. A lost packet is retransmitted on its own",
+    links: [["RFC 9000", "https://www.rfc-editor.org/rfc/rfc9000.html"], ["RFC 9002", "https://www.rfc-editor.org/rfc/rfc9002.html"]]
+  },
+  roce: {
+    name: "RoCEv2", udp: true,
+    what: "The NIC moves memory directly. The host stack does not touch this data.",
+    where: "GPU cluster interconnects.",
+    back: "a CNP on UDP 4791",
+    mark: "CNP",
+    act: "the NIC lowers the send rate",
+    links: [["IBTA Annex A17", "https://www.infinibandta.org/"]]
+  },
+  rtp: {
+    name: "RTP", udp: true,
+    what: "Real-time audio and video. A picture that is already late is not retransmitted.",
+    where: "video calls (WeChat/Zoom), live streaming, and cloud gaming.",
+    back: "RTCP on UDP, carrying CE back",
+    mark: "RTCP",
+    act: "the encoder lowers the bitrate",
+    aside: "WebRTC in a browser does not look at CE by default. This card is the ECN feedback in the specification.",
+    links: [["RFC 3550", "https://www.rfc-editor.org/rfc/rfc3550.html"], ["RFC 6679", "https://www.rfc-editor.org/rfc/rfc6679.html"], ["RFC 8888", "https://www.rfc-editor.org/rfc/rfc8888.html"]]
+  }
+};
+let ecnKind = "tcp";
+let ecnPlay = 0;
+let ecnAt = -1;
+let ecnRun = null;
+let ecnPlaying = false;
+let ecnStale = false;
+function ecnCode(bits) {
+  return ((bits >> 1) & 1).toString() + (bits & 1).toString();
+}
+function ecnStory(bits, kind) {
+  const code = ecnCode(bits);
+  const info = ECN_KIND[kind];
+  const steps = [
+    { hop: "tx", lane: "fwd", mark: code, note: "writes " + code },
+    { hop: "sw1", lane: "fwd", mark: code, note: "leaves these bits" },
+    {
+      hop: "sw2", lane: "fwd", mark: bits === 0 ? "drop" : "11", drop: bits === 0,
+      note: bits === 0 ? "Drops it. 00 is not rewritten to CE"
+        : bits === 3 ? "Already 11, left as is"
+        : "Rewrites to 11. A full queue still drops"
+    }
+  ];
+  if (bits === 0) return steps;
+  steps.push({ hop: "rx", lane: "fwd", mark: "11", also: "sw3", note: "got 11", sideHop: "sw3", side: "carries 11" });
+  steps.push({
+    hop: "tx", via: "rx", lane: "back", mark: info.mark,
+    note: info.mark, noteHop: "rx", act: info.act
+  });
+  return steps;
+}
+function paintEcnCard() {
+  const info = ECN_KIND[ecnKind];
+  const links = info.links.map((link) => '<a href="' + link[1] + '" target="_blank" rel="noopener">' + link[0] + "</a>").join("");
+  document.getElementById("ecn-card").innerHTML =
+    '<p class="id"><b>' + info.name + "</b>" + (info.udp ? '<i class="udp">UDP</i>' : "") +
+    "<span>" + info.what + "</span><span>Used for " + info.where + "</span></p>" +
+    '<p class="loop"><span>Return: ' + info.back + ".</span><span>Sender then: " + info.act + ".</span>" +
+    (info.aside ? '<span class="aside">' + info.aside + "</span>" : "") +
+    '<span class="links">' + links + "</span></p>";
+}
+function layoutEcnLeg() {
+  const board = document.getElementById("ecn-board");
+  const tx = board.querySelector('[data-hop="tx"]');
+  const rx = board.querySelector('[data-hop="rx"]');
+  const fwd = board.querySelector(".ecn-line.fwd");
+  const back = board.querySelector(".ecn-line.back");
+  const leg = board.querySelector(".ecn-line.down");
+  const br = board.getBoundingClientRect();
+  if (br.width < 2) return;
+  const x1 = tx.getBoundingClientRect().left + tx.getBoundingClientRect().width / 2 - br.left;
+  const x2 = rx.getBoundingClientRect().left + rx.getBoundingClientRect().width / 2 - br.left;
+  const y1 = fwd.getBoundingClientRect().top - br.top;
+  const y2 = back.getBoundingClientRect().top - br.top;
+  fwd.style.left = x1 + "px";
+  fwd.style.right = "auto";
+  fwd.style.width = Math.max(0, x2 - x1) + "px";
+  back.style.left = x1 + "px";
+  back.style.right = "auto";
+  back.style.width = Math.max(0, x2 - x1) + "px";
+  leg.style.left = (x2 - 1) + "px";
+  leg.style.top = y1 + "px";
+  leg.style.height = Math.max(0, y2 - y1) + "px";
+}
+function paintEcn(placeHop) {
+  const steps = ecnRun || ecnStory(ecnBits, ecnKind);
+  const notes = { tx: "", sw1: "", sw2: "", sw3: "", rx: "", act: "" };
+  steps.forEach((step, index) => {
+    if (index > ecnAt) return;
+    if (step.note) notes[step.noteHop || step.hop] = step.note;
+    if (step.side) notes[step.sideHop] = step.side;
+    if (step.act && !(index === ecnAt && placeHop)) notes.act = step.act;
+  });
+  ["tx", "sw1", "sw2", "sw3", "rx"].forEach((hop) => {
+    document.querySelector('#ecn-board [data-hop="' + hop + '"] .saw').textContent = notes[hop];
+  });
+  document.querySelector('#ecn-board [data-hop="tx"] .act').textContent = notes.act;
+  paintEcnCard();
+  document.querySelectorAll("#ecn-board .ecn-node").forEach((node) => node.classList.remove("on", "bad"));
+  layoutEcnLeg();
+  if (ecnAt < 0) return;
+  const step = steps[ecnAt];
+  const place = placeHop || step.hop;
+  const current = document.querySelector('#ecn-board [data-hop="' + place + '"]');
+  if (current) current.classList.add(step.drop ? "bad" : "on");
+  if (!placeHop && step.also) document.querySelector('#ecn-board [data-hop="' + step.also + '"]').classList.add("on");
+  const board = document.getElementById("ecn-board");
+  const token = document.getElementById("ecn-token");
+  const node = document.querySelector('#ecn-board [data-hop="' + place + '"]');
+  const line = board.querySelector(step.lane === "back" ? ".ecn-line.back" : ".ecn-line.fwd");
+  const br = board.getBoundingClientRect();
+  const nr = node.getBoundingClientRect();
+  const lr = line.getBoundingClientRect();
+  token.hidden = false;
+  token.textContent = step.mark;
+  token.classList.toggle("drop", !!step.drop);
+  token.classList.toggle("back", step.lane === "back");
+  token.style.left = (nr.left + nr.width / 2 - br.left) + "px";
+  token.style.top = (lr.top + lr.height / 2 - br.top - 11) + "px";
+}
+function syncEcn() {
+  if (ecnPlaying) {
+    ecnStale = true;
+    return;
+  }
+  ecnRun = null;
+  ecnAt = -1;
+  document.getElementById("ecn-token").hidden = true;
+  paintEcn();
+}
+function playEcn() {
+  const tokenId = ++ecnPlay;
+  ecnPlaying = true;
+  ecnStale = false;
+  const steps = ecnStory(ecnBits, ecnKind);
+  ecnRun = steps;
+  ecnAt = -1;
+  const token = document.getElementById("ecn-token");
+  token.style.transition = "none";
+  token.hidden = true;
+  paintEcn();
+  steps.forEach((_, index) => {
+    window.setTimeout(() => {
+      if (tokenId !== ecnPlay) return;
+      ecnAt = index;
+      const step = steps[index];
+      if (index === 0) token.style.transition = "none";
+      if (step.via) {
+        paintEcn(step.via);
+        window.setTimeout(() => {
+          if (tokenId !== ecnPlay) return;
+          paintEcn();
+          ecnPlaying = false;
+          if (ecnStale) syncEcn();
+        }, 620);
+        return;
+      }
+      paintEcn();
+      if (index === 0) {
+        void token.offsetWidth;
+        token.style.transition = "";
+      }
+      if (index === steps.length - 1) {
+        ecnPlaying = false;
+        if (ecnStale) syncEcn();
+      }
+    }, 40 + index * 700);
+  });
+}
+document.getElementById("ecn-go").onclick = playEcn;
+["tcp", "quic", "roce", "rtp"].forEach((kind) => {
+  document.getElementById("ecn-" + kind).onclick = () => {
+    ecnKind = kind;
+    ["tcp", "quic", "roce", "rtp"].forEach((name) => {
+      document.getElementById("ecn-" + name).classList.toggle("on", name === kind);
+    });
+    syncEcn();
+  };
+});
 
 renderOsi();
 renderFrame();
