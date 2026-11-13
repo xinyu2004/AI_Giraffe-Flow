@@ -7,6 +7,7 @@ Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop v
 | Document | Description |
 |----------|-------------|
 | [architecture/DESIGN.md](architecture/DESIGN.md) | Architecture (middleware + toolchain; perc/planning as workload) |
+| [tsn/index.html](tsn/index.html) | TSN (open in a browser, click a year): OSI, Ethernet II, VLAN, AVB, gates and stream filters. 中文: [../zh/tsn/index.html](../zh/tsn/index.html) |
 | [architecture/module-decision-matrix.md](architecture/module-decision-matrix.md) | AP keep/defer matrix (stub) |
 | [architecture/transport-binding-guide.md](architecture/transport-binding-guide.md) | Transport selection (stub) |
 | [architecture/naming-compatibility.md](architecture/naming-compatibility.md) | `gf_ara` ↔ `gf` (stub) |

@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TSN · Time-Sensitive Networking</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1b1b1b;
+      --muted: #5c5c5c;
+      --line: #e4e0d8;
+      --paper: #f4f2ec;
+      --card: #fff;
+      --shut: #e7e4de;
+      --l7: #5c4d8a;
+      --l6: #8d6e97;
+      --l5: #a68462;
+      --l4: #1d6f82;
+      --l3: #c56a12;
+      --l2: #1f4b99;
+      --l1: #243038;
+      --vlan: #1e7a4a;
+      --gptp: #0e6b5c;
+      --on: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.55 "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
+    }
+    main { max-width: 1080px; margin: 0 auto; padding: 32px 24px 72px; }
+    h1 { font-size: 34px; margin: 0 0 6px; letter-spacing: -0.03em; }
+    h1 small { display: block; margin-top: 2px; font-size: 15px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+    h2 { font-size: 22px; margin: 36px 0 12px; }
+    h3 { font-size: 18px; margin: 0 0 10px; }
+    a { color: var(--l2); }
+    p { margin: 0; }
+    .lede { color: var(--muted); margin-bottom: 22px; }
+    button, select {
+      font: inherit;
+      background: var(--card);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      padding: 7px 12px;
+      cursor: pointer;
+    }
+    button.on { background: var(--l2); color: var(--on); border-color: var(--l2); }
+    .line { display: flex; gap: 0; margin: 8px 0 22px; }
+    .line button {
+      flex: 1;
+      border-radius: 0;
+      border-left-width: 0;
+      text-align: left;
+      padding: 12px 14px;
+      background: var(--card);
+    }
+    .line button:first-child { border-left-width: 1px; }
+    .line button b { display: block; font-size: 18px; }
+    .line button span { color: var(--muted); font-size: 13px; }
+    .line button.on {
+      background: var(--l2);
+      color: #fff;
+      border-color: var(--l2);
+    }
+    .line button.on b,
+    .line button.on span { color: #fff; }
+    .station { display: none; }
+    .station.show { display: block; }
+    .osi {
+      display: grid;
+      grid-template-columns: minmax(240px, 320px) 1fr;
+      column-gap: 18px;
+      align-items: start;
+      margin-top: 12px;
+    }
+    .stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .framecol {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      min-width: 0;
+    }
+    .lead-full { margin: 0 0 12px; }
+    .layer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      height: 52px;
+      min-height: 0;
+      padding: 6px 12px;
+      color: var(--on);
+      border: 0;
+      text-align: left;
+      overflow: hidden;
+      box-sizing: border-box;
+      flex: none;
+    }
+    .layer small { display: block; opacity: 0.85; font-size: 12px; white-space: nowrap; }
+    .layer .mark {
+      font-size: 12px;
+      border: 1px solid var(--on);
+      padding: 1px 6px;
+      white-space: nowrap;
+    }
+    .layer.pick { outline: 3px solid #111; outline-offset: 2px; }
+    .packet { width: 100%; box-sizing: border-box; }
+    .packet > .wrap,
+    .packet .wrap {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 4px;
+      box-sizing: border-box;
+    }
+    .packet > .wrap { height: 100%; }
+    .packet .inner {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 0;
+    }
+    .packet .inner > .wrap,
+    .packet .inner > .payload { flex: 0 0 auto; }
+    .packet > .frame-l2 > .ethhead {
+      flex: 1 1 46px;
+      min-height: 46px;
+      margin: 0;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.16);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .packet .ethhead b,
+    .packet .ethhead span { display: block; }
+    .packet .ethhead span { font-size: 12px; line-height: 1.35; opacity: 0.92; }
+    .packet .dsfield { flex: 0 0 auto; }
+    .packet .wrap { padding: 4px 8px; }
+    .packet .wrap .label b { font-size: 14px; line-height: 1.2; }
+    .packet .payload {
+      flex: 0 0 auto;
+      min-height: 0;
+      padding: 4px 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .packet > .frame-l2 > .tagband {
+      flex: 1 1 46px;
+      min-height: 46px;
+      height: auto;
+      overflow: visible;
+      margin-top: 0;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .packet > .frame-l2 > .tagband.plain {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner > .wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner > .wrap > .inner {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner > .wrap > .inner > .wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l2:has(> .tagband.plain) > .inner > .wrap > .inner > .wrap > .inner,
+    .packet > .frame-l2:has(> .tagband.plain) .payload {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+    .packet > .frame-l2 > .fcs {
+      height: auto;
+      flex: 0 0 auto;
+      overflow: visible;
+      margin-top: 0;
+      padding: 6px 8px;
+    }
+    .packet .tagband b,
+    .packet .fcs b,
+    .packet .payload b { line-height: 1.2; }
+    .packet .tagband span,
+    .packet .fcs span,
+    .packet .payload span { white-space: normal; line-height: 1.25; }
+    .packet .dsfield { margin-top: 2px; gap: 12px; }
+    .packet .dsfield .grp b { font-size: 12px; margin-bottom: 2px; }
+    .packet .dsfield .sum { font-size: 11px; margin-top: 1px; line-height: 1.2; }
+    .packet .bits { gap: 3px; }
+    .packet .bits .bit { width: 20px; min-height: 22px; gap: 0; }
+    .packet .bits .bit b { font-size: 12px; line-height: 1; }
+    .packet .bits .bit em { font-size: 9px; line-height: 1; }
+    .packet > .frame-l3 > .label b { font-size: 16px; }
+    .packet > .frame-l3 > .label span { font-size: 14px; }
+    .packet > .frame-l3 .dsfield .grp b { font-size: 14px; margin-bottom: 4px; }
+    .packet > .frame-l3 .dsfield .sum { font-size: 13px; margin-top: 4px; }
+    .packet > .frame-l3 .bits { gap: 4px; }
+    .packet > .frame-l3 .bits .bit { width: 28px; min-height: 34px; }
+    .packet > .frame-l3 .bits .bit b { font-size: 16px; }
+    .packet > .frame-l3 .bits .bit em { font-size: 11px; }
+    .packet > .frame-l3 > .inner {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l3 .dsfield {
+      flex: 1 1 auto;
+      align-items: center;
+    }
+    .packet > .frame-l3 > .inner > .wrap {
+      flex: 0 0 calc((52px * 5 + 6px * 4) * 2 / 5);
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l3 .inner > .wrap > .label { flex: 0 0 auto; }
+    .packet > .frame-l3 .inner > .wrap > .inner {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .packet > .frame-l3 .payload { flex: 1 1 auto; justify-content: center; }
+    .wrap { color: var(--on); padding: 8px 10px; }
+    .wrap .label { display: flex; justify-content: flex-start; gap: 12px; align-items: baseline; }
+    .wrap .label b { font-size: 15px; }
+    .wrap .label span { font-size: 12px; opacity: 0.92; }
+    .payload span, .fcs span { display: block; font-size: 12px; opacity: 0.92; }
+    .wrap .inner { margin-top: 8px; }
+    .packet .wrap .inner { margin-top: 0; }
+    .payload { color: var(--on); padding: 14px 12px; text-align: center; }
+    .payload b, .fcs b { display: block; }
+    .fcs { margin-top: 8px; height: 58px; box-sizing: border-box; background: rgba(255,255,255,0.16); padding: 8px 10px; }
+    .tagband { margin-top: 8px; height: 58px; box-sizing: border-box; background: var(--vlan); color: var(--on); padding: 8px 10px; overflow: hidden; }
+    .tagband.plain { background: rgba(255,255,255,0.14); }
+    input[type="number"] { font: inherit; width: 5.5em; padding: 6px 8px; border: 1px solid var(--line); }
+    .node.host { cursor: pointer; }
+    .node.pick { outline: 2px solid #111; outline-offset: 2px; }
+    .tagband b, .tagband span { display: block; }
+    .tagband span { font-size: 12px; opacity: 0.92; }
+    .dsfield { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; margin-top: 10px; }
+    .dsfield .grp b { display: block; font-size: 13px; margin-bottom: 6px; }
+    .dsfield .sum { display: block; margin-top: 6px; font-size: 12px; }
+    .dsfield .ecn { padding-left: 16px; border-left: 2px solid #d7d2c8; }
+    .dsfield.ink { color: #fff; }
+    .dsfield.ink .ecn { border-left-color: rgba(255,255,255,0.55); }
+    .bits { display: flex; gap: 4px; }
+    .bits .bit {
+      width: 36px;
+      min-height: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 0;
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+      background: #f3e6d4;
+      color: var(--l3);
+    }
+    .bits .bit b { font-size: 14px; }
+    .bits .bit em { font-size: 10px; font-style: normal; opacity: 0.8; }
+    .bits .bit.fill { background: var(--l3); color: #fff; }
+    .ecn .bits .bit { background: #d5e4ea; color: var(--l4); }
+    .ecn .bits .bit.fill { background: var(--l4); color: #fff; }
+    .dsfield.ink .bits .bit { background: rgba(255,255,255,0.28); color: #fff; }
+    .dsfield.ink .bits .bit.fill { background: #fff; color: var(--l3); }
+    .dsfield.ink .ecn .bits .bit { background: rgba(0,0,0,0.28); color: #fff; }
+    .dsfield.ink .ecn .bits .bit.fill { background: #fff; color: var(--l4); }
+    .node label { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; }
+    .node .sw-vlans { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .node.vother { box-shadow: inset 0 4px 0 var(--vlan); }
+    .node.vother.hot { background: var(--vlan); }
+    #net-hops { margin-top: 12px; }
+    .node.sw .portline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; font-size: 12px; }
+    .node.sw select { font: inherit; padding: 2px 4px; }
+    .portline .allows { display: flex; flex-wrap: wrap; gap: 8px; }
+    .node button { margin-top: 6px; padding: 4px 8px; }
+    .cap { color: var(--muted); margin-top: 12px; max-width: 70ch; }
+    figure {
+      margin: 14px 0 0;
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 16px;
+    }
+    figcaption { color: var(--muted); margin-top: 12px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .cells { display: flex; flex-wrap: wrap; gap: 4px; }
+    .cell { flex: 1 1 120px; min-width: 120px; padding: 10px 8px; color: var(--on); }
+    .cell b, .cell span { display: block; white-space: normal; overflow: visible; }
+    .cell span { font-size: 12px; margin-top: 6px; opacity: 0.92; }
+    .block { margin-top: 28px; }
+    .rack { margin-bottom: 14px; }
+    .band, .jacks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+    .wires { height: 88px; }
+    .wire { position: relative; display: flex; justify-content: center; height: 100%; color: var(--vc, transparent); }
+    .wire .twist { display: block; width: 18px; height: 100%; }
+    .wire.live .twist path { stroke-width: 2.6; }
+    .token, .badge {
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.4;
+      white-space: nowrap;
+      background: #111;
+      color: #fff;
+      padding: 0 6px;
+    }
+    .token {
+      position: absolute;
+      left: 50%;
+      width: 56px;
+      height: 28px;
+      margin-left: -28px;
+      line-height: 14px;
+      text-align: center;
+      top: 0;
+      z-index: 3;
+      transition: top .6s ease;
+    }
+    .token.dir-down { padding: 1px 4px 10px; clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%); }
+    .token.dir-up { padding: 10px 4px 1px; clip-path: polygon(50% 0, 100% 38%, 100% 100%, 0 100%, 0 38%); }
+    .token.drop, .badge.drop { background: #8a2a2a; }
+    #wires-top .token.host,
+    #wires-bot .token.sw { top: 0; }
+    #wires-top .token.sw,
+    #wires-bot .token.host { top: calc(100% - 28px); }
+    .badge { display: block; text-align: center; }
+    .chassis {
+      background: #d5dee8;
+      color: var(--ink);
+      border: 3px solid #243038;
+      border-radius: 14px;
+      box-shadow: 0 4px 0 rgba(36, 48, 56, 0.12);
+    }
+    .swtitle { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 2px 14px 0; }
+    .swtitle b { font-size: 18px; letter-spacing: 0.12em; }
+    .sw-note { margin: 2px 14px 2px; min-height: 2.2em; color: var(--muted); font-size: 13px; }
+    .vchips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .vchip { color: #fff; font-size: 12px; font-weight: 700; padding: 1px 7px; }
+    .jack { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 0 2px; }
+    .jacks.bot .jack { flex-direction: column-reverse; padding: 2px 0 0; }
+    .plug {
+      width: 44px;
+      height: 32px;
+      display: block;
+      position: relative;
+      background: linear-gradient(#3c4652, #243038);
+      border-radius: 2px 2px 5px 5px;
+      box-shadow: inset 0 4px 0 var(--vc, #5c6570), inset 0 0 0 1px #12181d;
+    }
+    .plug i {
+      position: absolute;
+      left: 5px;
+      right: 5px;
+      top: 7px;
+      height: 12px;
+      background: #0c1014;
+      border-radius: 1px;
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.08);
+    }
+    .plug s {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      top: 17px;
+      height: 7px;
+      background: repeating-linear-gradient(90deg, #e6d7a2 0 1.5px, transparent 1.5px 3.6px);
+      text-decoration: none;
+    }
+    .jacks.bot .plug { transform: rotate(180deg); }
+    .pnum { font-style: normal; font-size: 12px; font-weight: 700; }
+    .jack .pcfg { width: min(100%, 132px); display: flex; flex-direction: column; gap: 4px; }
+    .jack select { font: inherit; font-size: 12px; padding: 2px 4px; width: 100%; }
+    .jack select.port-pvid { border-left: 4px solid var(--vc); }
+    .node.toned input[type="number"] { border-left: 4px solid var(--vc); }
+    .jack .allows { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; font-size: 12px; font-weight: 700; }
+    .jack.on .plug { outline: 2px solid var(--ink); outline-offset: 2px; }
+    .jack.drop .plug { outline: 2px solid #e15b4c; outline-offset: 2px; }
+    .node {
+      width: auto;
+      padding: 10px;
+      background: var(--shut);
+      color: var(--ink);
+    }
+    .node b { display: block; }
+    .node small { color: var(--muted); }
+    .node.toned { box-shadow: inset 0 5px 0 var(--vc); }
+    .node.hot { color: #fff; background: var(--vc); }
+    .node.hot small, .node.hot label { color: #fff; }
+    .node.hot input, .node.hot button, .jack.on select { color: var(--ink); background: #fff; }
+    .rack .node input[type="number"] { width: 4.2em; padding: 4px 6px; }
+    .qrow { display: flex; gap: 8px; align-items: center; margin: 3px 0; }
+    .qrow > span { width: 132px; flex: none; font-size: 13px; }
+    .track { flex: 1; height: 18px; display: flex; background: var(--shut); }
+    .track i { display: block; height: 100%; }
+    .slices { display: flex; gap: 6px; min-height: 72px; }
+    .slices div { color: var(--on); padding: 12px; font-weight: 650; }
+    .meter { flex: 1; height: 16px; background: var(--shut); }
+    .meter i { display: block; height: 100%; background: var(--l3); }
+    .qscale { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; }
+    .qscale > span { width: 132px; flex: none; }
+    .qscale .track { height: 18px; background: transparent; overflow: visible; }
+    .qscale i { position: relative; }
+    .qscale em {
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-style: normal;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      color: var(--ink);
+    }
+    .walk { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .walk li { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 14px; align-items: center; margin: 0; padding: 0; }
+    .walk li .step { display: flex; gap: 10px; align-items: center; padding: 8px 12px; min-height: 40px; }
+    .walk li b { width: 1.2em; flex: none; font-variant-numeric: tabular-nums; }
+    .walk li p { margin: 0; color: var(--ink); }
+    .walk li.on .step { outline: 2px solid var(--ink); outline-offset: 1px; }
+    #time-hops { margin-top: 22px; }
+    #time-hops i { position: relative; }
+    #time-hops i em {
+      position: absolute;
+      left: 50%;
+      top: -18px;
+      transform: translateX(-50%);
+      font-style: normal;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      color: var(--ink);
+    }
+    .chain-wrap { overflow: visible; }
+    .chain {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      width: 100%;
+      min-width: 0;
+    }
+    .chain .part {
+      flex: 1 1 0;
+      min-width: 0;
+      background: var(--shut);
+      padding: 8px 6px;
+    }
+    .chain .part.mac b,
+    .chain .part.phy b { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .chain .ic { width: 26px; height: 26px; flex: none; }
+    .chain .part.phy .ic { width: 40px; height: 40px; }
+    .chain .ic.flip { transform: scaleX(-1); }
+    .chain .part.phy {
+      position: relative;
+      color: #f4f2ec;
+      background: #1f7a45;
+    }
+    .chain .part.phy::before,
+    .chain .part.phy::after {
+      content: "";
+      position: absolute;
+      left: 7px;
+      right: 7px;
+      height: 7px;
+      background: repeating-linear-gradient(90deg, #243038 0 4px, transparent 4px 10px);
+      pointer-events: none;
+    }
+    .chain .part.phy::before { top: -7px; }
+    .chain .part.phy::after { bottom: -7px; }
+    .chain .part.phy > small,
+    .chain .part.phy label,
+    .chain .part.phy label small { color: #f4f2ec; }
+    .chain .part > small { display: block; color: var(--muted); margin-bottom: 4px; line-height: 1.35; }
+    .chain .part label small { display: block; color: var(--muted); font-size: 12px; margin: 0; font-weight: 400; }
+    .chain .part label span { min-width: 0; overflow-wrap: break-word; }
+    .stds { list-style: none; margin: 8px 0 10px 1.5em; padding: 0; }
+    .stds li { margin: 0 0 8px; max-width: 68ch; }
+    .chain .part.sw {
+      flex: 1.15 1 0;
+      background: #d5dee8;
+      border: 3px solid #243038;
+      border-radius: 12px;
+      box-shadow: none;
+    }
+    .chain .join {
+      flex: 0 0 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .chain .join.rgmii .bus { width: 100%; display: flex; flex-direction: column; gap: 5px; }
+    .chain .join.rgmii i { display: block; height: 2px; background: #243038; }
+    .chain .join.pair svg { display: block; width: 100%; height: 28px; }
+    .chain .part .row { margin-top: 6px; flex-direction: column; align-items: stretch; }
+    .chain .part .row button { flex: none; width: 100%; padding: 4px 4px; font-size: 12px; }
+    .chain .part label { display: flex; align-items: flex-start; gap: 4px; margin-top: 6px; min-width: 0; font-size: 12px; }
+    .verdict { list-style: none; margin: 12px 0 0; padding: 0; }
+    .verdict li { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 6px; padding: 8px 10px; }
+    .verdict li .mark { flex: 0 0 auto; width: 1.2em; font-weight: 700; line-height: 1.45; }
+    .verdict li.ok { background: #e5f2ea; }
+    .verdict li.ok .mark { color: var(--vlan); }
+    .verdict li.bad { background: #f8e6e4; }
+    .verdict li.bad .mark { color: #8a2a2a; }
+    .dim { opacity: 0.38; }
+    .hops { display: flex; align-items: center; }
+    .hops b { background: var(--shut); color: var(--ink); padding: 8px 10px; font-size: 13px; }
+    .hops b.on { background: var(--vlan); color: #fff; }
+    .hops i { flex: 1; height: 8px; background: var(--shut); }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .cards div { background: var(--card); border: 1px solid var(--line); padding: 14px; }
+    .cards b { display: block; margin-bottom: 6px; }
+    .pair { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 18px; align-items: start; margin-top: 14px; }
+    .meanings { list-style: none; margin: 0; padding: 0; }
+    .meanings li { margin: 0 0 4px; padding: 6px 8px; border-left: 3px solid transparent; color: var(--muted); }
+    #dscp-mean li { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    #dscp-mean li > span:first-child { flex: 1 1 auto; min-width: 0; }
+    #dscp-mean .q {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      color: var(--l3);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .meanings li.on { color: var(--ink); background: #f3e6d4; border-left-color: var(--l3); }
+    .meanings.ecn li.on { background: #d5e4ea; border-left-color: var(--l4); }
+    .meanings .q { display: block; }
+    .pair.off .q {
+      text-decoration: line-through;
+      text-decoration-color: var(--ink);
+      text-decoration-thickness: 2px;
+      text-decoration-skip-ink: none;
+    }
+    .policy { list-style: none; margin: 8px 0 0; padding: 0; }
+    .policy li { margin: 0 0 4px; padding: 6px 8px; border-left: 3px solid transparent; color: var(--muted); }
+    .policy li.on { color: var(--ink); background: #f6d98a; border-left-color: #8a5a10; }
+    .swbox {
+      margin-top: 18px;
+      padding: 12px 14px;
+      background: #d5dee8;
+      border: 3px solid #243038;
+      border-radius: 14px;
+    }
+    .swbox > b { display: block; margin-bottom: 6px; }
+    .swbox .pair { margin-top: 8px; }
+    .swbox .rule { color: var(--muted); margin: 8px 0 0; }
+    .field { margin-top: 14px; }
+    .field + .field { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .field .rule { margin: 0; }
+    .field .pair { margin-top: 8px; }
+    @media (max-width: 800px) {
+      .osi, .cards, .pair { grid-template-columns: 1fr; }
+      .line { flex-direction: column; }
+      .line button { border-left-width: 1px; }
+      .rack { overflow-x: auto; }
+      .band, .jacks { min-width: 680px; }
+      .walk li { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>TSN<small>Time-Sensitive Networking</small></h1>
+  <p class="lede">Config lives in <a href="../../../tools/gf-config/README.md">gf-config “Time / gates”</a>. Click a year on the timeline. <a href="../../zh/tsn/index.html">中文</a></p>
+
+  <section>
+    <h2>OSI seven layers</h2>
+    <p class="lead-full">Top to bottom: application, presentation, session, transport, network, data link, physical. The application example is SOME/IP, transport is UDP, and network is IPv4. Presentation and session add no header or trailer. In 1982 Ethernet II the data link writes the destination MAC, source MAC, and EtherType, and adds the FCS at the end of the frame. In 1998, 802.1Q inserts 4 bytes between the source MAC and the EtherType.</p>
+    <div class="osi">
+      <div class="stack" id="stack"></div>
+      <div class="framecol">
+        <div class="packet" id="packet"></div>
+      </div>
+    </div>
+  </section>
+
+  <h2>Timeline</h2>
+  <div class="line" id="line">
+    <button type="button" data-station="frame"><b>1982</b><span>Ethernet II</span></button>
+    <button type="button" data-station="vlan"><b>1998</b><span>VLAN</span></button>
+    <button type="button" data-station="avb"><b>2009</b><span>AVB</span></button>
+    <button type="button" data-station="tsn"><b>2012</b><span>Time-Sensitive Networking</span></button>
+  </div>
+
+  <article class="station" id="st-frame">
+    <h2>1982 · Ethernet II</h2>
+    <figure>
+      <div id="frame-cells"></div>
+      <div class="swbox">
+        <b>Switch ingress</b>
+        <label><input id="trust" type="checkbox" checked> Trust DSCP</label>
+        <p class="rule">Ingress reads the 6 DSCP bits only to pick a queue. It does not change those bits, and it does not look at ECN. The frame is still forwarded by destination MAC.</p>
+        <ul class="policy" id="trust-policy">
+          <li id="trust-on"><b>Trusted.</b> A class selector enters the queue of the same number. EF enters queue 5. The queue number on the right, below, is in effect.</li>
+          <li id="trust-off"><b>Untrusted.</b> Those 6 bits are not read. The queue does not come from DSCP. Forwarding uses the destination MAC.</li>
+        </ul>
+      </div>
+      <div class="field">
+        <p class="rule">When the last 3 bits of the DSCP (Differentiated Services Code Point) are 000, it is a class selector (CS). The class number is the first 3 bits, and a trusted switch puts it in the queue of that number. CS7 is 111000 = 56 and enters queue 7. CS0 also needs the first 3 bits to be 000. Other codepoints whose last bit is 0 stay in the standards pool: the named ones are AF (Assured Forwarding), EF (Expedited Forwarding), VA (Voice-Admit), and LE (Lower Effort), and unnamed ones stay in that pool too. Last two bits 01 are experimental or local. Last two bits 11 are reserved for a future standard. EF is marked on queue 5 by itself. AF, VA, LE, unnamed pool codepoints, and local codepoints do not follow the class-number queue rule.</p>
+        <div class="pair" id="dscp-pair">
+          <div id="dscp-bits"></div>
+          <ul id="dscp-mean" class="meanings"></ul>
+        </div>
+      </div>
+      <div class="field">
+        <p class="rule">ECN (Explicit Congestion Notification) is these 2 bits. ECT (ECN-Capable Transport) means the endpoint accepts a congestion mark, so a router may write 11 instead of dropping. On a classic router, 01 ECT(1) and 10 ECT(0) are handled the same way. An L4S low-latency queue treats only 01 as scalable congestion control and marks earlier and more often. 10 is classic ECN, and a sender usually sets 10. 00 does not use ECN, so congestion means a drop. 11 CE (Congestion Experienced) means the router has written congestion, and the receiver tells the sender to slow down.</p>
+        <div class="pair">
+          <div id="ecn-bits"></div>
+          <ul id="ecn-mean" class="meanings ecn"></ul>
+        </div>
+      </div>
+    </figure>
+  </article>
+
+  <article class="station" id="st-vlan">
+    <h2>1998 · 802.1Q VLAN</h2>
+    <figure>
+      <div id="tag-cells"></div>
+      <figcaption>The 802.1Q tag sits between the source MAC and the EtherType, 4 bytes in all. TPID is 0x8100. TCI is PCP 3 bits, DEI 1 bit, VID 12 bits. The frame header grows from 14 bytes to 18 bytes. The FCS stays at the end and covers the longer frame.</figcaption>
+    </figure>
+    <div class="block">
+      <h3>802.1Q VLAN · 8 ports</h3>
+      <figure>
+        <div class="rack">
+          <div class="band">
+            <div class="node host" id="node-a1" data-host="a1"><b>A1</b><label><input class="host-tag" data-host="a1" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a1" type="number" min="0" max="4095" step="1" value="10"></label><button type="button" class="host-send" data-host="a1">Send</button></div>
+            <div class="node host" id="node-a2" data-host="a2"><b>A2</b><label><input class="host-tag" data-host="a2" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a2" type="number" min="0" max="4095" step="1" value="10"></label><button type="button" class="host-send" data-host="a2">Send</button></div>
+            <div class="node host" id="node-a3" data-host="a3"><b>A3</b><label><input class="host-tag" data-host="a3" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a3" type="number" min="0" max="4095" step="1" value="10"></label><button type="button" class="host-send" data-host="a3">Send</button></div>
+            <div class="node host" id="node-a4" data-host="a4"><b>A4</b><label><input class="host-tag" data-host="a4" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="a4" type="number" min="0" max="4095" step="1" value="0"></label><button type="button" class="host-send" data-host="a4">Send</button></div>
+          </div>
+          <div class="band wires" id="wires-top"></div>
+          <div class="chassis" id="node-sw">
+            <div class="jacks" id="jacks-top"></div>
+            <div class="swtitle"><b>Switch</b><span class="vchips" id="sw-vlans"></span></div>
+            <p class="sw-note" id="sw-note"></p>
+            <div class="jacks bot" id="jacks-bot"></div>
+          </div>
+          <div class="band wires" id="wires-bot"></div>
+          <div class="band">
+            <div class="node host" id="node-b1" data-host="b1"><b>B1</b><label><input class="host-tag" data-host="b1" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b1" type="number" min="0" max="4095" step="1" value="20"></label><button type="button" class="host-send" data-host="b1">Send</button></div>
+            <div class="node host" id="node-b2" data-host="b2"><b>B2</b><label><input class="host-tag" data-host="b2" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b2" type="number" min="0" max="4095" step="1" value="20"></label><button type="button" class="host-send" data-host="b2">Send</button></div>
+            <div class="node host" id="node-b3" data-host="b3"><b>B3</b><label><input class="host-tag" data-host="b3" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b3" type="number" min="0" max="4095" step="1" value="20"></label><button type="button" class="host-send" data-host="b3">Send</button></div>
+            <div class="node host" id="node-b4" data-host="b4"><b>B4</b><label><input class="host-tag" data-host="b4" type="checkbox"> 802.1Q</label><label>VID <input class="host-vid" data-host="b4" type="number" min="0" max="4095" step="1" value="0"></label><button type="button" class="host-send" data-host="b4">Send</button></div>
+          </div>
+        </div>
+      </figure>
+    </div>
+  </article>
+
+  <article class="station" id="st-avb">
+    <h2>2009 · AVB</h2>
+    <figure>
+      <div class="slices">
+        <div style="flex:1.2;background:var(--gptp)">gPTP<span style="display:block;font-weight:400;font-size:13px">0x88F7 · high priority</span></div>
+        <div style="flex:3;background:var(--l7)">Reserved stream<span style="display:block;font-weight:400;font-size:13px">sends only while credit remains</span></div>
+        <div style="flex:2;background:#8a847a">The rest<span style="display:block;font-weight:400;font-size:13px">uses the bandwidth left over</span></div>
+      </div>
+      <p class="cap">AVTP EtherType 0x22F0 puts audio and video straight into the Ethernet payload. The same bridge is later used to carry control.</p>
+    </figure>
+  </article>
+
+  <article class="station" id="st-tsn">
+    <h2>2012 · Time-Sensitive Networking</h2>
+    <p class="cap" style="margin-bottom:8px">The same bridge now carries control. First see whether this hop can timestamp, then look at the time gates, preemption, and stream filtering. Gates and preemption are 2016, stream filtering is 2017, and they all sit in this station.</p>
+
+    <div class="block">
+      <h3>Devices on this hop</h3>
+      <figure>
+        <p class="rule"><a href="https://1.ieee802.org/tsn/802-1as/" target="_blank" rel="noopener">802.1AS</a> (gPTP) measures the link delay on every hop, and the switch corrects its own residence time. Both ends have to do this per-hop measurement before the time gates can line up.</p>
+        <ul class="stds">
+          <li><a href="https://1.ieee802.org/tsn/802-1qbv/" target="_blank" rel="noopener">802.1Qbv</a> Enhancements for Scheduled Traffic. Egress opens and closes on a schedule. Datasheets call it a Time-Aware Shaper. Q7 is usually left for gPTP. Without this block, the gates below do not run.</li>
+          <li><a href="https://1.ieee802.org/tsn/802-1qci/" target="_blank" rel="noopener">802.1Qci</a> Per-Stream Filtering and Policing. Ingress identifies the stream, drops a frame past the maximum length, and drops it when the bucket has no token. Datasheets call it PSFP. This block is on the switch ingress, not in the PHY.</li>
+          <li><a href="https://1.ieee802.org/tsn/802-3br-interspersing-express-traffic/" target="_blank" rel="noopener">802.3br</a> Interspersing Express Traffic. A normal frame already on the wire can be cut so a higher-priority frame can go through. The PHY datasheet has to say it forwards an mPacket. If only one MAC lists 802.1Qbu, this hop still cannot preempt.</li>
+        </ul>
+        <p class="rule" style="margin-top:8px"><a href="https://standards.ieee.org/ieee/1588/6825/" target="_blank" rel="noopener">IEEE 1588</a> end-to-end delay measures one delay between the slave clock and the master clock. Switches in between do not correct per hop, so the gates do not line up.</p>
+        <div class="chain-wrap">
+          <div class="chain">
+            <div class="part mac">
+              <b>MAC<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><g fill="#243038"><rect x="6" y="0" width="2" height="4"/><rect x="11" y="0" width="2" height="4"/><rect x="16" y="0" width="2" height="4"/><rect x="6" y="20" width="2" height="4"/><rect x="11" y="20" width="2" height="4"/><rect x="16" y="20" width="2" height="4"/><rect x="0" y="6" width="4" height="2"/><rect x="0" y="11" width="4" height="2"/><rect x="0" y="16" width="4" height="2"/><rect x="20" y="6" width="4" height="2"/><rect x="20" y="11" width="4" height="2"/><rect x="20" y="16" width="4" height="2"/></g><rect x="4.5" y="4.5" width="15" height="15" fill="#d5dee8" stroke="#243038"/></svg></b><small>End A</small>
+              <label><input id="a-phc" type="checkbox" checked><span>PTP Hardware Clock<small>the timestamp lands in this clock</small></span></label>
+              <label><input id="a-mac" type="checkbox" checked><span>802.1Qbu Frame Preemption<small>the MAC can split a normal frame</small></span></label>
+            </div>
+            <div class="join rgmii"><div class="bus"><i></i><i></i><i></i><i></i></div></div>
+            <div class="part phy">
+              <b>PHY<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="3" width="16" height="18" rx="1.5" fill="#d5dee8" stroke="#243038" stroke-width="1.3"/><rect x="3.5" y="7" width="11" height="8" fill="#0c1014"/><g fill="#c6a15a"><rect x="4.6" y="12" width="1.6" height="6"/><rect x="7.2" y="12" width="1.6" height="6"/><rect x="9.8" y="12" width="1.6" height="6"/><rect x="12.4" y="12" width="1.6" height="6"/></g><rect x="17" y="10" width="6" height="4" fill="#243038"/></svg></b><small>End A</small>
+              <label><input id="a-phy" type="checkbox" checked><span>IEEE 1588 Timestamp<small>latched next to the wire</small></span></label>
+              <label><input id="a-frag" type="checkbox" checked><span>802.3br mPacket<small>a cut fragment gets through</small></span></label>
+            </div>
+            <div class="join pair"><svg viewBox="0 0 64 28" aria-hidden="true"><path d="M0 6C16 6 16 22 32 22C48 22 48 6 64 6" fill="none" stroke="#243038" stroke-width="2"/><path d="M0 22C16 22 16 6 32 6C48 6 48 22 64 22" fill="none" stroke="#8aa0b4" stroke-width="2"/></svg></div>
+            <div class="part sw">
+              <b>Switch</b><small>802.1AS peer delay, or IEEE 1588 E2E delay</small>
+              <div class="row">
+                <button type="button" id="dly-as" class="on">802.1AS</button>
+                <button type="button" id="dly-e2e">IEEE 1588 E2E</button>
+              </div>
+              <label><input id="hw-qbv" type="checkbox" checked><span>802.1Qbv Time-Aware Shaper<small>egress opens on a schedule</small></span></label>
+              <label><input id="hw-qci" type="checkbox" checked><span>802.1Qci PSFP<small>ingress filters and polices each stream</small></span></label>
+            </div>
+            <div class="join pair"><svg viewBox="0 0 64 28" aria-hidden="true"><path d="M0 6C16 6 16 22 32 22C48 22 48 6 64 6" fill="none" stroke="#243038" stroke-width="2"/><path d="M0 22C16 22 16 6 32 6C48 6 48 22 64 22" fill="none" stroke="#8aa0b4" stroke-width="2"/></svg></div>
+            <div class="part phy">
+              <b>PHY<svg class="ic flip" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="3" width="16" height="18" rx="1.5" fill="#d5dee8" stroke="#243038" stroke-width="1.3"/><rect x="3.5" y="7" width="11" height="8" fill="#0c1014"/><g fill="#c6a15a"><rect x="4.6" y="12" width="1.6" height="6"/><rect x="7.2" y="12" width="1.6" height="6"/><rect x="9.8" y="12" width="1.6" height="6"/><rect x="12.4" y="12" width="1.6" height="6"/></g><rect x="17" y="10" width="6" height="4" fill="#243038"/></svg></b><small>End B</small>
+              <label><input id="b-phy" type="checkbox" checked><span>IEEE 1588 Timestamp<small>latched next to the wire</small></span></label>
+              <label><input id="b-frag" type="checkbox" checked><span>802.3br mPacket<small>a cut fragment gets through</small></span></label>
+            </div>
+            <div class="join rgmii"><div class="bus"><i></i><i></i><i></i><i></i></div></div>
+            <div class="part mac">
+              <b>MAC<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><g fill="#243038"><rect x="6" y="0" width="2" height="4"/><rect x="11" y="0" width="2" height="4"/><rect x="16" y="0" width="2" height="4"/><rect x="6" y="20" width="2" height="4"/><rect x="11" y="20" width="2" height="4"/><rect x="16" y="20" width="2" height="4"/><rect x="0" y="6" width="4" height="2"/><rect x="0" y="11" width="4" height="2"/><rect x="0" y="16" width="4" height="2"/><rect x="20" y="6" width="4" height="2"/><rect x="20" y="11" width="4" height="2"/><rect x="20" y="16" width="4" height="2"/></g><rect x="4.5" y="4.5" width="15" height="15" fill="#d5dee8" stroke="#243038"/></svg></b><small>End B</small>
+              <label><input id="b-phc" type="checkbox" checked><span>PTP Hardware Clock<small>the timestamp lands in this clock</small></span></label>
+              <label><input id="b-mac" type="checkbox" checked><span>802.1Qbu Frame Preemption<small>the MAC can split a normal frame</small></span></label>
+            </div>
+          </div>
+        </div>
+        <ul class="verdict" id="hw-cap"></ul>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>Time · <a href="https://1.ieee802.org/tsn/802-1as/" target="_blank" rel="noopener">802.1AS</a> / <a href="https://standards.ieee.org/ieee/1588/6825/" target="_blank" rel="noopener">IEEE 1588</a></h3>
+      <figure>
+        <div class="hops" id="time-hops"></div>
+        <figcaption id="time-cap"></figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>Gates · <a href="https://1.ieee802.org/tsn/802-1qbv/" target="_blank" rel="noopener">802.1Qbv</a></h3>
+      <figure>
+        <div id="gate-fit"></div>
+        <figcaption id="gate-cap">Each row is one queue. A dark segment means that gate is open and a frame may leave. A light segment means this queue is closed; another queue may still be open. The hatched segment closes all eight queues. That is the guard band, 40 µs here, placed before Q2 opens. If a frame has already started, those 40 µs finish it. When Q2 opens, the wire is empty, so a partial frame is not left in the way. Without preemption the guard band must cover a maximum-length frame. With preemption it only has to cover the last fragment.</figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>Cycle · <a href="https://1.ieee802.org/tsn/802-1qbv/" target="_blank" rel="noopener">802.1Qbv</a></h3>
+      <figure>
+        <div class="row">
+          <button type="button" id="cy-fit" class="on">Fits</button>
+          <button type="button" id="cy-short">500 µs short</button>
+          <button type="button" id="cy-long">200 µs over</button>
+        </div>
+        <div id="gate-cycle" style="margin-top:12px"></div>
+        <figcaption id="cy-cap"></figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>Preemption · <a href="https://1.ieee802.org/tsn/802-3br-interspersing-express-traffic/" target="_blank" rel="noopener">802.3br</a></h3>
+      <figure>
+        <button type="button" id="pre-toggle">Show Q0 preemptable</button>
+        <div class="slices" id="pre-fig" style="margin-top:12px"></div>
+        <figcaption id="pre-cap"></figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>Stream filter and policing · <a href="https://1.ieee802.org/tsn/802-1qci/" target="_blank" rel="noopener">802.1Qci</a></h3>
+      <figure>
+        <p class="cap">Switch ingress does two checks. First the frame length: this stream allows 1500 bytes, and a longer frame is dropped. If it fits, the token bucket is next. Tokens refill at the bandwidth allowed for this stream, and the frame enters a queue only while the bucket has a token.</p>
+        <div class="row">
+          <select id="psfp">
+            <option value="pass">300 bytes, bucket has tokens</option>
+            <option value="sdu">2000 bytes, over 1500</option>
+            <option value="meter">300 bytes, bucket empty</option>
+          </select>
+          <b id="psfp-result"></b>
+        </div>
+        <div class="row" style="margin-top:10px"><span>Tokens</span><div class="meter"><i id="psfp-bar"></i></div></div>
+        <figcaption id="psfp-cap"></figcaption>
+      </figure>
+    </div>
+    <div class="block">
+      <h3>How a frame walks</h3>
+      <figure>
+        <div class="row">
+          <button type="button" id="walk-ctrl" class="on">Control frame</button>
+          <button type="button" id="walk-gptp">gPTP</button>
+          <button type="button" id="walk-go">Step</button>
+        </div>
+        <p class="cap">Click Step. Each step keeps its note on the right.</p>
+        <ol class="walk" id="walk-steps"></ol>
+      </figure>
+    </div>
+  </article>
+</main>
+<script>
+const LAYERS = [
+  { id: 7, name: "Application", sub: "SOME/IP", color: "var(--l7)", width: "46%" },
+  { id: 6, name: "Presentation", sub: "no header", color: "var(--l6)", width: "54%" },
+  { id: 5, name: "Session", sub: "no header", color: "var(--l5)", width: "62%" },
+  { id: 4, name: "Transport", sub: "UDP", color: "var(--l4)", width: "70%" },
+  { id: 3, name: "Network", sub: "IPv4 · DSCP", color: "var(--l3)", width: "78%", here: true },
+  { id: 2, name: "Data link", sub: "Ethernet II · FCS", color: "var(--l2)", width: "88%", here: true },
+  { id: 1, name: "Physical", sub: "preamble · bits", color: "var(--l1)", width: "100%" }
+];
+const QCOLOR = ["#8a847a", "#5c4d8a", "#c56a12", "#cfcabe", "#cfcabe", "#1d6f82", "#1f4b99", "#0e6b5c"];
+const QNAME = ["Best effort", "Diag", "Bulk", "Reserved", "Reserved", "Control", "Discovery", "gPTP"];
+const DEMO = [
+  { us: 80, mask: 1 << 7 },
+  { us: 200, mask: (1 << 6) | (1 << 5) },
+  { us: 40, mask: 0 },
+  { us: 480, mask: 1 << 2 },
+  { us: 200, mask: (1 << 1) | 1 }
+];
+const DSCP_NAME = {};
+
+const hosts = {
+  a1: { tag: false, vid: 10, port: 1 },
+  a2: { tag: false, vid: 10, port: 2 },
+  a3: { tag: false, vid: 10, port: 3 },
+  a4: { tag: false, vid: 0, port: 4 },
+  b1: { tag: false, vid: 20, port: 5 },
+  b2: { tag: false, vid: 20, port: 6 },
+  b3: { tag: false, vid: 20, port: 7 },
+  b4: { tag: false, vid: 0, port: 8 }
+};
+const ports = {};
+for (let index = 1; index <= 8; index += 1) {
+  ports[index] = { mode: "access", pvid: index === 4 || index === 8 ? 0 : index >= 5 ? 20 : 10, allow: {} };
+}
+const VLAN_PALETTE = ["#1f4b99", "#c56a12", "#1e7a4a", "#1d6f82", "#5c4d8a", "#0e6b5c", "#a68462", "#8d6e97"];
+const vlanColorOf = {};
+function colorFor(vid) {
+  const key = String(vid);
+  if (!vlanColorOf[key]) vlanColorOf[key] = VLAN_PALETTE[Object.keys(vlanColorOf).length % VLAN_PALETTE.length];
+  return vlanColorOf[key];
+}
+colorFor(10);
+colorFor(20);
+
+let dscpBits = 46;
+let ecnBits = 0;
+const ECN_NAME = { 0: "Not-ECT", 1: "ECT(1)", 2: "ECT(0)", 3: "CE" };
+let focus = 2;
+let station = "frame";
+let selected = "a1";
+let action = null;
+let flow = 0;
+let cycleMode = "fit";
+let preemptOn = false;
+let walkKind = "ctrl";
+let walkAt = -1;
+let walkToken = 0;
+const WALKS = {
+  ctrl: [
+    { title: "Application writes SOME/IP", text: "Control data leaves the application. The payload of this frame is SOME/IP.", color: "var(--l7)" },
+    { title: "Packed into UDP", text: "SOME/IP is packed into UDP. This step does not pick a queue.", color: "var(--l4)" },
+    { title: "IP header writes DSCP", text: "DSCP is the priority in the IP header, 6 bits. The 1982 station covers it.", color: "var(--l3)" },
+    { title: "PCP picks the queue", text: "PCP in the 802.1Q tag is a second priority. The switch uses PCP to choose the queue. DSCP stays in the IP header.", color: "var(--l2)" },
+    { title: "Ingress runs 802.1Qci", text: "Before the queue, check the frame length, then the token bucket. Too long, or an empty bucket, and the frame is dropped.", color: "var(--vlan)" },
+    { title: "Egress waits for the gate", text: "Leaving the queue still waits for the 802.1Qbv gate to open. The guard band in front of the gate finishes the previous frame.", color: "var(--gptp)" },
+    { title: "PHY puts it on the wire", text: "The gate is open. The PHY puts the bits on the wire.", color: "var(--l1)" }
+  ],
+  gptp: [
+    { title: "EtherType 0x88F7", text: "The type is the EtherType in the frame header. On the 1982 station, 0x0800 means IPv4 is inside. gPTP writes 0x88F7, which means a time-sync message is inside.", color: "var(--gptp)" },
+    { title: "No IP header", text: "What follows 0x88F7 is not IP, so there is no DSCP and no UDP. The switch cannot pick its queue the way the 1982 station does.", color: "var(--l3)" },
+    { title: "Straight into queue 7", text: "The switch recognizes 0x88F7 and places the frame in queue 7. Queue 7 is reserved for gPTP and does not compete with the control frame.", color: "var(--l2)" },
+    { title: "Line the gates up", text: "The message in queue 7 measures how long each hop took. Each port lines its time gate up to that time, so a control frame knows which gate opens when.", color: "var(--gptp)" }
+  ]
+};
+
+function bitButton(bit, attr, index, weight) {
+  return '<button type="button" class="bit' + (bit === "1" ? " fill" : "") + '" ' + attr + '="' + index + '"><b>' + bit + "</b>" +
+    (weight == null ? "" : "<em>" + weight + "</em>") + "</button>";
+}
+function dscpGroup(value) {
+  const bits = (value & 63).toString(2).padStart(6, "0").split("");
+  const weights = [32, 16, 8, 4, 2, 1];
+  const used = bits.map((bit, index) => (bit === "1" ? weights[index] : 0)).filter((weight) => weight > 0);
+  const name = DSCP_NAME[value] ? " · " + DSCP_NAME[value] : " · no standard PHB name";
+  const dscp = bits.map((bit, index) => bitButton(bit, "data-bit", index, weights[index])).join("");
+  const sum = used.length ? used.join("+") + " = " + value : "0";
+  return '<div class="grp"><b>DSCP · 6 bit</b><div class="bits">' + dscp + "</div><span class=\"sum\">" + bits.join("") + " = " + sum + name + "</span></div>";
+}
+function ecnGroup() {
+  const ecnText = ((ecnBits >> 1) & 1).toString() + (ecnBits & 1).toString();
+  const ecn = [0, 1].map((index) => bitButton(((ecnBits >> (1 - index)) & 1).toString(), "data-ecn", index)).join("");
+  return '<div class="grp ecn"><b>ECN · 2 bit</b><div class="bits">' + ecn + "</div><span class=\"sum\">" + ecnText + " " + ECN_NAME[ecnBits] + "</span></div>";
+}
+function dsField(value, tone) {
+  return '<div class="dsfield ' + tone + '">' + dscpGroup(value) + ecnGroup() + "</div>";
+}
+function cell(label, sub, color) {
+  return '<div class="cell" style="background:' + color + '"><b>' + label + "</b><span>" + sub + "</span></div>";
+}
+function frameHtml(opts) {
+  const parts = [
+    cell("Dest MAC", "6 bytes", "#4a5568"),
+    cell("Src MAC", "6 bytes", "#4a5568")
+  ];
+  if (opts.tagged) {
+    parts.push(cell("0x8100", "TPID", "var(--vlan)"));
+    parts.push(cell("PCP " + (opts.pcp == null ? "·" : opts.pcp) + " · VID " + (opts.vid == null ? "·" : opts.vid), "TCI", "var(--vlan)"));
+  }
+  parts.push(cell("EtherType", opts.eth || "0x0800", "var(--l2)"));
+  if (opts.dscp != null) {
+    parts.push(cell("IPv4", "DSCP " + opts.dscp, "var(--l3)"));
+    parts.push(cell("UDP", "transport", "var(--l4)"));
+  }
+  parts.push(cell(opts.eth === "0x88F7" ? "gPTP" : "SOME/IP", opts.eth === "0x88F7" ? "no IP header" : "application payload", opts.eth === "0x88F7" ? "var(--gptp)" : "var(--l7)"));
+  parts.push(cell("FCS", "CRC-32 · 4 bytes", "var(--l2)"));
+  return '<div class="cells">' + parts.join("") + "</div>" + (opts.fields ? dsField(opts.dscp, "paper") : "");
+}
+
+function vlanOn() { return station !== "frame"; }
+
+function nest(color, title, sub, inner, cls) {
+  return '<div class="wrap' + (cls ? " " + cls : "") + '" style="background:' + color + '">' +
+    '<div class="label"><b>' + title + "</b>" + (sub ? "<span>" + sub + "</span>" : "") + "</div>" +
+    (inner ? '<div class="inner">' + inner + "</div>" : "") +
+    "</div>";
+}
+
+function renderOsi() {
+  const tagged = vlanOn();
+  document.getElementById("stack").innerHTML = LAYERS.map((layer) => {
+    const sub = layer.id === 2 ? (tagged ? "Ethernet II · 802.1Q · FCS" : "Ethernet II · FCS") : layer.sub;
+    return '<button type="button" class="layer' + (layer.id === focus ? " pick" : "") + '" data-layer="' + layer.id + '" style="background:' + layer.color + ";width:" + layer.width + '">' +
+      "<span><b>" + layer.id + " " + layer.name + "</b><small>" + sub + "</small></span>" +
+      (layer.here ? '<span class="mark">here</span>' : "") +
+    "</button>";
+  }).join("");
+  let html = '<div class="payload" style="background:var(--l7)"><b>Application · SOME/IP</b><span>payload</span></div>';
+  if (focus <= 4) html = nest("var(--l4)", "Transport · UDP", "UDP header", html);
+  if (focus <= 3) html = nest("var(--l3)", "Network · IPv4", "DSCP 6 bit · ECN 2 bit", dsField(dscpBits, "ink") + html, focus === 3 ? "frame-l3" : "");
+  if (focus <= 2) {
+    const tag = tagged
+      ? '<div class="ethhead"><b>Ethernet header</b><span>dest MAC 6 bytes · src MAC 6 bytes · EtherType 0x0800</span></div>' +
+        '<div class="tagband"><b>802.1Q</b><span>between src MAC and EtherType · 4 bytes · TPID 0x8100 · TCI = PCP + DEI + VID · header 18 bytes</span></div>'
+      : '<div class="tagband plain"><b>Ethernet II</b><span>dest MAC · src MAC · EtherType 0x0800 · header 14 bytes, EtherType follows the src MAC</span></div>';
+    html = '<div class="wrap frame-l2" style="background:var(--l2)">' +
+      '<div class="label"><b>Data link · Ethernet II</b></div>' +
+      tag +
+      '<div class="inner">' + html + "</div>" +
+      '<div class="fcs"><b>FCS</b><span>CRC-32 · 4 bytes</span></div>' +
+      "</div>";
+  }
+  if (focus === 1) html = nest("var(--l1)", "Physical", "preamble · SFD", html);
+  const packet = document.getElementById("packet");
+  const rows = { 7: 1, 6: 1, 5: 1, 4: 4, 3: 5, 2: 6, 1: 7 }[focus];
+  packet.style.height = "calc(52px * " + rows + " + 6px * " + (rows - 1) + ")";
+  packet.innerHTML = html;
+  document.querySelectorAll(".layer").forEach((button) => {
+    button.onclick = () => { focus = Number(button.getAttribute("data-layer")); renderOsi(); };
+  });
+  bindBits();
+}
+
+function bindBits() {
+  document.querySelectorAll(".bits .bit[data-bit]").forEach((button) => {
+    button.onclick = () => {
+      dscpBits ^= 1 << (5 - Number(button.getAttribute("data-bit")));
+      dscpBits &= 63;
+      renderFrame();
+      renderOsi();
+    };
+  });
+  document.querySelectorAll(".bits .bit[data-ecn]").forEach((button) => {
+    button.onclick = () => {
+      ecnBits ^= 1 << (1 - Number(button.getAttribute("data-ecn")));
+      ecnBits &= 3;
+      renderFrame();
+      renderOsi();
+    };
+  });
+}
+
+function afOf(value) {
+  if ((value & 1) !== 0) return null;
+  const cls = value >> 3;
+  const drop = (value >> 1) & 3;
+  if (cls < 1 || cls > 4 || drop < 1 || drop > 3) return null;
+  return "AF" + cls + drop;
+}
+function standardName(value) {
+  if (value === 0) return "CS0 · DF · BE";
+  if (value === 1) return "LE";
+  if (value === 46) return "EF";
+  if (value === 44) return "VA";
+  if ((value & 7) === 0 && value >= 8 && value <= 56) return "CS" + (value >> 3);
+  return afOf(value) || "";
+}
+for (let code = 0; code < 64; code++) {
+  const title = standardName(code);
+  if (title) DSCP_NAME[code] = title;
+}
+function queueOf(value) {
+  if ((value & 7) === 0) return value >> 3;
+  if (value === 46) return 5;
+  return null;
+}
+function dscpItems(value) {
+  const bits = (value & 63).toString(2).padStart(6, "0");
+  const items = [
+    { on: value === 56, name: "CS7 · 56 · 111000", text: "Class selector 7. The first 3 bits are 111.", queue: 7 },
+    { on: value === 48, name: "CS6 · 48 · 110000", text: "Class selector 6. The first 3 bits are 110.", queue: 6 },
+    { on: value === 46, name: "EF · 46 · 101110", text: "Expedited Forwarding. The last 3 bits are 110, so this is not a class selector.", queue: 5 },
+    { on: value === 0, name: "CS0 · DF · BE · 0 · 000000", text: "Class selector 0. DF is Default Forwarding. BE is Best Effort. The first 3 bits are also 000. These three names mean only codepoint 0.", queue: 0 }
+  ];
+  if (!items.some((item) => item.on)) {
+    const named = standardName(value);
+    const af = afOf(value);
+    let text;
+    if (af) text = "Assured Forwarding. Class " + (value >> 3) + ", drop precedence " + ((value >> 1) & 3) + ". Within a class, a higher number is dropped first.";
+    else if ((value & 7) === 0) text = "Class selector. The class number is the first 3 bits.";
+    else if (value === 44) text = "Voice-Admit.";
+    else if (value === 1) text = "Lower Effort.";
+    else if ((value & 3) === 1) text = "The last two bits are 01: experimental or local.";
+    else if ((value & 1) === 0) text = "No PHB name in the standards pool yet.";
+    else text = "The last two bits are 11.";
+    items.push({ on: true, name: (named || "current") + " · " + value + " · " + bits, text: text, queue: queueOf(value) });
+  }
+  return items;
+}
+const ECN_ROWS = [
+  { value: 0, name: "00 Not-ECT", text: "The endpoint does not use ECN. A congested router drops the packet." },
+  { value: 1, name: "01 ECT(1)", text: "L4S uses this codepoint. Marks come earlier and more often." },
+  { value: 2, name: "10 ECT(0)", text: "Classic ECN. A sender usually sets 10." },
+  { value: 3, name: "11 CE", text: "The router has written congestion. The receiver tells the sender to slow down." }
+];
+
+function renderFrame() {
+  const trust = document.getElementById("trust").checked;
+  document.getElementById("frame-cells").innerHTML = frameHtml({ tagged: false, dscp: dscpBits, eth: "0x0800", fields: false });
+  document.getElementById("dscp-bits").innerHTML = '<div class="dsfield paper">' + dscpGroup(dscpBits) + "</div>";
+  document.getElementById("ecn-bits").innerHTML = '<div class="dsfield paper">' + ecnGroup() + "</div>";
+  document.getElementById("dscp-pair").classList.toggle("off", !trust);
+  document.getElementById("dscp-mean").innerHTML = dscpItems(dscpBits).map((item) =>
+    '<li class="' + (item.on ? "on" : "") + '"><span><b>' + item.name + "</b> " + item.text + "</span>" +
+    (item.queue == null ? "" : '<span class="q">queue ' + item.queue + "</span>") + "</li>"
+  ).join("");
+  document.getElementById("ecn-mean").innerHTML = ECN_ROWS.map((row) =>
+    '<li class="' + (row.value === ecnBits ? "on" : "") + '"><b>' + row.name + "</b> " + row.text + "</li>"
+  ).join("");
+  document.getElementById("trust-on").classList.toggle("on", trust);
+  document.getElementById("trust-off").classList.toggle("on", !trust);
+  bindBits();
+}
+
+function tagPreview() {
+  document.getElementById("tag-cells").innerHTML = frameHtml({ tagged: true, pcp: 5, vid: 10, dscp: 46, eth: "0x0800" });
+}
+
+function bars(rows, cycle, hold) {
+  const sum = rows.reduce((total, row) => total + row.us, 0);
+  const span = hold ? cycle : Math.max(cycle, sum, 1);
+  const pastRow = (row) => !hold && sum > cycle && row === rows[rows.length - 1] && rows.length > DEMO.length;
+  const widthOf = (us) => (us / span) * 100;
+  const guard = "repeating-linear-gradient(135deg,#b7b2a8,#b7b2a8 2px,#e7e4de 2px,#e7e4de 5px)";
+  const queues = [7, 6, 5, 4, 3, 2, 1, 0].map((queue) => {
+    const segs = rows.map((row) => {
+      const past = pastRow(row);
+      const open = !past && (row.mask & (1 << queue)) !== 0;
+      const color = past ? "#d9d4cc" : row.mask === 0 ? guard : open ? QCOLOR[queue] : "var(--shut)";
+      return '<i style="width:' + widthOf(row.us) + "%;background:" + color + '"></i>';
+    }).join("");
+    const extra = hold
+      ? '<i style="width:' + widthOf(cycle - sum) + "%;background:" + ((rows[rows.length - 1].mask & (1 << queue)) ? QCOLOR[queue] : "#d9d4cc") + ';outline:1px solid #8a8a8a"></i>'
+      : "";
+    return '<div class="qrow"><span style="color:' + QCOLOR[queue] + '">Q' + queue + " " + QNAME[queue] + '</span><div class="track">' + segs + extra + "</div></div>";
+  }).join("");
+  const scale = rows.map((row) => (
+    '<i style="width:' + widthOf(row.us) + '%">' + (row.mask === 0 && !pastRow(row) ? "<em>guard</em>" : "") + "</i>"
+  )).join("") + (hold ? '<i style="width:' + widthOf(cycle - sum) + '%"></i>' : "");
+  return queues + '<div class="qscale"><span></span><div class="track">' + scale + "</div></div>";
+}
+
+const NET_IDLE = "Click Send. The frame follows this wire into the switch, then leaves on a port that accepts it.";
+
+function allows(store, vid) { return store[vid] !== false; }
+function seenVids() {
+  const set = new Set();
+  Object.keys(hosts).forEach((id) => {
+    const vid = hosts[id].vid;
+    if (vid >= 1 && vid <= 4094) set.add(vid);
+  });
+  return [...set].sort((a, b) => a - b);
+}
+function hostOn(port) {
+  return Object.keys(hosts).find((id) => hosts[id].port === port) || "";
+}
+function ingressOf(id) {
+  const host = hosts[id];
+  const port = ports[host.port];
+  const name = id.toUpperCase();
+  const emit = host.tag ? { tagged: true, pcp: 0, vid: host.vid, dscp: 46, eth: "0x0800" } : { dscp: 46, eth: "0x0800" };
+  const opened = name + (host.tag ? " sends VID " + host.vid + "." : " sends a frame with no 802.1Q tag.");
+  if (host.tag && host.vid === 4095) return { drop: true, emit: emit, opened: opened, text: "VID 4095 is reserved. Ingress drops it." };
+  if (port.mode === "access") {
+    if (host.tag && host.vid !== 0 && (host.vid < 1 || host.vid > 4094 || host.vid !== port.pvid)) {
+      return { drop: true, emit: emit, opened: opened, text: "This access port is VLAN " + port.pvid + ". VID " + host.vid + " cannot enter." };
+    }
+    const vlan = !host.tag || host.vid === 0 ? port.pvid : host.vid;
+    const how = !host.tag
+      ? "Untagged into access. Ingress writes VLAN " + port.pvid + "."
+      : host.vid === 0
+        ? "VID 0 is a priority tag. The VLAN is this port's " + port.pvid + "."
+        : "The VID in the tag matches this port's VLAN.";
+    return { vlan: vlan, emit: emit, opened: opened, how: how, internal: { tagged: true, pcp: 0, vid: vlan, dscp: 46, eth: "0x0800" } };
+  }
+  let vlan;
+  let how;
+  if (!host.tag || host.vid === 0) {
+    vlan = port.pvid;
+    if (!allows(port.allow, vlan)) return { drop: true, emit: emit, opened: opened, text: "This trunk port does not allow VLAN " + vlan + ". Ingress drops it." };
+    how = "Untagged into a trunk. Ingress first writes VLAN " + vlan + ".";
+  } else if (host.vid < 1 || host.vid > 4094) {
+    return { drop: true, emit: emit, opened: opened, text: "VID " + host.vid + " cannot be a VLAN. Ingress drops it." };
+  } else if (!allows(port.allow, host.vid)) {
+    return { drop: true, emit: emit, opened: opened, text: "This trunk port does not allow VID " + host.vid + ". Ingress drops it." };
+  } else {
+    vlan = host.vid;
+    how = "Trunk ingress keeps VID " + vlan + ".";
+  }
+  return { vlan: vlan, emit: emit, opened: opened, how: how, internal: { tagged: true, pcp: 0, vid: vlan, dscp: 46, eth: "0x0800" } };
+}
+function egressOf(id, vlan) {
+  const src = hosts[id].port;
+  const access = [];
+  const trunk = [];
+  Object.keys(ports).forEach((key) => {
+    const number = Number(key);
+    if (number === src) return;
+    const port = ports[number];
+    if (port.mode === "access" && port.pvid === vlan && hostOn(number)) access.push(number);
+    if (port.mode === "trunk" && allows(port.allow, vlan)) trunk.push(number);
+  });
+  return { access: access, trunk: trunk };
+}
+function note(text) {
+  document.getElementById("sw-note").textContent = text;
+}
+function later(ms, token, fn) {
+  window.setTimeout(() => { if (token === flow) fn(); }, ms);
+}
+function placeToken(port, at, text, drop, toward) {
+  const wire = document.getElementById("wire-" + port);
+  if (!wire || !hostOn(port)) return;
+  let token = wire.querySelector(".token");
+  const fresh = !token;
+  if (!token) {
+    token = document.createElement("b");
+    token.className = "token";
+    wire.appendChild(token);
+  }
+  token.textContent = text;
+  token.classList.toggle("drop", !!drop);
+  const dest = toward || at;
+  const down = (port <= 4) === (dest === "sw");
+  token.classList.toggle("dir-down", down);
+  token.classList.toggle("dir-up", !down);
+  if (fresh) token.style.transition = "none";
+  token.classList.toggle("host", at === "host");
+  token.classList.toggle("sw", at === "sw");
+  if (fresh) {
+    void token.offsetWidth;
+    token.style.transition = "";
+  }
+  wire.classList.add("live");
+}
+function retitle(port, text, drop) {
+  const token = document.querySelector("#wire-" + port + " .token");
+  if (!token) return;
+  token.textContent = text;
+  token.classList.toggle("drop", !!drop);
+}
+function placeBadge(port, text) {
+  const jack = document.getElementById("port-" + port);
+  if (!jack) return;
+  let badge = jack.querySelector(".badge");
+  if (!badge) {
+    badge = document.createElement("b");
+    badge.className = "badge";
+    jack.querySelector(".plug").insertAdjacentElement("afterend", badge);
+  }
+  badge.textContent = text;
+  jack.classList.add("on");
+}
+function play(id) {
+  flow += 1;
+  const token = flow;
+  selected = id;
+  action = "send";
+  paintRack();
+  const ing = ingressOf(id);
+  const portNo = hosts[id].port;
+  const emitted = ing.emit.tagged ? "VID " + ing.emit.vid : "no tag";
+  document.getElementById("node-" + id).classList.add("hot");
+  placeToken(portNo, "host", emitted, false, "sw");
+  note(ing.opened);
+  later(700, token, () => {
+    placeToken(portNo, "sw", emitted, false);
+    later(650, token, () => {
+      const inside = ing.drop ? "Drop" : "VID " + ing.vlan;
+      retitle(portNo, inside, ing.drop);
+      document.getElementById("port-" + portNo).classList.add(ing.drop ? "drop" : "on");
+      note(ing.drop ? ing.text : "Port " + portNo + ". " + ing.how);
+      if (ing.drop) return;
+      later(700, token, () => {
+        const eg = egressOf(id, ing.vlan);
+        eg.access.forEach((number) => {
+          placeToken(number, "sw", "no tag", false, "host");
+          document.getElementById("port-" + number).classList.add("on");
+        });
+        eg.trunk.forEach((number) => {
+          if (hostOn(number)) placeToken(number, "sw", "VID " + ing.vlan, false, "host");
+          else placeBadge(number, "VID " + ing.vlan);
+          document.getElementById("port-" + number).classList.add("on");
+        });
+        const parts = [];
+        if (eg.access.length) parts.push("Access ports leave untagged");
+        if (eg.trunk.length) parts.push("Trunk ports still carry VID " + ing.vlan);
+        note(parts.length ? parts.join(". ") + "." : "No port can forward it.");
+        later(60, token, () => {
+          eg.access.forEach((number) => placeToken(number, "host", "no tag", false));
+          eg.trunk.forEach((number) => {
+            if (hostOn(number)) placeToken(number, "host", "VID " + ing.vlan, false);
+          });
+        });
+        later(700, token, () => {
+          const names = [];
+          eg.access.concat(eg.trunk).forEach((number) => {
+            const who = hostOn(number);
+            if (!who) return;
+            document.getElementById("node-" + who).classList.add("hot");
+            names.push(who.toUpperCase());
+          });
+          const parked = eg.trunk.some((number) => !hostOn(number));
+          if (names.length && parked) note(names.join(", ") + " received it. An empty trunk port holds the frame.");
+          else if (names.length) note(names.join(", ") + " received it.");
+          else if (parked) note("No host on the trunk port. The frame stays on the port.");
+        });
+      });
+    });
+  });
+}
+function portColor(number) {
+  const port = ports[number];
+  if (port.mode !== "access" || port.pvid < 1 || port.pvid > 4094) return "#243038";
+  return colorFor(port.pvid);
+}
+function twistSvg() {
+  return '<svg class="twist" viewBox="0 0 18 88" preserveAspectRatio="none" aria-hidden="true">' +
+    '<path d="M4 0C4 8 14 8 14 16S4 24 4 32S14 40 14 48S4 56 4 64S14 72 14 80S4 88 4 88" fill="none" stroke="currentColor" stroke-width="1.8"/>' +
+    '<path d="M14 0C14 8 4 8 4 16S14 24 14 32S4 40 4 48S14 56 14 64S4 72 4 80S14 88 14 88" fill="none" stroke="currentColor" stroke-width="1.8" opacity="0.4"/>' +
+    "</svg>";
+}
+function wireBand(start) {
+  return [0, 1, 2, 3].map((offset) => {
+    const number = start + offset;
+    if (!hostOn(number)) return '<div class="wire" id="wire-' + number + '"></div>';
+    return '<div class="wire" id="wire-' + number + '" style="--vc:' + portColor(number) + '">' + twistSvg() + "</div>";
+  }).join("");
+}
+function jack(number) {
+  const port = ports[number];
+  const vids = seenVids();
+  const mode = '<select class="port-mode" data-port="' + number + '"><option value="access"' +
+    (port.mode === "access" ? " selected" : "") + ">Access</option><option value=\"trunk\"" +
+    (port.mode === "trunk" ? " selected" : "") + ">Trunk</option></select>";
+  const choices = [0].concat(vids);
+  const vlan = port.mode === "access"
+    ? '<select class="port-pvid" data-port="' + number + '">' + choices.map((vid) =>
+      '<option value="' + vid + '"' + (vid === port.pvid ? " selected" : "") + ">" + vid + "</option>"
+    ).join("") + "</select>"
+    : '<span class="allows">' + vids.map((vid) =>
+      '<label class="vchip" style="background:' + colorFor(vid) + '"><input class="port-allow" data-port="' + number + '" data-vid="' + vid + '" type="checkbox"' +
+      (allows(port.allow, vid) ? " checked" : "") + "> " + vid + "</label>"
+    ).join("") + "</span>";
+  return '<div class="jack" id="port-' + number + '" style="--vc:' + portColor(number) + '"><b class="plug"><i></i><s></s></b><em class="pnum">' + number + '</em><div class="pcfg">' + mode + vlan + "</div></div>";
+}
+function paintRack() {
+  const vids = seenVids();
+  Object.keys(ports).forEach((number) => {
+    const pvid = ports[number].pvid;
+    if (pvid !== 0 && vids.length && vids.indexOf(pvid) < 0) ports[number].pvid = vids[0];
+  });
+  Object.keys(hosts).forEach((id) => {
+    const host = hosts[id];
+    const node = document.getElementById("node-" + id);
+    document.querySelector('.host-tag[data-host="' + id + '"]').checked = host.tag;
+    document.querySelector('.host-vid[data-host="' + id + '"]').value = host.vid;
+    node.classList.remove("hot");
+    node.classList.toggle("toned", host.vid >= 1 && host.vid <= 4094);
+    if (host.vid >= 1 && host.vid <= 4094) node.style.setProperty("--vc", colorFor(host.vid));
+  });
+  document.getElementById("sw-vlans").innerHTML = vids.map((vid) =>
+    '<i class="vchip" style="background:' + colorFor(vid) + '">' + vid + "</i>"
+  ).join("");
+  document.getElementById("jacks-top").innerHTML = [1, 2, 3, 4].map(jack).join("");
+  document.getElementById("jacks-bot").innerHTML = [5, 6, 7, 8].map(jack).join("");
+  document.getElementById("wires-top").innerHTML = wireBand(1);
+  document.getElementById("wires-bot").innerHTML = wireBand(5);
+  if (action !== "send") note(NET_IDLE);
+}
+const hop = {
+  a: { phy: true, phc: true, mac: true, frag: true },
+  b: { phy: true, phc: true, mac: true, frag: true },
+  as: true,
+  qbv: true,
+  qci: true
+};
+function hopTime() {
+  return hop.a.phy && hop.b.phy && hop.a.phc && hop.b.phc;
+}
+function hopCut() {
+  return hop.a.mac && hop.b.mac && hop.a.frag && hop.b.frag;
+}
+function gateWhy() {
+  if (!hop.qbv) return "This egress has no 802.1Qbv Time-Aware Shaper. The gate is on the switch or NIC egress, not in the PHY.";
+  if (!hopTime()) return "This hop has no matched timestamp, so the gate does not open.";
+  if (!hop.as) return "This is not 802.1AS, so the gates do not line up.";
+  return "";
+}
+function renderTime() {
+  const host = document.getElementById("time-hops");
+  const cap = document.getElementById("time-cap");
+  const aside = " The counter and CRC in the payload are AUTOSAR E2E. They detect a changed payload. They do not measure how long this hop took.";
+  if (!hopTime()) {
+    host.innerHTML = "<b>Slave P1</b><i></i><b>Bridge 1 P1</b><i></i><b>Bridge 2</b><i></i><b>Master</b>";
+    const miss = [];
+    if (!hop.a.phy || !hop.b.phy) miss.push("both PHYs need an IEEE 1588 timestamp");
+    if (!hop.a.phc || !hop.b.phc) miss.push("both MACs need a PTP Hardware Clock to hold that count");
+    cap.textContent = "This hop has no nanosecond count. " + miss.join(". ") + ".";
+    return;
+  }
+  if (!hop.as) {
+    host.innerHTML = '<b class="on">Slave P1</b><i style="background:var(--l3);flex:3"><em>4.8 µs</em></i><b class="on">Master</b>';
+    cap.textContent = "Slave to master yields one time, 4.8 µs. How long bridge 1 and bridge 2 waited cannot be separated. This is not 802.1AS, so the gates on each port do not line up." + aside;
+    return;
+  }
+  host.innerHTML = '<b class="on">Slave P1</b><i style="background:var(--l3)"><em>180 ns</em></i><b class="on">Bridge 1 P1</b><i style="background:var(--l3)"><em>240 ns</em></i><b class="on">Bridge 2</b><i style="background:var(--l3)"><em>150 ns</em></i><b class="on">Master</b>';
+  cap.textContent = "One time per hop. Bridge 1 also waits 2.4 µs while forwarding, and bridge 2 waits 1.8 µs. The slave adds the time on the wire and the time spent inside each bridge. Once the clock on the NIC is aligned, the system clock follows it." + aside;
+}
+function renderHw() {
+  ["a", "b"].forEach((side) => {
+    document.getElementById(side + "-phy").checked = hop[side].phy;
+    document.getElementById(side + "-phc").checked = hop[side].phc;
+    document.getElementById(side + "-mac").checked = hop[side].mac;
+    document.getElementById(side + "-frag").checked = hop[side].frag;
+  });
+  document.getElementById("hw-qbv").checked = hop.qbv;
+  document.getElementById("hw-qci").checked = hop.qci;
+  document.getElementById("dly-as").classList.toggle("on", hop.as);
+  document.getElementById("dly-e2e").classList.toggle("on", !hop.as);
+  const items = [];
+  if (!hopTime()) {
+    const miss = [];
+    if (!hop.a.phy) miss.push("End A PHY IEEE 1588 timestamp");
+    if (!hop.b.phy) miss.push("End B PHY IEEE 1588 timestamp");
+    if (!hop.a.phc) miss.push("End A MAC PTP Hardware Clock");
+    if (!hop.b.phc) miss.push("End B MAC PTP Hardware Clock");
+    items.push({ ok: false, text: "Timing does not hold. Missing " + miss.join(", ") + "." });
+  } else if (hop.as) {
+    items.push({ ok: true, text: "802.1AS: per-hop time. Slave P1 180 ns, then 240 ns to bridge 2, then 150 ns to the master." });
+  } else {
+    items.push({ ok: false, text: "1588 E2E: one 4.8 µs for the whole path. The switch does not correct per hop, so the time gates do not line up." });
+  }
+  if (!hop.qbv) items.push({ ok: false, text: "The time gate does not hold. The switch datasheet has no 802.1Qbv Time-Aware Shaper." });
+  else if (!hopTime() || !hop.as) items.push({ ok: false, text: "The time gate cannot open. It first needs the per-hop timestamps of 802.1AS peer delay." });
+  else items.push({ ok: true, text: "802.1Qbv can open on the schedule. Q7 is left for gPTP." });
+  if (hopCut()) items.push({ ok: true, text: "Preemption can run. Both MACs have 802.1Qbu, and both PHYs forward an mPacket." });
+  else {
+    const miss = [];
+    if (!hop.a.mac) miss.push("End A MAC 802.1Qbu");
+    if (!hop.b.mac) miss.push("End B MAC 802.1Qbu");
+    if (!hop.a.frag) miss.push("End A PHY mPacket");
+    if (!hop.b.frag) miss.push("End B PHY mPacket");
+    items.push({ ok: false, text: "Preemption does not hold. Missing " + miss.join(", ") + ". The guard band still covers a whole frame." });
+  }
+  items.push(hop.qci
+    ? { ok: true, text: "802.1Qci PSFP is active on the switch ingress." }
+    : { ok: false, text: "Stream filtering does not hold. The switch datasheet has no 802.1Qci PSFP." });
+  document.getElementById("hw-cap").innerHTML = items.map((item) =>
+    '<li class="' + (item.ok ? "ok" : "bad") + '"><b class="mark">' + (item.ok ? "✓" : "×") + "</b><span>" + item.text + "</span></li>"
+  ).join("");
+  renderTime();
+  renderGates();
+  renderCycle();
+  renderPre();
+  renderPsfp();
+}
+function renderGates() {
+  const why = gateWhy();
+  const fit = document.getElementById("gate-fit");
+  fit.innerHTML = bars(DEMO, 1000, false);
+  fit.classList.toggle("dim", !!why);
+  document.getElementById("gate-cap").textContent = why || "Each row is one queue. A dark segment means that gate is open and a frame may leave. A light segment means this queue is closed; another queue may still be open. The hatched segment closes all eight queues. That is the guard band, 40 µs here, placed before Q2 opens. If a frame has already started, those 40 µs finish it. When Q2 opens, the wire is empty, so a partial frame is not left in the way. Without preemption the guard band must cover a maximum-length frame. With preemption it only has to cover the last fragment.";
+}
+function renderCycle() {
+  ["fit", "short", "long"].forEach((mode) => {
+    document.getElementById("cy-" + mode).classList.toggle("on", cycleMode === mode);
+  });
+  const host = document.getElementById("gate-cycle");
+  const cap = document.getElementById("cy-cap");
+  const why = gateWhy();
+  host.classList.toggle("dim", !!why);
+  if (why) {
+    host.innerHTML = bars(DEMO, 1000, false);
+    cap.textContent = why;
+    return;
+  }
+  if (cycleMode === "short") {
+    host.innerHTML = bars(DEMO, 1500, true);
+    cap.textContent = "The rows add up to 1000 µs and the cycle is 1500 µs, so 500 µs is unlisted. That gap keeps the last row: Q1 and Q0 stay open until the cycle ends.";
+  } else if (cycleMode === "long") {
+    host.innerHTML = bars(DEMO.concat([{ us: 200, mask: 1 }]), 1000, false);
+    cap.textContent = "The table runs 200 µs past the cycle. The gray segment is already outside the cycle. It stops when the cycle ends and does not run.";
+  } else {
+    host.innerHTML = bars(DEMO, 1000, false);
+    cap.textContent = "The rows add up to exactly 1000 µs, the same length as the cycle.";
+  }
+}
+
+function renderPre() {
+  const can = hopCut();
+  const show = preemptOn && can;
+  const slices = show
+    ? [["Q0 fragment", "#8a847a", 2], ["Q7 gPTP", "var(--gptp)", 1.3], ["Q0 rest", "#8a847a", 4]]
+    : [["Q0 whole frame", "#8a847a", 6], ["guard", "#d9d4cc", 1.4], ["Q7 still waiting", "var(--gptp)", 1.6]];
+  document.getElementById("pre-fig").innerHTML = slices.map((slice) => (
+    '<div style="flex:' + slice[2] + ";background:" + slice[1] + ";" + (slice[1] === "#d9d4cc" ? "color:#1b1b1b" : "") + '">' + slice[0] + "</div>"
+  )).join("");
+  const toggle = document.getElementById("pre-toggle");
+  toggle.disabled = !can;
+  if (!can) {
+    const miss = [];
+    if (!hop.a.mac || !hop.b.mac) miss.push("both MACs need 802.1Qbu Frame Preemption");
+    if (!hop.a.frag || !hop.b.frag) miss.push("both PHYs must forward an 802.3br mPacket");
+    document.getElementById("pre-cap").textContent = miss.join(". ") + ". This hop cannot cut a frame. The guard band has to cover the whole Q0 frame, and gPTP is still waiting.";
+    toggle.textContent = "This hop cannot preempt";
+    return;
+  }
+  document.getElementById("pre-cap").textContent = show
+    ? "Q0 is cut. The guard band covers only the last fragment, and gPTP inserts in the middle instead of waiting for the whole frame."
+    : "Gray is the guard band. The whole Q0 frame has to finish inside it before Q7 can open. gPTP is still waiting behind it.";
+  toggle.textContent = show ? "Show no preemption" : "Show Q0 preemptable";
+}
+
+function renderPsfp() {
+  const pick = document.getElementById("psfp");
+  if (!hop.qci) {
+    pick.disabled = true;
+    document.getElementById("psfp-result").textContent = "No stream filter";
+    document.getElementById("psfp-bar").style.width = "0%";
+    document.getElementById("psfp-cap").textContent = "802.1Qci PSFP is not checked on the switch. Ingress does not check frame length or the token bucket.";
+    return;
+  }
+  pick.disabled = false;
+  const mode = pick.value;
+  const text = {
+    pass: ["Into the queue", "70%", "300 bytes, under 1500. The bucket still has a token, so this frame enters a queue."],
+    sdu: ["Dropped on length", "70%", "2000 bytes, already over 1500. Ingress drops it before the token bucket is consulted."],
+    meter: ["Dropped on tokens", "0%", "300 bytes, length is fine. The bucket is empty, so the frame is dropped and does not enter a queue."]
+  }[mode];
+  document.getElementById("psfp-result").textContent = text[0];
+  document.getElementById("psfp-bar").style.width = text[1];
+  document.getElementById("psfp-cap").textContent = text[2];
+}
+
+function renderWalk() {
+  document.getElementById("walk-ctrl").classList.toggle("on", walkKind === "ctrl");
+  document.getElementById("walk-gptp").classList.toggle("on", walkKind === "gptp");
+  const steps = WALKS[walkKind];
+  document.getElementById("walk-steps").innerHTML = steps.map((step, index) => {
+    const state = index < walkAt ? "done" : index === walkAt ? "on" : "";
+    const bg = state ? step.color : "var(--shut)";
+    const fg = state ? "#fff" : "var(--ink)";
+    const shown = index <= walkAt ? step.text : "";
+    return '<li class="' + state + '"><div class="step" style="background:' + bg + ";color:" + fg + '"><b>' + (index + 1) + "</b><span>" + step.title + '</span></div><p>' + shown + "</p></li>";
+  }).join("");
+}
+function playWalk() {
+  const token = ++walkToken;
+  const steps = WALKS[walkKind];
+  walkAt = -1;
+  renderWalk();
+  steps.forEach((_, index) => {
+    setTimeout(() => {
+      if (token !== walkToken) return;
+      walkAt = index;
+      renderWalk();
+    }, 80 + index * 700);
+  });
+}
+function show(id) {
+  station = id;
+  document.querySelectorAll(".station").forEach((node) => node.classList.toggle("show", node.id === "st-" + id));
+  document.querySelectorAll("#line button").forEach((button) => {
+    button.classList.toggle("on", button.getAttribute("data-station") === id);
+  });
+  renderOsi();
+}
+
+document.querySelectorAll("#line button").forEach((button) => {
+  button.onclick = () => show(button.getAttribute("data-station"));
+});
+document.getElementById("trust").onchange = () => { renderFrame(); renderOsi(); };
+document.querySelectorAll(".host-tag").forEach((box) => {
+  box.onchange = () => { hosts[box.getAttribute("data-host")].tag = box.checked; flow += 1; action = null; paintRack(); };
+});
+document.querySelectorAll(".host-vid").forEach((input) => {
+  input.onchange = () => {
+    const vid = Math.max(0, Math.min(4095, Number(input.value) || 0));
+    hosts[input.getAttribute("data-host")].vid = vid;
+    action = null;
+    flow += 1;
+    paintRack();
+  };
+});
+document.querySelectorAll(".host-send").forEach((button) => {
+  button.onclick = () => play(button.getAttribute("data-host"));
+});
+document.getElementById("st-vlan").addEventListener("change", (event) => {
+  const target = event.target;
+  const port = ports[target.getAttribute("data-port")];
+  if (!port) return;
+  if (target.classList.contains("port-mode")) port.mode = target.value;
+  else if (target.classList.contains("port-pvid")) port.pvid = Number(target.value);
+  else if (target.classList.contains("port-allow")) port.allow[Number(target.getAttribute("data-vid"))] = target.checked;
+  else return;
+  action = null;
+  flow += 1;
+  paintRack();
+});
+document.getElementById("cy-fit").onclick = () => { cycleMode = "fit"; renderCycle(); };
+document.getElementById("cy-short").onclick = () => { cycleMode = "short"; renderCycle(); };
+document.getElementById("cy-long").onclick = () => { cycleMode = "long"; renderCycle(); };
+document.getElementById("st-tsn").addEventListener("change", (event) => {
+  const id = event.target.id;
+  if (id === "a-phy") hop.a.phy = event.target.checked;
+  else if (id === "a-phc") hop.a.phc = event.target.checked;
+  else if (id === "a-mac") hop.a.mac = event.target.checked;
+  else if (id === "b-phy") hop.b.phy = event.target.checked;
+  else if (id === "b-phc") hop.b.phc = event.target.checked;
+  else if (id === "b-mac") hop.b.mac = event.target.checked;
+  else if (id === "hw-qbv") hop.qbv = event.target.checked;
+  else if (id === "hw-qci") hop.qci = event.target.checked;
+  else if (id === "a-frag") hop.a.frag = event.target.checked;
+  else if (id === "b-frag") hop.b.frag = event.target.checked;
+  else return;
+  renderHw();
+});
+document.getElementById("dly-as").onclick = () => { hop.as = true; renderHw(); };
+document.getElementById("dly-e2e").onclick = () => { hop.as = false; renderHw(); };
+document.getElementById("pre-toggle").onclick = () => { if (hopCut()) { preemptOn = !preemptOn; renderPre(); } };
+document.getElementById("psfp").onchange = renderPsfp;
+document.getElementById("walk-ctrl").onclick = () => { walkKind = "ctrl"; walkAt = -1; walkToken += 1; renderWalk(); };
+document.getElementById("walk-gptp").onclick = () => { walkKind = "gptp"; walkAt = -1; walkToken += 1; renderWalk(); };
+document.getElementById("walk-go").onclick = playWalk;
+
+renderOsi();
+renderFrame();
+tagPreview();
+renderHw();
+renderWalk();
+paintRack();
+show("frame");
+</script>
+</body>
+</html>

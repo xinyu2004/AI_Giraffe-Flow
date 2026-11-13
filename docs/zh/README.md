@@ -17,7 +17,7 @@ Lightweight middleware + toolchain for cross-platform SOA systems. Closed-loop v
 | 文档 | 说明 |
 |------|------|
 | [architecture/DESIGN.md](architecture/DESIGN.md) | 总体设计（中间件 + 工具链；感知/规划为载荷） |
-| [tsn/index.html](tsn/index.html) | TSN（浏览器打开，按时间线点站）：七层、普通帧、VLAN 组网、AVB、门控与流过滤 |
+| [tsn/index.html](tsn/index.html) | TSN（浏览器打开，按时间线点站）：七层、普通帧、VLAN 组网、AVB、门控与流过滤。English: [../en/tsn/index.html](../en/tsn/index.html) |
 | [architecture/sor-authoring.md](architecture/sor-authoring.md) | SOR / compose |
 | [architecture/heterogeneous-compute.md](architecture/heterogeneous-compute.md) | AP + MCU |
 | [operations/ROADMAP.md](operations/ROADMAP.md) | 路线图 |

@@ -52,7 +52,7 @@ gf-config projects/afc/giraffe.yaml
 
 ### 页 2 · TSN（`tsync.yaml`）
 
-入口：勾选 **tsync**，打开 **时间 / 门控**。动画：[docs/zh/tsn/index.html](../../docs/zh/tsn/index.html)（用浏览器打开，按时间线点站）。
+入口：勾选 **tsync**，打开 **时间 / 门控**。中文：[docs/zh/tsn/index.html](../../docs/zh/tsn/index.html)（用浏览器打开，按时间线点站）。English: [docs/en/tsn/index.html](../../docs/en/tsn/index.html).
 
 - 没改过这一页时，保存不会写出 `network`。
 - **门控表**（`gate_list`）：每行是 `interval_us` 和 `gate_states`，各段之和必须等于 `cycle_us`。少了会沿用最后一行的门，直到周期结束；多了，超出的段不执行。两种 Verify 都不通过（`platform_tsync_network`），左侧保持标红。
