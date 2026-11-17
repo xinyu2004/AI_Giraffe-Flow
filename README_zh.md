@@ -49,14 +49,15 @@
 
 ---
 
-> [!NOTE]
-> **[AutoEth](docs/zh/net/index.html)：**
->
-> 　　车上网络从 CAN 的信号表走到以太网。现在的新能源车以以太网为骨干：SOME/IP 做服务，DDS 做数据分发，DoIP 做诊断和刷写，gPTP 给 TSN 对时。点一个协议，再勾选特性，就能看到组出来的包。English: [docs/en/net/index.html](docs/en/net/index.html)。加密和密钥在 [AI Fortress Auto](https://github.com/xinyu2004/AI_Fortress-Auto)。
->
-> **[FuSa](fusa/README.md)：**
->
-> 　　待添加。
+<table width="100%" cellpadding="16" cellspacing="0" bgcolor="#e4eef6" style="background:#e4eef6;border-radius:12px;overflow:hidden">
+<tr><td>
+<b><a href="docs/zh/net/index.html">AutoEth</a>：</b><br>
+　　车载以太网从 CAN 的信号表讲到以太网骨干。现在的新能源车上，这条骨干跑 SOME/IP 服务、DDS 数据分发、DoIP 诊断和刷写，并用 gPTP 给 TSN 对时。点一个协议，再勾选特性，就能看到组出来的包。<a href="docs/en/net/index.html">English</a>。加密和密钥在 <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>。<br>
+<br>
+<b><a href="fusa/README.md">FuSa</a>：</b><br>
+　　待添加。
+</td></tr>
+</table>
 
 ---
 
