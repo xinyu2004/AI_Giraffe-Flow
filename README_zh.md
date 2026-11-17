@@ -49,6 +49,17 @@
 
 ---
 
+> [!NOTE]
+> **[AutoEth](docs/zh/net/index.html)：**
+>
+> 　　车上网络从 CAN 的信号表走到以太网。现在的新能源车以以太网为骨干：SOME/IP 做服务，DDS 做数据分发，DoIP 做诊断和刷写，gPTP 给 TSN 对时。点一个协议，再勾选特性，就能看到组出来的包。English: [docs/en/net/index.html](docs/en/net/index.html)。加密和密钥在 [AI Fortress Auto](https://github.com/xinyu2004/AI_Fortress-Auto)。
+>
+> **[FuSa](fusa/README.md)：**
+>
+> 　　待添加。
+
+---
+
 ### 1. gf-config（配置侧工具链）
 
 定 **要什么能力、谁连谁、板端裁哪些模块**，不实现算法。两页写回三层资产：

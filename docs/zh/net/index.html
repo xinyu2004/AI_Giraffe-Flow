@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>车载网络</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1b1b1b;
+      --muted: #5c5c5c;
+      --line: #e4e0d8;
+      --ground: #d9d3c8;
+      --paper: #f4f2ec;
+      --shut: #e7e4de;
+      --card: #fff;
+      --l7: #5c4d8a;
+      --l6: #8d6e97;
+      --l5: #a68462;
+      --l4: #1d6f82;
+      --l3: #c56a12;
+      --l2: #1f4b99;
+      --l1: #243038;
+      --vlan: #1e7a4a;
+      --gptp: #0e6b5c;
+      --on: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--ground);
+      color: var(--ink);
+      font: 16px/1.55 "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
+      padding: 28px 20px 48px;
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      background: var(--paper);
+      border-radius: 16px;
+      box-shadow: 0 10px 28px rgba(36, 48, 56, 0.14);
+      overflow: hidden;
+    }
+    .mast { position: relative; background: var(--l1); color: var(--paper); padding: 28px 28px 18px; }
+    .lang { position: absolute; top: 28px; right: 28px; color: var(--paper); font-size: 14px; }
+    .stripes { display: flex; height: 6px; }
+    .stripes span { flex: 1; }
+    .sheet { padding: 28px 28px 64px; }
+    h1 { font-size: 34px; margin: 0; letter-spacing: -0.03em; color: var(--paper); }
+    a { color: var(--l2); }
+    p { margin: 0; }
+    .era p { margin: 10px 0 0; }
+    .era p:first-child { margin-top: 0; }
+    .era .keys { margin-top: 10px; color: var(--muted); }
+    .mark {
+      display: inline-block;
+      margin: 0 0 10px;
+      padding: 2px 8px;
+      border: 1px solid var(--paper);
+      color: var(--paper);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    button {
+      font: inherit;
+      background: var(--card);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      padding: 7px 12px;
+      cursor: pointer;
+    }
+    button.on { background: var(--l2); color: var(--on); border-color: var(--l2); }
+    button:disabled { opacity: 0.38; cursor: not-allowed; }
+    .panel { margin: 22px 0 0; padding: 12px 14px 14px; border-radius: 12px; }
+    .protocol { background: var(--card); border: 2px solid var(--l1); }
+    .addon { background: var(--shut); }
+    #protos button { border-radius: 999px; background: var(--layer); color: #fff; border: 0; }
+    #protos button.on { outline: 3px solid #111; outline-offset: 2px; background: var(--layer); border-color: transparent; color: #fff; }
+    .checks { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+    .checks label { display: inline-flex; align-items: center; gap: 6px; color: var(--layer); font-weight: 650; cursor: pointer; }
+    .checks input { width: 16px; height: 16px; margin: 0; accent-color: var(--layer); }
+    .checks label.off { opacity: 0.38; cursor: not-allowed; }
+    .tls-hold { position: relative; display: inline-flex; }
+    .hover-tip {
+      display: none;
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 8px);
+      z-index: 2;
+      padding: 4px 8px;
+      background: var(--l1);
+      color: var(--paper);
+      font-size: 13px;
+      font-weight: 400;
+      white-space: nowrap;
+      border-radius: 6px;
+      pointer-events: none;
+    }
+    .tls-hold:hover .hover-tip:not(:empty) { display: block; }
+    .notes p { margin: 6px 0 0; }
+    .notes a + a { margin-left: 0.75em; }
+    .intro { margin: 10px 0 0; }
+    .intro a + a { margin-left: 0.75em; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stack { width: min(520px, 100%); display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 22px 0; }
+    .band { color: #fff; padding: 10px 12px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; cursor: pointer; }
+    .band.col { flex-direction: column; align-items: stretch; }
+    .band .line { display: flex; justify-content: space-between; align-items: baseline; width: 100%; }
+    .band b { font-size: 15px; }
+    .band span { font-size: 14px; }
+    .chip { margin-left: 8px; padding: 0 6px; background: rgba(255,255,255,.18); font-style: normal; font-size: 13px; }
+    .esp { display: block; margin-top: 6px; padding: 6px 8px; background: rgba(0,0,0,.18); }
+    .lower { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .shell { box-sizing: border-box; width: 88%; padding: 8px 12px 12px; background: var(--l2); color: #fff; cursor: pointer; }
+    .shell > b { display: block; margin-bottom: 8px; font-size: 15px; }
+    .fld { padding: 8px 10px; }
+    .fld + .fld, .shell .plain + .fld { margin-top: 6px; }
+    .plain { font-size: 14px; }
+    .phy { width: 100%; background: var(--l1); }
+    .rail {
+      position: absolute; left: 100%; top: 0; bottom: 0; width: 42px; margin-left: 8px;
+      display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl;
+      background: var(--gptp); color: #fff; text-decoration: none; letter-spacing: 0.14em; font-weight: 700;
+    }
+    .cells { display: flex; flex-wrap: wrap; gap: 4px; }
+    .cell {
+      flex: 1 1 108px;
+      min-width: 108px;
+      padding: 10px 8px;
+      color: var(--on);
+      border: 0;
+      text-align: left;
+    }
+    .cell b, .cell span { display: block; }
+    .cell span { font-size: 12px; margin-top: 6px; opacity: 0.92; }
+    .cell.pick { outline: 3px solid #111; outline-offset: 2px; }
+    .tip {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .tip:empty { display: none; }
+    .tip ul { margin: 8px 0 0; padding-left: 1.2em; }
+    .tip li { margin: 4px 0; }
+    .tip li.on { font-weight: 700; }
+    .tip .row { margin-top: 10px; }
+  </style>
+</head>
+<body>
+<main>
+  <header class="mast">
+    <a class="lang" href="../../en/net/index.html">English</a>
+    <p class="mark">AutoEth</p>
+    <h1>车载网络</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+  <div class="era">
+    <p><b>过去：</b>控制器靠 CAN 交换事先排好的信号，诊断也走这条总线。LIN 接开关、灯这类简单车身件，FlexRay 为底盘做更严的同步，MOST 走信息娱乐。这些总线带宽小，摄像头和大量软件数据放不上去。</p>
+    <p><b>现在：</b>新能源车的骨干是以太网，中央计算和区域控制器已经量产。服务走 SOME/IP，诊断和刷写走 DoIP。DDS 做数据分发，节点按主题发布和订阅，时效和可靠性写在 QoS 里。摄像头这类时间敏感的流量，由 TSN 按 gPTP 的时间发送。执行器和简单节点仍走 CAN FD。</p>
+    <p><b>以后：</b>骨干要更高速率，边上的简单节点可能改用 10BASE-T1S。Zenoh 想用同一套发布、订阅和查询，把车上的数据接到边缘和云。这条还不是现在的车载标准。</p>
+    <p class="keys">加密和密钥在 <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>。</p>
+  </div>
+  <section class="panel protocol">
+    <div class="row" id="protos">
+      <button type="button" data-proto="someip" style="--layer:var(--l7)">SOME/IP</button>
+      <button type="button" data-proto="dds" style="--layer:var(--l7)">DDS</button>
+      <button type="button" data-proto="doip" style="--layer:var(--l7)">DoIP</button>
+      <button type="button" data-proto="zenoh" style="--layer:var(--l7)">Zenoh</button>
+      <button type="button" data-proto="gptp" style="--layer:var(--gptp)">gPTP</button>
+    </div>
+    <p class="intro" id="intro"></p>
+  </section>
+  <section class="panel addon">
+    <div class="checks" id="feats">
+      <label data-feat="secoc" style="--layer:var(--l7)"><input type="checkbox">SecOC</label>
+      <label data-feat="e2e" style="--layer:var(--l7)"><input type="checkbox">E2E</label>
+      <span class="tls-hold"><label data-feat="tls" style="--layer:var(--l6)"><input type="checkbox">TLS</label><span class="hover-tip" id="tls-tip"></span></span>
+      <label data-feat="ipsec" style="--layer:var(--l3)"><input type="checkbox">IPsec</label>
+      <label data-feat="vlan" style="--layer:var(--vlan)"><input type="checkbox">VLAN</label>
+      <label data-feat="macsec" style="--layer:var(--gptp)"><input type="checkbox">MACsec</label>
+    </div>
+    <div class="notes" id="notes"></div>
+  </section>
+  <div class="stack" id="stack"></div>
+  <div class="cells" id="hdr"></div>
+  <div class="tip" id="tip"></div>
+  </div>
+</main>
+<script>
+const PROTOS = {
+  someip: { name: "SOME/IP", ip: true, choose: true },
+  dds: { name: "DDS", ip: true, choose: true },
+  doip: { name: "DoIP", ip: true, choose: false },
+  zenoh: { name: "Zenoh", ip: true, choose: true },
+  gptp: { name: "gPTP", ip: false, choose: false }
+};
+const feats = { secoc: false, e2e: false, tls: false, ipsec: false, vlan: false, macsec: false };
+let proto = "someip";
+let l4 = "UDP";
+let tip = "";
+const HSM = "https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md";
+const SECOC = "https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/README_zh.md#3-secoc";
+const ETHS = [
+  ["0x0800", "IPv4，这一帧的网络层"],
+  ["0x0806", 'ARP · <a href="https://www.rfc-editor.org/rfc/rfc826" target="_blank" rel="noopener">RFC 826</a>'],
+  ["0x86DD", 'IPv6 · <a href="https://www.rfc-editor.org/rfc/rfc8200" target="_blank" rel="noopener">RFC 8200</a>'],
+  ["0x8100", '802.1Q · <a href="../tsn/index.html">TSN</a> · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>'],
+  ["0x88A8", '802.1ad · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>'],
+  ["0x88E5", 'MACsec · <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a>'],
+  ["0x88F7", 'gPTP · <a href="../tsn/index.html">TSN</a> · <a href="https://www.ieee802.org/1/pages/802.1AS.html" target="_blank" rel="noopener">IEEE 802.1AS</a>'],
+  ["0x22F0", 'AVTP · <a href="../tsn/index.html">TSN</a>'],
+  ["0x88CC", 'LLDP · <a href="https://www.ieee802.org/1/pages/802.1AB.html" target="_blank" rel="noopener">IEEE 802.1AB</a>'],
+  ["0x888E", 'EAPOL · <a href="https://www.ieee802.org/1/pages/802.1X.html" target="_blank" rel="noopener">IEEE 802.1X</a>'],
+  ["0x88F5", 'MVRP · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>'],
+  ["0x88F6", 'MMRP · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>'],
+  ["0x22EA", 'MSRP · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>']
+];
+
+function wire() {
+  if (proto === "doip") return "TCP";
+  if (proto === "gptp") return "";
+  return l4;
+}
+function allowed(name) {
+  if (name === "secoc" || name === "e2e") return proto === "someip";
+  if (name === "tls") return wire() === "TCP";
+  if (name === "ipsec") return PROTOS[proto].ip;
+  return true;
+}
+function band(id, width, color, title, body, col) {
+  return '<div class="band' + (col ? " col" : "") + '" data-tip="' + id + '" style="width:' + width + ";background:" + color + '"><b>' + title + "</b>" + body + "</div>";
+}
+function osi() {
+  const inner = proto === "gptp" ? "0x88F7" : "0x0800";
+  let shell = '<div class="shell" data-tip="eth-' + inner + '"><b>数据链路层</b><div class="plain">' + (proto === "gptp" ? "0x88F7 · gPTP" : "以太网 · EtherType 0x0800") + "</div>";
+  if (feats.vlan) shell += '<div class="fld" data-tip="eth-0x8100" style="background:var(--vlan)">802.1Q · 0x8100</div>';
+  if (feats.macsec) shell += '<div class="fld" data-tip="eth-0x88E5" style="background:var(--gptp)">MACsec · 0x88E5</div>';
+  if (proto === "gptp" && feats.macsec) shell += '<div class="plain">对时帧常常不进这条加密关联。</div>';
+  shell += "</div>";
+  const lower = '<div class="lower">' + shell + '<div class="band phy" data-tip="phy"><b>物理层</b><span>PHY</span></div><a class="rail" href="../tsn/index.html">TSN</a></div>';
+  if (!PROTOS[proto].ip) return lower;
+  let chips = "";
+  if (feats.secoc) chips += '<i class="chip">SecOC</i>';
+  if (feats.e2e) chips += '<i class="chip">E2E</i>';
+  const net = feats.ipsec
+    ? '<div class="band col" data-tip="ipv4" style="width:78%;background:var(--l3)"><span class="line"><b>网络层</b><span>IPv4</span></span><span class="esp" data-tip="esp">ESP</span></div>'
+    : band("ipv4", "78%", "var(--l3)", "网络层", "<span>IPv4</span>");
+  return [
+    band("app", "46%", "var(--l7)", "应用层", "<span>" + PROTOS[proto].name + chips + "</span>"),
+    band("pres", "54%", "var(--l6)", "表示层", "<span>" + (feats.tls ? "TLS 记录层" : "帧上不加首部") + "</span>"),
+    band("sess", "62%", "var(--l5)", "会话层", "<span>" + (feats.tls ? "TLS 握手" : "帧上不加首部") + "</span>"),
+    band("l4", "70%", "var(--l4)", "传输层", "<span>" + wire() + "</span>"),
+    net,
+    lower
+  ].join("");
+}
+function cell(id, label, sub, color) {
+  return '<button type="button" class="cell' + (tip === id ? " pick" : "") + '" data-tip="' + id + '" style="background:' + color + '"><b>' + label + "</b><span>" + sub + "</span></button>";
+}
+function header() {
+  const inner = proto === "gptp" ? "0x88F7" : "0x0800";
+  const parts = [
+    cell("dmac", "目的 MAC", "6 字节", "#4a5568"),
+    cell("smac", "源 MAC", "6 字节", "#4a5568")
+  ];
+  if (feats.vlan) {
+    parts.push(cell("eth-0x8100", "0x8100", "TPID", "var(--vlan)"));
+    parts.push(cell("tci", "TCI", "PCP · DEI · VID", "var(--vlan)"));
+  }
+  if (feats.macsec) {
+    parts.push(cell("eth-0x88E5", "0x88E5", "MACsec", "var(--gptp)"));
+    parts.push(cell("sectag", "SecTAG", "TCI · PN", "var(--gptp)"));
+  }
+  parts.push(cell("eth-" + inner, "EtherType", inner, "var(--l2)"));
+  if (PROTOS[proto].ip) {
+    parts.push(cell("ipv4", "IPv4", "网络层", "var(--l3)"));
+    if (feats.ipsec) parts.push(cell("esp", "ESP", "IPsec", "#8d3d12"));
+    const transport = wire();
+    parts.push(cell("l4", transport, transport === "UDP" ? "8 字节" : "20 字节起", "var(--l4)"));
+    if (feats.tls) parts.push(cell("tls", "TLS", "记录层", "var(--l6)"));
+  }
+  let sub = proto === "gptp" ? "对时 · 无 IP" : "载荷";
+  if (feats.secoc) sub += " · SecOC";
+  if (feats.e2e) sub += " · E2E";
+  parts.push(cell("app", PROTOS[proto].name, sub, proto === "gptp" ? "var(--gptp)" : "var(--l7)"));
+  if (feats.macsec) parts.push(cell("icv", "ICV", "完整性校验", "var(--gptp)"));
+  parts.push(cell("fcs", "FCS", "CRC-32 · 4 字节", "var(--l2)"));
+  return parts;
+}
+function ethTip(code) {
+  const items = ETHS.map(function (row) {
+    return '<li class="' + (row[0] === code ? "on" : "") + '"><code>' + row[0] + "</code> " + row[1] + "</li>";
+  }).join("");
+  return "<p>这一格是 <code>" + code + "</code>。标签各自带一个类型，不把里面的 EtherType 吃掉。</p><ul>" + items + "</ul>";
+}
+function tipHtml() {
+  const app = PROTOS[proto].name;
+  if (tip === "dmac" || tip === "smac") return "以太网地址，各 6 字节。";
+  if (tip === "tci") return 'PCP 选队列，DEI 标可丢弃，VID 是 VLAN 号。插法与 <a href="../tsn/index.html">TSN</a> 的 1998 站相同：源 MAC 和原来的 EtherType 之间。';
+  if (tip === "sectag") {
+    let text = "安全标签。算法和密钥在 <a href=\"" + HSM + "\" target=\"_blank\" rel=\"noopener\">AI Fortress Auto</a>。";
+    if (proto === "gptp" && feats.macsec) text += " 对时帧常常不进这条加密关联。";
+    return text;
+  }
+  if (tip.indexOf("eth-") === 0) return ethTip(tip.slice(4));
+  if (tip === "ipv4") return "IPv4 头。这一格的 EtherType 是 0x0800。" + (feats.ipsec ? " ESP 插在它和传输头之间。" : "");
+  if (tip === "esp") return "ESP 插在 IPv4 和传输头之间，这是传输模式。算法和密钥在 <a href=\"" + HSM + "\" target=\"_blank\" rel=\"noopener\">AI Fortress Auto</a>。";
+  if (tip === "l4") {
+    const now = wire();
+    let text = now === "UDP" ? "UDP 头 8 字节：源端口、目的端口、长度、校验和。UDP 不是可靠字节流，套不上 TLS。" : "TCP 头至少 20 字节：源端口、目的端口、序号、确认号。这是可靠字节流，可以加 TLS。";
+    if (PROTOS[proto].choose) {
+      text += '<div class="row"><button type="button" data-set-l4="UDP"' + (now === "UDP" ? ' class="on"' : "") + '>UDP</button><button type="button" data-set-l4="TCP"' + (now === "TCP" ? ' class="on"' : "") + ">TCP</button></div>";
+    } else text += " DoIP 固定走 TCP。";
+    return text;
+  }
+  if (tip === "tls") return "记录层和握手放在 " + app + " 与 TCP 之间。算法和密钥在 <a href=\"" + HSM + "\" target=\"_blank\" rel=\"noopener\">AI Fortress Auto</a>。";
+  if (tip === "icv") return "帧尾前的完整性校验。算法和密钥在 <a href=\"" + HSM + "\" target=\"_blank\" rel=\"noopener\">AI Fortress Auto</a>。";
+  if (tip === "pres") return feats.tls ? "TLS 记录层在这一层。帧上不另加以太网首部。" : "这一层帧上不加首部。";
+  if (tip === "sess") return feats.tls ? "TLS 握手在这一层。帧上不另加以太网首部。" : "这一层帧上不加首部。";
+  if (tip === "phy") return '比特放到线上。<a href="../tsn/index.html">TSN</a> 的 2012 站画了 PHY。';
+  if (tip === "fcs") return "以太网帧校验，CRC-32，4 字节。";
+  if (tip === "app" && proto === "someip") {
+    let text = "面向服务：调用方法，或订阅事件。";
+    if (feats.secoc) text += ' SecOC 在 PDU 上加 MAC 和新鲜度。<a href="' + SECOC + '" target="_blank" rel="noopener">封装</a>';
+    if (feats.e2e) text += " E2E 在 PDU 上加计数器和 CRC。";
+    return text;
+  }
+  if (tip === "app" && proto === "dds") return "按主题发布和订阅，时效写在 QoS 里。保护是 DDS-Security，做在 RTPS 上，不是 TLS。";
+  if (tip === "app" && proto === "doip") return '诊断仪经以太网把 UDS 送到 ECU。传输固定 TCP。载荷可以是 <a href="https://www.iso.org/standard/72439.html" target="_blank" rel="noopener">UDS</a>。';
+  if (tip === "app" && proto === "zenoh") return '发布、订阅和查询。说明在 <a href="https://zenoh.io/" target="_blank" rel="noopener">zenoh.io</a>。';
+  if (tip === "app" && proto === "gptp") return '局域网里对齐时间，没有 IP。EtherType 是 0x88F7。<a href="../tsn/index.html">TSN</a>';
+  return "";
+}
+function introHtml() {
+  const link = {
+    someip: 'BMW 提出，后来收进 AUTOSAR。为了让控制器在以太网上按服务通信：调用方法，或订阅事件，不必先排好一整张信号表。入口 <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
+    dds: 'OMG 制定的数据分发服务。为了让多个节点按主题共享同一类数据，时效和可靠性写在 QoS 里。节点之间互通用 RTPS。入口 <a href="https://www.omg.org/spec/DDS/" target="_blank" rel="noopener">DDS</a> <a href="https://www.omg.org/spec/DDSI-RTPS/" target="_blank" rel="noopener">RTPS</a>',
+    doip: 'ISO 13400。为了把诊断仪和 ECU 之间的诊断报文从 CAN 搬到以太网，UDS 请求可以穿过 IP 到达车上的控制器。入口 <a href="https://www.iso.org/standard/74785.html" target="_blank" rel="noopener">ISO 13400</a> <a href="https://www.iso.org/standard/72439.html" target="_blank" rel="noopener">UDS</a>',
+    zenoh: 'Eclipse 的协议。为了用同一套发布、订阅和查询，连接从设备到云的数据，不必为流动的数据和存下来的数据各做一套协议。入口 <a href="https://zenoh.io/" target="_blank" rel="noopener">zenoh.io</a>',
+    gptp: 'IEEE 802.1AS，是 PTP 在桥接局域网上的轮廓。为了让这条网上的交换机和端站共用一个时间，时间敏感的流量才能按这个时间发送。入口 <a href="../tsn/index.html">TSN</a> <a href="https://www.ieee802.org/1/pages/802.1AS.html" target="_blank" rel="noopener">IEEE 802.1AS</a>'
+  };
+  return "<b>" + PROTOS[proto].name + "。</b>" + link[proto];
+}
+function tlsTip() {
+  if (allowed("tls")) return "";
+  if (PROTOS[proto].choose) return "建立在可靠字节流上，也就是 TCP";
+  return "没有可靠字节流";
+}
+function notesHtml() {
+  const lines = {
+    secoc: '<b>SecOC。</b>用在应用层报文上，加 MAC 和新鲜度。入口 <a href="' + SECOC + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    e2e: '<b>E2E。</b>用在应用层报文上，加计数器和 CRC。入口 <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
+    tls: '<b>TLS。</b>记录层和握手，建立在可靠字节流上，也就是 TCP。入口 <a href="https://www.rfc-editor.org/rfc/rfc8446" target="_blank" rel="noopener">RFC 8446</a>。算法和密钥在 <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    ipsec: '<b>IPsec。</b>在网络层加 ESP。入口 <a href="https://www.rfc-editor.org/rfc/rfc4303" target="_blank" rel="noopener">RFC 4303</a>。算法和密钥在 <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    vlan: '<b>VLAN。</b><code>0x8100</code>，插在源 MAC 和原来的 EtherType 之间。入口 <a href="../tsn/index.html">TSN</a> <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>',
+    macsec: '<b>MACsec。</b><code>0x88E5</code>，逐跳套在帧外。入口 <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a>。算法和密钥在 <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>'
+  };
+  return Object.keys(lines).filter(function (name) { return feats[name]; }).map(function (name) {
+    return "<p>" + lines[name] + "</p>";
+  }).join("");
+}
+function paint() {
+  Object.keys(feats).forEach(function (name) { if (!allowed(name)) feats[name] = false; });
+  document.querySelectorAll("#protos button").forEach(function (button) {
+    button.classList.toggle("on", button.getAttribute("data-proto") === proto);
+  });
+  document.querySelectorAll("#feats label").forEach(function (label) {
+    const name = label.getAttribute("data-feat");
+    const ok = allowed(name);
+    const input = label.querySelector("input");
+    label.classList.toggle("off", !ok);
+    input.disabled = !ok;
+    input.checked = ok && feats[name];
+  });
+  const keep = ["dmac", "smac", "fcs", "app", "phy"];
+  if (feats.vlan) keep.push("eth-0x8100", "tci");
+  if (feats.macsec) keep.push("eth-0x88E5", "sectag", "icv");
+  keep.push(proto === "gptp" ? "eth-0x88F7" : "eth-0x0800");
+  if (PROTOS[proto].ip) {
+    keep.push("ipv4", "l4", "pres", "sess");
+    if (feats.ipsec) keep.push("esp");
+    if (feats.tls) keep.push("tls");
+  }
+  if (tip && keep.indexOf(tip) < 0) tip = "";
+  const cells = header();
+  const intro = document.getElementById("intro");
+  intro.innerHTML = introHtml();
+  document.getElementById("tls-tip").textContent = tlsTip();
+  document.getElementById("notes").innerHTML = notesHtml();
+  document.getElementById("stack").innerHTML = osi();
+  document.getElementById("hdr").innerHTML = cells.join("");
+  document.getElementById("tip").innerHTML = tipHtml();
+}
+document.getElementById("protos").onclick = function (event) {
+  const button = event.target.closest("button");
+  if (!button) return;
+  proto = button.getAttribute("data-proto");
+  paint();
+};
+document.getElementById("feats").addEventListener("change", function (event) {
+  const input = event.target;
+  if (input.tagName !== "INPUT") return;
+  const label = input.closest("label");
+  if (label.classList.contains("off")) {
+    input.checked = false;
+    return;
+  }
+  feats[label.getAttribute("data-feat")] = input.checked;
+  paint();
+});
+document.getElementById("stack").onclick = function (event) {
+  const node = event.target.closest("[data-tip]");
+  if (!node || event.target.closest("a")) return;
+  const next = node.getAttribute("data-tip");
+  tip = tip === next ? "" : next;
+  paint();
+};
+document.getElementById("hdr").onclick = function (event) {
+  const button = event.target.closest("button");
+  if (!button) return;
+  const next = button.getAttribute("data-tip");
+  tip = tip === next ? "" : next;
+  paint();
+};
+document.getElementById("tip").onclick = function (event) {
+  const button = event.target.closest("button");
+  if (!button) return;
+  l4 = button.getAttribute("data-set-l4");
+  paint();
+};
+paint();
+</script>
+</body>
+</html>

@@ -49,6 +49,17 @@ The clips below are that loop on the bench — **AFC** (single camera) and **ADC
 
 ---
 
+> [!NOTE]
+> **[AutoEth](docs/en/net/index.html):**
+>
+> 　　In-vehicle networks moved from CAN signal lists to Ethernet. On current new-energy vehicles the backbone is Ethernet: SOME/IP for services, DDS for data distribution, DoIP for diagnostics and flashing, and gPTP so TSN can share one clock. Pick a protocol, then the features, and the packet is built from them. 中文: [docs/zh/net/index.html](docs/zh/net/index.html). Ciphers and keys are in [AI Fortress Auto](https://github.com/xinyu2004/AI_Fortress-Auto).
+>
+> **[FuSa](fusa/README.md):**
+>
+> 　　To be added.
+
+---
+
 ### 1. gf-config (configure toolchain)
 
 Defines **what**, **who talks to whom**, and **which board modules to trim** — not algorithms. Two tabs write three asset layers:

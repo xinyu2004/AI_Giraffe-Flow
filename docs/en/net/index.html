@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>In-vehicle network</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1b1b1b;
+      --muted: #5c5c5c;
+      --line: #e4e0d8;
+      --ground: #d9d3c8;
+      --paper: #f4f2ec;
+      --shut: #e7e4de;
+      --card: #fff;
+      --l7: #5c4d8a;
+      --l6: #8d6e97;
+      --l5: #a68462;
+      --l4: #1d6f82;
+      --l3: #c56a12;
+      --l2: #1f4b99;
+      --l1: #243038;
+      --vlan: #1e7a4a;
+      --gptp: #0e6b5c;
+      --on: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--ground);
+      color: var(--ink);
+      font: 16px/1.55 "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif;
+      padding: 28px 20px 48px;
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      background: var(--paper);
+      border-radius: 16px;
+      box-shadow: 0 10px 28px rgba(36, 48, 56, 0.14);
+      overflow: hidden;
+    }
+    .mast { position: relative; background: var(--l1); color: var(--paper); padding: 28px 28px 18px; }
+    .lang { position: absolute; top: 28px; right: 28px; color: var(--paper); font-size: 14px; }
+    .stripes { display: flex; height: 6px; }
+    .stripes span { flex: 1; }
+    .sheet { padding: 28px 28px 64px; }
+    h1 { font-size: 34px; margin: 0; letter-spacing: -0.03em; color: var(--paper); }
+    a { color: var(--l2); }
+    p { margin: 0; }
+    .era p { margin: 10px 0 0; }
+    .era p:first-child { margin-top: 0; }
+    .era .keys { margin-top: 10px; color: var(--muted); }
+    .mark {
+      display: inline-block;
+      margin: 0 0 10px;
+      padding: 2px 8px;
+      border: 1px solid var(--paper);
+      color: var(--paper);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    button {
+      font: inherit;
+      background: var(--card);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      padding: 7px 12px;
+      cursor: pointer;
+    }
+    button.on { background: var(--l2); color: var(--on); border-color: var(--l2); }
+    button:disabled { opacity: 0.38; cursor: not-allowed; }
+    .panel { margin: 22px 0 0; padding: 12px 14px 14px; border-radius: 12px; }
+    .protocol { background: var(--card); border: 2px solid var(--l1); }
+    .addon { background: var(--shut); }
+    #protos button { border-radius: 999px; background: var(--layer); color: #fff; border: 0; }
+    #protos button.on { outline: 3px solid #111; outline-offset: 2px; background: var(--layer); border-color: transparent; color: #fff; }
+    .checks { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+    .checks label { display: inline-flex; align-items: center; gap: 6px; color: var(--layer); font-weight: 650; cursor: pointer; }
+    .checks input { width: 16px; height: 16px; margin: 0; accent-color: var(--layer); }
+    .checks label.off { opacity: 0.38; cursor: not-allowed; }
+    .tls-hold { position: relative; display: inline-flex; }
+    .hover-tip {
+      display: none;
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 8px);
+      z-index: 2;
+      padding: 4px 8px;
+      background: var(--l1);
+      color: var(--paper);
+      font-size: 13px;
+      font-weight: 400;
+      white-space: nowrap;
+      border-radius: 6px;
+      pointer-events: none;
+    }
+    .tls-hold:hover .hover-tip:not(:empty) { display: block; }
+    .notes p { margin: 6px 0 0; }
+    .notes a + a { margin-left: 0.75em; }
+    .intro { margin: 10px 0 0; }
+    .intro a + a { margin-left: 0.75em; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stack { width: min(520px, 100%); display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 22px 0; }
+    .band { color: #fff; padding: 10px 12px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; cursor: pointer; }
+    .band.col { flex-direction: column; align-items: stretch; }
+    .band .line { display: flex; justify-content: space-between; align-items: baseline; width: 100%; }
+    .band b { font-size: 15px; }
+    .band span { font-size: 14px; }
+    .chip { margin-left: 8px; padding: 0 6px; background: rgba(255,255,255,.18); font-style: normal; font-size: 13px; }
+    .esp { display: block; margin-top: 6px; padding: 6px 8px; background: rgba(0,0,0,.18); }
+    .lower { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .shell { box-sizing: border-box; width: 88%; padding: 8px 12px 12px; background: var(--l2); color: #fff; cursor: pointer; }
+    .shell > b { display: block; margin-bottom: 8px; font-size: 15px; }
+    .fld { padding: 8px 10px; }
+    .fld + .fld, .shell .plain + .fld { margin-top: 6px; }
+    .plain { font-size: 14px; }
+    .phy { width: 100%; background: var(--l1); }
+    .rail {
+      position: absolute; left: 100%; top: 0; bottom: 0; width: 42px; margin-left: 8px;
+      display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl;
+      background: var(--gptp); color: #fff; text-decoration: none; letter-spacing: 0.14em; font-weight: 700;
+    }
+    .cells { display: flex; flex-wrap: wrap; gap: 4px; }
+    .cell {
+      flex: 1 1 108px;
+      min-width: 108px;
+      padding: 10px 8px;
+      color: var(--on);
+      border: 0;
+      text-align: left;
+    }
+    .cell b, .cell span { display: block; }
+    .cell span { font-size: 12px; margin-top: 6px; opacity: 0.92; }
+    .cell.pick { outline: 3px solid #111; outline-offset: 2px; }
+    .tip {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .tip:empty { display: none; }
+    .tip ul { margin: 8px 0 0; padding-left: 1.2em; }
+    .tip li { margin: 4px 0; }
+    .tip li.on { font-weight: 700; }
+    .tip .row { margin-top: 10px; }
+  </style>
+</head>
+<body>
+<main>
+  <header class="mast">
+    <a class="lang" href="../../zh/net/index.html">中文</a>
+    <p class="mark">AutoEth</p>
+    <h1>In-vehicle network</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+  <div class="era">
+    <p><b>Past:</b> Controllers exchanged a fixed signal list on CAN, and diagnostics used that same bus. LIN connected simple body parts such as switches and lamps. FlexRay gave the chassis a stricter synchronization. MOST carried infotainment. Those buses were too narrow for cameras and large software payloads.</p>
+    <p><b>Present:</b> On new-energy vehicles the backbone is Ethernet, and central compute with zonal controllers is already in production. Services use SOME/IP. Diagnostics and flashing use DoIP. DDS distributes data: nodes publish and subscribe by topic, with timing and reliability written in QoS. Time-sensitive flows such as cameras are sent by TSN on the gPTP clock. Actuators and simple nodes still use CAN FD.</p>
+    <p><b>Later:</b> The backbone needs a higher rate, and simple edge nodes may move to 10BASE-T1S. Zenoh aims to carry vehicle data to the edge and the cloud with one publish, subscribe, and query protocol. It is not an in-vehicle standard yet.</p>
+    <p class="keys">Ciphers and keys are in <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>.</p>
+  </div>
+  <section class="panel protocol">
+    <div class="row" id="protos">
+      <button type="button" data-proto="someip" style="--layer:var(--l7)">SOME/IP</button>
+      <button type="button" data-proto="dds" style="--layer:var(--l7)">DDS</button>
+      <button type="button" data-proto="doip" style="--layer:var(--l7)">DoIP</button>
+      <button type="button" data-proto="zenoh" style="--layer:var(--l7)">Zenoh</button>
+      <button type="button" data-proto="gptp" style="--layer:var(--gptp)">gPTP</button>
+    </div>
+    <p class="intro" id="intro"></p>
+  </section>
+  <section class="panel addon">
+    <div class="checks" id="feats">
+      <label data-feat="secoc" style="--layer:var(--l7)"><input type="checkbox">SecOC</label>
+      <label data-feat="e2e" style="--layer:var(--l7)"><input type="checkbox">E2E</label>
+      <span class="tls-hold"><label data-feat="tls" style="--layer:var(--l6)"><input type="checkbox">TLS</label><span class="hover-tip" id="tls-tip"></span></span>
+      <label data-feat="ipsec" style="--layer:var(--l3)"><input type="checkbox">IPsec</label>
+      <label data-feat="vlan" style="--layer:var(--vlan)"><input type="checkbox">VLAN</label>
+      <label data-feat="macsec" style="--layer:var(--gptp)"><input type="checkbox">MACsec</label>
+    </div>
+    <div class="notes" id="notes"></div>
+  </section>
+  <div class="stack" id="stack"></div>
+  <div class="cells" id="hdr"></div>
+  <div class="tip" id="tip"></div>
+  </div>
+</main>
+<script>
+const PROTOS = {
+  someip: { name: "SOME/IP", ip: true, choose: true },
+  dds: { name: "DDS", ip: true, choose: true },
+  doip: { name: "DoIP", ip: true, choose: false },
+  zenoh: { name: "Zenoh", ip: true, choose: true },
+  gptp: { name: "gPTP", ip: false, choose: false }
+};
+const feats = { secoc: false, e2e: false, tls: false, ipsec: false, vlan: false, macsec: false };
+let proto = "someip";
+let l4 = "UDP";
+let tip = "";
+const HSM = "https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md";
+const SECOC = "https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/README_zh.md#3-secoc";
+const ETHS = [
+  ["0x0800", "IPv4, the network layer of this frame"],
+  ["0x0806", 'ARP · <a href="https://www.rfc-editor.org/rfc/rfc826" target="_blank" rel="noopener">RFC 826</a>'],
+  ["0x86DD", 'IPv6 · <a href="https://www.rfc-editor.org/rfc/rfc8200" target="_blank" rel="noopener">RFC 8200</a>'],
+  ["0x8100", '802.1Q · <a href="../tsn/index.html">TSN</a> · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>'],
+  ["0x88A8", '802.1ad · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>'],
+  ["0x88E5", 'MACsec · <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a>'],
+  ["0x88F7", 'gPTP · <a href="../tsn/index.html">TSN</a> · <a href="https://www.ieee802.org/1/pages/802.1AS.html" target="_blank" rel="noopener">IEEE 802.1AS</a>'],
+  ["0x22F0", 'AVTP · <a href="../tsn/index.html">TSN</a>'],
+  ["0x88CC", 'LLDP · <a href="https://www.ieee802.org/1/pages/802.1AB.html" target="_blank" rel="noopener">IEEE 802.1AB</a>'],
+  ["0x888E", 'EAPOL · <a href="https://www.ieee802.org/1/pages/802.1X.html" target="_blank" rel="noopener">IEEE 802.1X</a>'],
+  ["0x88F5", 'MVRP · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>'],
+  ["0x88F6", 'MMRP · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>'],
+  ["0x22EA", 'MSRP · <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>']
+];
+
+function wire() {
+  if (proto === "doip") return "TCP";
+  if (proto === "gptp") return "";
+  return l4;
+}
+function allowed(name) {
+  if (name === "secoc" || name === "e2e") return proto === "someip";
+  if (name === "tls") return wire() === "TCP";
+  if (name === "ipsec") return PROTOS[proto].ip;
+  return true;
+}
+function band(id, width, color, title, body, col) {
+  return '<div class="band' + (col ? " col" : "") + '" data-tip="' + id + '" style="width:' + width + ";background:" + color + '"><b>' + title + "</b>" + body + "</div>";
+}
+function osi() {
+  const inner = proto === "gptp" ? "0x88F7" : "0x0800";
+  let shell = '<div class="shell" data-tip="eth-' + inner + '"><b>Data link</b><div class="plain">' + (proto === "gptp" ? "0x88F7 · gPTP" : "Ethernet · EtherType 0x0800") + "</div>";
+  if (feats.vlan) shell += '<div class="fld" data-tip="eth-0x8100" style="background:var(--vlan)">802.1Q · 0x8100</div>';
+  if (feats.macsec) shell += '<div class="fld" data-tip="eth-0x88E5" style="background:var(--gptp)">MACsec · 0x88E5</div>';
+  if (proto === "gptp" && feats.macsec) shell += '<div class="plain">Time-sync frames often stay out of this secure association.</div>';
+  shell += "</div>";
+  const lower = '<div class="lower">' + shell + '<div class="band phy" data-tip="phy"><b>Physical</b><span>PHY</span></div><a class="rail" href="../tsn/index.html">TSN</a></div>';
+  if (!PROTOS[proto].ip) return lower;
+  let chips = "";
+  if (feats.secoc) chips += '<i class="chip">SecOC</i>';
+  if (feats.e2e) chips += '<i class="chip">E2E</i>';
+  const net = feats.ipsec
+    ? '<div class="band col" data-tip="ipv4" style="width:78%;background:var(--l3)"><span class="line"><b>Network</b><span>IPv4</span></span><span class="esp" data-tip="esp">ESP</span></div>'
+    : band("ipv4", "78%", "var(--l3)", "Network", "<span>IPv4</span>");
+  return [
+    band("app", "46%", "var(--l7)", "Application", "<span>" + PROTOS[proto].name + chips + "</span>"),
+    band("pres", "54%", "var(--l6)", "Presentation", "<span>" + (feats.tls ? "TLS record" : "No header added") + "</span>"),
+    band("sess", "62%", "var(--l5)", "Session", "<span>" + (feats.tls ? "TLS handshake" : "No header added") + "</span>"),
+    band("l4", "70%", "var(--l4)", "Transport", "<span>" + wire() + "</span>"),
+    net,
+    lower
+  ].join("");
+}
+function cell(id, label, sub, color) {
+  return '<button type="button" class="cell' + (tip === id ? " pick" : "") + '" data-tip="' + id + '" style="background:' + color + '"><b>' + label + "</b><span>" + sub + "</span></button>";
+}
+function header() {
+  const inner = proto === "gptp" ? "0x88F7" : "0x0800";
+  const parts = [
+    cell("dmac", "Dest MAC", "6 bytes", "#4a5568"),
+    cell("smac", "Src MAC", "6 bytes", "#4a5568")
+  ];
+  if (feats.vlan) {
+    parts.push(cell("eth-0x8100", "0x8100", "TPID", "var(--vlan)"));
+    parts.push(cell("tci", "TCI", "PCP · DEI · VID", "var(--vlan)"));
+  }
+  if (feats.macsec) {
+    parts.push(cell("eth-0x88E5", "0x88E5", "MACsec", "var(--gptp)"));
+    parts.push(cell("sectag", "SecTAG", "TCI · PN", "var(--gptp)"));
+  }
+  parts.push(cell("eth-" + inner, "EtherType", inner, "var(--l2)"));
+  if (PROTOS[proto].ip) {
+    parts.push(cell("ipv4", "IPv4", "network", "var(--l3)"));
+    if (feats.ipsec) parts.push(cell("esp", "ESP", "IPsec", "#8d3d12"));
+    const transport = wire();
+    parts.push(cell("l4", transport, transport === "UDP" ? "8 bytes" : "20 bytes min", "var(--l4)"));
+    if (feats.tls) parts.push(cell("tls", "TLS", "record", "var(--l6)"));
+  }
+  let sub = proto === "gptp" ? "time sync · no IP" : "payload";
+  if (feats.secoc) sub += " · SecOC";
+  if (feats.e2e) sub += " · E2E";
+  parts.push(cell("app", PROTOS[proto].name, sub, proto === "gptp" ? "var(--gptp)" : "var(--l7)"));
+  if (feats.macsec) parts.push(cell("icv", "ICV", "integrity check", "var(--gptp)"));
+  parts.push(cell("fcs", "FCS", "CRC-32 · 4 bytes", "var(--l2)"));
+  return parts;
+}
+function ethTip(code) {
+  const items = ETHS.map(function (row) {
+    return '<li class="' + (row[0] === code ? "on" : "") + '"><code>' + row[0] + "</code> " + row[1] + "</li>";
+  }).join("");
+  return "<p>This cell is <code>" + code + "</code>. Each tag carries its own type and leaves the inner EtherType in place.</p><ul>" + items + "</ul>";
+}
+function tipHtml() {
+  const app = PROTOS[proto].name;
+  if (tip === "dmac" || tip === "smac") return "An Ethernet address, 6 bytes each.";
+  if (tip === "tci") return 'PCP selects the queue, DEI marks the frame drop-eligible, and VID is the VLAN id. Inserted as on the 1998 stop of <a href="../tsn/index.html">TSN</a>: between the source MAC and the original EtherType.';
+  if (tip === "sectag") {
+    let text = "The security tag. Algorithms and keys are in <a href=\"" + HSM + "\" target=\"_blank\" rel=\"noopener\">AI Fortress Auto</a>.";
+    if (proto === "gptp" && feats.macsec) text += " Time-sync frames often stay out of this secure association.";
+    return text;
+  }
+  if (tip.indexOf("eth-") === 0) return ethTip(tip.slice(4));
+  if (tip === "ipv4") return "The IPv4 header. This cell's EtherType is 0x0800." + (feats.ipsec ? " ESP sits between it and the transport header." : "");
+  if (tip === "esp") return "ESP sits between IPv4 and the transport header. This is transport mode. Algorithms and keys are in <a href=\"" + HSM + "\" target=\"_blank\" rel=\"noopener\">AI Fortress Auto</a>.";
+  if (tip === "l4") {
+    const now = wire();
+    let text = now === "UDP" ? "The UDP header is 8 bytes: source port, destination port, length, checksum. UDP is not a reliable byte stream, so TLS does not fit." : "The TCP header is at least 20 bytes: source port, destination port, sequence number, acknowledgment number. This is a reliable byte stream, so TLS can be added.";
+    if (PROTOS[proto].choose) {
+      text += '<div class="row"><button type="button" data-set-l4="UDP"' + (now === "UDP" ? ' class="on"' : "") + '>UDP</button><button type="button" data-set-l4="TCP"' + (now === "TCP" ? ' class="on"' : "") + ">TCP</button></div>";
+    } else text += " DoIP stays on TCP.";
+    return text;
+  }
+  if (tip === "tls") return "The record and the handshake sit between " + app + " and TCP. Algorithms and keys are in <a href=\"" + HSM + "\" target=\"_blank\" rel=\"noopener\">AI Fortress Auto</a>.";
+  if (tip === "icv") return "The integrity check before the frame trailer. Algorithms and keys are in <a href=\"" + HSM + "\" target=\"_blank\" rel=\"noopener\">AI Fortress Auto</a>.";
+  if (tip === "pres") return feats.tls ? "The TLS record is at this layer. The Ethernet frame gains no extra header." : "This layer adds no header to the frame.";
+  if (tip === "sess") return feats.tls ? "The TLS handshake is at this layer. The Ethernet frame gains no extra header." : "This layer adds no header to the frame.";
+  if (tip === "phy") return 'Bits go onto the wire. The 2012 stop on <a href="../tsn/index.html">TSN</a> draws the PHY.';
+  if (tip === "fcs") return "The Ethernet frame check, CRC-32, 4 bytes.";
+  if (tip === "app" && proto === "someip") {
+    let text = "Service-oriented: call a method, or subscribe to an event.";
+    if (feats.secoc) text += ' SecOC adds a MAC and a freshness value on the PDU. <a href="' + SECOC + '" target="_blank" rel="noopener">Encapsulation</a>';
+    if (feats.e2e) text += " E2E adds a counter and a CRC on the PDU.";
+    return text;
+  }
+  if (tip === "app" && proto === "dds") return "Publish and subscribe by topic, with timing in QoS. Protection is DDS-Security on RTPS, not TLS.";
+  if (tip === "app" && proto === "doip") return 'A tester sends UDS to an ECU over Ethernet. The transport is fixed as TCP. The payload can be <a href="https://www.iso.org/standard/72439.html" target="_blank" rel="noopener">UDS</a>.';
+  if (tip === "app" && proto === "zenoh") return 'Publish, subscribe, and query. The description is at <a href="https://zenoh.io/" target="_blank" rel="noopener">zenoh.io</a>.';
+  if (tip === "app" && proto === "gptp") return 'Aligns time on the LAN. No IP. EtherType 0x88F7. <a href="../tsn/index.html">TSN</a>';
+  return "";
+}
+function introHtml() {
+  const link = {
+    someip: 'BMW designed it, and AUTOSAR later adopted it. Controllers offer services over Ethernet: call a method, or subscribe to an event, without a fixed signal list first. Entry <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
+    dds: 'The OMG data-distribution service. Nodes share one data type by topic, with timing and reliability written in QoS. They interoperate with RTPS. Entry <a href="https://www.omg.org/spec/DDS/" target="_blank" rel="noopener">DDS</a> <a href="https://www.omg.org/spec/DDSI-RTPS/" target="_blank" rel="noopener">RTPS</a>',
+    doip: 'ISO 13400. It moves diagnostic messages between a tester and an ECU from CAN onto Ethernet, so a UDS request can cross IP to a controller. Entry <a href="https://www.iso.org/standard/74785.html" target="_blank" rel="noopener">ISO 13400</a> <a href="https://www.iso.org/standard/72439.html" target="_blank" rel="noopener">UDS</a>',
+    zenoh: 'An Eclipse protocol. One publish, subscribe, and query path connects data from a device to the cloud, instead of a separate protocol for data in motion and data at rest. Entry <a href="https://zenoh.io/" target="_blank" rel="noopener">zenoh.io</a>',
+    gptp: 'IEEE 802.1AS, the PTP profile for a bridged LAN. Switches and end stations on that LAN share one clock, so time-sensitive traffic can be sent on it. Entry <a href="../tsn/index.html">TSN</a> <a href="https://www.ieee802.org/1/pages/802.1AS.html" target="_blank" rel="noopener">IEEE 802.1AS</a>'
+  };
+  return "<b>" + PROTOS[proto].name + ".</b> " + link[proto];
+}
+function tlsTip() {
+  if (allowed("tls")) return "";
+  if (PROTOS[proto].choose) return "A reliable byte stream, which means TCP";
+  return "No reliable byte stream";
+}
+function notesHtml() {
+  const lines = {
+    secoc: '<b>SecOC.</b> On an application PDU, it adds a MAC and a freshness value. Entry <a href="' + SECOC + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    e2e: '<b>E2E.</b> On an application PDU, it adds a counter and a CRC. Entry <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
+    tls: '<b>TLS.</b> The record and the handshake sit on a reliable byte stream, which means TCP. Entry <a href="https://www.rfc-editor.org/rfc/rfc8446" target="_blank" rel="noopener">RFC 8446</a>. Algorithms and keys are in <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    ipsec: '<b>IPsec.</b> Adds ESP at the network layer. Entry <a href="https://www.rfc-editor.org/rfc/rfc4303" target="_blank" rel="noopener">RFC 4303</a>. Algorithms and keys are in <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    vlan: '<b>VLAN.</b> <code>0x8100</code>, inserted between the source MAC and the original EtherType. Entry <a href="../tsn/index.html">TSN</a> <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>',
+    macsec: '<b>MACsec.</b> <code>0x88E5</code>, wrapped around the frame hop by hop. Entry <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a>. Algorithms and keys are in <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>'
+  };
+  return Object.keys(lines).filter(function (name) { return feats[name]; }).map(function (name) {
+    return "<p>" + lines[name] + "</p>";
+  }).join("");
+}
+function paint() {
+  Object.keys(feats).forEach(function (name) { if (!allowed(name)) feats[name] = false; });
+  document.querySelectorAll("#protos button").forEach(function (button) {
+    button.classList.toggle("on", button.getAttribute("data-proto") === proto);
+  });
+  document.querySelectorAll("#feats label").forEach(function (label) {
+    const name = label.getAttribute("data-feat");
+    const ok = allowed(name);
+    const input = label.querySelector("input");
+    label.classList.toggle("off", !ok);
+    input.disabled = !ok;
+    input.checked = ok && feats[name];
+  });
+  const keep = ["dmac", "smac", "fcs", "app", "phy"];
+  if (feats.vlan) keep.push("eth-0x8100", "tci");
+  if (feats.macsec) keep.push("eth-0x88E5", "sectag", "icv");
+  keep.push(proto === "gptp" ? "eth-0x88F7" : "eth-0x0800");
+  if (PROTOS[proto].ip) {
+    keep.push("ipv4", "l4", "pres", "sess");
+    if (feats.ipsec) keep.push("esp");
+    if (feats.tls) keep.push("tls");
+  }
+  if (tip && keep.indexOf(tip) < 0) tip = "";
+  const cells = header();
+  const intro = document.getElementById("intro");
+  intro.innerHTML = introHtml();
+  document.getElementById("tls-tip").textContent = tlsTip();
+  document.getElementById("notes").innerHTML = notesHtml();
+  document.getElementById("stack").innerHTML = osi();
+  document.getElementById("hdr").innerHTML = cells.join("");
+  document.getElementById("tip").innerHTML = tipHtml();
+}
+document.getElementById("protos").onclick = function (event) {
+  const button = event.target.closest("button");
+  if (!button) return;
+  proto = button.getAttribute("data-proto");
+  paint();
+};
+document.getElementById("feats").addEventListener("change", function (event) {
+  const input = event.target;
+  if (input.tagName !== "INPUT") return;
+  const label = input.closest("label");
+  if (label.classList.contains("off")) {
+    input.checked = false;
+    return;
+  }
+  feats[label.getAttribute("data-feat")] = input.checked;
+  paint();
+});
+document.getElementById("stack").onclick = function (event) {
+  const node = event.target.closest("[data-tip]");
+  if (!node || event.target.closest("a")) return;
+  const next = node.getAttribute("data-tip");
+  tip = tip === next ? "" : next;
+  paint();
+};
+document.getElementById("hdr").onclick = function (event) {
+  const button = event.target.closest("button");
+  if (!button) return;
+  const next = button.getAttribute("data-tip");
+  tip = tip === next ? "" : next;
+  paint();
+};
+document.getElementById("tip").onclick = function (event) {
+  const button = event.target.closest("button");
+  if (!button) return;
+  l4 = button.getAttribute("data-set-l4");
+  paint();
+};
+paint();
+</script>
+</body>
+</html>
