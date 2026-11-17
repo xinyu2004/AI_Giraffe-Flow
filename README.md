@@ -49,15 +49,14 @@ The clips below are that loop on the bench — **AFC** (single camera) and **ADC
 
 ---
 
-<table width="100%" cellpadding="16" cellspacing="0" bgcolor="#e4eef6" style="background:#e4eef6;border-radius:12px;overflow:hidden">
-<tr><td>
-<b><a href="docs/en/net/index.html">AutoEth</a>:</b><br>
-　　Automotive Ethernet follows the path from CAN signal lists to an Ethernet backbone. On current new-energy vehicles that backbone carries SOME/IP for services, DDS for data distribution, DoIP for diagnostics and flashing, and gPTP so TSN can share one clock. Pick a protocol, then the features, and the packet is built from them. Ciphers and keys are in <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>.<br>
-<br>
-<b><a href="fusa/README.md">FuSa</a>:</b><br>
-　　To be added.
-</td></tr>
-</table>
+> [!NOTE]
+> **[AutoEth](docs/en/net/index.html):**
+>
+> 　　Automotive Ethernet follows the path from CAN signal lists to an Ethernet backbone. On current new-energy vehicles that backbone carries SOME/IP for services, DDS for data distribution, DoIP for diagnostics and flashing, and gPTP so TSN can share one clock. Pick a protocol, then the features, and the packet is built from them. Ciphers and keys are in [AI Fortress Auto](https://github.com/xinyu2004/AI_Fortress-Auto).
+>
+> **[FuSa](fusa/README.md):**
+>
+> 　　To be added.
 
 ---
 
