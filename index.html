@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Giraffe Flow</title>
+  <style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #fff;
+  color: #1f2328;
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", Helvetica, Arial, sans-serif;
+}
+.markdown-body { max-width: 980px; margin: 0 auto; padding: 32px 32px 80px; }
+h1, h2 { padding-bottom: .3em; border-bottom: 1px solid #d0d7de; }
+h1 { font-size: 2em; font-weight: 600; margin: 0 0 16px; }
+h2 { font-size: 1.5em; font-weight: 600; margin: 24px 0 16px; }
+h3 { font-size: 1.25em; font-weight: 600; margin: 24px 0 16px; }
+h4 { font-size: 1em; margin: 24px 0 16px; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 16px; }
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+table { border-collapse: collapse; display: block; width: max-content; max-width: 100%; overflow: auto; }
+th, td { border: 1px solid #d0d7de; padding: 6px 13px; }
+tr:nth-child(2n) { background: #f6f8fa; }
+code, tt { background: #eff1f3; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+pre { background: #f6f8fa; padding: 16px; overflow: auto; border-radius: 6px; line-height: 1.45; }
+pre code { background: none; padding: 0; font-size: 85%; }
+img { max-width: 100%; }
+hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
+.band {
+  background: #e4eef6;
+  border-radius: 12px;
+  padding: 8px 20px 16px;
+  margin: 16px 0 24px;
+}
+.band p { margin: 12px 0 0; }
+.band p:first-child { margin-top: 8px; }
+.band strong { font-size: 16px; }
+</style>
+</head>
+<body>
+<article class="markdown-body">
+<h1>AI Giraffe Flow</h1>
+<p><strong>Lightweight SOA middleware + toolchain.</strong></p>
+<p>Why this repo: so a trimmable on-board SOA is authored, run, seen, and stressed on the bench — then the <strong>same EM</strong> goes to the board. When it is done you can decompose an OEM contract into a running runtime without hand-written plumbing, kill a process and keep control, measure a real tick, put the same chain back, and <strong>CD only what passed</strong>. Hardware is the last mile.</p>
+<p>The product is a trimmable <code>gf_ara::*</code> runtime (<strong>ARM Linux</strong> first; OSAL reserved for MIPS / RISC-V) and three tools around it: <strong>gf-config</strong> authors what runs and who talks to whom; <strong>Giraffe modules</strong> are the on-target SOA (EM launch, com, PHM, isolation); <strong>GMT</strong> answers <em>who published what, when</em> and injects the same chain. In-tree perception and planning are a <strong>closed-loop workload</strong>, not an ADAS product — they exist to prove the traits above. OEM cameras and NN weights stay out of tree.</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Why it matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Robustness / isolation</strong></td>
+<td>A fault stays in one process; the rest <strong>hold-last</strong>. One EM owns the topology: spawn, PHM, relaunch <strong>that</strong> process — not the whole stack. Same entry on SIL and on the board.</td>
+</tr>
+<tr>
+<td><strong>Latency</strong></td>
+<td>High throughput, low latency — <strong>overlay-latest</strong>, no blocking IPC.</td>
+</tr>
+<tr>
+<td><strong>Visibility</strong></td>
+<td>The live chain stays in the open — measure it, watch it, play it back, same picture.</td>
+</tr>
+<tr>
+<td><strong>Inject / replay</strong></td>
+<td>Same wiring, same types; put the scene back on that chain.</td>
+</tr>
+<tr>
+<td><strong>CI/CD with FuSa</strong></td>
+<td>Compose → generate → SIL, FuSa in the CI loop. <strong>CD only what passed.</strong></td>
+</tr>
+<tr>
+<td><strong>OEM decomposition</strong></td>
+<td>Tools split the OEM contract into modules. No hand wiring; every change is traceable.</td>
+</tr>
+</tbody>
+</table>
+<p>The clips below are that loop on the bench — <strong>AFC</strong> (single camera) and <strong>ADC</strong> (surround). The car is the hook; the claim is the stack behind it.</p>
+<p><strong>中文:</strong> <a href="zh.html">中文</a></p>
+<p align="center">
+  Single camera (AFC) <a href="gallery/videos/afc.mp4">mp4</a>
+</p>
+
+<p align="center">
+  <img src="gallery/videos/afc_preview.gif" alt="AFC closed-loop demo (preview)" />
+</p>
+
+<p align="center">
+  Multi cameras (ADC) <a href="gallery/videos/adc.mp4">mp4</a>
+</p>
+
+<p align="center">
+  <img src="gallery/videos/adc_preview.gif" alt="ADC closed-loop demo (preview)" />
+</p>
+
+<hr />
+<h2>Overview</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Pillar</th>
+<th>Role</th>
+<th>Dig in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1</strong></td>
+<td><strong>gf-config</strong></td>
+<td>Toolchain · configure</td>
+<td><a href="tools/gf-config/README.md">tools/gf-config</a> · <a href="docs/en/architecture/sor-authoring.md">SOR</a></td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td><strong>Giraffe modules</strong></td>
+<td><strong>Product core</strong> · SOA runtime, FuSa evidence</td>
+<td><a href="middleware/README.md">middleware</a> · <a href="fusa/README.md">fusa/</a> · <a href="docs/en/architecture/DESIGN.md">Design</a></td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td><strong>GMT</strong></td>
+<td>Toolchain · observe / inject / Foxglove</td>
+<td><a href="tools/gmt/README.md">tools/gmt</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">Observability demo</a></td>
+</tr>
+</tbody>
+</table>
+<p><img alt="Architecture: CARLA → Giraffe modules → Foxglove · GMT" src="gallery/Giraffe_Flow/Giraffe_Flow.en.gif" /></p>
+<hr />
+<div class="band">
+<p id="autoeth"><strong><a href="docs/en/net/index.html">AutoEth</a>:</strong></p>
+<p>　　Automotive Ethernet follows the path from CAN signal lists to an Ethernet backbone. On current new-energy vehicles that backbone carries SOME/IP for services, DDS for data distribution, DoIP for diagnostics and flashing, and gPTP so TSN can share one clock. Pick a protocol, then the features, and the packet is built from them. Ciphers and keys are in <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>.</p>
+<p id="fusa"><strong><a href="fusa/README.md">FuSa</a>:</strong></p>
+<p>　　To be added.</p>
+</div>
+
+<hr />
+<h3>1. gf-config (configure toolchain)</h3>
+<p>Defines <strong>what</strong>, <strong>who talks to whom</strong>, and <strong>which board modules to trim</strong> — not algorithms. Two tabs write three asset layers:</p>
+<table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>Writes</th>
+<th>Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1 · Signals &amp; apps</strong></td>
+<td>Thin SKU (<code>req.yaml</code>) + wiring canvas (<code>wiring.yaml</code>)</td>
+<td>deployments / dataflows / live_tap</td>
+</tr>
+<tr>
+<td><strong>2 · Platform runtime</strong></td>
+<td><code>runtime_modules</code> + <code>cfg/gf_ara_cfg/*</code> (exec · <strong>EM launch</strong> · PHM · collector · diag · log · ucm; <strong>per/tsync</strong> trimable)</td>
+<td><code>gf_ara_cfg_manifest</code> → CMake trim / EM topo</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Verify / Generate → SOR + Proxy/Skeleton + lineage (incl. <code>platform_em_launch</code>)</li>
+</ul>
+<p><img alt="gf-config — SOA signal graph" src="gallery/gf-config.png" /></p>
+<pre><code class="language-bash">gf-config projects/afc/giraffe.yaml
+</code></pre>
+<p>Details: <a href="tools/gf-config/README.md">tools/gf-config/README.md</a> · <a href="docs/en/operations/WORKFLOW.md">WORKFLOW</a></p>
+<hr />
+<h3>2. Giraffe modules (core)</h3>
+<p>What actually runs on the board and in SIL is the <strong>middleware</strong>. SKU apps (FCM, Octave planning → Trajectory) are the <strong>exercise load</strong>: a real pub/sub loop so GMT, Foxglove, inject, PHM, and CI have something honest to measure — not a claim that this repo is a production ADAS stack.</p>
+<p><img alt="Giraffe Modules: on-board middleware boot &amp; collaboration" src="gallery/Giraffe_Modules/Giraffe_Modules.en.gif" /></p>
+<h4>2.1 Layers</h4>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Path</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>API / runtime</strong></td>
+<td><code>middleware/</code></td>
+<td>Public <code>gf_ara::*</code>; trim via SKU <code>runtime_modules</code></td>
+</tr>
+<tr>
+<td><strong>Transports</strong></td>
+<td><code>middleware/bindings/</code></td>
+<td>iceoryx, SOME/IP, DDS, cross_domain_ipc (MCU)</td>
+</tr>
+<tr>
+<td><strong>Exec / health</strong></td>
+<td>exec (<strong>EM daemon</strong>) / phm / sm / collector</td>
+<td>Topo launch, relaunch, heartbeat, FG, events</td>
+</tr>
+<tr>
+<td><strong>Portability</strong></td>
+<td><code>osal/</code> · <code>hal/</code></td>
+<td>Clock / thread / <strong>process Spawn</strong>; ARM Linux first</td>
+</tr>
+<tr>
+<td><strong>Workload apps</strong></td>
+<td><code>projects/&lt;sku&gt;/apps/</code></td>
+<td>Gateway / FCM / planning — <strong>load</strong> to exercise the platform (<code>.m</code> gold → C 1:1)</td>
+</tr>
+<tr>
+<td><strong>Host scenes</strong></td>
+<td><code>carla_scenarios/</code></td>
+<td>CARLA Client A: layout + instrument; another stress source, not the controller</td>
+</tr>
+<tr>
+<td><strong>Integration</strong></td>
+<td><code>projects/</code></td>
+<td>OEM DBC / wiring / hpp / SIL·HIL / <strong>CI scripts</strong></td>
+</tr>
+<tr>
+<td><strong>FuSa evidence</strong></td>
+<td><code>fusa/</code></td>
+<td>Cases / metrics / Safety Case drafts (<strong>not</strong> a certificate)</td>
+</tr>
+</tbody>
+</table>
+<p>Rule: <strong>apps depend only on semantic service names</strong>; OEM deltas stay in adapter/gateway. See <a href="docs/en/architecture/DESIGN.md">DESIGN</a>.</p>
+<h4>2.2 Middleware packages (SKU-trim)</h4>
+<p>Aligned with Giraffe SoC chips in the architecture GIF (<code>com</code> · <code>EM</code>∈exec · <code>exec</code> · <code>phm</code> · <code>sm</code> · <code>collector</code> · <code>OSAL</code> · <code>diag</code> · <code>ucm</code> · <code>log</code> · <code>per</code> · <code>tsync</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="middleware/com/">com</a></td>
+<td>Unified com (Proxy / Skeleton)</td>
+</tr>
+<tr>
+<td><a href="middleware/bindings/iceoryx/">bindings/iceoryx</a> …</td>
+<td>Transport backends</td>
+</tr>
+<tr>
+<td><a href="middleware/exec/">exec</a></td>
+<td>ExecutionClient + <strong>EmDaemon</strong> (OSAL Spawn；GIF 中 <code>EM</code>)</td>
+</tr>
+<tr>
+<td><a href="middleware/phm/">phm</a> / <a href="middleware/sm/">sm</a> / <a href="middleware/collector/">collector</a></td>
+<td>Health / FG / event collect</td>
+</tr>
+<tr>
+<td><a href="middleware/osal/">osal</a></td>
+<td>OS abstraction (incl. process；GIF 中 <code>OSAL</code>)</td>
+</tr>
+<tr>
+<td><a href="middleware/diag/">diag</a> / <a href="middleware/ucm/">ucm</a></td>
+<td>DoIP session / OTA orchestrator (SIL)</td>
+</tr>
+<tr>
+<td><a href="middleware/log/">log</a></td>
+<td>Logging lite</td>
+</tr>
+<tr>
+<td><a href="middleware/per/">per</a> / <a href="middleware/tsync/">tsync</a></td>
+<td>Persistency KV stub / time-sync skeleton（可裁剪）</td>
+</tr>
+<tr>
+<td><a href="middleware/trace/">trace</a></td>
+<td>Timing → VCD / GMT（偏 debug-path）</td>
+</tr>
+</tbody>
+</table>
+<p>Overview: <a href="middleware/README.md">middleware/README.md</a></p>
+<h4>2.3 Closed-loop workload (sample SKUs)</h4>
+<p>Two SKUs <strong>validate</strong> com / EM / observability — they are not a perception or planner product. Planning gold: <a href="octave_planning/README.md">octave_planning/</a>.</p>
+<table>
+<thead>
+<tr>
+<th>SKU</th>
+<th>Cameras</th>
+<th>Workload chain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="projects/afc/">AFC</a></td>
+<td>Single front</td>
+<td>gateway → <code>perception.fcm</code> → <code>planning.driving</code></td>
+</tr>
+<tr>
+<td><a href="projects/adc/">ADC</a></td>
+<td>Surround</td>
+<td>gateway → surround / fcm / rcm → <code>planning.driving_plus</code> · parking · <code>mode.drive_park</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-text">Vehicle state (pick one)
+  · gateway (no inject)   or   · inject (playhead; gateway off)
+        │
+        ▼ EgoMotion / Perception_In  (+ surround / rear on ADC)
+        ▼
+   perception.* → Out / Near / World     ← workload (not a camera NN)
+        │
+        ▼
+   planning.* → Trajectory               ← workload (.m gold, C 1:1)
+        │
+        ▼
+   gmt_board: tap NDJSON · gf_foxglove_ws :8765
+        │
+        └─ latency / isolation / “who published when” / inject replay
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Process</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>adapter.vehicle_can_gateway</code></td>
+<td>CAN/sim → EgoMotion, Perception_In… (off under inject)</td>
+</tr>
+<tr>
+<td><code>perception.fcm</code> · <code>surround</code> · <code>rcm</code></td>
+<td>Workload perception (ADC adds surround + rear)</td>
+</tr>
+<tr>
+<td><code>planning.driving</code> / <code>driving_plus</code></td>
+<td>Ego + perc → Trajectory (workload)</td>
+</tr>
+<tr>
+<td><code>gf_iox_obs_tap</code></td>
+<td>Allowlisted services → NDJSON (GMT record)</td>
+</tr>
+<tr>
+<td><code>gf_foxglove_ws</code></td>
+<td>iceoryx → Foxglove Studio + BEV (<code>tools/gmt_board</code>)</td>
+</tr>
+<tr>
+<td><code>gf_iox_obs_inject</code></td>
+<td>playhead / continuous Ego inject</td>
+</tr>
+</tbody>
+</table>
+<p>SKU apps live under <code>projects/&lt;sku&gt;/apps/</code>. iceoryx smoke: <code>middleware/bindings/iceoryx/testcases/</code>.</p>
+<h4>2.4 Build &amp; run</h4>
+<p>Same scripts for <a href="projects/afc/">AFC</a> and <a href="projects/adc/">ADC</a>. SIL overrides the frame source; the board freeze default stays <code>isp</code>. Host CARLA: <a href="carla_scenarios/">carla_scenarios/</a>. CI: <a href="devops/README.md">devops/</a>.</p>
+<p><code>GF_FRAME_SOURCE</code> = <code>carla</code> · <code>replay</code> · <code>colorbar</code> · <code>isp</code> · <code>none</code></p>
+<pre><code class="language-bash">bash projects/adc/scripts/compile_sil.sh
+GF_FRAME_SOURCE=carla bash projects/adc/scripts/run_sil.sh
+
+# Same EM on the board (after stage):
+#   ./projects/adc/build-sil/runtime/bin/giraffe_launch
+</code></pre>
+<p>AFC is the same path under <code>projects/afc/scripts/</code>. Inject / replay lives in GMT, not here.</p>
+<h4>2.5 Boundary vs toolchain</h4>
+<table>
+<thead>
+<tr>
+<th>Giraffe modules own</th>
+<th>Toolchain owns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>In-process I/O, real pub/sub on iceoryx</td>
+<td>wiring / SKU trim → gf-config</td>
+</tr>
+<tr>
+<td>SIL: systemd/init → EM → daemons + apps; tap/inject/Foxglove/DoIP = <strong>GMT_depend</strong> (not EM)</td>
+<td>Studio / Tag / MCAP; Logging via DLT</td>
+</tr>
+<tr>
+<td>Semantic contract on target</td>
+<td>DBC / lineage gates → compose</td>
+</tr>
+<tr>
+<td>FuSa evidence (<code>fusa/</code>)</td>
+<td>GMT remains <strong>debug-path</strong> (not board ASIL evidence)</td>
+</tr>
+</tbody>
+</table>
+<h4>2.6 FuSa (inside Giraffe modules)</h4>
+<p>Evidence toward a <strong>full Safety Case</strong> — L1/L2/L3 cases, isolation, reference latency, Safety Case skeletons. Entry: <a href="fusa/README.md">fusa/</a>.</p>
+<pre><code class="language-bash">bash fusa/scripts/run_cases.sh
+GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
+bash fusa/scripts/measure_latency.sh   # optional timing snapshot
+</code></pre>
+<hr />
+<h3>3. GMT (observe toolchain)</h3>
+<p>In multi-process SIL, terminal logs rarely answer “who published what, when.” GMT attaches the tap NDJSON to a host timeline: <strong>scrub / speed</strong>, <strong>playhead inject</strong>, <strong>Tag → MCAP</strong>. <strong>Foxglove live</strong> is C <code>gf_foxglove_ws</code> on <strong>:8765</strong> (<code>tools/gmt_board</code>); Python <code>GMT bridge foxglove</code> is JSONL replay only. <code>run_sil</code> does <strong>not</strong> start GMT Live :8766.</p>
+<p><img alt="GMT — Vars scrub / Live + Inject" src="gallery/GMT.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Port</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>8765</strong></td>
+<td>Foxglove Studio (<code>gf_foxglove_ws</code>; BEV + module I/O)</td>
+</tr>
+<tr>
+<td><strong>8766</strong></td>
+<td>GMT GUI live (optional; not started by <code>run_sil</code>)</td>
+</tr>
+<tr>
+<td><strong>8767</strong></td>
+<td>playhead inject</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">pip install -e tools/gmt -e 'tools/gmt[gui]'
+GMT gui --project projects/afc \
+  --session projects/afc/scenarios/overtake_acc_aeb.jsonl
+</code></pre>
+<p>Details: <a href="tools/gmt/README.md">tools/gmt/README.md</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">OBSERVABILITY_DEMO</a></p>
+<hr />
+<h2>Repo map</h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="middleware/">middleware/</a></td>
+<td><strong>Giraffe runtime (core)</strong></td>
+</tr>
+<tr>
+<td><a href="octave_planning/">octave_planning/</a></td>
+<td>Planning <code>.m</code> gold (<strong>workload</strong>, not the product)</td>
+</tr>
+<tr>
+<td><a href="projects/">projects/</a></td>
+<td>OEM SKU: apps, wiring, SIL·HIL, CI scripts</td>
+</tr>
+<tr>
+<td><a href="carla_scenarios/">carla_scenarios/</a></td>
+<td>Host CARLA scenes + instrument</td>
+</tr>
+<tr>
+<td><a href="projects/afc/apps/">projects/afc/apps/</a></td>
+<td>AFC workload (gateway / FCM / planning)</td>
+</tr>
+<tr>
+<td><a href="projects/adc/apps/">projects/adc/apps/</a></td>
+<td>ADC workload (surround / driving_plus / parking)</td>
+</tr>
+<tr>
+<td><a href="fusa/">fusa/</a></td>
+<td>FuSa evidence</td>
+</tr>
+<tr>
+<td><a href="tools/gf-config/">tools/gf-config/</a></td>
+<td>gf-config</td>
+</tr>
+<tr>
+<td><a href="tools/gf-codegen/">tools/gf-codegen/</a></td>
+<td>gf-codegen</td>
+</tr>
+<tr>
+<td><a href="tools/gf-octavecoder/">tools/gf-octavecoder/</a></td>
+<td><code>.m</code> → C 1:1</td>
+</tr>
+<tr>
+<td><a href="tools/gmt/">tools/gmt/</a></td>
+<td>GMT host</td>
+</tr>
+<tr>
+<td><a href="tools/gmt_board/">tools/gmt_board/</a></td>
+<td>tap / inject / <code>gf_foxglove_ws</code></td>
+</tr>
+<tr>
+<td><a href="devops/">devops/</a></td>
+<td>Bench CI → CD last mile (hardware)</td>
+</tr>
+<tr>
+<td><a href="docs/README.md">docs/</a></td>
+<td>Docs index</td>
+</tr>
+</tbody>
+</table>
+<p><a href="STRUCTURE.md">STRUCTURE.md</a> · <a href="docs/en/operations/ROADMAP.md">ROADMAP</a></p>
+<h2>License</h2>
+<p><a href="LICENSE">LICENSE</a></p>
+</article>
+</body>
+</html>

@@ -50,11 +50,11 @@ The clips below are that loop on the bench — **AFC** (single camera) and **ADC
 ---
 
 > [!NOTE]
-> **[AutoEth](docs/en/net/index.html):**
+> **[AutoEth](https://xinyu2004.github.io/AI_Giraffe-Flow/#autoeth):**
 >
 > 　　Automotive Ethernet follows the path from CAN signal lists to an Ethernet backbone. On current new-energy vehicles that backbone carries SOME/IP for services, DDS for data distribution, DoIP for diagnostics and flashing, and gPTP so TSN can share one clock. Pick a protocol, then the features, and the packet is built from them. Ciphers and keys are in [AI Fortress Auto](https://github.com/xinyu2004/AI_Fortress-Auto).
 >
-> **[FuSa](fusa/README.md):**
+> **[FuSa](https://xinyu2004.github.io/AI_Giraffe-Flow/#fusa):**
 >
 > 　　To be added.
 

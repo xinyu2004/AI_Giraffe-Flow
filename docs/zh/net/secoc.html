@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SecOC</title>
+  <link rel="stylesheet" href="detail.css">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="index.html">总图</a>
+    <p class="mark">AutoEth</p>
+    <h1>SecOC</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <p class="lead">在应用层报文上加 MAC 和新鲜度，用来认出是谁发的、是不是刚发的。它不把载荷加密。</p>
+
+    <h2>保护的是哪一条</h2>
+    <p>AUTOSAR 的安全车载通信。被保护的叫认证 PDU，加上新鲜度和截短的认证码之后叫安全 PDU。总图上这条 PDU 是 <a href="someip.html">SOME/IP</a>。新鲜度是计数器或时间，让旧报文不能原样重放。MAC 用新鲜度、数据标识和 PDU 内容一起算出来，接收方用同一把密钥重算，对得上才收下。</p>
+    <p>数据标识用来把“这条报文”和“另一条长得像的报文”分开。它参与计算，不一定整段都出现在线上。截短之后线上只看见新鲜度和 MAC 的一部分，长度由配置定：新鲜度截几位、认证码截几位，两边必须相同。</p>
+    <p>封装和打开的步骤写在 AI Fortress Auto 第 3 节。用哪一种算法、密钥放在哪，写在那份 HSM 说明里。这页停在报文上多出来的两段，以及接收方怎么跟上新鲜度。</p>
+
+    <h2>新鲜度怎么跟上</h2>
+    <p>发送方每发一条就把完整新鲜度加一（或取当前时间），再按配置截短，和截短的 MAC 一起送出。接收方手里有上次收下的完整新鲜度。它用线上的截短值和自己记住的高位，试出一个候选的完整值，再算 MAC。</p>
+    <p>截短会有歧义，所以接收方不是只试一个数。认证窗口允许它往新的方向试若干个新鲜度。窗口里有一个能让 MAC 对上，就收下，并把记住的新鲜度拨过去。窗口里都不对，这条作废。窗口太大，旧报文更容易撞上；窗口太小，丢了几包之后就接不上。这个宽度是配置，不是协议里的一个固定常数。</p>
+    <p>构建失败可以按配置重试几次再放弃。验证失败同样有次数。溢出之后新鲜度绕回，两边都得按同一种规则理解绕回，否则会把新报文当成重放。</p>
+
+    <h2>在哪一层</h2>
+    <p>仍在应用层，加在 SOME/IP 的 PDU 上。总图上只有 SOME/IP 能勾。不新开以太网首部，也不改 UDP 或 TCP。交换机和路由器看不见这截 MAC，它们只转发原来的 UDP 或 TCP。</p>
+
+    <h2>报文</h2>
+    <p>安全 PDU 在认证 PDU 之外多两段。这两段放在 PDU 的哪一头，由配置的位置决定。这页不把某一种截断长度画成唯一格式。</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>认证 PDU</b><span>原来的应用数据</span></div>
+      <div class="cell" style="background:var(--l7)"><b>新鲜度</b><span>截短的计数器或时间</span></div>
+      <div class="cell" style="background:var(--l7)"><b>MAC</b><span>截短，长度由配置定</span></div>
+    </div>
+    <p class="note">参与 MAC 计算的还有数据标识和完整新鲜度。线上看不见的那一部分，靠两边事先约定和接收方记住的状态补上。</p>
+
+    <h2>不做什么</h2>
+    <ul>
+      <li>不加密载荷。机密性不是这截 MAC 的事。</li>
+      <li>不是 <a href="e2e.html">E2E</a>。E2E 的计数器和 CRC 没有密钥，也认不出是谁签的。</li>
+      <li>不保护整条以太网帧，也不保护整份 IP。帧是 <a href="macsec.html">MACsec</a>，IP 是 <a href="ipsec.html">IPsec</a>，字节流是 <a href="tls.html">TLS</a>。</li>
+      <li>总图上不套到 DDS、DoIP、Zenoh 或 gPTP。DDS 的认证在 DDS-Security 里。</li>
+    </ul>
+
+    <p class="keys">入口 <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/README_zh.md#3-secoc" target="_blank" rel="noopener">AI Fortress Auto · 封装</a> <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md" target="_blank" rel="noopener">算法和密钥</a> <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a></p>
+    <nav class="sib">
+      <a href="index.html">总图</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <b>SecOC</b>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+  </div>
+</main>
+</body>
+</html>

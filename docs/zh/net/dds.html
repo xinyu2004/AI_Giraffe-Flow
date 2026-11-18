@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DDS</title>
+  <link rel="stylesheet" href="detail.css">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="index.html">总图</a>
+    <p class="mark">AutoEth</p>
+    <h1>DDS</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <p class="lead">多个节点按主题共享同一类数据。时效、历史和可靠性都写在 QoS 里，发现也按这套 QoS 决定谁和谁接得上。</p>
+
+    <h2>主题和实例</h2>
+    <p>OMG 的数据分发服务。一个域里，发布方是 DataWriter，订阅方是 DataReader。两边的主题名和类型名对上，样本才有地方去。类型里可以指定键。键的每一个取值是一个实例：同一主题上，车速是一个实例，每个雷达目标可以是各自的实例。历史深度是按实例留的，不是把整个主题揉成一条队列。</p>
+
+    <h2>发现</h2>
+    <p>发现分两步，都走 RTPS 的内置端点。SPDP 让参与者知道谁在这个域里：周期宣布自己，并带上租约，租约到期就认为对方走了。SEDP 再交换各自的 DataWriter 和 DataReader，包括它们的主题、类型和 QoS。对不上的 QoS 不会匹配，数据送不过去。联调时最常见的沉默就是这里：进程都在，主题名也一样，可靠性或持久性一边要、一边不给。</p>
+    <p>对照 <a href="someip.html">SOME/IP-SD</a>：SD 按服务号、实例号和事件组做 Offer、Find、Subscribe；DDS 按域、主题名、类型和 QoS 做匹配，没有服务号这一层。</p>
+    <p>也有不跑 SPDP、端点事先写死的部署。那样就没有组播宣布，地址和 QoS 都在配置里。</p>
+
+    <h3>域和端口</h3>
+    <p>同一个域号的参与者才互相发现。RTPS 用域号和参与者号算出 UDP 端口。默认常数：端口基数 PB = 7400，域增益 DG = 250，参与者增益 PG = 2，偏移 d0 = 0、d1 = 10、d2 = 1、d3 = 11。发现组播地址的默认是 <code>239.255.0.1</code>。</p>
+    <table>
+      <tr><th>端口</th><th>算法</th><th>域 0、参与者 0</th></tr>
+      <tr><td>发现组播</td><td>PB + DG × 域 + d0</td><td>7400</td></tr>
+      <tr><td>用户组播</td><td>PB + DG × 域 + d2</td><td>7401</td></tr>
+      <tr><td>发现单播</td><td>PB + DG × 域 + d1 + PG × 参与者</td><td>7410</td></tr>
+      <tr><td>用户单播</td><td>PB + DG × 域 + d3 + PG × 参与者</td><td>7411</td></tr>
+    </table>
+    <p class="note">同一台机器上第二个参与者是 7412 和 7413。实现可以改这些常数。两边改得不一样，就互相看不见。</p>
+
+    <h2>QoS</h2>
+    <p>QoS 是这条数据怎么送、留多久、迟到算不算故障。有的策略必须两边匹配，叫请求/提供：读者的要求不能高过写者提供的。有的只约束本地队列，不参与匹配。</p>
+    <table>
+      <tr><th>策略</th><th>常用取值</th><th>车上用来做什么</th></tr>
+      <tr><td>Reliability</td><td>BEST_EFFORT 或 RELIABLE</td><td>雷达点、视频常常尽力而为。控制指令和状态常常要可靠：写者发 HEARTBEAT，读者用 ACKNACK 要缺的样本</td></tr>
+      <tr><td>Durability</td><td>VOLATILE 或 TRANSIENT_LOCAL</td><td>VOLATILE 不给晚加入的人补历史。TRANSIENT_LOCAL 把写者内存里的历史补给后上线的读者，晚加入也能拿到最后一帧。TRANSIENT 和 PERSISTENT 还要持久化服务，车上少用</td></tr>
+      <tr><td>History</td><td>KEEP_LAST 加深度，或 KEEP_ALL</td><td>传感器常用深度 1，只留最新。指令有时深度大于 1，避免把还没读的覆盖掉。这是本地队列，不参与匹配</td></tr>
+      <tr><td>Resource Limits</td><td>样本数、实例数、每实例样本数</td><td>给上面的历史封顶。封满之后新样本会被丢掉或堵住写者。本地策略</td></tr>
+      <tr><td>Deadline</td><td>一段时长</td><td>两个样本之间最多隔多久。写者提供的周期必须不长于读者要求的。超时是通知，不是把样本改掉</td></tr>
+      <tr><td>Liveliness</td><td>AUTOMATIC，或按参与者、按主题手动</td><td>对方还在不在。AUTOMATIC 靠任何写操作续租。手动则要显式断言。写者的断言方式必须满足读者的要求，租约也不能更长</td></tr>
+      <tr><td>Lifespan</td><td>一段时长</td><td>样本过了这段时间就过期，读者不该再把它当新的。本地策略</td></tr>
+      <tr><td>Ownership</td><td>SHARED 或 EXCLUSIVE</td><td>多个写者写同一实例时，SHARED 都收。EXCLUSIVE 只认强度最高的那个写者，用来做冗余切换。两边必须同一种</td></tr>
+      <tr><td>Ownership Strength</td><td>一个整数</td><td>只在 EXCLUSIVE 下有意义。强度高的成为属主，它停了，次高的接上</td></tr>
+      <tr><td>Time Based Filter</td><td>最小间隔</td><td>读者主动丢弃来得太密的样本。本地策略</td></tr>
+      <tr><td>Latency Budget</td><td>一段时长</td><td>希望多快送到。写者给的时延必须不大于读者要的。它是提示，不是定时器</td></tr>
+      <tr><td>Transport Priority</td><td>一个整数</td><td>发送优先级的提示。标准不规定它等于哪个 VLAN PCP，有的实现会拿它去选队列</td></tr>
+      <tr><td>Destination Order</td><td>按收到的时间，或按源时间戳</td><td>多个写者时，按源时间戳可以不把晚到、但时间更早的样本当成更新</td></tr>
+      <tr><td>Partition</td><td>一组名字</td><td>同一域里再分逻辑组。分区字符串对不上，端点不匹配</td></tr>
+    </table>
+    <p>匹配时常见的高低关系：可靠性上，读者要 RELIABLE 就只能配 RELIABLE 的写者，读者要 BEST_EFFORT 则两种写者都能配。持久性从低到高是 VOLATILE、TRANSIENT_LOCAL、TRANSIENT、PERSISTENT，写者提供的不能低于读者要的。Deadline 和延迟预算是写者答应的时间不能比读者松。所有权必须两边一样。</p>
+
+    <h2>在哪一层</h2>
+    <p>应用层是 DDS。节点之间的报文是 RTPS，常见走 UDP。总图上可以把传输改成 TCP。保护是 DDS-Security，做在 RTPS 上，分成三块插件：认证、访问控制、加密。总图不给 DDS 勾 SecOC 和 E2E。默认 UDP 没有可靠字节流，套不上 <a href="tls.html">TLS</a>。DDS-Security 也不靠 TLS。</p>
+
+    <h2>报文</h2>
+    <p>RTPS 头带协议标识 <code>RTPS</code>、版本、厂商和 GUID 前缀。后面是子消息。</p>
+    <table>
+      <tr><th>子消息</th><th>作用</th></tr>
+      <tr><td>DATA</td><td>运一个样本，或运发现用的内置数据</td></tr>
+      <tr><td>DATA_FRAG</td><td>样本太大，拆成片</td></tr>
+      <tr><td>HEARTBEAT</td><td>写者告诉读者：我的序号从哪到哪。可靠传输靠它推动确认</td></tr>
+      <tr><td>ACKNACK</td><td>读者回答还缺哪些序号。这是可靠性确认，不是 IP 头里的 ECN</td></tr>
+      <tr><td>GAP</td><td>这些序号可以跳过，不必再要</td></tr>
+      <tr><td>NACK_FRAG / HEARTBEAT_FRAG</td><td>对分片做同样的缺片和心跳</td></tr>
+      <tr><td>INFO_TS / INFO_DST</td><td>给后面的子消息带时间戳，或指明要送给谁</td></tr>
+    </table>
+    <p>可靠传输的一轮是：写者发 DATA，再发 HEARTBEAT；读者发现缺口就回 ACKNACK；写者把缺的序号再送一次。尽力而为则没有这一轮。</p>
+
+    <h2>不做什么</h2>
+    <ul>
+      <li>不按服务号和方法号调用。那是 <a href="someip.html">SOME/IP</a>。</li>
+      <li>ACKNACK 是可靠传输的确认，不是 IP 的 ECN。</li>
+      <li>SecOC 和 E2E 不加在 DDS 上。认证和加密是 DDS-Security 的插件。</li>
+      <li>QoS 对不上时协议不会报一条“错误返回码”。端点就是不匹配，读者收不到样本。</li>
+    </ul>
+
+    <p class="keys">入口 <a href="https://www.omg.org/spec/DDS/" target="_blank" rel="noopener">DDS</a> <a href="https://www.omg.org/spec/DDSI-RTPS/" target="_blank" rel="noopener">RTPS</a> <a href="https://www.omg.org/spec/DDS-SECURITY/" target="_blank" rel="noopener">DDS-Security</a></p>
+    <nav class="sib">
+      <a href="index.html">总图</a>
+      <a href="someip.html">SOME/IP</a>
+      <b>DDS</b>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+  </div>
+</main>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>车载网络</title>
+  <title>车载以太网</title>
   <style>
     :root {
       color-scheme: light;
@@ -154,7 +154,7 @@
   <header class="mast">
     <a class="lang" href="../../en/net/index.html">English</a>
     <p class="mark">AutoEth</p>
-    <h1>车载网络</h1>
+    <h1>车载以太网</h1>
   </header>
   <div class="stripes" aria-hidden="true">
     <span style="background:var(--l7)"></span>
@@ -344,6 +344,10 @@ function tipHtml() {
   return "";
 }
 function introHtml() {
+  const page = { someip: "someip.html", dds: "dds.html", doip: "doip.html" };
+  const name = page[proto]
+    ? '<a href="' + page[proto] + '">' + PROTOS[proto].name + "</a>"
+    : PROTOS[proto].name;
   const link = {
     someip: 'BMW 提出，后来收进 AUTOSAR。为了让控制器在以太网上按服务通信：调用方法，或订阅事件，不必先排好一整张信号表。入口 <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
     dds: 'OMG 制定的数据分发服务。为了让多个节点按主题共享同一类数据，时效和可靠性写在 QoS 里。节点之间互通用 RTPS。入口 <a href="https://www.omg.org/spec/DDS/" target="_blank" rel="noopener">DDS</a> <a href="https://www.omg.org/spec/DDSI-RTPS/" target="_blank" rel="noopener">RTPS</a>',
@@ -351,7 +355,7 @@ function introHtml() {
     zenoh: 'Eclipse 的协议。为了用同一套发布、订阅和查询，连接从设备到云的数据，不必为流动的数据和存下来的数据各做一套协议。入口 <a href="https://zenoh.io/" target="_blank" rel="noopener">zenoh.io</a>',
     gptp: 'IEEE 802.1AS，是 PTP 在桥接局域网上的轮廓。为了让这条网上的交换机和端站共用一个时间，时间敏感的流量才能按这个时间发送。入口 <a href="../tsn/index.html">TSN</a> <a href="https://www.ieee802.org/1/pages/802.1AS.html" target="_blank" rel="noopener">IEEE 802.1AS</a>'
   };
-  return "<b>" + PROTOS[proto].name + "。</b>" + link[proto];
+  return "<b>" + name + "。</b>" + link[proto];
 }
 function tlsTip() {
   if (allowed("tls")) return "";
@@ -360,12 +364,12 @@ function tlsTip() {
 }
 function notesHtml() {
   const lines = {
-    secoc: '<b>SecOC。</b>用在应用层报文上，加 MAC 和新鲜度。入口 <a href="' + SECOC + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
-    e2e: '<b>E2E。</b>用在应用层报文上，加计数器和 CRC。入口 <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
-    tls: '<b>TLS。</b>记录层和握手，建立在可靠字节流上，也就是 TCP。入口 <a href="https://www.rfc-editor.org/rfc/rfc8446" target="_blank" rel="noopener">RFC 8446</a>。算法和密钥在 <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
-    ipsec: '<b>IPsec。</b>在网络层加 ESP。入口 <a href="https://www.rfc-editor.org/rfc/rfc4303" target="_blank" rel="noopener">RFC 4303</a>。算法和密钥在 <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    secoc: '<b><a href="secoc.html">SecOC</a>。</b>用在应用层报文上，加 MAC 和新鲜度。入口 <a href="' + SECOC + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    e2e: '<b><a href="e2e.html">E2E</a>。</b>用在应用层报文上，加计数器和 CRC。入口 <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
+    tls: '<b><a href="tls.html">TLS</a>。</b>记录层和握手，建立在可靠字节流上，也就是 TCP。入口 <a href="https://www.rfc-editor.org/rfc/rfc8446" target="_blank" rel="noopener">RFC 8446</a>。算法和密钥在 <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    ipsec: '<b><a href="ipsec.html">IPsec</a>。</b>在网络层加 ESP。入口 <a href="https://www.rfc-editor.org/rfc/rfc4303" target="_blank" rel="noopener">RFC 4303</a>。算法和密钥在 <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
     vlan: '<b>VLAN。</b><code>0x8100</code>，插在源 MAC 和原来的 EtherType 之间。入口 <a href="../tsn/index.html">TSN</a> <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>',
-    macsec: '<b>MACsec。</b><code>0x88E5</code>，逐跳套在帧外。入口 <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a>。算法和密钥在 <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>'
+    macsec: '<b><a href="macsec.html">MACsec</a>。</b><code>0x88E5</code>，逐跳套在帧外。入口 <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a>。算法和密钥在 <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>'
   };
   return Object.keys(lines).filter(function (name) { return feats[name]; }).map(function (name) {
     return "<p>" + lines[name] + "</p>";

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IPsec</title>
+  <link rel="stylesheet" href="detail.css">
+</head>
+<body>
+<main style="--accent:var(--l3)">
+  <header class="mast">
+    <a class="lang" href="index.html">总图</a>
+    <p class="mark">AutoEth</p>
+    <h1>IPsec</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <p class="lead">在网络层保护 IP 包。总图上画的是 ESP 的传输模式：IPv4 仍在外面，ESP 插在它和 UDP 或 TCP 之间。</p>
+
+    <h2>哪一类包会进</h2>
+    <p>有 IP 的协议都能加：SOME/IP、DDS、DoIP、Zenoh，UDP 和 TCP 都可以。gPTP 没有 IP，加不上。保护的是这一台主机到那一台主机，不是每一跳的链路。</p>
+    <p>策略先选路。一条策略看源地址、目的地址、上层协议和端口，然后三选一：按某条安全关联保护、直接放行、或丢掉。对时帧、发现用的组播，常常单独写成放行，不进 ESP。选错了，要么该保护的明文出去了，要么对端根本解不开。</p>
+
+    <h2>安全关联</h2>
+    <p>真正用来封装的是安全关联，一条关联由目的地址、使用的协议（这里是 ESP）和 SPI 标出。SPI 是 32 位，写在 ESP 头里，接收方靠它找出密钥和算法。序号从 1 往上加，接收方用一个窗口防重放：太旧的序号丢掉，窗口里已经见过的也丢掉。序号快用尽时要换一条新的关联，不能把序号绕回去继续用同一把密钥。</p>
+    <p>关联怎么谈成，是 IKEv2（RFC 7296）的事，总图上不画这些往返。先有 IKE 自己的关联：<code>IKE_SA_INIT</code> 交换密钥材料，<code>IKE_AUTH</code> 验身份。然后 <code>CREATE_CHILD_SA</code> 做出用来跑 ESP 的子关联，里面定下 SPI、算法和这条关联盖住的地址与端口。算法和密钥在 AI Fortress Auto 的 HSM 说明里。</p>
+
+    <h2>在哪一层</h2>
+    <p>网络层。传输模式不换外面的 IP 头，EtherType 仍是 <code>0x0800</code>。网上的设备仍按原来的地址转发，端口和载荷在 ESP 里面。同一条链路上的两台 ECU 互相保护，用的就是这种。</p>
+    <p>隧道模式把整份原来的 IP 包装进一个新的 IP 包。网关出去、地址要换成另一段时用它。总图不画隧道，IPv4 仍留在网络层那一行的右边，ESP 画在它下面。</p>
+
+    <h2>报文</h2>
+    <p>ESP（RFC 4303）的加密范围是运输层和载荷，再加上尾部。完整性校验盖住 SPI、序号和这些密文。外面看得见 IP 地址，看不见端口。</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l3)"><b>IPv4</b><span>仍在外面</span></div>
+      <div class="cell" style="background:#8d3d12"><b>SPI</b><span>哪条安全关联</span></div>
+      <div class="cell" style="background:#8d3d12"><b>序号</b><span>防重放</span></div>
+      <div class="cell" style="background:#8d3d12"><b>加密的载荷</b><span>UDP 或 TCP</span></div>
+      <div class="cell" style="background:#8d3d12"><b>尾</b><span>补齐 · 填充长度 · 下一个头</span></div>
+      <div class="cell" style="background:#8d3d12"><b>ICV</b><span>完整性校验</span></div>
+    </div>
+    <p>下一个头标出里面是 UDP 还是 TCP，接收方解开之后按它交给传输层。</p>
+    <p>AH（RFC 4302）不加密。它给 IP 头里转发时不变的部分和载荷做完整性校验。跳数、头校验和这种沿途会变的字段不算在内。地址或载荷被改会对不上，端口和数据仍是明文。总图只画 ESP，不画 AH。</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l3)"><b>IPv4</b><span>不变字段被校验</span></div>
+      <div class="cell" style="background:#8d3d12"><b>AH</b><span>SPI · 序号 · ICV</span></div>
+      <div class="cell" style="background:var(--l4)"><b>UDP 或 TCP</b><span>仍是明文</span></div>
+    </div>
+
+    <h2>不做什么</h2>
+    <ul>
+      <li>不要求换成 TCP。<a href="tls.html">TLS</a> 要可靠字节流，IPsec 不要。</li>
+      <li>不是逐跳的 <a href="macsec.html">MACsec</a>。过交换机时，外面的 IP 头还是这一份，交换机不用解开 ESP。</li>
+      <li>不是 <a href="secoc.html">SecOC</a>。SecOC 加在某一条应用 PDU 上，不看 IP 地址和端口。</li>
+      <li>gPTP 不走 IP，不进这一页。它若要避开 ESP，靠策略里的放行，而不是靠 gPTP 自己带一个 SPI。</li>
+    </ul>
+
+    <p class="keys">入口 <a href="https://www.rfc-editor.org/rfc/rfc4303" target="_blank" rel="noopener">RFC 4303</a> <a href="https://www.rfc-editor.org/rfc/rfc4302" target="_blank" rel="noopener">RFC 4302</a> <a href="https://www.rfc-editor.org/rfc/rfc7296" target="_blank" rel="noopener">RFC 7296</a> <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md" target="_blank" rel="noopener">算法和密钥</a></p>
+    <nav class="sib">
+      <a href="index.html">总图</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <b>IPsec</b>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+  </div>
+</main>
+</body>
+</html>

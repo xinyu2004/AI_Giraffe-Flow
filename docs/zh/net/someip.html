@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SOME/IP</title>
+  <link rel="stylesheet" href="detail.css">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="index.html">总图</a>
+    <p class="mark">AutoEth</p>
+    <h1>SOME/IP</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <p class="lead">控制器在以太网上按服务通信：调用方法，或订阅事件，不必先排好一整张信号表。</p>
+
+    <h2>服务、方法和事件</h2>
+    <p>BMW 提出，后来收进 AUTOSAR。一个服务有 16 位服务号。同一服务可以有多个实例，实例号也是 16 位。主版本必须一致才算同一个接口；次版本用来表示向后能接上的修订。</p>
+    <p>方法是一次调用。请求要返回，消息类型是 REQUEST。不等返回，是 REQUEST_NO_RETURN，调用方发完就走。事件是服务方在值变化或按周期送出的通知，消息类型是 NOTIFICATION。方法号的最高位区分这两类：0 是方法，1 是事件。几个事件收成一个事件组，订阅按组来，不按单个事件来。</p>
+    <table>
+      <tr><th>消息类型</th><th>值</th><th>谁发给谁</th></tr>
+      <tr><td>REQUEST</td><td><code>0x00</code></td><td>客户端调用，等响应</td></tr>
+      <tr><td>REQUEST_NO_RETURN</td><td><code>0x01</code></td><td>客户端调用，不等</td></tr>
+      <tr><td>NOTIFICATION</td><td><code>0x02</code></td><td>服务端送出事件</td></tr>
+      <tr><td>RESPONSE</td><td><code>0x80</code></td><td>服务端对请求的正常返回</td></tr>
+      <tr><td>ERROR</td><td><code>0x81</code></td><td>服务端拒绝或出错</td></tr>
+    </table>
+    <p class="note">带 TP 的类型是上面这几个再加分段标志，用来把一条大报文拆进多个 UDP 包。见下面的分段。</p>
+
+    <h2>发现</h2>
+    <p>SOME/IP-SD 负责“谁提供服务、事件送到哪”。它自己仍是一条 SOME/IP：服务号 <code>0xFFFF</code>，方法号 <code>0x8100</code>，消息类型是通知。规范把 SD 报文的端口定成 <code>SD_PORT</code>，默认 UDP 30490，源端口和目的端口都用它。组播地址由 <code>SD_MULTICAST_IP</code> 配置，同一网段里要一致。能合并的条目放进同一条 SD，少发几次。</p>
+
+    <h3>三条阶段</h3>
+    <p>每个服务实例或事件组，发出条目之前都走过这三段。初始等待的时间在最小值和最大值之间随机取，避免上电时所有节点同时开口。</p>
+    <table>
+      <tr><th>阶段</th><th>做什么</th></tr>
+      <tr><td>初始等待</td><td>链路起来、服务也准备好之后先等一段随机时间，再发第一条</td></tr>
+      <tr><td>重复</td><td>第一条发出后，按基数间隔重复，次数有上限，间隔逐次加倍</td></tr>
+      <tr><td>主阶段</td><td>服务端按周期继续 Offer。客户端不再周期性地 Find</td></tr>
+    </table>
+
+    <h3>条目</h3>
+    <p>条目分两类，每条 16 字节。服务条目谈服务实例，事件组条目谈订阅。生存时间 TTL 以秒计。<code>0xFFFFFF</code> 表示一直有效，直到对方明确停止。TTL 写成 0 就是停止：停 Offer，或停订阅。订阅确认的 TTL 写成 0，就是拒绝这次订阅。</p>
+    <table>
+      <tr><th>条目</th><th>类型值</th><th>作用</th></tr>
+      <tr><td>FindService</td><td><code>0x00</code></td><td>打听谁提供这个服务</td></tr>
+      <tr><td>OfferService</td><td><code>0x01</code></td><td>宣布自己提供这个实例。TTL 为 0 即停止提供</td></tr>
+      <tr><td>SubscribeEventgroup</td><td><code>0x06</code></td><td>订阅一个事件组。TTL 为 0 即退订</td></tr>
+      <tr><td>SubscribeEventgroupAck</td><td><code>0x07</code></td><td>确认订上了。TTL 为 0 即拒绝</td></tr>
+    </table>
+    <p>Find 的实例号可以写成 <code>0xFFFF</code>，表示这个服务的任一实例都行。主版本必须对上。次版本写成 <code>0xFFFFFFFF</code> 表示任意次版本，写成别的值就是能接受的最低次版本。多个实例同时 Offer 时，条目里可以带优先级和权重：优先级数字小的先被选，同一优先级再按权重分。</p>
+    <p>SD 头里有重启标志和单播标志。会话号从 1 递增。会话号绕回、重启标志变化，别人把这台机器当成重启，已经订过的事件组要重新订阅。</p>
+
+    <h3>选项</h3>
+    <p>条目指向选项。选项里才是地址。</p>
+    <table>
+      <tr><th>选项</th><th>里面有什么</th></tr>
+      <tr><td>IPv4 端点</td><td>地址、UDP 或 TCP、端口。服务从这里进，事件也从这里出</td></tr>
+      <tr><td>IPv4 组播</td><td>事件要送去的组播地址和端口</td></tr>
+      <tr><td>配置</td><td>若干键值，给这个服务带额外参数</td></tr>
+      <tr><td>负载均衡</td><td>优先级和权重</td></tr>
+    </table>
+    <p>订阅若要求 TCP，客户端得先把 TCP 连上。服务端发现该连的 TCP 没有，可以拒绝这次订阅。客户端则检查这条连接，必要时重连。</p>
+
+    <h2>在哪一层</h2>
+    <p>应用层。方法调用和事件在车上常见走 UDP。总图上可以把传输改成 TCP，只有这条可靠字节流上才能再套 <a href="tls.html">TLS</a>。<a href="secoc.html">SecOC</a> 和 <a href="e2e.html">E2E</a> 加在这条 PDU 上，不另开一层。</p>
+    <p>TCP 是字节流，粘包之后靠 SOME/IP 头里的长度切开。流一旦错位，用魔术字重新对齐：客户端的消息号是 <code>0xFFFF0000</code>，服务端是 <code>0xFFFF8000</code>。</p>
+
+    <h2>报文</h2>
+    <p>头在载荷前面。服务号和方法号合成消息号。长度从请求号算到报文末尾，不包含消息号和长度自己。请求号由客户号和会话号合成，用来把响应配回某一次调用。</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>服务号</b><span>16 位</span></div>
+      <div class="cell" style="background:var(--l7)"><b>方法号</b><span>16 位，最高位分事件</span></div>
+      <div class="cell" style="background:var(--l7)"><b>长度</b><span>从请求号算起</span></div>
+      <div class="cell" style="background:var(--l7)"><b>请求号</b><span>客户 · 会话</span></div>
+      <div class="cell" style="background:var(--l7)"><b>版本</b><span>协议 · 接口</span></div>
+      <div class="cell" style="background:var(--l7)"><b>消息类型</b><span>见上表</span></div>
+      <div class="cell" style="background:var(--l7)"><b>返回码</b><span>1 字节</span></div>
+      <div class="cell" style="background:var(--l7)"><b>载荷</b><span>序列化后的参数</span></div>
+    </div>
+
+    <h3>返回码</h3>
+    <p>响应和错误报文用返回码说明结果。通知的返回码是 <code>0x00</code>。</p>
+    <table>
+      <tr><th>返回码</th><th>值</th><th>含义</th></tr>
+      <tr><td>E_OK</td><td><code>0x00</code></td><td>成功</td></tr>
+      <tr><td>E_NOT_OK</td><td><code>0x01</code></td><td>没有更细的原因</td></tr>
+      <tr><td>E_UNKNOWN_SERVICE</td><td><code>0x02</code></td><td>不认识这个服务</td></tr>
+      <tr><td>E_UNKNOWN_METHOD</td><td><code>0x03</code></td><td>服务在，方法不在</td></tr>
+      <tr><td>E_NOT_READY</td><td><code>0x04</code></td><td>服务还没准备好</td></tr>
+      <tr><td>E_NOT_REACHABLE</td><td><code>0x05</code></td><td>现在够不着</td></tr>
+      <tr><td>E_TIMEOUT</td><td><code>0x06</code></td><td>内部超时</td></tr>
+      <tr><td>E_WRONG_PROTOCOL_VERSION</td><td><code>0x07</code></td><td>协议版本不对</td></tr>
+      <tr><td>E_WRONG_INTERFACE_VERSION</td><td><code>0x08</code></td><td>接口版本不对</td></tr>
+      <tr><td>E_MALFORMED_MESSAGE</td><td><code>0x09</code></td><td>报文不完整或对不上</td></tr>
+      <tr><td>E_WRONG_MESSAGE_TYPE</td><td><code>0x0a</code></td><td>消息类型不该出现在这里</td></tr>
+    </table>
+
+    <h3>序列化</h3>
+    <p>基本类型默认按网络字节序，高字节在前。结构体按成员顺序排。动态数组和字符串前面有长度。经典 SOME/IP 字符串的长度是 32 位，把字节序标记和结尾的 0 都算进去。AUTOSAR 的序列化器还能改长度字段的宽度和哪些字段带长度，两边的配置必须是同一份。</p>
+
+    <h3>UDP 上的分段</h3>
+    <p>一条报文塞不进一个 UDP 包时用 SOME/IP-TP。消息类型带上分段标志，SOME/IP 头后面多 4 字节：偏移以 16 字节为单位，另有一个“后面还有段”的标志。接收方按偏移拼回，拼齐才交给上面的服务。</p>
+
+    <h2>不做什么</h2>
+    <ul>
+      <li>不代替事先排好的 CAN 信号表。服务、方法和事件是另一套编址。</li>
+      <li>SD 只发现服务和事件组，不运送服务自己的参数。</li>
+      <li>车上常见走 UDP。UDP 不是可靠字节流，套不上 TLS。</li>
+      <li>不保护链路，也不保护整份 IP。链路是 <a href="macsec.html">MACsec</a>，IP 是 <a href="ipsec.html">IPsec</a>。</li>
+    </ul>
+
+    <p class="keys">入口 <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a></p>
+    <nav class="sib">
+      <a href="index.html">总图</a>
+      <b>SOME/IP</b>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+  </div>
+</main>
+</body>
+</html>

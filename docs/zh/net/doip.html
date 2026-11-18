@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DoIP</title>
+  <link rel="stylesheet" href="detail.css">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="index.html">总图</a>
+    <p class="mark">AutoEth</p>
+    <h1>DoIP</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <p class="lead">把诊断仪和 ECU 之间的诊断报文从 CAN 搬到以太网。连上之后，载荷里跑的是 UDS。</p>
+
+    <h2>一次诊断怎么连上</h2>
+    <p>ISO 13400。诊断仪先在网上找到车，再建 TCP，做路由激活，然后才能把 UDS 送进去。顺序不能倒。</p>
+    <table>
+      <tr><th>步骤</th><th>走哪</th><th>结果</th></tr>
+      <tr><td>找车</td><td>UDP 13400</td><td>车用 <code>0x0004</code> 回答 VIN、EID、GID 和自己的逻辑地址。车辆宣告也是这一条，由车主动送出</td></tr>
+      <tr><td>建连</td><td>TCP 13400，套 TLS 时是 TCP 3496</td><td>字节流立起来。刚连上若一直不做激活，规范里的初始无活动定时器会把连接拆掉，默认大约 2 秒</td></tr>
+      <tr><td>路由激活</td><td>TCP，<code>0x0005</code> / <code>0x0006</code></td><td>诊断仪的源地址在这台 DoIP 实体上登记。成功码是 <code>0x10</code></td></tr>
+      <tr><td>诊断报文</td><td>TCP，<code>0x8001</code></td><td>里面才是 UDS。DoIP 先回 <code>0x8002</code> 或 <code>0x8003</code>，表示收不收这包，不是 UDS 的正响应</td></tr>
+      <tr><td>保住连接</td><td>TCP</td><td>激活之后大约 5 分钟没有报文，一般无活动定时器会拆连接。诊断仪用 UDS 的 TesterPresent 续上</td></tr>
+    </table>
+    <p>同一个源地址已经在另一条 TCP 上，实体会先做存活检查（<code>0x0007</code> / <code>0x0008</code>）。旧连接还活着，新的激活会被拒绝。</p>
+
+    <h3>路由激活的结果</h3>
+    <p>请求里带诊断仪的源地址和激活类型。默认类型是 <code>0x00</code>。法规诊断用的 WWH-OBD 是 <code>0x01</code>。响应码里常用的有：</p>
+    <table>
+      <tr><th>码</th><th>含义</th></tr>
+      <tr><td><code>0x10</code></td><td>激活成功</td></tr>
+      <tr><td><code>0x11</code></td><td>要再确认一次，随后才算成功</td></tr>
+      <tr><td><code>0x00</code></td><td>不认识这个源地址</td></tr>
+      <tr><td><code>0x01</code></td><td>TCP 套接字已经满了</td></tr>
+      <tr><td><code>0x02</code></td><td>这条连接上已经有别的源地址</td></tr>
+      <tr><td><code>0x03</code></td><td>这个源地址正在另一条连接上</td></tr>
+      <tr><td><code>0x04</code></td><td>还缺认证</td></tr>
+      <tr><td><code>0x06</code></td><td>不支持这种激活类型</td></tr>
+      <tr><td><code>0x07</code></td><td>拒绝明文，要求改走 TLS</td></tr>
+    </table>
+    <p>见到 <code>0x07</code>，就关掉 13400 上的明文 TCP，改连 3496，做完 TLS 握手再发一次路由激活。DoIP 的头在 TLS 记录里面。</p>
+
+    <h2>在哪一层</h2>
+    <p>应用层。诊断报文固定走 TCP。这条已经是可靠字节流，总图上 <a href="tls.html">TLS</a> 一开始就能勾。找车和宣告走 UDP 13400。总图上 SecOC 和 E2E 不套在 DoIP 上。</p>
+
+    <h2>报文</h2>
+    <p>头是四段：协议版本、版本的反码、载荷类型、载荷长度。反码是版本字节按位取反，用来尽早认出这不是一条 DoIP。</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>版本</b><span>1 字节</span></div>
+      <div class="cell" style="background:var(--l7)"><b>反码</b><span>1 字节</span></div>
+      <div class="cell" style="background:var(--l7)"><b>类型</b><span>2 字节</span></div>
+      <div class="cell" style="background:var(--l7)"><b>长度</b><span>4 字节</span></div>
+      <div class="cell" style="background:var(--l7)"><b>载荷</b><span>由类型决定</span></div>
+    </div>
+    <table>
+      <tr><th>类型</th><th>名字</th><th>方向</th></tr>
+      <tr><td><code>0x0000</code></td><td>头本身不合法时的否定</td><td>实体 → 诊断仪</td></tr>
+      <tr><td><code>0x0001</code></td><td>车辆识别请求</td><td>UDP</td></tr>
+      <tr><td><code>0x0002</code> / <code>0x0003</code></td><td>按 EID 或按 VIN 找</td><td>UDP</td></tr>
+      <tr><td><code>0x0004</code></td><td>车辆宣告，也是识别响应。带 VIN、EID、GID、逻辑地址</td><td>UDP</td></tr>
+      <tr><td><code>0x0005</code> / <code>0x0006</code></td><td>路由激活请求和响应</td><td>TCP</td></tr>
+      <tr><td><code>0x0007</code> / <code>0x0008</code></td><td>存活检查</td><td>TCP</td></tr>
+      <tr><td><code>0x4001</code> / <code>0x4002</code></td><td>实体状态：还能接几条连接、已经接了几条</td><td>UDP</td></tr>
+      <tr><td><code>0x4003</code> / <code>0x4004</code></td><td>诊断电源模式</td><td>UDP</td></tr>
+      <tr><td><code>0x8001</code></td><td>诊断报文，载荷是 UDS</td><td>TCP，双向</td></tr>
+      <tr><td><code>0x8002</code> / <code>0x8003</code></td><td>诊断报文的肯定 / 否定确认</td><td>实体 → 诊断仪</td></tr>
+    </table>
+
+    <h3>0x8001 和它的确认</h3>
+    <p>诊断报文的载荷是源地址、目的地址，然后才是 UDS。源地址是诊断仪，目的地址是一个 ECU，或一个功能地址（一组 ECU 都听）。具体编号由厂商分配，外部测试设备常用的那一段在规范里单独留出。</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l4)"><b>源地址</b><span>2 字节</span></div>
+      <div class="cell" style="background:var(--l4)"><b>目的地址</b><span>2 字节</span></div>
+      <div class="cell" style="background:var(--l7)"><b>UDS</b><span>ISO 14229</span></div>
+    </div>
+    <p><code>0x8002</code> 只说明 DoIP 实体收下了这包、可以往下送。UDS 的正响应是稍后另一条 <code>0x8001</code>，服务号是请求号加 <code>0x40</code>。<code>0x8003</code> 是否掉这包，常见原因：</p>
+    <table>
+      <tr><th>码</th><th>含义</th></tr>
+      <tr><td><code>0x02</code></td><td>源地址无效</td></tr>
+      <tr><td><code>0x03</code></td><td>不认识目的地址</td></tr>
+      <tr><td><code>0x04</code></td><td>诊断报文太大</td></tr>
+      <tr><td><code>0x05</code></td><td>内存不够</td></tr>
+      <tr><td><code>0x06</code></td><td>目的到不了</td></tr>
+      <tr><td><code>0x07</code></td><td>不认识要走的网络</td></tr>
+      <tr><td><code>0x08</code></td><td>下层传输出错</td></tr>
+    </table>
+
+    <h3>载荷里常见的 UDS</h3>
+    <p>UDS 的服务怎么编码仍看 ISO 14229，这里只列诊断仪最常放进 <code>0x8001</code> 的那些。否定响应是 <code>0x7F</code>，后面跟原服务号和否定码。</p>
+    <table>
+      <tr><th>服务</th><th>号</th><th>用来做什么</th></tr>
+      <tr><td>DiagnosticSessionControl</td><td><code>0x10</code></td><td>进入默认、扩展或编程会话</td></tr>
+      <tr><td>ECUReset</td><td><code>0x11</code></td><td>复位</td></tr>
+      <tr><td>ClearDiagnosticInformation</td><td><code>0x14</code></td><td>清故障码</td></tr>
+      <tr><td>ReadDTCInformation</td><td><code>0x19</code></td><td>读故障码</td></tr>
+      <tr><td>ReadDataByIdentifier</td><td><code>0x22</code></td><td>按数据标识读</td></tr>
+      <tr><td>SecurityAccess</td><td><code>0x27</code></td><td>解锁。种子和密钥的算法不在这页</td></tr>
+      <tr><td>WriteDataByIdentifier</td><td><code>0x2E</code></td><td>按数据标识写</td></tr>
+      <tr><td>RoutineControl</td><td><code>0x31</code></td><td>启动、停止或问一个例程</td></tr>
+      <tr><td>RequestDownload / TransferData / RequestTransferExit</td><td><code>0x34</code> / <code>0x36</code> / <code>0x37</code></td><td>刷写时的下载三步</td></tr>
+      <tr><td>TesterPresent</td><td><code>0x3E</code></td><td>保住当前会话，也帮 DoIP 的无活动定时器续命</td></tr>
+    </table>
+
+    <h2>不做什么</h2>
+    <ul>
+      <li>不规定 UDS 每个服务的参数布局。那是 ISO 14229。</li>
+      <li><code>0x8002</code> 不是 UDS 正响应。正响应仍是一条 <code>0x8001</code>。</li>
+      <li>地址是 DoIP 的逻辑地址，不是 CAN 标识符。</li>
+      <li>总图上 SecOC 和 E2E 不套在 DoIP 上。这条 TCP 要保护，用 <a href="tls.html">TLS</a> 或 <a href="ipsec.html">IPsec</a>。</li>
+    </ul>
+
+    <p class="keys">入口 <a href="https://www.iso.org/standard/74785.html" target="_blank" rel="noopener">ISO 13400</a> <a href="https://www.iso.org/standard/72439.html" target="_blank" rel="noopener">ISO 14229</a></p>
+    <nav class="sib">
+      <a href="index.html">总图</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <b>DoIP</b>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+  </div>
+</main>
+</body>
+</html>

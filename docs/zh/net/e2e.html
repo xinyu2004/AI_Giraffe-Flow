@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>E2E</title>
+  <link rel="stylesheet" href="detail.css">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="index.html">总图</a>
+    <p class="mark">AutoEth</p>
+    <h1>E2E</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <p class="lead">在应用层报文上加计数器、长度、数据标识和 CRC，用来发现丢失、重复、错序、插进别的报文，以及比特错误。</p>
+
+    <h2>能发现什么</h2>
+    <p>AUTOSAR 的端到端保护。没有密钥。发送方每发一条就把计数器加一，到头再从 0 开始，并按头和用户数据算出 CRC。接收方先对 CRC，再看计数器是不是跟上一条接得上。数据标识把“这一条数据”和网上别的数据分开，避免收成别人的报文还当成自己的。</p>
+    <table>
+      <tr><th>故障</th><th>靠什么看出来</th></tr>
+      <tr><td>重复</td><td>计数器没往前走</td></tr>
+      <tr><td>丢失、超时</td><td>计数器跳了，或迟迟没有新计数</td></tr>
+      <tr><td>错序</td><td>计数器不是期望的下一个</td></tr>
+      <tr><td>插进一条别的数据、地址错了</td><td>数据标识不对，CRC 也对不上</td></tr>
+      <tr><td>比特被改</td><td>CRC</td></tr>
+    </table>
+    <p>这认不出是谁签的。要认人，用 <a href="secoc.html">SecOC</a> 的 MAC。两样可以加在同一条 PDU 上，各算各的。</p>
+
+    <h2>轮廓</h2>
+    <p>轮廓决定字段多宽、放在哪。短报文常用 Profile 1：CRC-8，计数器只有 4 位，数据标识怎么参与 CRC 有几种模式（两个字节都算、按计数器奇偶交替、只用低字节）。以太网和 SOME/IP 上更常见的是 Profile 4，头固定 12 字节，能盖住变长数据。</p>
+
+    <h3>Profile 4 的头</h3>
+    <p>字段按大端放。规范把起点定成 0。整段头可以按配置的偏移嵌进被保护的数据，SOME/IP 里通常嵌在载荷里，不占用 SOME/IP 自己的头。</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>长度</b><span>16 位，偏移 0</span></div>
+      <div class="cell" style="background:var(--l7)"><b>计数器</b><span>16 位，偏移 2</span></div>
+      <div class="cell" style="background:var(--l7)"><b>数据标识</b><span>32 位，偏移 4</span></div>
+      <div class="cell" style="background:var(--l7)"><b>CRC</b><span>32 位，偏移 8</span></div>
+    </div>
+    <p>长度把 E2E 头和用户数据都算进去，所以变长载荷也能对上。CRC 用的多项式是 <code>0xF4ACFB13</code>（CRC 库里的 CRC32P4）。它和以太网 FCS、CAN、FlexRay 的 CRC 不是同一个多项式，不能拿帧校验的结果来顶。计算范围是除 CRC 自己以外的 E2E 头，加上用户数据。</p>
+    <p>还有更宽的轮廓，例如 64 位 CRC、32 位计数器，给特别长的数据。短轮廓和 Profile 4 不要混在同一条 PDU 的同一段上。两边选的轮廓、偏移和数据标识必须是同一份配置。</p>
+
+    <h2>接收侧怎么判</h2>
+    <p>单次检查和一段时间里的状态是两层。单次看这一条；状态机看最近一个窗口里好了几次、坏了几次，避免一条错误就把信号打成无效，也避免偶发正确就把坏通道当成好的。</p>
+    <table>
+      <tr><th>这一条</th><th>含义</th></tr>
+      <tr><td>OK</td><td>CRC 对，计数器就是期望的下一个</td></tr>
+      <tr><td>OK，丢了一些</td><td>CRC 对，计数器往前跳了，但还在允许的窗口里</td></tr>
+      <tr><td>重复</td><td>计数器没有前进</td></tr>
+      <tr><td>错序</td><td>计数器跳得超出窗口，或往回走</td></tr>
+      <tr><td>错误</td><td>CRC 不对，或长度、数据标识对不上</td></tr>
+      <tr><td>没有新数据</td><td>这次读的时候线上没有新报文</td></tr>
+    </table>
+    <p>状态机四个状态：还没有任何数据、初始、有效、无效。窗口里累计的正确次数和错误次数决定停在哪一态，阈值由配置给。应用读到的是这一态，不一定是刚才那一条的原始检查结果。</p>
+
+    <h2>在哪一层</h2>
+    <p>仍在应用层，加在 <a href="someip.html">SOME/IP</a> 的 PDU 上。总图上只有 SOME/IP 能勾。帧上不加首部。</p>
+
+    <h2>不做什么</h2>
+    <ul>
+      <li>没有密钥，认不出发送者。</li>
+      <li>不是 IEEE 802.1AS 里的端到端时延。那个 E2E 说的是对时路径。这页的 E2E 是报文上的计数器和 CRC。</li>
+      <li>不链 AI Fortress Auto。这里没有密钥，也没有算法章节。</li>
+      <li>不加在 DDS 上。DDS 的可靠性写在 QoS 里，确认是 RTPS 的 ACKNACK。DDS 没有这条 AUTOSAR 轮廓。</li>
+      <li>CRC 对上只说明比特没变、标识对得上。它不证明这条报文来自持有某把密钥的 ECU。</li>
+    </ul>
+
+    <p class="keys">入口 <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a></p>
+    <nav class="sib">
+      <a href="index.html">总图</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <b>E2E</b>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+  </div>
+</main>
+</body>
+</html>

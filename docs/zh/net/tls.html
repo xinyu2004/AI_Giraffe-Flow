@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TLS</title>
+  <link rel="stylesheet" href="detail.css">
+</head>
+<body>
+<main style="--accent:var(--l6)">
+  <header class="mast">
+    <a class="lang" href="index.html">总图</a>
+    <p class="mark">AutoEth</p>
+    <h1>TLS</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <p class="lead">记录层和握手建立在可靠字节流上，也就是 TCP。两端先谈妥是谁、用哪套密钥，再保护这条字节流。</p>
+
+    <h2>握手在谈什么</h2>
+    <p>握手要定三件事：协议版本、随后用来保护记录的参数，以及对面的身份。身份靠证书。诊断连接常见两边都有证书，诊断仪认车，车也认这台诊断仪。只验一边的做法也有，车上的诊断和刷写更常见的是互相验。</p>
+    <p>TLS 1.3（RFC 8446）一轮新的握手，报文按这个次序走。除了开头两条，后面的都已经包在加密的记录里：</p>
+    <table>
+      <tr><th>报文</th><th>谁发</th><th>谈成什么</th></tr>
+      <tr><td>ClientHello</td><td>客户端</td><td>支持的版本、密钥交换、以及自己的随机数</td></tr>
+      <tr><td>ServerHello</td><td>服务端</td><td>选定的参数和自己的随机数</td></tr>
+      <tr><td>EncryptedExtensions</td><td>服务端</td><td>其余扩展，已经加密</td></tr>
+      <tr><td>Certificate</td><td>要被验的一方</td><td>证书链。互相认证时两边都送</td></tr>
+      <tr><td>CertificateVerify</td><td>证书的持有者</td><td>用私钥对握手内容签名，证明拿着这张证书的私钥</td></tr>
+      <tr><td>Finished</td><td>两边</td><td>对整个握手做一次校验，对上之后应用数据才能走</td></tr>
+    </table>
+    <p>1.3 里各方都要实现的那套保护是 <code>TLS_AES_128_GCM_SHA256</code>。还有哪些套件可以出现，由部署决定。算法和密钥放在哪，看 AI Fortress Auto 的 HSM 说明，这页不写计算过程。</p>
+    <p>车上的诊断链路也有仍按 TLS 1.2 来做的。1.2 多一轮明文的密钥交换和 ChangeCipherSpec，总图不把两个版本分成两格。DoIP 遇到路由激活被拒绝、原因是要求加密时，改连 TCP 3496 再握一次，见 <a href="doip.html">DoIP</a>。</p>
+    <p>会话可以恢复，少走一轮证书。1.3 还有 0-RTT 的早数据，这段数据有被重放的可能。诊断和刷写不靠它来送第一条命令。</p>
+
+    <h3>警报</h3>
+    <p>握手或记录对不上时，送一条警报然后把连接拆掉。常见的有：</p>
+    <table>
+      <tr><th>警报</th><th>发生在什么时候</th></tr>
+      <tr><td>close_notify</td><td>一边正常说结束，不是出错</td></tr>
+      <tr><td>handshake_failure</td><td>版本或参数对不拢</td></tr>
+      <tr><td>certificate_unknown / bad_certificate</td><td>证书链不被信任，或证书本身有问题</td></tr>
+      <tr><td>bad_record_mac</td><td>记录的校验对不上，密文被改过或密钥不一致</td></tr>
+      <tr><td>unexpected_message</td><td>这个时候不该出现这种报文</td></tr>
+    </table>
+
+    <h2>在哪一层</h2>
+    <p>总图把记录层画在表示层，握手画在会话层，都夹在应用和 TCP 之间。帧上不另加以太网首部。SOME/IP、DDS、Zenoh 默认 UDP，要先把传输改成 TCP 才能勾。gPTP 没有字节流，加不上。</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>应用</b><span>DoIP · SOME/IP · …</span></div>
+      <div class="cell" style="background:var(--l6)"><b>记录层</b><span>表示层</span></div>
+      <div class="cell" style="background:var(--l5)"><b>握手</b><span>会话层</span></div>
+      <div class="cell" style="background:var(--l4)"><b>TCP</b><span>可靠字节流</span></div>
+    </div>
+    <p class="note">线上，握手报文装在记录里送，不是记录旁边再加一个以太网首部。两格是总图上的分层。</p>
+
+    <h2>报文</h2>
+    <p>记录头带类型、遗留的版本字段和长度，受保护的内容跟在后面。1.3 里真正的内容类型放在加密之后的明文尾部，头上的类型常常只写成“应用数据”，用来不把握手和警报暴露在外面。</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l6)"><b>类型</b><span>记录头</span></div>
+      <div class="cell" style="background:var(--l6)"><b>版本</b><span>记录头里的遗留字段</span></div>
+      <div class="cell" style="background:var(--l6)"><b>长度</b><span>后面有多长</span></div>
+      <div class="cell" style="background:var(--l6)"><b>受保护的内容</b><span>握手、警报或应用数据</span></div>
+    </div>
+    <p>应用数据是一整条字节流。DoIP 的头和 UDS 都在这流里面，靠 DoIP 自己的长度字段切开，TLS 不认识服务号。SOME/IP 若走 TCP 再套 TLS，同样靠 SOME/IP 的长度字段切开。</p>
+
+    <h2>不做什么</h2>
+    <ul>
+      <li>不保护 UDP。没有可靠字节流，就套不上这里画的 TLS。DTLS 走数据报，总图不画。</li>
+      <li>不是逐跳的。交换机看不见里面，保护停在这条 TCP 的两端。逐跳是 <a href="macsec.html">MACsec</a>。</li>
+      <li>不是 DDS-Security。DDS 的保护做在 RTPS 上，不靠这条字节流。</li>
+      <li>不是 <a href="ipsec.html">IPsec</a>。IPsec 加在 IP 和传输头之间，UDP 和 TCP 都能用。</li>
+      <li>不是 <a href="secoc.html">SecOC</a>。SecOC 给每一条 PDU 单独做 MAC。TLS 保护的是整条字节流，不给某一条 SOME/IP 单独签名。</li>
+    </ul>
+
+    <p class="keys">入口 <a href="https://www.rfc-editor.org/rfc/rfc8446" target="_blank" rel="noopener">RFC 8446</a> <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md" target="_blank" rel="noopener">算法和密钥</a></p>
+    <nav class="sib">
+      <a href="index.html">总图</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <b>TLS</b>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+  </div>
+</main>
+</body>
+</html>

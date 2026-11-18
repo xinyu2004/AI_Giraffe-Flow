@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Giraffe Flow</title>
+  <style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #fff;
+  color: #1f2328;
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", Helvetica, Arial, sans-serif;
+}
+.markdown-body { max-width: 980px; margin: 0 auto; padding: 32px 32px 80px; }
+h1, h2 { padding-bottom: .3em; border-bottom: 1px solid #d0d7de; }
+h1 { font-size: 2em; font-weight: 600; margin: 0 0 16px; }
+h2 { font-size: 1.5em; font-weight: 600; margin: 24px 0 16px; }
+h3 { font-size: 1.25em; font-weight: 600; margin: 24px 0 16px; }
+h4 { font-size: 1em; margin: 24px 0 16px; }
+p, ul, ol, table, pre, blockquote { margin: 0 0 16px; }
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+table { border-collapse: collapse; display: block; width: max-content; max-width: 100%; overflow: auto; }
+th, td { border: 1px solid #d0d7de; padding: 6px 13px; }
+tr:nth-child(2n) { background: #f6f8fa; }
+code, tt { background: #eff1f3; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+pre { background: #f6f8fa; padding: 16px; overflow: auto; border-radius: 6px; line-height: 1.45; }
+pre code { background: none; padding: 0; font-size: 85%; }
+img { max-width: 100%; }
+hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
+.band {
+  background: #e4eef6;
+  border-radius: 12px;
+  padding: 8px 20px 16px;
+  margin: 16px 0 24px;
+}
+.band p { margin: 12px 0 0; }
+.band p:first-child { margin-top: 8px; }
+.band strong { font-size: 16px; }
+</style>
+</head>
+<body>
+<article class="markdown-body">
+<h1>AI Giraffe Flow</h1>
+<p><strong>可裁剪的车规 SOA 中间件 + 工具链。</strong></p>
+<p>为什么做：板上要的是可裁剪的 SOA，先在台架上配、跑、看见、压住，再把 <strong>同一套 EM</strong> 上车。做好之后：OEM 合同能被工具分解进运行时，不用手写接线；杀掉一个进程，控车不断；真环上的一拍时延量得着；同一条链灌得回去；<strong>过了才 CD</strong>。真机是 last mile。</p>
+<p>产品是可裁剪的 <code>gf_ara::*</code> 运行时（<strong>ARM Linux</strong> 优先；OSAL 预留 MIPS / RISC-V）和围着它的三件工具：<strong>gf-config</strong> 写要跑什么、谁连谁；<strong>Giraffe 模块</strong> 是板上 SOA（EM 拉起、通信、PHM、隔离）；<strong>GMT</strong> 回答「谁在何时发了什么」，并在同一条链上做回灌。仓内感知和规划是 <strong>闭环载荷，不是 ADAS 产品</strong>——用来把上面这些特点跑实。OEM 相机和网络权重在仓外。</p>
+<table>
+<thead>
+<tr>
+<th>特点</th>
+<th>图什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>健壮 / 隔离</strong></td>
+<td>故障关在一个进程，其余 <strong>hold-last</strong>。一套 EM 管拓扑：拉起、PHM、只再拉起那一个，不整栈重启。台架和板同一个入口。</td>
+</tr>
+<tr>
+<td><strong>时延</strong></td>
+<td>高吞吐、低时延；<strong>overlay-latest</strong>，互不卡住。</td>
+</tr>
+<tr>
+<td><strong>看得见</strong></td>
+<td>活链在明处：能量、能看，回灌也还是同一幅画。</td>
+</tr>
+<tr>
+<td><strong>回灌 / 回放</strong></td>
+<td>同一套接线、同一套类型，把场景灌回这条链。</td>
+</tr>
+<tr>
+<td><strong>CI/CD with FuSa</strong></td>
+<td>compose → generate → SIL，FuSa 走在 CI 里。<strong>过了才 CD。</strong></td>
+</tr>
+<tr>
+<td><strong>OEM 分解</strong></td>
+<td>工具把 OEM 合同拆成模块。不手写接线，改动可追溯。</td>
+</tr>
+</tbody>
+</table>
+<p>下面两段视频就是这条环在台架上的样子——<strong>AFC</strong>（单相机）和 <strong>ADC</strong>（环视）。车是用来把人留下的；要证明的是车后面的栈。</p>
+<p><strong>English:</strong> <a href="index.html">English</a></p>
+<p align="center">
+  Single camera (AFC) <a href="gallery/videos/afc.mp4">mp4</a>
+</p>
+
+<p align="center">
+  <img src="gallery/videos/afc_preview.gif" alt="AFC 闭环演示（预览）" />
+</p>
+
+<p align="center">
+  Multi cameras (ADC) <a href="gallery/videos/adc.mp4">mp4</a>
+</p>
+
+<p align="center">
+  <img src="gallery/videos/adc_preview.gif" alt="ADC 闭环演示（预览）" />
+</p>
+
+<hr />
+<h2>总览</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>主线</th>
+<th>角色</th>
+<th>深入</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1</strong></td>
+<td><strong>gf-config</strong></td>
+<td>工具链 · 配置侧</td>
+<td><a href="tools/gf-config/README_zh.md">tools/gf-config</a> · <a href="docs/zh/architecture/sor-authoring.md">SOR</a></td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td><strong>Giraffe 模块</strong></td>
+<td><strong>产品主体</strong> · SOA 运行时、FuSa 证据</td>
+<td><a href="middleware/README.md">middleware</a> · <a href="fusa/README.md">fusa/</a> · <a href="docs/zh/architecture/DESIGN.md">设计</a></td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td><strong>GMT</strong></td>
+<td>工具链 · 观测 / 回灌 / Foxglove</td>
+<td><a href="tools/gmt/README_zh.md">tools/gmt</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">可观测演示</a></td>
+</tr>
+</tbody>
+</table>
+<p><img alt="架构：CARLA → Giraffe 模块 → Foxglove · GMT" src="gallery/Giraffe_Flow/Giraffe_Flow.gif" /></p>
+<hr />
+<div class="band">
+<p id="autoeth"><strong><a href="docs/zh/net/index.html">AutoEth</a>：</strong></p>
+<p>　　车载以太网从 CAN 的信号表讲到以太网骨干。现在的新能源车上，这条骨干跑 SOME/IP 服务、DDS 数据分发、DoIP 诊断和刷写，并用 gPTP 给 TSN 对时。点一个协议，再勾选特性，就能看到组出来的包。<a href="index.html#autoeth">English</a>。加密和密钥在 <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>。</p>
+<p id="fusa"><strong><a href="fusa/README.md">FuSa</a>：</strong></p>
+<p>　　待添加。</p>
+</div>
+
+<hr />
+<h3>1. gf-config（配置侧工具链）</h3>
+<p>定 <strong>要什么能力、谁连谁、板端裁哪些模块</strong>，不实现算法。两页写回三层资产：</p>
+<table>
+<thead>
+<tr>
+<th>页</th>
+<th>写什么</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1 · 信号与应用</strong></td>
+<td>薄 SKU（<code>req.yaml</code>）+ 信号图画布（<code>wiring.yaml</code>）</td>
+<td>deployments / dataflows / live_tap</td>
+</tr>
+<tr>
+<td><strong>2 · 平台运行时</strong></td>
+<td><code>runtime_modules</code> + <code>cfg/gf_ara_cfg/*</code>（exec · <strong>EM 启动表</strong> · PHM · Collector · diag · log · ucm；<strong>per/tsync</strong> 可勾选裁剪）</td>
+<td><code>gf_ara_cfg_manifest</code> → CMake 裁剪 / EM 拓扑</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Verify / Generate</strong> → SOR + Proxy/Skeleton + lineage（含 <code>platform_em_launch</code> 等门禁）</li>
+</ul>
+<p><img alt="gf-config — SOA 信号图" src="gallery/gf-config.png" /></p>
+<pre><code class="language-bash">gf-config projects/afc/giraffe.yaml
+</code></pre>
+<p>细节：<a href="tools/gf-config/README_zh.md">tools/gf-config/README_zh.md</a> · <a href="docs/zh/operations/WORKFLOW.md">WORKFLOW</a></p>
+<hr />
+<h3>2. Giraffe 模块（主体）</h3>
+<p>这里是板上和 SIL 里真正跑着的 <strong>中间件</strong>。SKU 里的 FCM、Octave 规划 → Trajectory 是 <strong>载荷</strong>：给 GMT、Foxglove、回灌、PHM、CI 一条诚实的 pub/sub 环，用来验证平台，而不是宣称本仓是量产 ADAS。</p>
+<p><img alt="Giraffe Modules：板内中间件如何起来、如何协作" src="gallery/Giraffe_Modules/Giraffe_Modules.gif" /></p>
+<h4>2.1 分层</h4>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>目录</th>
+<th>做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>API / 运行时</strong></td>
+<td><code>middleware/</code></td>
+<td><code>gf_ara::*</code> 对外；<code>gf::*</code> 对内；按 SKU <code>runtime_modules</code> 裁剪</td>
+</tr>
+<tr>
+<td><strong>传输插件</strong></td>
+<td><code>middleware/bindings/</code></td>
+<td>iceoryx（机内）、SOME/IP、DDS、cross_domain_ipc（MCU）</td>
+</tr>
+<tr>
+<td><strong>执行与健康</strong></td>
+<td>exec（<strong>EM daemon</strong>）/ phm / sm / collector</td>
+<td>拓扑拉起、relaunch、心跳、FG、事件收集</td>
+</tr>
+<tr>
+<td><strong>可移植</strong></td>
+<td><code>osal/</code> · <code>hal/</code></td>
+<td>时钟 / 线程 / <strong>进程 Spawn</strong>；主目标 ARM Linux</td>
+</tr>
+<tr>
+<td><strong>载荷 App</strong></td>
+<td><code>projects/&lt;sku&gt;/apps/</code></td>
+<td>Gateway / FCM / 规划 — 用来 <strong>压</strong> 平台（<code>.m</code> 金源 → C 1:1）</td>
+</tr>
+<tr>
+<td><strong>上位机场景</strong></td>
+<td><code>carla_scenarios/</code></td>
+<td>CARLA Client A：布景 + 仪表；另一路压力源，不是控制器</td>
+</tr>
+<tr>
+<td><strong>集成工程</strong></td>
+<td><code>projects/</code></td>
+<td>OEM DBC / wiring / hpp / SIL·HIL / <strong>CI 脚本</strong></td>
+</tr>
+<tr>
+<td><strong>FuSa 证据</strong></td>
+<td><code>fusa/</code></td>
+<td>cases / metrics / Safety Case 骨架（<strong>非证书</strong>）</td>
+</tr>
+</tbody>
+</table>
+<p>公开约定：<strong>业务只依赖 semantic 服务名</strong>；OEM 差异收在 adapter/gateway。详见 <a href="docs/zh/architecture/DESIGN.md">DESIGN</a>。</p>
+<h4>2.2 中间件包（按需裁剪）</h4>
+<p>与架构 GIF 中 Giraffe SoC 芯片对齐（<code>com</code> · <code>EM</code>∈exec · <code>exec</code> · <code>phm</code> · <code>sm</code> · <code>collector</code> · <code>OSAL</code> · <code>diag</code> · <code>ucm</code> · <code>log</code> · <code>per</code> · <code>tsync</code>）。</p>
+<table>
+<thead>
+<tr>
+<th>包</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="middleware/com/">com</a></td>
+<td>统一通信抽象（Proxy / Skeleton）</td>
+</tr>
+<tr>
+<td><a href="middleware/bindings/iceoryx/">bindings/iceoryx</a> 等</td>
+<td>传输后端</td>
+</tr>
+<tr>
+<td><a href="middleware/exec/">exec</a></td>
+<td>ExecutionClient + <strong>EmDaemon</strong>（OSAL Spawn；GIF 中 <code>EM</code>）</td>
+</tr>
+<tr>
+<td><a href="middleware/phm/">phm</a> / <a href="middleware/sm/">sm</a> / <a href="middleware/collector/">collector</a></td>
+<td>健康 / FG / 事件收集</td>
+</tr>
+<tr>
+<td><a href="middleware/osal/">osal</a></td>
+<td>OS 抽象（含 process；GIF 中 <code>OSAL</code>）</td>
+</tr>
+<tr>
+<td><a href="middleware/diag/">diag</a> / <a href="middleware/ucm/">ucm</a></td>
+<td>DoIP 会话 / OTA 编排（SIL）</td>
+</tr>
+<tr>
+<td><a href="middleware/log/">log</a></td>
+<td>日志 lite</td>
+</tr>
+<tr>
+<td><a href="middleware/per/">per</a> / <a href="middleware/tsync/">tsync</a></td>
+<td>持久化 KV stub / 时间同步骨架（可裁剪）</td>
+</tr>
+<tr>
+<td><a href="middleware/trace/">trace</a></td>
+<td>时序 → VCD / GMT（偏 debug-path）</td>
+</tr>
+</tbody>
+</table>
+<p>总览：<a href="middleware/README.md">middleware/README.md</a></p>
+<h4>2.3 闭环载荷（示例 SKU）</h4>
+<p>两套 SKU 都用来 <strong>验证</strong> com / EM / 可观测性，不是交付感知或规划产品。规划金源：<a href="octave_planning/README.md">octave_planning/</a>。</p>
+<table>
+<thead>
+<tr>
+<th>SKU</th>
+<th>相机</th>
+<th>载荷链</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="projects/afc/">AFC</a></td>
+<td>单前视</td>
+<td>gateway → <code>perception.fcm</code> → <code>planning.driving</code></td>
+</tr>
+<tr>
+<td><a href="projects/adc/">ADC</a></td>
+<td>环视</td>
+<td>gateway → surround / fcm / rcm → <code>planning.driving_plus</code> · parking · <code>mode.drive_park</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-text">车态源（二选一）
+  · gateway（continuous / 无回灌）  或  · inject（playhead，替 gateway）
+        │
+        ▼ EgoMotion / Perception_In  （ADC 另有 surround / 后视）
+        ▼
+   perception.* → Out / Near / World     ← 载荷（不是相机网络）
+        │
+        ▼
+   planning.* → Trajectory               ← 载荷（.m 金源，C 1:1）
+        │
+        ▼
+   gmt_board：tap NDJSON · gf_foxglove_ws :8765
+        │
+        └─ 时延 / 隔离 / 「谁何时发了什么」 / 回灌复现
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>进程</th>
+<th>角色</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>adapter.vehicle_can_gateway</code></td>
+<td>CAN/仿真 → EgoMotion、Perception_In…（回灌时关闭）</td>
+</tr>
+<tr>
+<td><code>perception.fcm</code> · <code>surround</code> · <code>rcm</code></td>
+<td>载荷感知（ADC 加环视与后视）</td>
+</tr>
+<tr>
+<td><code>planning.driving</code> / <code>driving_plus</code></td>
+<td>Ego + 感知 → Trajectory（载荷）</td>
+</tr>
+<tr>
+<td><code>gf_iox_obs_tap</code></td>
+<td>白名单服务 → NDJSON（GMT 录制）</td>
+</tr>
+<tr>
+<td><code>gf_foxglove_ws</code></td>
+<td>iceoryx → Foxglove Studio + BEV（<code>tools/gmt_board</code>）</td>
+</tr>
+<tr>
+<td><code>gf_iox_obs_inject</code></td>
+<td>playhead / continuous 回灌 Ego</td>
+</tr>
+</tbody>
+</table>
+<p>SKU 载荷在 <code>projects/&lt;sku&gt;/apps/</code>。iceoryx 烟测：<code>middleware/bindings/iceoryx/testcases/</code>。</p>
+<h4>2.4 编译与运行</h4>
+<p><a href="projects/afc/">AFC</a> 与 <a href="projects/adc/">ADC</a> 同一套脚本。SIL 用环境变量覆盖帧源；板上 freeze 默认仍是 <code>isp</code>。上位机 CARLA：<a href="carla_scenarios/">carla_scenarios/</a>。CI：<a href="devops/README.md">devops/</a>。</p>
+<p><code>GF_FRAME_SOURCE</code> = <code>carla</code> · <code>replay</code> · <code>colorbar</code> · <code>isp</code> · <code>none</code></p>
+<pre><code class="language-bash">bash projects/adc/scripts/compile_sil.sh
+GF_FRAME_SOURCE=carla bash projects/adc/scripts/run_sil.sh
+
+# 板上同一套 EM（stage 之后）：
+#   ./projects/adc/build-sil/runtime/bin/giraffe_launch
+</code></pre>
+<p>AFC 把路径换成 <code>projects/afc/scripts/</code> 即可。回灌 / 回放在 GMT，不在这里。</p>
+<h4>2.5 与工具链的边界</h4>
+<table>
+<thead>
+<tr>
+<th>Giraffe 模块负责</th>
+<th>不负责（交给工具）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>进程内算法与 I/O、iceoryx 上真发真收</td>
+<td>画 wiring / 裁 SKU → gf-config</td>
+</tr>
+<tr>
+<td>SIL：systemd/init → EM → daemons + App；tap/inject/Foxglove/DoIP 属 <strong>GMT_depend</strong>（非 EM）</td>
+<td>Studio / Tag / MCAP；Logging 走 DLT</td>
+</tr>
+<tr>
+<td>semantic 契约在板上成立</td>
+<td>离线改 DBC / lineage 会议替代 → compose</td>
+</tr>
+<tr>
+<td>FuSa 证据（<code>fusa/</code>）</td>
+<td>GMT 仍属 <strong>debug-path</strong>（不作板级 ASIL 证据）</td>
+</tr>
+</tbody>
+</table>
+<h4>2.6 FuSa（属于 Giraffe 模块）</h4>
+<p>通向 <strong>完整 Safety Case</strong> 的证据入口：L1/L2/L3、隔离、参考延时、Safety Case 骨架。入口：<a href="fusa/README.md">fusa/</a>。</p>
+<pre><code class="language-bash">bash fusa/scripts/run_cases.sh
+GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
+bash fusa/scripts/measure_latency.sh   # 可选：延时快照
+</code></pre>
+<hr />
+<h3>3. GMT（观测侧工具链）</h3>
+<p>多进程 SIL 联调时，光看终端往往对不齐「谁在何时发了什么」。GMT 把 tap NDJSON 接到本机时间轴：<strong>scrub / 倍速</strong>、<strong>playhead 回灌</strong>、<strong>Tag → MCAP</strong>。<strong>Foxglove 直播</strong>是 C <code>gf_foxglove_ws</code>（<strong>:8765</strong>，<code>tools/gmt_board</code>）；Python <code>GMT bridge foxglove</code> 只做 JSONL 回放。<code>run_sil</code> <strong>不起</strong> GMT Live :8766。</p>
+<p><img alt="GMT — 变量轨 scrub / Live + Inject" src="gallery/GMT.png" /></p>
+<table>
+<thead>
+<tr>
+<th>端口</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>8765</strong></td>
+<td>Foxglove Studio（<code>gf_foxglove_ws</code>；BEV + 模块 I/O）</td>
+</tr>
+<tr>
+<td><strong>8766</strong></td>
+<td>GMT GUI live（可选；<code>run_sil</code> 不启动）</td>
+</tr>
+<tr>
+<td><strong>8767</strong></td>
+<td>playhead 回灌</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">pip install -e tools/gmt -e 'tools/gmt[gui]'
+GMT gui --project projects/afc \
+  --session projects/afc/scenarios/overtake_acc_aeb.jsonl
+</code></pre>
+<p>细节：<a href="tools/gmt/README_zh.md">tools/gmt/README_zh.md</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">OBSERVABILITY_DEMO</a></p>
+<hr />
+<h2>仓库地图</h2>
+<table>
+<thead>
+<tr>
+<th>目录</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="middleware/">middleware/</a></td>
+<td><strong>Giraffe 运行时（主体）</strong></td>
+</tr>
+<tr>
+<td><a href="octave_planning/">octave_planning/</a></td>
+<td>规划 <code>.m</code> 金源（<strong>载荷</strong>，不是产品）</td>
+</tr>
+<tr>
+<td><a href="projects/">projects/</a></td>
+<td>OEM SKU：apps、wiring、SIL·HIL、CI</td>
+</tr>
+<tr>
+<td><a href="carla_scenarios/">carla_scenarios/</a></td>
+<td>上位机 CARLA 布景 + 仪表</td>
+</tr>
+<tr>
+<td><a href="projects/afc/apps/">projects/afc/apps/</a></td>
+<td>AFC 载荷（gateway / FCM / 规划）</td>
+</tr>
+<tr>
+<td><a href="projects/adc/apps/">projects/adc/apps/</a></td>
+<td>ADC 载荷（surround / driving_plus / parking）</td>
+</tr>
+<tr>
+<td><a href="fusa/">fusa/</a></td>
+<td>FuSa 证据</td>
+</tr>
+<tr>
+<td><a href="tools/gf-config/">tools/gf-config/</a></td>
+<td>gf-config</td>
+</tr>
+<tr>
+<td><a href="tools/gf-codegen/">tools/gf-codegen/</a></td>
+<td>gf-codegen</td>
+</tr>
+<tr>
+<td><a href="tools/gf-octavecoder/">tools/gf-octavecoder/</a></td>
+<td><code>.m</code> → C 1:1</td>
+</tr>
+<tr>
+<td><a href="tools/gmt/">tools/gmt/</a></td>
+<td>GMT 主机</td>
+</tr>
+<tr>
+<td><a href="tools/gmt_board/">tools/gmt_board/</a></td>
+<td>tap / inject / <code>gf_foxglove_ws</code></td>
+</tr>
+<tr>
+<td><a href="devops/">devops/</a></td>
+<td>台架 CI → CD last mile（真机）</td>
+</tr>
+<tr>
+<td><a href="docs/zh/README.md">docs/zh/</a></td>
+<td>文档索引</td>
+</tr>
+</tbody>
+</table>
+<p><a href="STRUCTURE.md">STRUCTURE.md</a> · <a href="docs/zh/operations/ROADMAP.md">ROADMAP</a></p>
+<h2>许可证</h2>
+<p><a href="LICENSE">LICENSE</a></p>
+</article>
+</body>
+</html>
