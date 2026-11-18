@@ -5,45 +5,86 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Giraffe Flow</title>
   <style>
+
 :root { color-scheme: light; }
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: #fff;
-  color: #1f2328;
-  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", Helvetica, Arial, sans-serif;
+  background: #f4f2ec;
+  color: #1b1b1b;
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", Helvetica, Arial, sans-serif;
 }
-.markdown-body { max-width: 980px; margin: 0 auto; padding: 32px 32px 80px; }
-h1, h2 { padding-bottom: .3em; border-bottom: 1px solid #d0d7de; }
-h1 { font-size: 2em; font-weight: 600; margin: 0 0 16px; }
-h2 { font-size: 1.5em; font-weight: 600; margin: 24px 0 16px; }
-h3 { font-size: 1.25em; font-weight: 600; margin: 24px 0 16px; }
-h4 { font-size: 1em; margin: 24px 0 16px; }
-p, ul, ol, table, pre, blockquote { margin: 0 0 16px; }
+.markdown-body { max-width: 980px; margin: 0 auto; padding: 36px 28px 80px; }
+h1 { margin: 0; font-size: 2em; font-weight: 600; letter-spacing: -0.02em; }
+h2 { font-size: 1.35em; font-weight: 600; margin: 28px 0 12px; }
+h3 { font-size: 1.15em; font-weight: 600; margin: 0 0 10px; }
+h4 { font-size: 1em; font-weight: 600; margin: 0 0 8px; }
+p, ul, ol, table, pre { margin: 0 0 14px; }
 a { color: #0969da; text-decoration: none; }
 a:hover { text-decoration: underline; }
-table { border-collapse: collapse; display: block; width: max-content; max-width: 100%; overflow: auto; }
-th, td { border: 1px solid #d0d7de; padding: 6px 13px; }
-tr:nth-child(2n) { background: #f6f8fa; }
 code, tt { background: #eff1f3; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
-pre { background: #f6f8fa; padding: 16px; overflow: auto; border-radius: 6px; line-height: 1.45; }
-pre code { background: none; padding: 0; font-size: 85%; }
+pre { background: #f6f8fa; padding: 16px; overflow: auto; border-radius: 12px; line-height: 1.45; }
+pre code { background: none; padding: 0; }
 img { max-width: 100%; }
-hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
-.band {
-  background: #e4eef6;
-  border-radius: 12px;
-  padding: 8px 20px 16px;
-  margin: 16px 0 24px;
+.top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 16px; }
+.lang { font-weight: 600; }
+.sheet {
+  background: #fff;
+  border: 1px solid #d9d3c8;
+  border-radius: 16px;
+  padding: 18px 22px 8px;
+  margin: 0 0 28px;
+  box-shadow: 0 8px 18px rgba(36, 48, 56, .07);
 }
-.band p { margin: 12px 0 0; }
-.band p:first-child { margin-top: 8px; }
-.band strong { font-size: 16px; }
+.sheet h4 { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(27, 27, 27, .12); }
+.num { font-weight: 700; margin-right: .4em; font-size: 1.25em; }
+.cfg .num { color: #c2410c; }
+.mod .num { color: #1d4ed8; }
+.gmt .num { color: #0f766e; }
+.sheet.cfg, .pillars article.cfg { background: #ffe3c4; border-color: #e7b27a; }
+.sheet.mod, .pillars article.mod { background: #d9e4ff; border-color: #8eabf5; }
+.sheet.gmt, .pillars article.gmt { background: #d2f3ea; border-color: #7ec9ba; }
+.pillars, .pair { display: grid; gap: 16px; margin: 0 0 28px; }
+.pillars { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pair { grid-template-columns: 1.45fr .75fr; }
+.pillars article {
+  border: 1px solid #d9d3c8;
+  border-radius: 12px;
+  padding: 14px 16px 16px;
+  box-shadow: 0 8px 18px rgba(36, 48, 56, .07);
+}
+.pillars .role { margin: 0 0 8px; }
+.pillars .dig { margin: 0; font-size: 14px; }
+.pair article { border-radius: 12px; padding: 16px 18px 18px; box-shadow: 0 8px 18px rgba(36, 48, 56, .07); }
+.auto { background: #d9e8f6; border: 1px solid #b9d0e6; }
+.fusa { background: #f3e6d4; border: 1px solid #e2cdb4; }
+.pair p { margin: 0; }
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #d9d3c8;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  display: block;
+}
+th, td { border: 0; border-bottom: 1px solid #e4dfd6; padding: 8px 12px; text-align: left; vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { background: #e7e4de; color: #1b1b1b; font-weight: 600; }
+@media (max-width: 720px) {
+  .markdown-body { padding: 24px 16px 64px; }
+  .pillars, .pair { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
 <article class="markdown-body">
+<div class="top">
 <h1>AI Giraffe Flow</h1>
+<a class="lang" href="zh.html">中文</a>
+</div>
+<section class="sheet front">
 <p><strong>Lightweight SOA middleware + toolchain.</strong></p>
 <p>Why this repo: so a trimmable on-board SOA is authored, run, seen, and stressed on the bench — then the <strong>same EM</strong> goes to the board. When it is done you can decompose an OEM contract into a running runtime without hand-written plumbing, kill a process and keep control, measure a real tick, put the same chain back, and <strong>CD only what passed</strong>. Hardware is the last mile.</p>
 <p>The product is a trimmable <code>gf_ara::*</code> runtime (<strong>ARM Linux</strong> first; OSAL reserved for MIPS / RISC-V) and three tools around it: <strong>gf-config</strong> authors what runs and who talks to whom; <strong>Giraffe modules</strong> are the on-target SOA (EM launch, com, PHM, isolation); <strong>GMT</strong> answers <em>who published what, when</em> and injects the same chain. In-tree perception and planning are a <strong>closed-loop workload</strong>, not an ADAS product — they exist to prove the traits above. OEM cameras and NN weights stay out of tree.</p>
@@ -82,7 +123,6 @@ hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
 </tbody>
 </table>
 <p>The clips below are that loop on the bench — <strong>AFC</strong> (single camera) and <strong>ADC</strong> (surround). The car is the hook; the claim is the stack behind it.</p>
-<p><strong>中文:</strong> <a href="zh.html">中文</a></p>
 <p align="center">
   Single camera (AFC) <a href="gallery/videos/afc.mp4">mp4</a>
 </p>
@@ -98,50 +138,40 @@ hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
 <p align="center">
   <img src="gallery/videos/adc_preview.gif" alt="ADC closed-loop demo (preview)" />
 </p>
-
-<hr />
+</section>
 <h2>Overview</h2>
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Pillar</th>
-<th>Role</th>
-<th>Dig in</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>1</strong></td>
-<td><strong>gf-config</strong></td>
-<td>Toolchain · configure</td>
-<td><a href="tools/gf-config/README.md">tools/gf-config</a> · <a href="docs/en/architecture/sor-authoring.md">SOR</a></td>
-</tr>
-<tr>
-<td><strong>2</strong></td>
-<td><strong>Giraffe modules</strong></td>
-<td><strong>Product core</strong> · SOA runtime, FuSa evidence</td>
-<td><a href="middleware/README.md">middleware</a> · <a href="fusa/README.md">fusa/</a> · <a href="docs/en/architecture/DESIGN.md">Design</a></td>
-</tr>
-<tr>
-<td><strong>3</strong></td>
-<td><strong>GMT</strong></td>
-<td>Toolchain · observe / inject / Foxglove</td>
-<td><a href="tools/gmt/README.md">tools/gmt</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">Observability demo</a></td>
-</tr>
-</tbody>
-</table>
-<p><img alt="Architecture: CARLA → Giraffe modules → Foxglove · GMT" src="gallery/Giraffe_Flow/Giraffe_Flow.en.gif" /></p>
-<hr />
-<div class="band">
-<p id="autoeth"><strong><a href="docs/en/net/index.html">AutoEth</a>:</strong></p>
-<p>　　Automotive Ethernet follows the path from CAN signal lists to an Ethernet backbone. On current new-energy vehicles that backbone carries SOME/IP for services, DDS for data distribution, DoIP for diagnostics and flashing, and gPTP so TSN can share one clock. Pick a protocol, then the features, and the packet is built from them. Ciphers and keys are in <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>.</p>
-<p id="fusa"><strong><a href="fusa/README.md">FuSa</a>:</strong></p>
-<p>　　To be added.</p>
+<div class="pillars">
+<article class="cfg">
+<h3><span class="num">1</span>gf-config</h3>
+<p class="role">Toolchain · configure</p>
+<p class="dig"><a href="tools/gf-config/README.md">tools/gf-config</a> · <a href="docs/en/architecture/sor-authoring.md">SOR</a></p>
+</article>
+<article class="mod">
+<h3><span class="num">2</span>Giraffe modules</h3>
+<p class="role"><strong>Product core</strong> · SOA runtime, FuSa evidence</p>
+<p class="dig"><a href="middleware/README.md">middleware</a> · <a href="fusa/README.md">fusa/</a> · <a href="docs/en/architecture/DESIGN.md">Design</a></p>
+</article>
+<article class="gmt">
+<h3><span class="num">3</span>GMT</h3>
+<p class="role">Toolchain · observe / inject / Foxglove</p>
+<p class="dig"><a href="tools/gmt/README.md">tools/gmt</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">Observability demo</a></p>
+</article>
 </div>
-
-<hr />
-<h3>1. gf-config (configure toolchain)</h3>
+<section class="sheet arch">
+<p><img alt="Architecture: CARLA → Giraffe modules → Foxglove · GMT" src="gallery/Giraffe_Flow/Giraffe_Flow.en.gif" /></p>
+</section>
+<div class="pair">
+<article class="auto" id="autoeth">
+<h3><a href="docs/en/net/index.html">AutoEth</a>:</h3>
+<p>Automotive Ethernet follows the path from CAN signal lists to an Ethernet backbone. On current new-energy vehicles that backbone carries SOME/IP for services, DDS for data distribution, DoIP for diagnostics and flashing, and gPTP so TSN can share one clock. Pick a protocol, then the features, and the packet is built from them. Ciphers and keys are in <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>.</p>
+</article>
+<article class="fusa" id="fusa">
+<h3><a href="fusa/README.md">FuSa</a>:</h3>
+<p>To be added.</p>
+</article>
+</div>
+<section class="sheet cfg">
+<h3><span class="num">1</span> gf-config (configure toolchain)</h3>
 <p>Defines <strong>what</strong>, <strong>who talks to whom</strong>, and <strong>which board modules to trim</strong> — not algorithms. Two tabs write three asset layers:</p>
 <table>
 <thead>
@@ -171,8 +201,9 @@ hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
 <pre><code class="language-bash">gf-config projects/afc/giraffe.yaml
 </code></pre>
 <p>Details: <a href="tools/gf-config/README.md">tools/gf-config/README.md</a> · <a href="docs/en/operations/WORKFLOW.md">WORKFLOW</a></p>
-<hr />
-<h3>2. Giraffe modules (core)</h3>
+</section>
+<section class="sheet mod">
+<h3><span class="num">2</span> Giraffe modules (core)</h3>
 <p>What actually runs on the board and in SIL is the <strong>middleware</strong>. SKU apps (FCM, Octave planning → Trajectory) are the <strong>exercise load</strong>: a real pub/sub loop so GMT, Foxglove, inject, PHM, and CI have something honest to measure — not a claim that this repo is a production ADAS stack.</p>
 <p><img alt="Giraffe Modules: on-board middleware boot &amp; collaboration" src="gallery/Giraffe_Modules/Giraffe_Modules.en.gif" /></p>
 <h4>2.1 Layers</h4>
@@ -393,8 +424,9 @@ GF_FRAME_SOURCE=carla bash projects/adc/scripts/run_sil.sh
 GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
 bash fusa/scripts/measure_latency.sh   # optional timing snapshot
 </code></pre>
-<hr />
-<h3>3. GMT (observe toolchain)</h3>
+</section>
+<section class="sheet gmt">
+<h3><span class="num">3</span> GMT (observe toolchain)</h3>
 <p>In multi-process SIL, terminal logs rarely answer “who published what, when.” GMT attaches the tap NDJSON to a host timeline: <strong>scrub / speed</strong>, <strong>playhead inject</strong>, <strong>Tag → MCAP</strong>. <strong>Foxglove live</strong> is C <code>gf_foxglove_ws</code> on <strong>:8765</strong> (<code>tools/gmt_board</code>); Python <code>GMT bridge foxglove</code> is JSONL replay only. <code>run_sil</code> does <strong>not</strong> start GMT Live :8766.</p>
 <p><img alt="GMT — Vars scrub / Live + Inject" src="gallery/GMT.png" /></p>
 <table>
@@ -424,7 +456,8 @@ GMT gui --project projects/afc \
   --session projects/afc/scenarios/overtake_acc_aeb.jsonl
 </code></pre>
 <p>Details: <a href="tools/gmt/README.md">tools/gmt/README.md</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">OBSERVABILITY_DEMO</a></p>
-<hr />
+</section>
+<section class="sheet map">
 <h2>Repo map</h2>
 <table>
 <thead>
@@ -493,8 +526,11 @@ GMT gui --project projects/afc \
 </tbody>
 </table>
 <p><a href="STRUCTURE.md">STRUCTURE.md</a> · <a href="docs/en/operations/ROADMAP.md">ROADMAP</a></p>
+</section>
+<section class="sheet license">
 <h2>License</h2>
 <p><a href="LICENSE">LICENSE</a></p>
+</section>
 </article>
 </body>
 </html>

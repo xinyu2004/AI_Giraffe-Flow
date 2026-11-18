@@ -5,45 +5,86 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Giraffe Flow</title>
   <style>
+
 :root { color-scheme: light; }
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: #fff;
-  color: #1f2328;
-  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", Helvetica, Arial, sans-serif;
+  background: #f4f2ec;
+  color: #1b1b1b;
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", Helvetica, Arial, sans-serif;
 }
-.markdown-body { max-width: 980px; margin: 0 auto; padding: 32px 32px 80px; }
-h1, h2 { padding-bottom: .3em; border-bottom: 1px solid #d0d7de; }
-h1 { font-size: 2em; font-weight: 600; margin: 0 0 16px; }
-h2 { font-size: 1.5em; font-weight: 600; margin: 24px 0 16px; }
-h3 { font-size: 1.25em; font-weight: 600; margin: 24px 0 16px; }
-h4 { font-size: 1em; margin: 24px 0 16px; }
-p, ul, ol, table, pre, blockquote { margin: 0 0 16px; }
+.markdown-body { max-width: 980px; margin: 0 auto; padding: 36px 28px 80px; }
+h1 { margin: 0; font-size: 2em; font-weight: 600; letter-spacing: -0.02em; }
+h2 { font-size: 1.35em; font-weight: 600; margin: 28px 0 12px; }
+h3 { font-size: 1.15em; font-weight: 600; margin: 0 0 10px; }
+h4 { font-size: 1em; font-weight: 600; margin: 0 0 8px; }
+p, ul, ol, table, pre { margin: 0 0 14px; }
 a { color: #0969da; text-decoration: none; }
 a:hover { text-decoration: underline; }
-table { border-collapse: collapse; display: block; width: max-content; max-width: 100%; overflow: auto; }
-th, td { border: 1px solid #d0d7de; padding: 6px 13px; }
-tr:nth-child(2n) { background: #f6f8fa; }
 code, tt { background: #eff1f3; padding: .2em .4em; border-radius: 6px; font-size: 85%; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
-pre { background: #f6f8fa; padding: 16px; overflow: auto; border-radius: 6px; line-height: 1.45; }
-pre code { background: none; padding: 0; font-size: 85%; }
+pre { background: #f6f8fa; padding: 16px; overflow: auto; border-radius: 12px; line-height: 1.45; }
+pre code { background: none; padding: 0; }
 img { max-width: 100%; }
-hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
-.band {
-  background: #e4eef6;
-  border-radius: 12px;
-  padding: 8px 20px 16px;
-  margin: 16px 0 24px;
+.top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 16px; }
+.lang { font-weight: 600; }
+.sheet {
+  background: #fff;
+  border: 1px solid #d9d3c8;
+  border-radius: 16px;
+  padding: 18px 22px 8px;
+  margin: 0 0 28px;
+  box-shadow: 0 8px 18px rgba(36, 48, 56, .07);
 }
-.band p { margin: 12px 0 0; }
-.band p:first-child { margin-top: 8px; }
-.band strong { font-size: 16px; }
+.sheet h4 { margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(27, 27, 27, .12); }
+.num { font-weight: 700; margin-right: .4em; font-size: 1.25em; }
+.cfg .num { color: #c2410c; }
+.mod .num { color: #1d4ed8; }
+.gmt .num { color: #0f766e; }
+.sheet.cfg, .pillars article.cfg { background: #ffe3c4; border-color: #e7b27a; }
+.sheet.mod, .pillars article.mod { background: #d9e4ff; border-color: #8eabf5; }
+.sheet.gmt, .pillars article.gmt { background: #d2f3ea; border-color: #7ec9ba; }
+.pillars, .pair { display: grid; gap: 16px; margin: 0 0 28px; }
+.pillars { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pair { grid-template-columns: 1.45fr .75fr; }
+.pillars article {
+  border: 1px solid #d9d3c8;
+  border-radius: 12px;
+  padding: 14px 16px 16px;
+  box-shadow: 0 8px 18px rgba(36, 48, 56, .07);
+}
+.pillars .role { margin: 0 0 8px; }
+.pillars .dig { margin: 0; font-size: 14px; }
+.pair article { border-radius: 12px; padding: 16px 18px 18px; box-shadow: 0 8px 18px rgba(36, 48, 56, .07); }
+.auto { background: #d9e8f6; border: 1px solid #b9d0e6; }
+.fusa { background: #f3e6d4; border: 1px solid #e2cdb4; }
+.pair p { margin: 0; }
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #d9d3c8;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  display: block;
+}
+th, td { border: 0; border-bottom: 1px solid #e4dfd6; padding: 8px 12px; text-align: left; vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { background: #e7e4de; color: #1b1b1b; font-weight: 600; }
+@media (max-width: 720px) {
+  .markdown-body { padding: 24px 16px 64px; }
+  .pillars, .pair { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
 <article class="markdown-body">
+<div class="top">
 <h1>AI Giraffe Flow</h1>
+<a class="lang" href="index.html">English</a>
+</div>
+<section class="sheet front">
 <p><strong>可裁剪的车规 SOA 中间件 + 工具链。</strong></p>
 <p>为什么做：板上要的是可裁剪的 SOA，先在台架上配、跑、看见、压住，再把 <strong>同一套 EM</strong> 上车。做好之后：OEM 合同能被工具分解进运行时，不用手写接线；杀掉一个进程，控车不断；真环上的一拍时延量得着；同一条链灌得回去；<strong>过了才 CD</strong>。真机是 last mile。</p>
 <p>产品是可裁剪的 <code>gf_ara::*</code> 运行时（<strong>ARM Linux</strong> 优先；OSAL 预留 MIPS / RISC-V）和围着它的三件工具：<strong>gf-config</strong> 写要跑什么、谁连谁；<strong>Giraffe 模块</strong> 是板上 SOA（EM 拉起、通信、PHM、隔离）；<strong>GMT</strong> 回答「谁在何时发了什么」，并在同一条链上做回灌。仓内感知和规划是 <strong>闭环载荷，不是 ADAS 产品</strong>——用来把上面这些特点跑实。OEM 相机和网络权重在仓外。</p>
@@ -82,7 +123,6 @@ hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
 </tbody>
 </table>
 <p>下面两段视频就是这条环在台架上的样子——<strong>AFC</strong>（单相机）和 <strong>ADC</strong>（环视）。车是用来把人留下的；要证明的是车后面的栈。</p>
-<p><strong>English:</strong> <a href="index.html">English</a></p>
 <p align="center">
   Single camera (AFC) <a href="gallery/videos/afc.mp4">mp4</a>
 </p>
@@ -98,50 +138,40 @@ hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
 <p align="center">
   <img src="gallery/videos/adc_preview.gif" alt="ADC 闭环演示（预览）" />
 </p>
-
-<hr />
+</section>
 <h2>总览</h2>
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>主线</th>
-<th>角色</th>
-<th>深入</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>1</strong></td>
-<td><strong>gf-config</strong></td>
-<td>工具链 · 配置侧</td>
-<td><a href="tools/gf-config/README_zh.md">tools/gf-config</a> · <a href="docs/zh/architecture/sor-authoring.md">SOR</a></td>
-</tr>
-<tr>
-<td><strong>2</strong></td>
-<td><strong>Giraffe 模块</strong></td>
-<td><strong>产品主体</strong> · SOA 运行时、FuSa 证据</td>
-<td><a href="middleware/README.md">middleware</a> · <a href="fusa/README.md">fusa/</a> · <a href="docs/zh/architecture/DESIGN.md">设计</a></td>
-</tr>
-<tr>
-<td><strong>3</strong></td>
-<td><strong>GMT</strong></td>
-<td>工具链 · 观测 / 回灌 / Foxglove</td>
-<td><a href="tools/gmt/README_zh.md">tools/gmt</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">可观测演示</a></td>
-</tr>
-</tbody>
-</table>
-<p><img alt="架构：CARLA → Giraffe 模块 → Foxglove · GMT" src="gallery/Giraffe_Flow/Giraffe_Flow.gif" /></p>
-<hr />
-<div class="band">
-<p id="autoeth"><strong><a href="docs/zh/net/index.html">AutoEth</a>：</strong></p>
-<p>　　车载以太网从 CAN 的信号表讲到以太网骨干。现在的新能源车上，这条骨干跑 SOME/IP 服务、DDS 数据分发、DoIP 诊断和刷写，并用 gPTP 给 TSN 对时。点一个协议，再勾选特性，就能看到组出来的包。<a href="index.html#autoeth">English</a>。加密和密钥在 <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>。</p>
-<p id="fusa"><strong><a href="fusa/README.md">FuSa</a>：</strong></p>
-<p>　　待添加。</p>
+<div class="pillars">
+<article class="cfg">
+<h3><span class="num">1</span>gf-config</h3>
+<p class="role">工具链 · 配置侧</p>
+<p class="dig"><a href="tools/gf-config/README_zh.md">tools/gf-config</a> · <a href="docs/zh/architecture/sor-authoring.md">SOR</a></p>
+</article>
+<article class="mod">
+<h3><span class="num">2</span>Giraffe 模块</h3>
+<p class="role"><strong>产品主体</strong> · SOA 运行时、FuSa 证据</p>
+<p class="dig"><a href="middleware/README.md">middleware</a> · <a href="fusa/README.md">fusa/</a> · <a href="docs/zh/architecture/DESIGN.md">设计</a></p>
+</article>
+<article class="gmt">
+<h3><span class="num">3</span>GMT</h3>
+<p class="role">工具链 · 观测 / 回灌 / Foxglove</p>
+<p class="dig"><a href="tools/gmt/README_zh.md">tools/gmt</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">可观测演示</a></p>
+</article>
 </div>
-
-<hr />
-<h3>1. gf-config（配置侧工具链）</h3>
+<section class="sheet arch">
+<p><img alt="架构：CARLA → Giraffe 模块 → Foxglove · GMT" src="gallery/Giraffe_Flow/Giraffe_Flow.gif" /></p>
+</section>
+<div class="pair">
+<article class="auto" id="autoeth">
+<h3><a href="docs/zh/net/index.html">AutoEth</a>：</h3>
+<p>车载以太网从 CAN 的信号表讲到以太网骨干。现在的新能源车上，这条骨干跑 SOME/IP 服务、DDS 数据分发、DoIP 诊断和刷写，并用 gPTP 给 TSN 对时。点一个协议，再勾选特性，就能看到组出来的包。<a href="docs/en/net/index.html">English</a>。加密和密钥在 <a href="https://github.com/xinyu2004/AI_Fortress-Auto">AI Fortress Auto</a>。</p>
+</article>
+<article class="fusa" id="fusa">
+<h3><a href="fusa/README.md">FuSa</a>：</h3>
+<p>待添加。</p>
+</article>
+</div>
+<section class="sheet cfg">
+<h3><span class="num">1</span> gf-config（配置侧工具链）</h3>
 <p>定 <strong>要什么能力、谁连谁、板端裁哪些模块</strong>，不实现算法。两页写回三层资产：</p>
 <table>
 <thead>
@@ -171,8 +201,9 @@ hr { height: 1px; border: 0; background: #d0d7de; margin: 24px 0; }
 <pre><code class="language-bash">gf-config projects/afc/giraffe.yaml
 </code></pre>
 <p>细节：<a href="tools/gf-config/README_zh.md">tools/gf-config/README_zh.md</a> · <a href="docs/zh/operations/WORKFLOW.md">WORKFLOW</a></p>
-<hr />
-<h3>2. Giraffe 模块（主体）</h3>
+</section>
+<section class="sheet mod">
+<h3><span class="num">2</span> Giraffe 模块（主体）</h3>
 <p>这里是板上和 SIL 里真正跑着的 <strong>中间件</strong>。SKU 里的 FCM、Octave 规划 → Trajectory 是 <strong>载荷</strong>：给 GMT、Foxglove、回灌、PHM、CI 一条诚实的 pub/sub 环，用来验证平台，而不是宣称本仓是量产 ADAS。</p>
 <p><img alt="Giraffe Modules：板内中间件如何起来、如何协作" src="gallery/Giraffe_Modules/Giraffe_Modules.gif" /></p>
 <h4>2.1 分层</h4>
@@ -393,8 +424,9 @@ GF_FRAME_SOURCE=carla bash projects/adc/scripts/run_sil.sh
 GF_FUSA_SIL=1 bash fusa/scripts/run_cases.sh
 bash fusa/scripts/measure_latency.sh   # 可选：延时快照
 </code></pre>
-<hr />
-<h3>3. GMT（观测侧工具链）</h3>
+</section>
+<section class="sheet gmt">
+<h3><span class="num">3</span> GMT（观测侧工具链）</h3>
 <p>多进程 SIL 联调时，光看终端往往对不齐「谁在何时发了什么」。GMT 把 tap NDJSON 接到本机时间轴：<strong>scrub / 倍速</strong>、<strong>playhead 回灌</strong>、<strong>Tag → MCAP</strong>。<strong>Foxglove 直播</strong>是 C <code>gf_foxglove_ws</code>（<strong>:8765</strong>，<code>tools/gmt_board</code>）；Python <code>GMT bridge foxglove</code> 只做 JSONL 回放。<code>run_sil</code> <strong>不起</strong> GMT Live :8766。</p>
 <p><img alt="GMT — 变量轨 scrub / Live + Inject" src="gallery/GMT.png" /></p>
 <table>
@@ -424,7 +456,8 @@ GMT gui --project projects/afc \
   --session projects/afc/scenarios/overtake_acc_aeb.jsonl
 </code></pre>
 <p>细节：<a href="tools/gmt/README_zh.md">tools/gmt/README_zh.md</a> · <a href="tools/gmt_board/README.md">gmt_board</a> · <a href="docs/zh/operations/OBSERVABILITY_DEMO.md">OBSERVABILITY_DEMO</a></p>
-<hr />
+</section>
+<section class="sheet map">
 <h2>仓库地图</h2>
 <table>
 <thead>
@@ -493,8 +526,11 @@ GMT gui --project projects/afc \
 </tbody>
 </table>
 <p><a href="STRUCTURE.md">STRUCTURE.md</a> · <a href="docs/zh/operations/ROADMAP.md">ROADMAP</a></p>
+</section>
+<section class="sheet license">
 <h2>许可证</h2>
 <p><a href="LICENSE">LICENSE</a></p>
+</section>
 </article>
 </body>
 </html>

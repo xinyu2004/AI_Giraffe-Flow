@@ -50,9 +50,9 @@
 ---
 
 > [!NOTE]
-> **[AutoEth](https://xinyu2004.github.io/AI_Giraffe-Flow/zh.html#autoeth)：**
+> **[AutoEth](https://xinyu2004.github.io/AI_Giraffe-Flow/docs/zh/net/index.html)：**
 >
-> 　　车载以太网从 CAN 的信号表讲到以太网骨干。现在的新能源车上，这条骨干跑 SOME/IP 服务、DDS 数据分发、DoIP 诊断和刷写，并用 gPTP 给 TSN 对时。点一个协议，再勾选特性，就能看到组出来的包。[English](https://xinyu2004.github.io/AI_Giraffe-Flow/#autoeth)。加密和密钥在 [AI Fortress Auto](https://github.com/xinyu2004/AI_Fortress-Auto)。
+> 　　车载以太网从 CAN 的信号表讲到以太网骨干。现在的新能源车上，这条骨干跑 SOME/IP 服务、DDS 数据分发、DoIP 诊断和刷写，并用 gPTP 给 TSN 对时。点一个协议，再勾选特性，就能看到组出来的包。[English](https://xinyu2004.github.io/AI_Giraffe-Flow/docs/en/net/index.html)。加密和密钥在 [AI Fortress Auto](https://github.com/xinyu2004/AI_Fortress-Auto)。
 >
 > **[FuSa](https://xinyu2004.github.io/AI_Giraffe-Flow/zh.html#fusa)：**
 >
