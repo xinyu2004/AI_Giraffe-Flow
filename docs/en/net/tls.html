@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TLS</title>
+  <link rel="stylesheet" href="../../zh/net/detail.css?v=8">
+</head>
+<body>
+<main style="--accent:var(--l6)">
+  <header class="mast">
+    <a class="lang" href="../../zh/net/tls.html">中文</a>
+    <p class="mark">AutoEth</p>
+    <h1>TLS</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <div class="leadbox">
+    <p class="lead">The record layer and the handshake sit on a reliable byte stream, which means TCP. The two ends agree who they are and which keys to use, and then protect that byte stream.</p>
+    </div>
+
+    <section class="block">
+    <h2>What the handshake agrees</h2>
+    <p>The handshake settles three things: the protocol version, the parameters that will protect the records, and the identity of the other side. Identity comes from a certificate. A diagnostic connection commonly has a certificate on both sides: the tester checks the vehicle, and the vehicle checks the tester. Checking only one side also exists. Diagnostics and flashing in a vehicle more often check both.</p>
+    <p>In TLS 1.3 (RFC 8446), when the key share is accepted immediately, a new handshake follows this order. If the server does not accept the client’s key share, it first returns HelloRetryRequest and the client sends ClientHello again. Blue to the right is the client. Orange to the left is the server. The first two messages are still plaintext. From EncryptedExtensions on, the handshake messages are inside an encrypted record. The drawing below is the mutual authentication common in vehicle diagnostics: the server asks the client for a certificate with CertificateRequest. When only one side is checked, that message is not sent, and the client sends no certificate.</p>
+    <div class="talk">
+      <div class="who"><span class="l">Client</span><span class="r">Server</span></div>
+      <ol>
+        <li class="turn go"><p><b>ClientHello</b><i class="tag open">Plain</i><span>Supported versions, a key share, and its own random</span></p></li>
+        <li class="turn back"><p><b>ServerHello</b><i class="tag open">Plain</i><span>The chosen suite, the key share, and its own random</span></p></li>
+        <li class="turn cut"><p>Ciphertext below</p></li>
+        <li class="turn back"><p><b>EncryptedExtensions</b><i class="tag shut">Cipher</i><span>The remaining extensions</span></p></li>
+        <li class="turn back"><p><b>CertificateRequest</b><i class="tag shut">Cipher</i><span>Ask the client for a certificate. Without this, the client sends none</span></p></li>
+        <li class="turn back"><p><b>Certificate</b><i class="tag shut">Cipher</i><span>The server’s certificate chain</span></p></li>
+        <li class="turn back"><p><b>CertificateVerify</b><i class="tag shut">Cipher</i><span>A signature with the private key, proving this certificate is held</span></p></li>
+        <li class="turn back"><p><b>Finished</b><i class="tag shut">Cipher</i><span>A check over the handshake so far</span></p></li>
+        <li class="turn go"><p><b>Certificate</b><i class="tag shut">Cipher</i><span>The client’s certificate chain</span></p></li>
+        <li class="turn go"><p><b>CertificateVerify</b><i class="tag shut">Cipher</i><span>The client likewise proves it holds the private key</span></p></li>
+        <li class="turn go"><p><b>Finished</b><i class="tag shut">Cipher</i><span>This handshake is done. Application data follows</span></p></li>
+      </ol>
+    </div>
+    <p>The protection every TLS 1.3 implementation must provide is <code>TLS_AES_128_GCM_SHA256</code>. Which other suites may appear is a deployment choice. Where the algorithms and keys live is in the HSM note of AI Fortress Auto. This page does not describe the computation.</p>
+    <p>Some diagnostic links in vehicles are still done as TLS 1.2. Version 1.2 adds another cleartext key exchange and ChangeCipherSpec. The overview does not split the two versions into two cells. When DoIP rejects routing activation because encryption is required, connect to TCP 3496 and handshake again. See <a href="doip.html">DoIP</a>.</p>
+    <p>A session can be resumed, and that skips a round of certificates. TLS 1.3 also has 0-RTT early data, which can be replayed. Diagnostics and flashing do not use it to send the first command.</p>
+
+    <h3>Alerts</h3>
+    <p>When the handshake or a record does not check out, an alert is sent and the connection is torn down. Common ones:</p>
+    <table>
+      <tr><th>Alert</th><th>When it happens</th></tr>
+      <tr><td>close_notify</td><td>One side says it is finished. This is not an error</td></tr>
+      <tr><td>handshake_failure</td><td>The version or the parameters cannot be agreed</td></tr>
+      <tr><td>certificate_unknown / bad_certificate</td><td>The certificate chain is not trusted, or the certificate itself is wrong</td></tr>
+      <tr><td>bad_record_mac</td><td>The record check fails. The ciphertext was altered, or the keys do not match</td></tr>
+      <tr><td>unexpected_message</td><td>This message does not belong at this point</td></tr>
+    </table>
+    </section>
+
+    <section class="block">
+    <h2>Where it sits</h2>
+    <p>The overview draws the record layer at the presentation layer and the handshake at the session layer, both between the application and TCP. The Ethernet frame gains no extra header. SOME/IP, DDS, and Zenoh default to UDP and must be switched to TCP before TLS can be selected. gPTP has no byte stream, so TLS cannot be added.</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>Application</b><span>DoIP · SOME/IP · …</span></div>
+      <div class="cell" style="background:var(--l6)"><b>Record</b><span>Presentation</span></div>
+      <div class="cell" style="background:var(--l5)"><b>Handshake</b><span>Session</span></div>
+      <div class="cell" style="background:var(--l4)"><b>TCP</b><span>Reliable byte stream</span></div>
+    </div>
+    <p class="note">On the wire, handshake messages travel inside records. They are not an extra Ethernet header beside the record. The two cells are the layers on the overview.</p>
+    </section>
+
+    <section class="block">
+    <h2>Packet</h2>
+    <p>The record header carries a type, a legacy version field, and a length. The protected content follows. In TLS 1.3 the real content type sits at the end of the plaintext, after decryption. The type in the header is often written only as application data, so the handshake and alerts are not exposed outside.</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l6)"><b>Type</b><span>Record header</span></div>
+      <div class="cell" style="background:var(--l6)"><b>Version</b><span>The legacy field in the record header</span></div>
+      <div class="cell" style="background:var(--l6)"><b>Length</b><span>How long the rest is</span></div>
+      <div class="cell" style="background:var(--l6)"><b>Protected content</b><span>Handshake, alert, or application data</span></div>
+    </div>
+    <p>Application data is one byte stream. The DoIP header and UDS are both inside that stream and are cut apart by DoIP’s own length field. TLS does not know service IDs. If SOME/IP runs on TCP and then TLS, it is likewise cut apart by the SOME/IP length field.</p>
+    </section>
+
+    <section class="block">
+    <h2>What it does not do</h2>
+    <ul>
+      <li>It does not protect UDP. Without a reliable byte stream, the TLS drawn here does not fit. DTLS runs on datagrams and is not drawn on the overview.</li>
+      <li>It is not hop by hop. A switch cannot see inside. Protection stops at the two ends of this TCP connection. Hop by hop is <a href="macsec.html">MACsec</a>.</li>
+      <li>It is not DDS-Security. DDS protection is done on RTPS and does not use this byte stream.</li>
+      <li>It is not <a href="ipsec.html">IPsec</a>. IPsec sits between the IP header and the transport header, and works for both UDP and TCP.</li>
+      <li>It is not <a href="secoc.html">SecOC</a>. SecOC puts a MAC on each PDU. TLS protects the whole byte stream and does not sign one SOME/IP message on its own.</li>
+    </ul>
+    </section>
+
+    <div class="tail">
+    <p class="keys">Entry <a href="https://www.rfc-editor.org/rfc/rfc8446" target="_blank" rel="noopener">RFC 8446</a> <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md" target="_blank" rel="noopener">Algorithms and keys</a></p>
+    <nav class="sib">
+      <a href="index.html">Overview</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <b>TLS</b>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

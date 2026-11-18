@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MACsec</title>
-  <link rel="stylesheet" href="detail.css">
+  <link rel="stylesheet" href="detail.css?v=8">
 </head>
 <body>
 <main style="--accent:var(--gptp)">
   <header class="mast">
-    <a class="lang" href="index.html">总图</a>
+    <a class="lang" href="../../en/net/macsec.html">English</a>
     <p class="mark">AutoEth</p>
     <h1>MACsec</h1>
   </header>
@@ -23,31 +23,44 @@
     <span style="background:var(--l1)"></span>
   </div>
   <div class="sheet">
+    <div class="leadbox">
     <p class="lead">用 <code>0x88E5</code> 把以太网帧逐跳套起来。每一跳有自己的密钥。交换机要读的 VLAN 标签留在套子外面。</p>
+    </div>
 
+    <section class="block">
     <h2>一跳里有什么</h2>
-    <p>IEEE 802.1AE。一对已经达成一致的端口组成一个连接关联（CA）。每个方向是一条安全通道（SC），通道上同时可以有不止一条安全关联（SA），用关联号 AN 区分，AN 只有 0 到 3。换密钥时新的 SA 先准备好，再切 AN，免得这一跳断掉。</p>
+    <p>IEEE 802.1AE。这一跳上的保护分成三层，换密钥时新的安全关联先准备好，再切 AN，免得这一跳断掉。</p>
+    <table>
+      <tr><th>成员</th><th>是什么</th></tr>
+      <tr><td>连接关联 CA</td><td>已经达成一致的两端</td></tr>
+      <tr><td>安全通道 SC</td><td>其中一个方向</td></tr>
+      <tr><td>安全关联 SA</td><td>通道上的一把密钥。用关联号 AN 区分，AN 只有 0 到 3</td></tr>
+    </table>
     <p>帧上用的密钥是 SAK。SAK 从哪里来，是 MKA（IEEE 802.1X 里的协定）的事：成员先有一把连接关联密钥 CAK，MKA 用它在这一跳上推出当前的 SAK，并约定从哪个包序号开始用。算法和密钥的存放在 AI Fortress Auto 的 HSM 说明里，这页不写推导。</p>
     <p>端口在模型里分成两面。不受控的一面在保护建立之前也能收发，MKA 自己的报文走这里。受控的一面只放已经套上 MACsec、并且校验通过的帧。交换机若只是透明转发、自己不是这一跳的端点，它解不开，也看不到 VLAN 以内的以太类型。</p>
+    </section>
 
+    <section class="block">
     <h2>在哪一层</h2>
     <p>数据链路层的蓝框里。和 802.1Q 一样，是插进帧的标签，不是 IP 以上的层。有 VLAN 时，次序跟总图一致：目的 MAC、源 MAC、<code>0x8100</code> 和 TCI、<code>0x88E5</code> 和 SecTAG、原来的 EtherType、载荷、ICV、FCS。VLAN 在外面，交换机不用解密就能看到 VLAN 号，也能按 PCP 选队列。</p>
+    </section>
 
+    <section class="block">
     <h2>报文</h2>
     <p>三条类型各留各的。<code>0x8100</code> 是 VLAN，<code>0x88E5</code> 是 MACsec，最里面仍是原来的 EtherType，IPv4 就是 <code>0x0800</code>，gPTP 就是 <code>0x88F7</code>。没有 VLAN 时，<code>0x8100</code> 和 TCI 不出现。</p>
     <div class="cells">
-      <div class="cell" style="background:#4a5568"><b>目的 MAC</b><span>6 字节</span></div>
-      <div class="cell" style="background:#4a5568"><b>源 MAC</b><span>6 字节</span></div>
-      <div class="cell" style="background:var(--vlan)"><b>0x8100</b><span>有 VLAN 才有</span></div>
-      <div class="cell" style="background:var(--vlan)"><b>TCI</b><span>PCP · DEI · VID</span></div>
-      <div class="cell" style="background:var(--gptp)"><b>0x88E5</b><span>MACsec</span></div>
-      <div class="cell" style="background:var(--gptp)"><b>SecTAG</b><span>见下表</span></div>
-      <div class="cell" style="background:var(--l2)"><b>EtherType</b><span>原来的类型</span></div>
-      <div class="cell" style="background:var(--l7)"><b>载荷</b><span>里面的包</span></div>
-      <div class="cell" style="background:var(--gptp)"><b>ICV</b><span>完整性校验</span></div>
-      <div class="cell" style="background:var(--l2)"><b>FCS</b><span>CRC-32 · 4 字节</span></div>
+      <div class="cell" style="background:#4a5568"><b>目的 MAC</b><i class="tag open">明文</i><span>6 字节。这一跳谁接收</span></div>
+      <div class="cell" style="background:#4a5568"><b>源 MAC</b><i class="tag open">明文</i><span>6 字节。这一跳谁发出</span></div>
+      <div class="cell" style="background:var(--vlan)"><b>0x8100</b><i class="tag open">明文</i><span>有 VLAN 才有</span></div>
+      <div class="cell" style="background:var(--vlan)"><b>TCI</b><i class="tag open">明文</i><span>PCP · DEI · VID</span></div>
+      <div class="cell" style="background:var(--gptp)"><b>0x88E5</b><i class="tag open">明文</i><span>MACsec</span></div>
+      <div class="cell ref" style="background:var(--gptp)"><b><a href="#macsec-tag">SecTAG</a></b><i class="tag open">明文</i><span>下表逐条列出</span></div>
+      <div class="cell" style="background:var(--l2)"><b>EtherType</b><i class="tag shut">密文</i><span>原来的类型。只做完整性时仍是明文</span></div>
+      <div class="cell" style="background:var(--l7)"><b>载荷</b><i class="tag shut">密文</i><span>里面的包。只做完整性时仍是明文</span></div>
+      <div class="cell" style="background:var(--gptp)"><b>ICV</b><i class="tag open">明文</i><span>完整性校验</span></div>
+      <div class="cell" style="background:var(--l2)"><b>FCS</b><i class="tag open">明文</i><span>CRC-32 · 4 字节</span></div>
     </div>
-    <table>
+    <table class="jump" id="macsec-tag">
       <tr><th>SecTAG 里</th><th>作用</th></tr>
       <tr><td>TCI</td><td>版本、这一帧有没有加密、SCI 带没带、是不是单收端。E 表示加密，C 表示改过的文本要做校验</td></tr>
       <tr><td>AN</td><td>两比特，指出 0 到 3 里的哪一条安全关联</td></tr>
@@ -59,7 +72,9 @@
 
     <h3>对时帧</h3>
     <p>gPTP 的帧常常不进这条加密关联，走不受控的那一面。加解密会改变驻留时间，门控若按保护之前的时刻计算，时序就偏了。所以对时帧常常留在 <code>0x88E5</code> 外面，EtherType 仍直接是 <code>0x88F7</code>。哪些帧进关联，是这一跳的策略，不是 gPTP 头里的一个标志。</p>
+    </section>
 
+    <section class="block">
     <h2>不做什么</h2>
     <ul>
       <li>不是端到端。过一台交换机就要解开再套上，下一跳是另一把 SAK。字节流的两端是 <a href="tls.html">TLS</a>，主机到主机的 IP 是 <a href="ipsec.html">IPsec</a>。</li>
@@ -68,7 +83,9 @@
       <li>不保护没进这条关联的帧。gPTP 常常就在外面。门控和驻留时间仍看 <a href="../tsn/index.html">TSN</a>。</li>
       <li>交换机自己不是端点时，不能假设它会把套子拆掉再转发。套子停在这一跳的两个端口之间。</li>
     </ul>
+    </section>
 
+    <div class="tail">
     <p class="keys">入口 <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a> <a href="https://www.ieee802.org/1/pages/802.1X.html" target="_blank" rel="noopener">IEEE 802.1X</a> <a href="../tsn/index.html">TSN</a> <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md" target="_blank" rel="noopener">算法和密钥</a></p>
     <nav class="sib">
       <a href="index.html">总图</a>
@@ -81,6 +98,8 @@
       <a href="ipsec.html">IPsec</a>
       <b>MACsec</b>
     </nav>
+    </div>
+
   </div>
 </main>
 </body>

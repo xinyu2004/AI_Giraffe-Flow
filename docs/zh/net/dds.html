@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DDS</title>
-  <link rel="stylesheet" href="detail.css">
+  <link rel="stylesheet" href="detail.css?v=8">
 </head>
 <body>
 <main style="--accent:var(--l7)">
   <header class="mast">
-    <a class="lang" href="index.html">总图</a>
+    <a class="lang" href="../../en/net/dds.html">English</a>
     <p class="mark">AutoEth</p>
     <h1>DDS</h1>
   </header>
@@ -23,13 +23,40 @@
     <span style="background:var(--l1)"></span>
   </div>
   <div class="sheet">
+    <div class="leadbox">
     <p class="lead">多个节点按主题共享同一类数据。时效、历史和可靠性都写在 QoS 里，发现也按这套 QoS 决定谁和谁接得上。</p>
+    </div>
 
+    <section class="block">
     <h2>主题和实例</h2>
-    <p>OMG 的数据分发服务。一个域里，发布方是 DataWriter，订阅方是 DataReader。两边的主题名和类型名对上，样本才有地方去。类型里可以指定键。键的每一个取值是一个实例：同一主题上，车速是一个实例，每个雷达目标可以是各自的实例。历史深度是按实例留的，不是把整个主题揉成一条队列。</p>
+    <p>OMG 的数据分发服务。一个域里，发布的是样本，订的也是样本。主题、实例和这一次值各管一件事。</p>
+    <table>
+      <tr><th>成员</th><th>做什么</th></tr>
+      <tr><td>主题</td><td>一类数据的名字和类型。两边对上，样本才有地方去</td></tr>
+      <tr><td>实例</td><td>键的一个取值。同一主题上，车速是一个实例，每个雷达目标可以是各自的实例。历史按实例留</td></tr>
+      <tr><td>样本</td><td>写者发出的一次值</td></tr>
+      <tr><td>写者 / 读者</td><td>DataWriter 发布，DataReader 订阅。这是发布和订阅，不是一次调用</td></tr>
+    </table>
+    </section>
 
+    <section class="block">
     <h2>发现</h2>
-    <p>发现分两步，都走 RTPS 的内置端点。SPDP 让参与者知道谁在这个域里：周期宣布自己，并带上租约，租约到期就认为对方走了。SEDP 再交换各自的 DataWriter 和 DataReader，包括它们的主题、类型和 QoS。对不上的 QoS 不会匹配，数据送不过去。联调时最常见的沉默就是这里：进程都在，主题名也一样，可靠性或持久性一边要、一边不给。</p>
+    <p>发现分两步，都走 RTPS 的内置端点。SPDP 是 Simple Participant Discovery Protocol，SEDP 是 Simple Endpoint Discovery Protocol。蓝色、橙色只区分方向，两边都会做同样的事：SPDP 周期宣布自己，租约到期就认为对方走了；SEDP 再交换各自的 DataWriter 和 DataReader。对不上的 QoS 不会匹配，数据送不过去。联调时最常见的沉默就是这里：进程都在，主题名也一样，可靠性或持久性一边要、一边不给。</p>
+    <div class="talk">
+      <div class="who"><span class="l">参与者 A</span><span class="r">参与者 B</span></div>
+      <ol>
+        <li class="turn go"><p><b><a href="#dds-spdp">SPDP</a></b><span>宣布自己在这个域里，并带上租约</span></p></li>
+        <li class="turn back"><p><b><a href="#dds-spdp">SPDP</a></b><span>对方也宣布自己</span></p></li>
+        <li class="turn go"><p><b><a href="#dds-sedp">SEDP</a></b><span>自己的 Writer、Reader、主题、类型和 QoS</span></p></li>
+        <li class="turn back"><p><b><a href="#dds-sedp">SEDP</a></b><span>对方的 Writer、Reader 和 QoS。对不上就不匹配</span></p></li>
+      </ol>
+    </div>
+    <h3>两条</h3>
+    <table>
+      <tr><th>步骤</th><th>作用</th></tr>
+      <tr class="jump" id="dds-spdp"><td>SPDP</td><td>Simple Participant Discovery Protocol。周期宣布自己在这个域里，并带上租约。租约到期，别人就认为这台参与者走了。宣布走下面的发现端口</td></tr>
+      <tr class="jump" id="dds-sedp"><td>SEDP</td><td>Simple Endpoint Discovery Protocol。交换各自的 Writer、Reader、主题、类型和 QoS。对不上就不匹配，数据送不过去</td></tr>
+    </table>
     <p>对照 <a href="someip.html">SOME/IP-SD</a>：SD 按服务号、实例号和事件组做 Offer、Find、Subscribe；DDS 按域、主题名、类型和 QoS 做匹配，没有服务号这一层。</p>
     <p>也有不跑 SPDP、端点事先写死的部署。那样就没有组播宣布，地址和 QoS 都在配置里。</p>
 
@@ -43,7 +70,9 @@
       <tr><td>用户单播</td><td>PB + DG × 域 + d3 + PG × 参与者</td><td>7411</td></tr>
     </table>
     <p class="note">同一台机器上第二个参与者是 7412 和 7413。实现可以改这些常数。两边改得不一样，就互相看不见。</p>
+    </section>
 
+    <section class="block">
     <h2>QoS</h2>
     <p>QoS 是这条数据怎么送、留多久、迟到算不算故障。有的策略必须两边匹配，叫请求/提供：读者的要求不能高过写者提供的。有的只约束本地队列，不参与匹配。</p>
     <table>
@@ -64,10 +93,14 @@
       <tr><td>Partition</td><td>一组名字</td><td>同一域里再分逻辑组。分区字符串对不上，端点不匹配</td></tr>
     </table>
     <p>匹配时常见的高低关系：可靠性上，读者要 RELIABLE 就只能配 RELIABLE 的写者，读者要 BEST_EFFORT 则两种写者都能配。持久性从低到高是 VOLATILE、TRANSIENT_LOCAL、TRANSIENT、PERSISTENT，写者提供的不能低于读者要的。Deadline 和延迟预算是写者答应的时间不能比读者松。所有权必须两边一样。</p>
+    </section>
 
+    <section class="block">
     <h2>在哪一层</h2>
     <p>应用层是 DDS。节点之间的报文是 RTPS，常见走 UDP。总图上可以把传输改成 TCP。保护是 DDS-Security，做在 RTPS 上，分成三块插件：认证、访问控制、加密。总图不给 DDS 勾 SecOC 和 E2E。默认 UDP 没有可靠字节流，套不上 <a href="tls.html">TLS</a>。DDS-Security 也不靠 TLS。</p>
+    </section>
 
+    <section class="block">
     <h2>报文</h2>
     <p>RTPS 头带协议标识 <code>RTPS</code>、版本、厂商和 GUID 前缀。后面是子消息。</p>
     <table>
@@ -81,7 +114,9 @@
       <tr><td>INFO_TS / INFO_DST</td><td>给后面的子消息带时间戳，或指明要送给谁</td></tr>
     </table>
     <p>可靠传输的一轮是：写者发 DATA，再发 HEARTBEAT；读者发现缺口就回 ACKNACK；写者把缺的序号再送一次。尽力而为则没有这一轮。</p>
+    </section>
 
+    <section class="block">
     <h2>不做什么</h2>
     <ul>
       <li>不按服务号和方法号调用。那是 <a href="someip.html">SOME/IP</a>。</li>
@@ -89,7 +124,9 @@
       <li>SecOC 和 E2E 不加在 DDS 上。认证和加密是 DDS-Security 的插件。</li>
       <li>QoS 对不上时协议不会报一条“错误返回码”。端点就是不匹配，读者收不到样本。</li>
     </ul>
+    </section>
 
+    <div class="tail">
     <p class="keys">入口 <a href="https://www.omg.org/spec/DDS/" target="_blank" rel="noopener">DDS</a> <a href="https://www.omg.org/spec/DDSI-RTPS/" target="_blank" rel="noopener">RTPS</a> <a href="https://www.omg.org/spec/DDS-SECURITY/" target="_blank" rel="noopener">DDS-Security</a></p>
     <nav class="sib">
       <a href="index.html">总图</a>
@@ -102,6 +139,8 @@
       <a href="ipsec.html">IPsec</a>
       <a href="macsec.html">MACsec</a>
     </nav>
+    </div>
+
   </div>
 </main>
 </body>

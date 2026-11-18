@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>E2E</title>
+  <link rel="stylesheet" href="../../zh/net/detail.css?v=8">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="../../zh/net/e2e.html">中文</a>
+    <p class="mark">AutoEth</p>
+    <h1>E2E</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <div class="leadbox">
+    <p class="lead">A counter, a length, a data ID, and a CRC are added on an application PDU, to detect loss, repetition, a wrong order, a different PDU inserted in the stream, and bit errors.</p>
+    </div>
+
+    <section class="block">
+    <h2>What it can detect</h2>
+    <p>This is AUTOSAR end-to-end protection. There is no key. Each time the sender transmits, it increments a counter, wrapping back to 0 at the end, and computes a CRC over the header and the user data. The receiver checks the CRC first, then checks that the counter follows the previous one. The data ID separates this data from other data on the network, so someone else’s PDU is not accepted as this one.</p>
+    <table>
+      <tr><th>Fault</th><th>How it shows up</th></tr>
+      <tr><td>Repetition</td><td>The counter did not move forward</td></tr>
+      <tr><td>Loss, timeout</td><td>The counter jumped, or no new counter arrived in time</td></tr>
+      <tr><td>Wrong order</td><td>The counter is not the expected next value</td></tr>
+      <tr><td>Another PDU inserted, or the wrong address</td><td>The data ID is wrong, and the CRC does not match either</td></tr>
+      <tr><td>Bits were changed</td><td>The CRC</td></tr>
+    </table>
+    <p>This does not identify who signed. To identify the sender, use the MAC in <a href="secoc.html">SecOC</a>. Both can be added on the same PDU. Each is computed on its own.</p>
+    </section>
+
+    <section class="block">
+    <h2>Profiles</h2>
+    <p>A profile decides how wide the fields are and where they sit. Short PDUs often use Profile 1: CRC-8, a 4-bit counter, and several ways for the data ID to enter the CRC (both bytes, alternating with the counter’s parity, or only the low byte). On Ethernet and SOME/IP, Profile 4 is the more common one. Its header is a fixed 12 bytes and can cover variable-length data.</p>
+
+    <h3>The Profile 4 header</h3>
+    <p>Fields are big-endian. The specification sets the start at offset 0. The whole header can be placed inside the protected data at a configured offset. In SOME/IP it is usually inside the payload and does not occupy the SOME/IP header itself.</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>Length</b><span>16 bits, offset 0</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Counter</b><span>16 bits, offset 2</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Data ID</b><span>32 bits, offset 4</span></div>
+      <div class="cell" style="background:var(--l7)"><b>CRC</b><span>32 bits, offset 8</span></div>
+    </div>
+    <p>The length counts both the E2E header and the user data, so a variable-length payload can still be checked. The CRC polynomial is <code>0xF4ACFB13</code> (CRC32P4 in CRC libraries). It is not the polynomial of the Ethernet FCS, or of CAN, or of FlexRay, so a frame check cannot stand in for it. The computation covers the E2E header except the CRC itself, plus the user data.</p>
+    <p>Wider profiles also exist, for example a 64-bit CRC and a 32-bit counter, for especially long data. A short profile and Profile 4 should not be mixed on the same stretch of one PDU. The profile, the offset, and the data ID chosen by the two sides must be the same configuration.</p>
+    </section>
+
+    <section class="block">
+    <h2>How the receiver decides</h2>
+    <p>A single check and the state over a stretch of time are two layers. The single check looks at this PDU. The state machine looks at how many were good and how many were bad in a recent window, so one error does not mark the signal invalid, and one lucky success does not mark a bad channel good.</p>
+    <table>
+      <tr><th>This PDU</th><th>Meaning</th></tr>
+      <tr><td>OK</td><td>The CRC matches, and the counter is the expected next value</td></tr>
+      <tr><td>OK, some lost</td><td>The CRC matches, and the counter jumped forward, but it is still inside the allowed window</td></tr>
+      <tr><td>Repeated</td><td>The counter did not advance</td></tr>
+      <tr><td>Wrong sequence</td><td>The counter jumped past the window, or moved backward</td></tr>
+      <tr><td>Error</td><td>The CRC does not match, or the length or data ID does not</td></tr>
+      <tr><td>No new data</td><td>No new PDU was on the wire at this read</td></tr>
+    </table>
+    <p>The state machine has four states: no data yet, init, valid, and invalid. The counts of correct and incorrect checks in the window decide which state it stays in. The thresholds come from configuration. What the application reads is this state, which is not necessarily the raw check of the PDU just received.</p>
+    </section>
+
+    <section class="block">
+    <h2>Where it sits</h2>
+    <p>It stays at the application layer, on the <a href="someip.html">SOME/IP</a> PDU. On the overview only SOME/IP can select it. The frame gains no header.</p>
+    </section>
+
+    <section class="block">
+    <h2>What it does not do</h2>
+    <ul>
+      <li>There is no key, so the sender cannot be identified.</li>
+      <li>It is not the end-to-end delay in IEEE 802.1AS. That E2E is about the timing path. The E2E on this page is the counter and CRC on a PDU.</li>
+      <li>It does not link to AI Fortress Auto. There is no key here, and no algorithm section.</li>
+      <li>It is not added on DDS. DDS reliability is written in QoS, and the acknowledgement is the RTPS ACKNACK. DDS does not use this AUTOSAR profile.</li>
+      <li>A matching CRC only says the bits did not change and the ID matches. It does not prove the PDU came from an ECU that holds a particular key.</li>
+    </ul>
+    </section>
+
+    <div class="tail">
+    <p class="keys">Entry <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a></p>
+    <nav class="sib">
+      <a href="index.html">Overview</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <b>E2E</b>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

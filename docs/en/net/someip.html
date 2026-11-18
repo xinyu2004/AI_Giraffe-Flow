@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SOME/IP</title>
+  <link rel="stylesheet" href="../../zh/net/detail.css?v=8">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="../../zh/net/someip.html">中文</a>
+    <p class="mark">AutoEth</p>
+    <h1>SOME/IP</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <div class="leadbox">
+    <p class="lead">Controllers talk by service over Ethernet: call a method, subscribe to an event, or read and write a field that has a current value. A fixed signal list is not required first.</p>
+    </div>
+
+    <section class="block">
+    <h2>Method, event, field</h2>
+    <p>BMW designed it, and AUTOSAR later adopted it. A service has a 16-bit service ID. One service can have several instances, and the instance ID is 16 bits too. The major version must match for it to be the same interface. The minor version marks a revision that older clients can still use. A service has three kinds of members.</p>
+    <table>
+      <tr><th>Member</th><th>What it does</th><th>On the wire</th></tr>
+      <tr><td>Method</td><td>One call. Wait for the return, or send and leave</td><td><code>REQUEST</code> or <code>REQUEST_NO_RETURN</code>. The high bit of the method ID is 0</td></tr>
+      <tr><td>Event</td><td>One notification. The server tells whoever has subscribed</td><td><code>NOTIFICATION</code>. The high bit of the method ID is 1. Subscribe by eventgroup first</td></tr>
+      <tr><td>Field</td><td>A property with a current value. Get, set, and notify-on-change may each be left out</td><td>Get and set are methods. The notifier is an event. After a notifier is subscribed, the server sends the current value first</td></tr>
+    </table>
+    <p>A method is a remote call. An event is publish and subscribe: there is no call paired with a return. A field getter and setter use a method message. The notifier uses an event message. There is no fourth message type. An eventgroup subscribes ordinary events and field notifiers together.</p>
+    <table class="jump" id="someip-msg">
+      <tr><th>Message type</th><th>Value</th><th>Who sends it</th></tr>
+      <tr><td>REQUEST</td><td><code>0x00</code></td><td>The client calls and waits for a response</td></tr>
+      <tr><td>REQUEST_NO_RETURN</td><td><code>0x01</code></td><td>The client calls and does not wait</td></tr>
+      <tr><td>NOTIFICATION</td><td><code>0x02</code></td><td>The server sends an event</td></tr>
+      <tr><td>RESPONSE</td><td><code>0x80</code></td><td>The server’s normal return to a request</td></tr>
+      <tr><td>ERROR</td><td><code>0x81</code></td><td>The server rejects the call or reports an error</td></tr>
+    </table>
+    <p class="note">The TP types are these same types plus a segmentation flag, used to split one large message across several UDP packets. See segmentation below.</p>
+    </section>
+
+    <section class="block">
+    <h2>Discovery</h2>
+    <p>SOME/IP-SD answers “who offers this service, and where do events go”. It is still one SOME/IP message: service ID <code>0xFFFF</code>, method ID <code>0x8100</code>, message type notification. The specification names the SD port <code>SD_PORT</code>. The default is UDP 30490, used as both source and destination. The multicast address comes from <code>SD_MULTICAST_IP</code> and must be the same on that segment. Entries that can be combined go in one SD message, so fewer packets are sent.</p>
+
+    <p>Finding a service and then subscribing to an event is a round trip. Blue to the right is the client. Orange to the left is the server.</p>
+    <div class="talk">
+      <div class="who"><span class="l">Client</span><span class="r">Server</span></div>
+      <ol>
+        <li class="turn go"><p><b><a href="#sd-find">FindService</a></b><span>Ask who offers this service</span></p></li>
+        <li class="turn back"><p><b><a href="#sd-offer">OfferService</a></b><span>Announce that this instance is offered</span></p></li>
+        <li class="turn go"><p><b><a href="#sd-sub">SubscribeEventgroup</a></b><span>Subscribe to one eventgroup</span></p></li>
+        <li class="turn back"><p><b><a href="#sd-ack">SubscribeEventgroupAck</a></b><span>The subscription is accepted. TTL 0 rejects it</span></p></li>
+      </ol>
+    </div>
+
+    <h3>Three phases</h3>
+    <p>Each service instance or eventgroup passes these three phases before an entry is sent. The wait belongs to that one side. The initial delay is chosen at random between a minimum and a maximum, so nodes do not all speak at once when power comes on.</p>
+    <div class="steps">
+      <ol>
+        <li><b>Initial wait</b><span>After the link is up and the service is ready, wait a random time, then send the first entry</span></li>
+        <li><b>Repetition</b><span>After the first entry, repeat on a base interval, up to a maximum count, and double the interval each time</span></li>
+        <li><b>Main</b><span>The server keeps offering on a cycle. The client no longer sends Find on a cycle</span></li>
+      </ol>
+    </div>
+
+    <h3>Entries</h3>
+    <p>Entries come in two kinds, 16 bytes each. A service entry is about a service instance. An eventgroup entry is about a subscription. TTL is in seconds. <code>0xFFFFFF</code> means it stays valid until the other side stops it. TTL 0 means stop: stop the offer, or stop the subscription. A subscribe ack with TTL 0 rejects that subscription.</p>
+    <table>
+      <tr><th>Entry</th><th>Type</th><th>Role</th></tr>
+      <tr class="jump" id="sd-find"><td>FindService</td><td><code>0x00</code></td><td>Ask who offers this service</td></tr>
+      <tr class="jump" id="sd-offer"><td>OfferService</td><td><code>0x01</code></td><td>Announce that this instance is offered. TTL 0 stops the offer</td></tr>
+      <tr class="jump" id="sd-sub"><td>SubscribeEventgroup</td><td><code>0x06</code></td><td>Subscribe to one eventgroup. TTL 0 unsubscribes</td></tr>
+      <tr class="jump" id="sd-ack"><td>SubscribeEventgroupAck</td><td><code>0x07</code></td><td>The subscription is accepted. TTL 0 rejects it</td></tr>
+    </table>
+    <p>A Find may set the instance ID to <code>0xFFFF</code>, meaning any instance of that service. The major version must match. A minor version of <code>0xFFFFFFFF</code> means any minor version. Any other value is the lowest minor version that will be accepted. When several instances offer at once, an entry may carry priority and weight. The smaller priority number is chosen first. Equal priority is then split by weight.</p>
+    <p>The SD header has a reboot flag and a unicast flag. The session ID starts at 1 and increases. When the session ID wraps, or the reboot flag changes, other nodes treat the machine as restarted and must subscribe to eventgroups again.</p>
+
+    <h3>Options</h3>
+    <p>An entry points at options. The address is in the option.</p>
+    <table>
+      <tr><th>Option</th><th>What is inside</th></tr>
+      <tr><td>IPv4 endpoint</td><td>Address, UDP or TCP, and port. The service is reached here, and events leave from here</td></tr>
+      <tr><td>IPv4 multicast</td><td>The multicast address and port events are sent to</td></tr>
+      <tr><td>Configuration</td><td>Key-value pairs that carry extra parameters for this service</td></tr>
+      <tr><td>Load balancing</td><td>Priority and weight</td></tr>
+    </table>
+    <p>If a subscription requires TCP, the client connects TCP first. The server may reject the subscription when that TCP connection is missing. The client checks the connection and reconnects when it has to.</p>
+    </section>
+
+    <section class="block">
+    <h2>Where it sits</h2>
+    <p>Application layer. Method calls and events commonly use UDP in the vehicle. The overview can switch the transport to TCP. <a href="tls.html">TLS</a> can be added only on that reliable byte stream. <a href="secoc.html">SecOC</a> and <a href="e2e.html">E2E</a> sit on this PDU. They do not open another layer.</p>
+    <p>TCP is a byte stream. After bytes stick together, the length in the SOME/IP header cuts them apart. If the stream loses alignment, a magic cookie realigns it: the client’s message ID is <code>0xFFFF0000</code>, and the server’s is <code>0xFFFF8000</code>.</p>
+    </section>
+
+    <section class="block">
+    <h2>Packet</h2>
+    <p>The header is in front of the payload. The service ID and method ID form the message ID. Length counts from the request ID to the end of the message, and does not include the message ID or the length field itself. The request ID is a client ID plus a session ID, and matches a response to one call.</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>Service ID</b><span>16 bits. Which service</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Method ID</b><span>16 bits. Which method or event. High bit 1 means an event</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Length</b><span>From the request ID to the end. The message ID and the length field are not counted</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Request ID</b><span>Client ID plus session ID. Matches a response to this call</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Version</b><span>Protocol version is 0x01. Interface version is the service’s major version</span></div>
+      <div class="cell ref" style="background:var(--l7)"><b><a href="#someip-msg">Message type</a></b><span>1 byte. Listed row by row in the table above</span></div>
+      <div class="cell ref" style="background:var(--l7)"><b><a href="#someip-rc">Return code</a></b><span>1 byte. Listed row by row below. A notification is 0x00</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Payload</b><span>Serialized arguments</span></div>
+    </div>
+
+    <h3 class="jump" id="someip-rc">Return codes</h3>
+    <p>Response and error messages use a return code. A notification’s return code is <code>0x00</code>.</p>
+    <table>
+      <tr><th>Return code</th><th>Value</th><th>Meaning</th></tr>
+      <tr><td>E_OK</td><td><code>0x00</code></td><td>Success</td></tr>
+      <tr><td>E_NOT_OK</td><td><code>0x01</code></td><td>No finer reason</td></tr>
+      <tr><td>E_UNKNOWN_SERVICE</td><td><code>0x02</code></td><td>This service is unknown</td></tr>
+      <tr><td>E_UNKNOWN_METHOD</td><td><code>0x03</code></td><td>The service exists, the method does not</td></tr>
+      <tr><td>E_NOT_READY</td><td><code>0x04</code></td><td>The service is not ready</td></tr>
+      <tr><td>E_NOT_REACHABLE</td><td><code>0x05</code></td><td>It cannot be reached now</td></tr>
+      <tr><td>E_TIMEOUT</td><td><code>0x06</code></td><td>An internal timeout</td></tr>
+      <tr><td>E_WRONG_PROTOCOL_VERSION</td><td><code>0x07</code></td><td>The protocol version does not match</td></tr>
+      <tr><td>E_WRONG_INTERFACE_VERSION</td><td><code>0x08</code></td><td>The interface version does not match</td></tr>
+      <tr><td>E_MALFORMED_MESSAGE</td><td><code>0x09</code></td><td>The message is incomplete or does not parse</td></tr>
+      <tr><td>E_WRONG_MESSAGE_TYPE</td><td><code>0x0a</code></td><td>This message type does not belong here</td></tr>
+    </table>
+
+    <h3>Serialization</h3>
+    <p>Basic types default to network byte order, high byte first. A struct is laid out in member order. A dynamic array or a string is preceded by a length. In classic SOME/IP the string length is 32 bits and includes the byte-order mark and the trailing NUL. The AUTOSAR serializer can also change how wide the length field is and which fields carry a length. Both sides must use the same configuration.</p>
+
+    <h3>Segmentation on UDP</h3>
+    <p>When one message does not fit in one UDP packet, SOME/IP-TP is used. The message type carries a segmentation flag, and 4 bytes follow the SOME/IP header: the offset is in units of 16 bytes, and another flag says more segments follow. The receiver reassembles by offset and hands the message to the service only when it is complete.</p>
+    </section>
+
+    <section class="block">
+    <h2>What it does not do</h2>
+    <ul>
+      <li>It does not replace a CAN signal list laid out in advance. Service, method, event, and field are a different addressing scheme.</li>
+      <li>SD discovers services and eventgroups. It does not carry the service’s own arguments.</li>
+      <li>In the vehicle it commonly uses UDP. UDP is not a reliable byte stream, so TLS does not fit on it.</li>
+      <li>It does not protect the link, and it does not protect the whole IP packet. The link is <a href="macsec.html">MACsec</a>. IP is <a href="ipsec.html">IPsec</a>.</li>
+    </ul>
+    </section>
+
+    <div class="tail">
+    <p class="keys">Entry <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a></p>
+    <nav class="sib">
+      <a href="index.html">Overview</a>
+      <b>SOME/IP</b>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

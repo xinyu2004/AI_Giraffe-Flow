@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DDS</title>
+  <link rel="stylesheet" href="../../zh/net/detail.css?v=8">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="../../zh/net/dds.html">中文</a>
+    <p class="mark">AutoEth</p>
+    <h1>DDS</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <div class="leadbox">
+    <p class="lead">Nodes share one kind of data by topic. Timing, history, and reliability are written in QoS, and discovery uses that same QoS to decide who matches whom.</p>
+    </div>
+
+    <section class="block">
+    <h2>Topic and instance</h2>
+    <p>The OMG data-distribution service. Inside one domain, what is published is a sample, and what is subscribed is a sample. The topic, the instance, and this one value each do a different job.</p>
+    <table>
+      <tr><th>Member</th><th>What it does</th></tr>
+      <tr><td>Topic</td><td>The name and type of one kind of data. The two sides match before a sample has anywhere to go</td></tr>
+      <tr><td>Instance</td><td>One value of the key. On the same topic, vehicle speed is one instance, and each radar target can be its own. History is kept per instance</td></tr>
+      <tr><td>Sample</td><td>One value a writer sends</td></tr>
+      <tr><td>Writer / reader</td><td>A DataWriter publishes. A DataReader subscribes. This is publish and subscribe, not one call</td></tr>
+    </table>
+    </section>
+
+    <section class="block">
+    <h2>Discovery</h2>
+    <p>Discovery has two steps, both on RTPS built-in endpoints. SPDP is the Simple Participant Discovery Protocol. SEDP is the Simple Endpoint Discovery Protocol. Blue and orange only mark direction. Both sides do the same thing: SPDP announces a participant on a cycle, and a peer is treated as gone when the lease expires; SEDP then exchanges each side’s DataWriters and DataReaders. QoS that does not match does not pair, and the data is not delivered. The usual silence during bring-up is here: both processes are up, the topic name matches, and one side requests reliability or durability that the other does not offer.</p>
+    <div class="talk">
+      <div class="who"><span class="l">Participant A</span><span class="r">Participant B</span></div>
+      <ol>
+        <li class="turn go"><p><b><a href="#dds-spdp">SPDP</a></b><span>Announce this participant in the domain, with a lease</span></p></li>
+        <li class="turn back"><p><b><a href="#dds-spdp">SPDP</a></b><span>The other side announces itself too</span></p></li>
+        <li class="turn go"><p><b><a href="#dds-sedp">SEDP</a></b><span>This side’s writers, readers, topics, types, and QoS</span></p></li>
+        <li class="turn back"><p><b><a href="#dds-sedp">SEDP</a></b><span>The other side’s writers, readers, and QoS. No match means no data</span></p></li>
+      </ol>
+    </div>
+    <h3>The two steps</h3>
+    <table>
+      <tr><th>Step</th><th>Role</th></tr>
+      <tr class="jump" id="dds-spdp"><td>SPDP</td><td>Simple Participant Discovery Protocol. Announce this participant in the domain on a cycle, with a lease. When the lease expires, others treat the participant as gone. The announcement uses the discovery ports below</td></tr>
+      <tr class="jump" id="dds-sedp"><td>SEDP</td><td>Simple Endpoint Discovery Protocol. Exchange writers, readers, topics, types, and QoS. A mismatch does not pair, and the data is not delivered</td></tr>
+    </table>
+    <p>Compared with <a href="someip.html">SOME/IP-SD</a>: SD offers, finds, and subscribes by service ID, instance ID, and eventgroup. DDS matches by domain, topic name, type, and QoS. There is no service ID.</p>
+    <p>A deployment can also skip SPDP and fix the endpoints in configuration. Then there is no multicast announcement. Addresses and QoS are in the configuration.</p>
+
+    <h3>Domain and ports</h3>
+    <p>Only participants with the same domain ID discover each other. RTPS computes UDP ports from the domain ID and the participant ID. The default constants are port base PB = 7400, domain gain DG = 250, participant gain PG = 2, and offsets d0 = 0, d1 = 10, d2 = 1, d3 = 11. The default discovery multicast address is <code>239.255.0.1</code>.</p>
+    <table>
+      <tr><th>Port</th><th>Formula</th><th>Domain 0, participant 0</th></tr>
+      <tr><td>Discovery multicast</td><td>PB + DG × domain + d0</td><td>7400</td></tr>
+      <tr><td>User multicast</td><td>PB + DG × domain + d2</td><td>7401</td></tr>
+      <tr><td>Discovery unicast</td><td>PB + DG × domain + d1 + PG × participant</td><td>7410</td></tr>
+      <tr><td>User unicast</td><td>PB + DG × domain + d3 + PG × participant</td><td>7411</td></tr>
+    </table>
+    <p class="note">A second participant on the same machine uses 7412 and 7413. An implementation may change these constants. If the two sides change them differently, they cannot see each other.</p>
+    </section>
+
+    <section class="block">
+    <h2>QoS</h2>
+    <p>QoS says how this data is sent, how long it is kept, and whether lateness counts as a fault. Some policies must match on both sides. That is requested and offered: the reader’s request cannot be stricter than what the writer offers. Others only bound a local queue and do not take part in matching.</p>
+    <table>
+      <tr><th>Policy</th><th>Usual values</th><th>What it is for in a vehicle</th></tr>
+      <tr><td>Reliability</td><td>BEST_EFFORT or RELIABLE</td><td>Radar points and video are often best effort. Control commands and state are often reliable: the writer sends HEARTBEAT, and the reader uses ACKNACK to ask for missing samples</td></tr>
+      <tr><td>Durability</td><td>VOLATILE or TRANSIENT_LOCAL</td><td>VOLATILE does not fill history for a late joiner. TRANSIENT_LOCAL gives a late reader the history still in the writer’s memory, so a late joiner can still get the last sample. TRANSIENT and PERSISTENT also need a persistence service and are rarely used in a vehicle</td></tr>
+      <tr><td>History</td><td>KEEP_LAST with a depth, or KEEP_ALL</td><td>Sensors often use depth 1 and keep only the latest. A command sometimes uses a depth above 1 so an unread sample is not overwritten. This is a local queue and does not take part in matching</td></tr>
+      <tr><td>Resource Limits</td><td>Sample count, instance count, samples per instance</td><td>A cap on the history above. Once full, a new sample is dropped or the writer blocks. A local policy</td></tr>
+      <tr><td>Deadline</td><td>A duration</td><td>The longest gap allowed between two samples. The period the writer offers must be no longer than the reader requests. A miss is a notification. It does not rewrite the sample</td></tr>
+      <tr><td>Liveliness</td><td>AUTOMATIC, or manual by participant or by topic</td><td>Whether the other side is still there. AUTOMATIC renews the lease on any write. Manual requires an explicit assertion. The writer’s assertion must meet the reader’s request, and the lease must not be longer</td></tr>
+      <tr><td>Lifespan</td><td>A duration</td><td>A sample expires after this time. A reader should not treat it as new. A local policy</td></tr>
+      <tr><td>Ownership</td><td>SHARED or EXCLUSIVE</td><td>When several writers write one instance, SHARED accepts all of them. EXCLUSIVE accepts only the writer with the highest strength, which is how a redundant takeover is done. Both sides must use the same kind</td></tr>
+      <tr><td>Ownership Strength</td><td>An integer</td><td>Meaningful only under EXCLUSIVE. The higher strength becomes the owner. When it stops, the next one takes over</td></tr>
+      <tr><td>Time Based Filter</td><td>A minimum separation</td><td>The reader drops samples that arrive too close together. A local policy</td></tr>
+      <tr><td>Latency Budget</td><td>A duration</td><td>How soon delivery is wanted. The latency the writer offers must be no greater than the reader asks. It is a hint, not a timer</td></tr>
+      <tr><td>Transport Priority</td><td>An integer</td><td>A hint for send priority. The standard does not equate it with a VLAN PCP. Some implementations use it to pick a queue</td></tr>
+      <tr><td>Destination Order</td><td>By reception time, or by source timestamp</td><td>With several writers, source timestamp can keep a late sample with an earlier timestamp from counting as an update</td></tr>
+      <tr><td>Partition</td><td>A set of names</td><td>A further logical group inside one domain. Endpoints do not match when the partition strings do not</td></tr>
+    </table>
+    <p>The usual order at match time: for reliability, a reader that requests RELIABLE matches only a RELIABLE writer, while a reader that requests BEST_EFFORT matches either writer. Durability from low to high is VOLATILE, TRANSIENT_LOCAL, TRANSIENT, PERSISTENT, and the writer’s offer cannot be lower than the reader’s request. Deadline and latency budget cannot be looser than the reader asked. Ownership must be the same on both sides.</p>
+    </section>
+
+    <section class="block">
+    <h2>Where it sits</h2>
+    <p>The application layer is DDS. The packet between nodes is RTPS, commonly over UDP. The overview can switch the transport to TCP. Protection is DDS-Security, done on RTPS, in three plugins: authentication, access control, and cryptography. The overview does not offer SecOC or E2E on DDS. The default UDP path has no reliable byte stream, so <a href="tls.html">TLS</a> does not fit. DDS-Security does not depend on TLS either.</p>
+    </section>
+
+    <section class="block">
+    <h2>Packet</h2>
+    <p>The RTPS header carries the protocol mark <code>RTPS</code>, a version, a vendor ID, and a GUID prefix. Submessages follow.</p>
+    <table>
+      <tr><th>Submessage</th><th>Role</th></tr>
+      <tr><td>DATA</td><td>Carries one sample, or built-in data used for discovery</td></tr>
+      <tr><td>DATA_FRAG</td><td>The sample is too large and is split into fragments</td></tr>
+      <tr><td>HEARTBEAT</td><td>The writer tells the reader the range of sequence numbers. Reliable delivery uses it to push acknowledgement</td></tr>
+      <tr><td>ACKNACK</td><td>The reader reports which sequence numbers are still missing. This is the reliability acknowledgement, not ECN in the IP header</td></tr>
+      <tr><td>GAP</td><td>These sequence numbers may be skipped. Do not ask for them again</td></tr>
+      <tr><td>NACK_FRAG / HEARTBEAT_FRAG</td><td>The same missing-fragment and heartbeat exchange for fragments</td></tr>
+      <tr><td>INFO_TS / INFO_DST</td><td>A timestamp for the following submessages, or a statement of who they are for</td></tr>
+    </table>
+    <p>One reliable round is: the writer sends DATA, then HEARTBEAT; the reader replies ACKNACK when it sees a gap; the writer sends the missing sequence numbers again. Best effort has no such round.</p>
+    </section>
+
+    <section class="block">
+    <h2>What it does not do</h2>
+    <ul>
+      <li>It does not call by service ID and method ID. That is <a href="someip.html">SOME/IP</a>.</li>
+      <li>ACKNACK is the acknowledgement of reliable delivery, not IP ECN.</li>
+      <li>SecOC and E2E are not added on DDS. Authentication and encryption are DDS-Security plugins.</li>
+      <li>When QoS does not match, the protocol does not return an error code. The endpoints simply do not match, and the reader receives no samples.</li>
+    </ul>
+    </section>
+
+    <div class="tail">
+    <p class="keys">Entry <a href="https://www.omg.org/spec/DDS/" target="_blank" rel="noopener">DDS</a> <a href="https://www.omg.org/spec/DDSI-RTPS/" target="_blank" rel="noopener">RTPS</a> <a href="https://www.omg.org/spec/DDS-SECURITY/" target="_blank" rel="noopener">DDS-Security</a></p>
+    <nav class="sib">
+      <a href="index.html">Overview</a>
+      <a href="someip.html">SOME/IP</a>
+      <b>DDS</b>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MACsec</title>
+  <link rel="stylesheet" href="../../zh/net/detail.css?v=8">
+</head>
+<body>
+<main style="--accent:var(--gptp)">
+  <header class="mast">
+    <a class="lang" href="../../zh/net/macsec.html">中文</a>
+    <p class="mark">AutoEth</p>
+    <h1>MACsec</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <div class="leadbox">
+    <p class="lead"><code>0x88E5</code> wraps an Ethernet frame hop by hop. Each hop has its own key. The VLAN tag a switch has to read stays outside the wrapper.</p>
+    </div>
+
+    <section class="block">
+    <h2>What one hop contains</h2>
+    <p>IEEE 802.1AE. Protection on this hop is three levels deep. When the key changes, the new security association is prepared first, and then the AN switches, so the hop does not drop.</p>
+    <table>
+      <tr><th>Member</th><th>What it is</th></tr>
+      <tr><td>Connectivity Association, CA</td><td>The two ends that have already agreed</td></tr>
+      <tr><td>Secure Channel, SC</td><td>One direction</td></tr>
+      <tr><td>Secure Association, SA</td><td>One key on that channel. The association number AN distinguishes them. AN is only 0 to 3</td></tr>
+    </table>
+    <p>The key used on the frame is the SAK. Where the SAK comes from is MKA, the agreement inside IEEE 802.1X: the members first have a connectivity association key, the CAK, and MKA uses it to derive the current SAK on this hop and to agree the packet number at which it starts. Where the algorithms and keys are kept is in the HSM note of AI Fortress Auto. This page does not describe the derivation.</p>
+    <p>In the model a port has two sides. The uncontrolled side can still send and receive before protection is up, and MKA’s own packets use it. The controlled side admits only frames that are already wrapped in MACsec and whose check passes. A switch that only forwards transparently, and is not an endpoint of this hop, cannot unwrap the frame and cannot see the EtherType inside the VLAN.</p>
+    </section>
+
+    <section class="block">
+    <h2>Where it sits</h2>
+    <p>Inside the data-link layer. Like 802.1Q, it is a tag inserted in the frame, not a layer above IP. With a VLAN, the order matches the overview: destination MAC, source MAC, <code>0x8100</code> and TCI, <code>0x88E5</code> and SecTAG, the original EtherType, the payload, the ICV, and the FCS. The VLAN is outside, so a switch can see the VLAN ID without decrypting, and can pick a queue by PCP.</p>
+    </section>
+
+    <section class="block">
+    <h2>Packet</h2>
+    <p>The three type fields each keep their own value. <code>0x8100</code> is the VLAN, <code>0x88E5</code> is MACsec, and the innermost is still the original EtherType: <code>0x0800</code> for IPv4, <code>0x88F7</code> for gPTP. Without a VLAN, <code>0x8100</code> and the TCI do not appear.</p>
+    <div class="cells">
+      <div class="cell" style="background:#4a5568"><b>Destination MAC</b><i class="tag open">Plain</i><span>6 bytes. Who receives on this hop</span></div>
+      <div class="cell" style="background:#4a5568"><b>Source MAC</b><i class="tag open">Plain</i><span>6 bytes. Who sends on this hop</span></div>
+      <div class="cell" style="background:var(--vlan)"><b>0x8100</b><i class="tag open">Plain</i><span>Only when a VLAN is present</span></div>
+      <div class="cell" style="background:var(--vlan)"><b>TCI</b><i class="tag open">Plain</i><span>PCP · DEI · VID</span></div>
+      <div class="cell" style="background:var(--gptp)"><b>0x88E5</b><i class="tag open">Plain</i><span>MACsec</span></div>
+      <div class="cell ref" style="background:var(--gptp)"><b><a href="#macsec-tag">SecTAG</a></b><i class="tag open">Plain</i><span>Listed row by row below</span></div>
+      <div class="cell" style="background:var(--l2)"><b>EtherType</b><i class="tag shut">Cipher</i><span>The original type. Still plaintext when only integrity is used</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Payload</b><i class="tag shut">Cipher</i><span>The inner packet. Still plaintext when only integrity is used</span></div>
+      <div class="cell" style="background:var(--gptp)"><b>ICV</b><i class="tag open">Plain</i><span>Integrity check</span></div>
+      <div class="cell" style="background:var(--l2)"><b>FCS</b><i class="tag open">Plain</i><span>CRC-32 · 4 bytes</span></div>
+    </div>
+    <table class="jump" id="macsec-tag">
+      <tr><th>In the SecTAG</th><th>Role</th></tr>
+      <tr><td>TCI</td><td>Version, whether this frame is encrypted, whether the SCI is present, and whether there is a single receiver. E means encryption. C means the changed text is covered by the check</td></tr>
+      <tr><td>AN</td><td>Two bits, selecting which security association from 0 to 3</td></tr>
+      <tr><td>SL</td><td>Short length. On a short frame it states how long the payload is. A long frame uses a separate rule</td></tr>
+      <tr><td>PN</td><td>A 32-bit packet number. The receiver uses it against replay. When the number runs out, the next SA takes over</td></tr>
+      <tr><td>SCI</td><td>Optional, 8 bytes: the source MAC plus a port identifier. When several senders share one link, it tells the channels apart</td></tr>
+    </table>
+    <p>The ICV sits in front of the FCS. The FCS is still Ethernet’s own CRC-32, covering the frame after it has been wrapped. The peer checks the FCS first, then the ICV. When only integrity is used and the frame is not encrypted, the payload stays plaintext and the ICV is still there.</p>
+
+    <h3>Timing frames</h3>
+    <p>gPTP frames often stay out of this secure association and use the uncontrolled side. Encryption and decryption change the residence time. If a gate was computed from the time before protection, the schedule is off. So a timing frame is often left outside <code>0x88E5</code>, and its EtherType is still <code>0x88F7</code> directly. Which frames enter the association is policy for this hop, not a flag inside the gPTP header.</p>
+    </section>
+
+    <section class="block">
+    <h2>What it does not do</h2>
+    <ul>
+      <li>It is not end to end. Passing a switch means unwrap and wrap again, and the next hop is another SAK. The two ends of a byte stream are <a href="tls.html">TLS</a>. Host-to-host IP is <a href="ipsec.html">IPsec</a>.</li>
+      <li>It does not consume the original EtherType. <code>0x88E5</code> wraps the outside.</li>
+      <li><code>0x88E3</code> is not MACsec. That type number does not belong to 802.1AE.</li>
+      <li>It does not protect a frame that did not enter this association. gPTP is often outside. Gating and residence time are still on <a href="../tsn/index.html">TSN</a>.</li>
+      <li>When the switch itself is not an endpoint, do not assume it will strip the wrapper and then forward. The wrapper stops between the two ports of this hop.</li>
+    </ul>
+    </section>
+
+    <div class="tail">
+    <p class="keys">Entry <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a> <a href="https://www.ieee802.org/1/pages/802.1X.html" target="_blank" rel="noopener">IEEE 802.1X</a> <a href="../tsn/index.html">TSN</a> <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md" target="_blank" rel="noopener">Algorithms and keys</a></p>
+    <nav class="sib">
+      <a href="index.html">Overview</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <b>MACsec</b>
+    </nav>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

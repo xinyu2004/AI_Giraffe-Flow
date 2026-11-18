@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TLS</title>
-  <link rel="stylesheet" href="detail.css">
+  <link rel="stylesheet" href="detail.css?v=8">
 </head>
 <body>
 <main style="--accent:var(--l6)">
   <header class="mast">
-    <a class="lang" href="index.html">总图</a>
+    <a class="lang" href="../../en/net/tls.html">English</a>
     <p class="mark">AutoEth</p>
     <h1>TLS</h1>
   </header>
@@ -23,20 +23,30 @@
     <span style="background:var(--l1)"></span>
   </div>
   <div class="sheet">
+    <div class="leadbox">
     <p class="lead">记录层和握手建立在可靠字节流上，也就是 TCP。两端先谈妥是谁、用哪套密钥，再保护这条字节流。</p>
+    </div>
 
+    <section class="block">
     <h2>握手在谈什么</h2>
     <p>握手要定三件事：协议版本、随后用来保护记录的参数，以及对面的身份。身份靠证书。诊断连接常见两边都有证书，诊断仪认车，车也认这台诊断仪。只验一边的做法也有，车上的诊断和刷写更常见的是互相验。</p>
-    <p>TLS 1.3（RFC 8446）一轮新的握手，报文按这个次序走。除了开头两条，后面的都已经包在加密的记录里：</p>
-    <table>
-      <tr><th>报文</th><th>谁发</th><th>谈成什么</th></tr>
-      <tr><td>ClientHello</td><td>客户端</td><td>支持的版本、密钥交换、以及自己的随机数</td></tr>
-      <tr><td>ServerHello</td><td>服务端</td><td>选定的参数和自己的随机数</td></tr>
-      <tr><td>EncryptedExtensions</td><td>服务端</td><td>其余扩展，已经加密</td></tr>
-      <tr><td>Certificate</td><td>要被验的一方</td><td>证书链。互相认证时两边都送</td></tr>
-      <tr><td>CertificateVerify</td><td>证书的持有者</td><td>用私钥对握手内容签名，证明拿着这张证书的私钥</td></tr>
-      <tr><td>Finished</td><td>两边</td><td>对整个握手做一次校验，对上之后应用数据才能走</td></tr>
-    </table>
+    <p>TLS 1.3（RFC 8446）在密钥份额直接被接受时，一轮新的握手按这个次序走。服务端不接受客户端给的密钥份额时，会先回 HelloRetryRequest，客户端再发一次 ClientHello。蓝色向右是客户端，橙色向左是服务端。开头两条还是明文，从 EncryptedExtensions 起已经包在加密的记录里。下面按车上诊断常见的互相认证来画：服务端用 CertificateRequest 向客户端要证书。只验一边时不发这条，客户端也就不送证书。</p>
+    <div class="talk">
+      <div class="who"><span class="l">客户端</span><span class="r">服务端</span></div>
+      <ol>
+        <li class="turn go"><p><b>ClientHello</b><i class="tag open">明文</i><span>支持的版本、密钥份额、自己的随机数</span></p></li>
+        <li class="turn back"><p><b>ServerHello</b><i class="tag open">明文</i><span>选定的套件、密钥份额和自己的随机数</span></p></li>
+        <li class="turn cut"><p>以下为密文</p></li>
+        <li class="turn back"><p><b>EncryptedExtensions</b><i class="tag shut">密文</i><span>其余扩展</span></p></li>
+        <li class="turn back"><p><b>CertificateRequest</b><i class="tag shut">密文</i><span>向客户端要证书。没有这条，客户端就不送证书</span></p></li>
+        <li class="turn back"><p><b>Certificate</b><i class="tag shut">密文</i><span>服务端的证书链</span></p></li>
+        <li class="turn back"><p><b>CertificateVerify</b><i class="tag shut">密文</i><span>用私钥签名，证明拿着这张证书</span></p></li>
+        <li class="turn back"><p><b>Finished</b><i class="tag shut">密文</i><span>对到这里的握手做一次校验</span></p></li>
+        <li class="turn go"><p><b>Certificate</b><i class="tag shut">密文</i><span>客户端的证书链</span></p></li>
+        <li class="turn go"><p><b>CertificateVerify</b><i class="tag shut">密文</i><span>客户端同样证明自己拿着私钥</span></p></li>
+        <li class="turn go"><p><b>Finished</b><i class="tag shut">密文</i><span>这条握手结束，随后才是应用数据</span></p></li>
+      </ol>
+    </div>
     <p>1.3 里各方都要实现的那套保护是 <code>TLS_AES_128_GCM_SHA256</code>。还有哪些套件可以出现，由部署决定。算法和密钥放在哪，看 AI Fortress Auto 的 HSM 说明，这页不写计算过程。</p>
     <p>车上的诊断链路也有仍按 TLS 1.2 来做的。1.2 多一轮明文的密钥交换和 ChangeCipherSpec，总图不把两个版本分成两格。DoIP 遇到路由激活被拒绝、原因是要求加密时，改连 TCP 3496 再握一次，见 <a href="doip.html">DoIP</a>。</p>
     <p>会话可以恢复，少走一轮证书。1.3 还有 0-RTT 的早数据，这段数据有被重放的可能。诊断和刷写不靠它来送第一条命令。</p>
@@ -51,7 +61,9 @@
       <tr><td>bad_record_mac</td><td>记录的校验对不上，密文被改过或密钥不一致</td></tr>
       <tr><td>unexpected_message</td><td>这个时候不该出现这种报文</td></tr>
     </table>
+    </section>
 
+    <section class="block">
     <h2>在哪一层</h2>
     <p>总图把记录层画在表示层，握手画在会话层，都夹在应用和 TCP 之间。帧上不另加以太网首部。SOME/IP、DDS、Zenoh 默认 UDP，要先把传输改成 TCP 才能勾。gPTP 没有字节流，加不上。</p>
     <div class="cells">
@@ -61,7 +73,9 @@
       <div class="cell" style="background:var(--l4)"><b>TCP</b><span>可靠字节流</span></div>
     </div>
     <p class="note">线上，握手报文装在记录里送，不是记录旁边再加一个以太网首部。两格是总图上的分层。</p>
+    </section>
 
+    <section class="block">
     <h2>报文</h2>
     <p>记录头带类型、遗留的版本字段和长度，受保护的内容跟在后面。1.3 里真正的内容类型放在加密之后的明文尾部，头上的类型常常只写成“应用数据”，用来不把握手和警报暴露在外面。</p>
     <div class="cells">
@@ -71,7 +85,9 @@
       <div class="cell" style="background:var(--l6)"><b>受保护的内容</b><span>握手、警报或应用数据</span></div>
     </div>
     <p>应用数据是一整条字节流。DoIP 的头和 UDS 都在这流里面，靠 DoIP 自己的长度字段切开，TLS 不认识服务号。SOME/IP 若走 TCP 再套 TLS，同样靠 SOME/IP 的长度字段切开。</p>
+    </section>
 
+    <section class="block">
     <h2>不做什么</h2>
     <ul>
       <li>不保护 UDP。没有可靠字节流，就套不上这里画的 TLS。DTLS 走数据报，总图不画。</li>
@@ -80,7 +96,9 @@
       <li>不是 <a href="ipsec.html">IPsec</a>。IPsec 加在 IP 和传输头之间，UDP 和 TCP 都能用。</li>
       <li>不是 <a href="secoc.html">SecOC</a>。SecOC 给每一条 PDU 单独做 MAC。TLS 保护的是整条字节流，不给某一条 SOME/IP 单独签名。</li>
     </ul>
+    </section>
 
+    <div class="tail">
     <p class="keys">入口 <a href="https://www.rfc-editor.org/rfc/rfc8446" target="_blank" rel="noopener">RFC 8446</a> <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md" target="_blank" rel="noopener">算法和密钥</a></p>
     <nav class="sib">
       <a href="index.html">总图</a>
@@ -93,6 +111,8 @@
       <a href="ipsec.html">IPsec</a>
       <a href="macsec.html">MACsec</a>
     </nav>
+    </div>
+
   </div>
 </main>
 </body>

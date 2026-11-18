@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DoIP</title>
+  <link rel="stylesheet" href="../../zh/net/detail.css?v=8">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="../../zh/net/doip.html">中文</a>
+    <p class="mark">AutoEth</p>
+    <h1>DoIP</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <div class="leadbox">
+    <p class="lead">Diagnostic messages between a tester and an ECU move from CAN onto Ethernet. Once the connection is up, the payload is UDS.</p>
+    </div>
+
+    <section class="block">
+    <h2>How one diagnostic session connects</h2>
+    <p><a href="https://www.iso.org/standard/74785.html" target="_blank" rel="noopener">ISO 13400</a>. The tester finds the vehicle, then opens TCP, then activates routing, and only then can send UDS. The order cannot be reversed. Blue to the right is what the tester sends. Orange to the left is what the vehicle returns.</p>
+    <div class="talk">
+      <div class="who"><span class="l">Tester</span><span class="r">Vehicle</span></div>
+      <ol>
+        <li class="turn go"><p><b><a href="#doip-find">Vehicle identification request</a></b><i class="tag udp">UDP</i><span>Type 0x0001, port 13400</span></p></li>
+        <li class="turn back"><p><b><a href="#doip-0004">Vehicle announcement</a></b><i class="tag udp">UDP</i><span>Type 0x0004. VIN, EID, GID, and logical address. Also the identification response; the vehicle may send it on its own</span></p></li>
+        <li class="turn link"><p>Connect · TCP 13400, or 3496 when TLS is used. Activation is due in about 2 seconds</p></li>
+        <li class="turn go"><p><b><a href="#doip-route">Routing activation request</a></b><i class="tag tcp">TCP</i><span>Type 0x0005. Register the tester’s source address</span></p></li>
+        <li class="turn back"><p><b><a href="#doip-route">0x0006</a></b><i class="tag tcp">TCP</i><span>Response code. Success is 0x10</span></p></li>
+        <li class="turn go"><p><b><a href="#doip-diag">0x8001</a></b><i class="tag tcp">TCP</i><span>This packet’s payload is a source address, a target address, then <a href="#doip-uds">UDS</a></span></p></li>
+        <li class="turn back"><p><b><a href="#doip-diag">0x8002</a></b><i class="tag tcp">TCP</i><span>This packet was accepted. 0x8003 rejects it. This is not the UDS positive response</span></p></li>
+        <li class="turn back"><p><b><a href="#doip-diag">A later 0x8001</a></b><i class="tag tcp">TCP</i><span>The UDS positive response. The service ID is the request ID plus 0x40</span></p></li>
+        <li class="turn go"><p><b><a href="#doip-tp">TesterPresent</a></b><i class="tag tcp">TCP</i><span>Still inside 0x8001. About 5 minutes with no packet drops the connection</span></p></li>
+      </ol>
+    </div>
+    <p>If the same source address is already on another TCP connection, the entity first runs an alive check (<code>0x0007</code> / <code>0x0008</code>). While the old connection is still alive, the new activation is rejected.</p>
+
+    <h3 class="jump" id="doip-route">Routing-activation result</h3>
+    <p>This table lists only the response code inside <code>0x0006</code>. It does not explain <code>0x8001</code>, and these are not UDS service IDs. The request carries the tester’s source address and an activation type. The default type is <code>0x00</code>. WWH-OBD, used for regulated diagnostics, is <code>0x01</code>. Common response codes:</p>
+    <table>
+      <tr><th>Response code</th><th>Meaning</th></tr>
+      <tr><td><code>0x10</code></td><td>Activation succeeded</td></tr>
+      <tr><td><code>0x11</code></td><td>One more confirmation is required before it counts as success</td></tr>
+      <tr><td><code>0x00</code></td><td>This source address is unknown</td></tr>
+      <tr><td><code>0x01</code></td><td>The TCP sockets are full</td></tr>
+      <tr><td><code>0x02</code></td><td>This connection already has a different source address</td></tr>
+      <tr><td><code>0x03</code></td><td>This source address is already on another connection</td></tr>
+      <tr><td><code>0x04</code></td><td>Authentication is still missing</td></tr>
+      <tr><td><code>0x06</code></td><td>This activation type is not supported</td></tr>
+      <tr><td><code>0x07</code></td><td>Cleartext is rejected. TLS is required</td></tr>
+    </table>
+    <p>On <code>0x07</code>, close the cleartext TCP on 13400, connect to 3496, finish the TLS handshake, and send routing activation again. The DoIP header is inside the TLS record.</p>
+    </section>
+
+    <section class="block">
+    <h2>Where it sits</h2>
+    <p>Application layer. Diagnostic messages are fixed on TCP. That path is already a reliable byte stream, so <a href="tls.html">TLS</a> can be selected on the overview from the start. The vehicle identification request and the announcement use UDP 13400. The overview does not put SecOC or E2E on DoIP.</p>
+    </section>
+
+    <section class="block">
+    <h2>Packet</h2>
+    <p>The header has four fields: protocol version, the inverse of the version, payload type, and payload length. The inverse is the version byte bitwise inverted, so a non-DoIP packet can be rejected early. The table below is that two-byte type. How one row’s payload is split is written in the section after the table, not in the table itself.</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>Version</b><span>1 byte. <code>0x02</code> is 2012, <code>0x03</code> is 2019. The vehicle identification request and the announcement use <code>0xFF</code></span></div>
+      <div class="cell" style="background:var(--l7)"><b>Inverse</b><span>1 byte. The version with each bit flipped: <code>0x02</code> pairs with <code>0xFD</code>, <code>0x03</code> with <code>0xFC</code>, <code>0xFF</code> with <code>0x00</code></span></div>
+      <div class="cell ref" style="background:var(--l7)"><b><a href="#doip-types">Type</a></b><span>2 bytes. Listed row by row in the table below</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Length</b><span>4 bytes. How many payload bytes follow. The 8-byte header is not counted</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Payload</b><span>Set by the type. A different type means different fields inside</span></div>
+    </div>
+    <table class="jump" id="doip-types">
+      <tr><th>Type</th><th>Name</th><th>Direction</th></tr>
+      <tr><td><code>0x0000</code></td><td>Negative acknowledgement when the header itself is not valid</td><td>Entity → tester</td></tr>
+      <tr class="jump" id="doip-find"><td><code>0x0001</code></td><td>Vehicle identification request</td><td>UDP</td></tr>
+      <tr><td><code>0x0002</code> / <code>0x0003</code></td><td>Find by EID, or find by VIN</td><td>UDP</td></tr>
+      <tr class="jump" id="doip-0004"><td><code>0x0004</code></td><td>Vehicle announcement, also the identification response. Carries VIN, EID, GID, and logical address</td><td>UDP</td></tr>
+      <tr><td><code>0x0005</code> / <code>0x0006</code></td><td><a href="#doip-route">Routing activation request and response</a>. The response codes are in that section</td><td>TCP</td></tr>
+      <tr><td><code>0x0007</code> / <code>0x0008</code></td><td>Alive check</td><td>TCP</td></tr>
+      <tr><td><code>0x4001</code> / <code>0x4002</code></td><td>Entity status: how many connections can still be taken, and how many are already taken</td><td>UDP</td></tr>
+      <tr><td><code>0x4003</code> / <code>0x4004</code></td><td>Diagnostic power mode</td><td>UDP</td></tr>
+      <tr><td><code>0x8001</code></td><td><a href="#doip-diag">Diagnostic message</a>. The payload is a source address, a target address, then UDS</td><td>TCP, both ways</td></tr>
+      <tr><td><code>0x8002</code> / <code>0x8003</code></td><td><a href="#doip-diag">Positive / negative acknowledgement of a diagnostic message</a>. This is DoIP’s own acknowledgement, not the UDS positive response</td><td>Entity → tester</td></tr>
+    </table>
+
+    <h3 class="jump" id="doip-diag">0x8001 and its acknowledgement</h3>
+    <p>Opening <code>0x8001</code> from the type table, the payload is still this same packet, after the DoIP header, in three fields. UDS is the last field, not a following DoIP message. The source is the tester. The target is one ECU, or a functional address that a group of ECUs all hear. The numbers are assigned by the manufacturer. The range commonly used by an external test device is set aside in the specification.</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l4)"><b>Source</b><span>2 bytes. The tester’s logical address</span></div>
+      <div class="cell" style="background:var(--l4)"><b>Target</b><span>2 bytes. One ECU, or a functional address heard by a group of ECUs</span></div>
+      <div class="cell" style="background:var(--l7)"><b>UDS</b><span><a href="#doip-uds">Service IDs in the table below</a></span></div>
+    </div>
+    <p><code>0x8002</code> only says the DoIP entity accepted the packet and may forward it. The UDS positive response is a later <code>0x8001</code>, with the service ID equal to the request ID plus <code>0x40</code>. <code>0x8003</code> drops the packet. Common reasons:</p>
+    <table>
+      <tr><th>Code</th><th>Meaning</th></tr>
+      <tr><td><code>0x02</code></td><td>Invalid source address</td></tr>
+      <tr><td><code>0x03</code></td><td>Unknown target address</td></tr>
+      <tr><td><code>0x04</code></td><td>The diagnostic message is too large</td></tr>
+      <tr><td><code>0x05</code></td><td>Not enough memory</td></tr>
+      <tr><td><code>0x06</code></td><td>The target cannot be reached</td></tr>
+      <tr><td><code>0x07</code></td><td>The network to use is unknown</td></tr>
+      <tr><td><code>0x08</code></td><td>The transport below failed</td></tr>
+    </table>
+
+    <h3 class="jump" id="doip-uds">UDS at the end of 0x8001</h3>
+    <p>These service IDs are written in the last field above, still inside the same <code>0x8001</code>. They are not DoIP payload types, so <code>0x10</code> and <code>0x22</code> do not appear in the type table above. Encoding is still ISO 14229. A negative response is <code>0x7F</code>, followed by the original service ID and a negative-response code.</p>
+    <table>
+      <tr><th>Service</th><th>ID</th><th>What it is for</th></tr>
+      <tr><td>DiagnosticSessionControl</td><td><code>0x10</code></td><td>Enter the default, extended, or programming session</td></tr>
+      <tr><td>ECUReset</td><td><code>0x11</code></td><td>Reset</td></tr>
+      <tr><td>ClearDiagnosticInformation</td><td><code>0x14</code></td><td>Clear diagnostic trouble codes</td></tr>
+      <tr><td>ReadDTCInformation</td><td><code>0x19</code></td><td>Read diagnostic trouble codes</td></tr>
+      <tr><td>ReadDataByIdentifier</td><td><code>0x22</code></td><td>Read by data identifier</td></tr>
+      <tr><td>SecurityAccess</td><td><code>0x27</code></td><td>Unlock. The seed and key algorithm is not on this page</td></tr>
+      <tr><td>WriteDataByIdentifier</td><td><code>0x2E</code></td><td>Write by data identifier</td></tr>
+      <tr><td>RoutineControl</td><td><code>0x31</code></td><td>Start, stop, or query a routine</td></tr>
+      <tr><td>RequestDownload / TransferData / RequestTransferExit</td><td><code>0x34</code> / <code>0x36</code> / <code>0x37</code></td><td>The three download steps used while flashing</td></tr>
+      <tr class="jump" id="doip-tp"><td>TesterPresent</td><td><code>0x3E</code></td><td>Keep the current session, and also refresh the DoIP inactivity timer</td></tr>
+    </table>
+    </section>
+
+    <section class="block">
+    <h2>What it does not do</h2>
+    <ul>
+      <li>It does not specify the parameter layout of every UDS service. That is ISO 14229.</li>
+      <li><code>0x8002</code> is not the UDS positive response. The positive response is still a <code>0x8001</code>.</li>
+      <li>The address is a DoIP logical address, not a CAN identifier.</li>
+      <li>The overview does not put SecOC or E2E on DoIP. To protect this TCP connection, use <a href="tls.html">TLS</a> or <a href="ipsec.html">IPsec</a>.</li>
+    </ul>
+    </section>
+
+    <div class="tail">
+    <p class="keys">Entry <a href="https://www.iso.org/standard/74785.html" target="_blank" rel="noopener">ISO 13400</a> <a href="https://www.iso.org/standard/72439.html" target="_blank" rel="noopener">ISO 14229</a></p>
+    <nav class="sib">
+      <a href="index.html">Overview</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <b>DoIP</b>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

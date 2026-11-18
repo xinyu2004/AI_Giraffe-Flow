@@ -344,6 +344,14 @@ function tipHtml() {
   return "";
 }
 function introHtml() {
+  const page = {
+    someip: "someip.html",
+    dds: "dds.html",
+    doip: "doip.html"
+  };
+  const name = page[proto]
+    ? '<a href="' + page[proto] + '">' + PROTOS[proto].name + "</a>"
+    : PROTOS[proto].name;
   const link = {
     someip: 'BMW designed it, and AUTOSAR later adopted it. Controllers offer services over Ethernet: call a method, or subscribe to an event, without a fixed signal list first. Entry <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
     dds: 'The OMG data-distribution service. Nodes share one data type by topic, with timing and reliability written in QoS. They interoperate with RTPS. Entry <a href="https://www.omg.org/spec/DDS/" target="_blank" rel="noopener">DDS</a> <a href="https://www.omg.org/spec/DDSI-RTPS/" target="_blank" rel="noopener">RTPS</a>',
@@ -351,7 +359,7 @@ function introHtml() {
     zenoh: 'An Eclipse protocol. One publish, subscribe, and query path connects data from a device to the cloud, instead of a separate protocol for data in motion and data at rest. Entry <a href="https://zenoh.io/" target="_blank" rel="noopener">zenoh.io</a>',
     gptp: 'IEEE 802.1AS, the PTP profile for a bridged LAN. Switches and end stations on that LAN share one clock, so time-sensitive traffic can be sent on it. Entry <a href="../tsn/index.html">TSN</a> <a href="https://www.ieee802.org/1/pages/802.1AS.html" target="_blank" rel="noopener">IEEE 802.1AS</a>'
   };
-  return "<b>" + PROTOS[proto].name + ".</b> " + link[proto];
+  return "<b>" + name + ".</b> " + link[proto];
 }
 function tlsTip() {
   if (allowed("tls")) return "";
@@ -360,12 +368,12 @@ function tlsTip() {
 }
 function notesHtml() {
   const lines = {
-    secoc: '<b>SecOC.</b> On an application PDU, it adds a MAC and a freshness value. Entry <a href="' + SECOC + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
-    e2e: '<b>E2E.</b> On an application PDU, it adds a counter and a CRC. Entry <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
-    tls: '<b>TLS.</b> The record and the handshake sit on a reliable byte stream, which means TCP. Entry <a href="https://www.rfc-editor.org/rfc/rfc8446" target="_blank" rel="noopener">RFC 8446</a>. Algorithms and keys are in <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
-    ipsec: '<b>IPsec.</b> Adds ESP at the network layer. Entry <a href="https://www.rfc-editor.org/rfc/rfc4303" target="_blank" rel="noopener">RFC 4303</a>. Algorithms and keys are in <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    secoc: '<b><a href="secoc.html">SecOC</a>.</b> On an application PDU, it adds a MAC and a freshness value. Entry <a href="' + SECOC + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    e2e: '<b><a href="e2e.html">E2E</a>.</b> On an application PDU, it adds a counter and a CRC. Entry <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a>',
+    tls: '<b><a href="tls.html">TLS</a>.</b> The record and the handshake sit on a reliable byte stream, which means TCP. Entry <a href="https://www.rfc-editor.org/rfc/rfc8446" target="_blank" rel="noopener">RFC 8446</a>. Algorithms and keys are in <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
+    ipsec: '<b><a href="ipsec.html">IPsec</a>.</b> Adds ESP at the network layer. Entry <a href="https://www.rfc-editor.org/rfc/rfc4303" target="_blank" rel="noopener">RFC 4303</a>. Algorithms and keys are in <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>',
     vlan: '<b>VLAN.</b> <code>0x8100</code>, inserted between the source MAC and the original EtherType. Entry <a href="../tsn/index.html">TSN</a> <a href="https://www.ieee802.org/1/pages/802.1Q.html" target="_blank" rel="noopener">IEEE 802.1Q</a>',
-    macsec: '<b>MACsec.</b> <code>0x88E5</code>, wrapped around the frame hop by hop. Entry <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a>. Algorithms and keys are in <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>'
+    macsec: '<b><a href="macsec.html">MACsec</a>.</b> <code>0x88E5</code>, wrapped around the frame hop by hop. Entry <a href="https://www.ieee802.org/1/pages/802.1AE.html" target="_blank" rel="noopener">IEEE 802.1AE</a>. Algorithms and keys are in <a href="' + HSM + '" target="_blank" rel="noopener">AI Fortress Auto</a>'
   };
   return Object.keys(lines).filter(function (name) { return feats[name]; }).map(function (name) {
     return "<p>" + lines[name] + "</p>";

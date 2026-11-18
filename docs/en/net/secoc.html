@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SecOC</title>
+  <link rel="stylesheet" href="../../zh/net/detail.css?v=8">
+</head>
+<body>
+<main style="--accent:var(--l7)">
+  <header class="mast">
+    <a class="lang" href="../../zh/net/secoc.html">中文</a>
+    <p class="mark">AutoEth</p>
+    <h1>SecOC</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <div class="leadbox">
+    <p class="lead">A MAC and a freshness value are added on an application PDU, to recognize who sent it and whether it was just sent. The payload is not encrypted.</p>
+    </div>
+
+    <section class="block">
+    <h2>Which PDU is protected</h2>
+    <p>This is AUTOSAR Secure Onboard Communication. The protected part is the authentic PDU. After a freshness value and a truncated authenticator are added, it is the secured PDU. On the overview that PDU is <a href="someip.html">SOME/IP</a>. Freshness is a counter or a time, so an old PDU cannot be replayed unchanged. The MAC is computed from the freshness, a data ID, and the PDU contents. The receiver recomputes it with the same key and accepts the PDU only when the values match.</p>
+    <p>The data ID separates “this PDU” from “another PDU that looks like it”. It takes part in the computation and does not have to appear in full on the wire. After truncation, the wire shows only part of the freshness and part of the MAC. The lengths are configuration: how many freshness bits, and how many authenticator bits. Both sides must use the same lengths.</p>
+    <p>The steps that wrap and unwrap a PDU are in section 3 of AI Fortress Auto. Which algorithm is used, and where the key is kept, are in that HSM note. This page stops at the two extra fields on the PDU, and at how the receiver keeps up with freshness.</p>
+    </section>
+
+    <section class="block">
+    <h2>How freshness stays in step</h2>
+    <p>Each time the sender transmits, it increments the full freshness (or takes the current time), truncates it as configured, and sends that with the truncated MAC. The receiver holds the full freshness of the last PDU it accepted. It tries to build a candidate full value from the truncated value on the wire and the high bits it remembers, then computes the MAC.</p>
+    <p>Truncation is ambiguous, so the receiver does not try only one number. The acceptance window lets it try several fresher values. If one of them makes the MAC match, the PDU is accepted and the remembered freshness moves forward. If none match, the PDU is discarded. A window that is too wide makes an old PDU easier to accept. A window that is too narrow loses the sequence after a few dropped PDUs. The width is configuration, not a fixed constant in the protocol.</p>
+    <p>A failed build can be retried a configured number of times and then given up. Verification failure has a count as well. After overflow the freshness wraps. Both sides must understand that wrap the same way, or a new PDU will be treated as a replay.</p>
+    </section>
+
+    <section class="block">
+    <h2>Where it sits</h2>
+    <p>It stays at the application layer, on the SOME/IP PDU. On the overview only SOME/IP can select it. It adds no Ethernet header and does not change UDP or TCP. A switch or a router cannot see this MAC. They only forward the original UDP or TCP packet.</p>
+    </section>
+
+    <section class="block">
+    <h2>Packet</h2>
+    <p>A secured PDU adds two fields outside the authentic PDU. Which end of the PDU those fields occupy is a configured position. This page does not draw one truncation length as the only layout.</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l7)"><b>Authentic PDU</b><span>The original application data</span></div>
+      <div class="cell" style="background:var(--l7)"><b>Freshness</b><span>A truncated counter or time</span></div>
+      <div class="cell" style="background:var(--l7)"><b>MAC</b><span>Truncated. The length is configured</span></div>
+    </div>
+    <p class="note">The MAC computation also includes the data ID and the full freshness. The part that is not on the wire is filled in from what both sides agreed in advance and from the state the receiver remembers.</p>
+    </section>
+
+    <section class="block">
+    <h2>What it does not do</h2>
+    <ul>
+      <li>It does not encrypt the payload. Confidentiality is not what this MAC is for.</li>
+      <li>It is not <a href="e2e.html">E2E</a>. The E2E counter and CRC have no key, and they do not identify who signed.</li>
+      <li>It does not protect the whole Ethernet frame, and it does not protect the whole IP packet. The frame is <a href="macsec.html">MACsec</a>. IP is <a href="ipsec.html">IPsec</a>. The byte stream is <a href="tls.html">TLS</a>.</li>
+      <li>The overview does not put it on DDS, DoIP, Zenoh, or gPTP. DDS authentication is inside DDS-Security.</li>
+    </ul>
+    </section>
+
+    <div class="tail">
+    <p class="keys">Entry <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/README_zh.md#3-secoc" target="_blank" rel="noopener">AI Fortress Auto · encapsulation</a> <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md" target="_blank" rel="noopener">Algorithms and keys</a> <a href="https://www.autosar.org/standards/" target="_blank" rel="noopener">AUTOSAR</a></p>
+    <nav class="sib">
+      <a href="index.html">Overview</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <b>SecOC</b>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <a href="ipsec.html">IPsec</a>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>

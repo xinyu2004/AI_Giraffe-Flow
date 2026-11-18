@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IPsec</title>
+  <link rel="stylesheet" href="../../zh/net/detail.css?v=8">
+</head>
+<body>
+<main style="--accent:var(--l3)">
+  <header class="mast">
+    <a class="lang" href="../../zh/net/ipsec.html">中文</a>
+    <p class="mark">AutoEth</p>
+    <h1>IPsec</h1>
+  </header>
+  <div class="stripes" aria-hidden="true">
+    <span style="background:var(--l7)"></span>
+    <span style="background:var(--l6)"></span>
+    <span style="background:var(--l5)"></span>
+    <span style="background:var(--l4)"></span>
+    <span style="background:var(--l3)"></span>
+    <span style="background:var(--l2)"></span>
+    <span style="background:var(--l1)"></span>
+  </div>
+  <div class="sheet">
+    <div class="leadbox">
+    <p class="lead">IP packets are protected at the network layer. The overview draws ESP in transport mode: IPv4 stays outside, and ESP is inserted between it and UDP or TCP.</p>
+    </div>
+
+    <section class="block">
+    <h2>Which packets enter</h2>
+    <p>Any protocol that has IP can add it: SOME/IP, DDS, DoIP, and Zenoh, on both UDP and TCP. gPTP has no IP, so it cannot. What is protected is this host to that host, not each hop of the link.</p>
+    <p>Policy selects the path first. One policy looks at the source address, the destination address, the upper protocol, and the ports, and then chooses one of three actions.</p>
+    <table>
+      <tr><th>Policy</th><th>What it does</th></tr>
+      <tr><td>Protect</td><td>Apply ESP with one security association</td></tr>
+      <tr><td>Bypass</td><td>Let it pass in the clear. Timing frames and discovery multicast often take this path</td></tr>
+      <tr><td>Discard</td><td>Do not forward it</td></tr>
+    </table>
+    <p>A wrong choice either sends out plaintext that should have been protected, or the peer cannot decrypt it at all.</p>
+    </section>
+
+    <section class="block">
+    <h2>Security association</h2>
+    <p>What actually encapsulates the packet is a security association. One association is identified by the destination address, the protocol in use (ESP here), and the SPI. The SPI is 32 bits, written in the ESP header. The receiver uses it to find the key and the algorithm. The sequence number starts at 1 and increases. The receiver uses a window against replay: a sequence number that is too old is dropped, and one already seen inside the window is dropped too. When the sequence number is about to run out, a new association is needed. The same key must not keep going with a wrapped sequence number.</p>
+    <p>How an association is negotiated is IKEv2 (RFC 7296). The overview does not draw those round trips. First there is IKE’s own association: <code>IKE_SA_INIT</code> exchanges key material, and <code>IKE_AUTH</code> checks identity. Then <code>CREATE_CHILD_SA</code> creates the child association that carries ESP, and it fixes the SPI, the algorithms, and the addresses and ports that association covers. Algorithms and keys are in the HSM note of AI Fortress Auto.</p>
+    </section>
+
+    <section class="block">
+    <h2>Where it sits</h2>
+    <p>Network layer. Transport mode does not replace the outer IP header, and the EtherType stays <code>0x0800</code>. Devices on the network still forward by the original addresses. The ports and the payload are inside ESP. Two ECUs protecting each other on the same link use this mode.</p>
+    <p>Tunnel mode wraps the whole original IP packet in a new IP packet. It is used when a gateway sends the packet out and the address has to change to another range. The overview does not draw the tunnel. IPv4 stays on the right of the network-layer row, and ESP is drawn under it.</p>
+    </section>
+
+    <section class="block">
+    <h2>Packet</h2>
+    <p>ESP (RFC 4303) encrypts the transport header and the payload, plus the trailer. The integrity check covers the SPI, the sequence number, and that ciphertext. The IP address is visible outside. The port is not.</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l3)"><b>IPv4</b><i class="tag open">Plain</i><span>Stays outside</span></div>
+      <div class="cell" style="background:#8d3d12"><b>SPI</b><i class="tag open">Plain</i><span>Which security association</span></div>
+      <div class="cell" style="background:#8d3d12"><b>Sequence</b><i class="tag open">Plain</i><span>Anti-replay</span></div>
+      <div class="cell" style="background:#8d3d12"><b>Payload</b><i class="tag shut">Cipher</i><span>UDP or TCP</span></div>
+      <div class="cell" style="background:#8d3d12"><b>Trailer</b><i class="tag shut">Cipher</i><span>Padding · pad length · next header</span></div>
+      <div class="cell" style="background:#8d3d12"><b>ICV</b><i class="tag open">Plain</i><span>Integrity check</span></div>
+    </div>
+    <p>The next-header field says whether the inside is UDP or TCP. After the receiver decrypts, it hands the packet to the transport layer by that field.</p>
+    <p>AH (RFC 4302) does not encrypt. It checks the integrity of the parts of the IP header that do not change while forwarding, and of the payload. Fields that change along the path, such as the hop count and the header checksum, are left out. If the address or the payload is changed, the check fails. The ports and the data stay plaintext. The overview draws ESP only, not AH.</p>
+    <div class="cells">
+      <div class="cell" style="background:var(--l3)"><b>IPv4</b><i class="tag open">Plain</i><span>The unchanged fields are checked</span></div>
+      <div class="cell" style="background:#8d3d12"><b>AH</b><i class="tag open">Plain</i><span>SPI · sequence · ICV</span></div>
+      <div class="cell" style="background:var(--l4)"><b>UDP or TCP</b><i class="tag open">Plain</i><span>Ports and data stay visible</span></div>
+    </div>
+    </section>
+
+    <section class="block">
+    <h2>What it does not do</h2>
+    <ul>
+      <li>It does not require a switch to TCP. <a href="tls.html">TLS</a> needs a reliable byte stream. IPsec does not.</li>
+      <li>It is not hop-by-hop <a href="macsec.html">MACsec</a>. Across a switch, the outer IP header is still this one. The switch does not have to unwrap ESP.</li>
+      <li>It is not <a href="secoc.html">SecOC</a>. SecOC is added on one application PDU and does not look at the IP address or the port.</li>
+      <li>gPTP does not use IP, so it is not on this page. If it is to stay out of ESP, that is a bypass in the policy, not an SPI carried by gPTP itself.</li>
+    </ul>
+    </section>
+
+    <div class="tail">
+    <p class="keys">Entry <a href="https://www.rfc-editor.org/rfc/rfc4303" target="_blank" rel="noopener">RFC 4303</a> <a href="https://www.rfc-editor.org/rfc/rfc4302" target="_blank" rel="noopener">RFC 4302</a> <a href="https://www.rfc-editor.org/rfc/rfc7296" target="_blank" rel="noopener">RFC 7296</a> <a href="https://github.com/xinyu2004/AI_Fortress-Auto/blob/main/docs/zh/hsm.md" target="_blank" rel="noopener">Algorithms and keys</a></p>
+    <nav class="sib">
+      <a href="index.html">Overview</a>
+      <a href="someip.html">SOME/IP</a>
+      <a href="dds.html">DDS</a>
+      <a href="doip.html">DoIP</a>
+      <a href="secoc.html">SecOC</a>
+      <a href="e2e.html">E2E</a>
+      <a href="tls.html">TLS</a>
+      <b>IPsec</b>
+      <a href="macsec.html">MACsec</a>
+    </nav>
+    </div>
+
+  </div>
+</main>
+</body>
+</html>
